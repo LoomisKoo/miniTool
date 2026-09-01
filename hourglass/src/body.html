@@ -1,0 +1,54 @@
+<div id="stage"><canvas id="c"></canvas></div>
+
+<div class="toolbar-tr" id="toolbar">
+  <div class="menu-wrap" id="menuScene">
+    <button class="menu-btn" id="btnSceneMenu">环境<span class="sub" id="lblScene">夜雨</span></button>
+    <div class="menu-pop">
+      <button class="menu-item sc on" data-k="night">夜雨</button>
+      <button class="menu-item sc" data-k="bamboo">竹林</button>
+      <button class="menu-item sc" data-k="temple">古寺</button>
+      <button class="menu-item sc" data-k="silent">默照</button>
+    </div>
+  </div>
+  <div class="menu-wrap" id="menuLight">
+    <button class="menu-btn" id="btnLightMenu">点香<span class="sub" id="lblLight">火柴</span></button>
+    <div class="menu-pop">
+      <button class="menu-item lm on" data-m="match">火柴</button>
+      <button class="menu-item lm" data-m="lighter">打火机</button>
+    </div>
+  </div>
+</div>
+
+<div id="bottom-ui">
+<div id="timebar"><div id="clock">05:00</div></div>
+
+<div id="main-presets">
+  <button class="chip" data-s="60">1 分</button>
+  <button class="chip on" data-s="300">5 分</button>
+  <button class="chip" data-s="900">15 分</button>
+  <button class="chip" data-s="1500">25 分</button>
+  <button class="chip" data-s="3600">1 时</button>
+</div>
+<div id="dock">
+  <button class="dock-btn" id="btnPanel">⏱</button>
+  <button class="dock-main" id="btnGo">点香</button>
+  <button class="dock-btn" id="btnReset">↺</button>
+</div>
+</div>
+<div id="panel">
+  <div id="panel-bg"></div>
+  <div id="panel-body">
+    <div class="handle"></div>
+    <div class="panel-title">自定义时长</div>
+    <div class="p-label"><span>时</span><span>分</span><span>秒</span></div>
+    <div class="picker-wrap">
+      <div class="picker-col" id="colH"></div>
+      <div class="picker-col" id="colM"></div>
+      <div class="picker-col" id="colS"></div>
+    </div>
+    <div class="panel-btns">
+      <button class="ok" id="btnApply">确定</button>
+      <button class="red" id="btnCancel">取消</button>
+    </div>
+  </div>
+</div>

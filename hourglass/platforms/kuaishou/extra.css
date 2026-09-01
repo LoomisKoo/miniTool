@@ -1,0 +1,5 @@
+/* 快手：竖屏优先，横屏时收紧底部留白 */
+@media (orientation: landscape) and (max-height: 520px) {
+  #bottom-ui { gap: 6px; padding-bottom: calc(8px + var(--safe-b)); }
+  #clock { font-size: clamp(1.35rem, 6vh, 1.75rem); }
+}

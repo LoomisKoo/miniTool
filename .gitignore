@@ -1,0 +1,6 @@
+.DS_Store
+*.log
+node_modules/
+
+# 打包产物
+hourglass/dist/
