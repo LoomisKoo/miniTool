@@ -43,8 +43,8 @@ function stickLayout(sec){
     if(mid-d>=0&&si<n) placed[mid-d]=sorted[si++].sz;
     if(mid+d<n&&si<n) placed[mid+d]=sorted[si++].sz;
   }
-  const maxSpread=censerW*0.5;
-  const step=n>1?Math.min(28,maxSpread/(n-1)):0;
+  const maxSpread=censerW*0.32;
+  const step=n>1?Math.min(18,maxSpread/(n-1)):0;
   return placed.map((sz,i)=>({sz,x:(i-(n-1)/2)*step,tilt:(i-(n-1)/2)*0.018,slot:i}));
 }
 
@@ -95,14 +95,34 @@ let hintTimer=0,curHint='';
 
 const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
 let W,H,cx,baseY,stickBaseLen,stickBaseW,dpr,censerW,rimY,topLimit=40,uiTop=0;
+let censerBox=null;
 
 const bgImgs={};
+const CENSER_RIM_NX=0.5, CENSER_RIM_NY=0.33, CENSER_BOTTOM_NY=0.94, CENSER_OPEN_FRAC=0.55;
+const hasCenserAsset=()=>window.BG_IMGS&&(window.BG_IMGS['censer-front']||window.BG_IMGS['censer-back']);
 if(window.BG_IMGS){
   Object.keys(window.BG_IMGS).forEach(k=>{
     const im=new Image();
-    im.onload=()=>{ bgImgs[k]=im; };
+    im.onload=()=>{ bgImgs[k]=im; scheduleResize(); };
     im.src=window.BG_IMGS[k];
   });
+}
+function layoutCenserBox(){
+  const img=bgImgs['censer-front']||bgImgs['censer-back'];
+  const iw=img?img.width:512, ih=img?img.height:512;
+  censerW=Math.min(W*0.20,W*0.18);
+  const dispW=(censerW*0.82)/CENSER_OPEN_FRAC;
+  const dispH=dispW*(ih/iw);
+  const censerBottom=uiTop-12;
+  const y=censerBottom-CENSER_BOTTOM_NY*dispH;
+  censerBox={x:cx-CENSER_RIM_NX*dispW,y,dispW,dispH};
+  rimY=y+CENSER_RIM_NY*dispH;
+}
+function drawCenserImg(key){
+  const img=bgImgs[key];
+  if(!img||!censerBox) return false;
+  ctx.drawImage(img,censerBox.x,censerBox.y,censerBox.dispW,censerBox.dispH);
+  return true;
 }
 
 function relayoutSticks(){
@@ -133,13 +153,19 @@ function resize(){
   if(toolbarRoot) topLimit=Math.max(topLimit,toolbarRoot.getBoundingClientRect().bottom+10);
 
   const censerBelow=56,margin=8;
-  rimY=Math.min(H*0.72,uiTop-censerBelow-margin);
-  rimY=Math.max(rimY,topLimit+56);
+  if(hasCenserAsset()){
+    layoutCenserBox();
+  }else{
+    censerBox=null;
+    rimY=Math.min(H*0.72,uiTop-censerBelow-margin);
+    rimY=Math.max(rimY,topLimit+56);
+  }
 
-  stickBaseLen=Math.min(H*0.72,W*0.72,rimY-topLimit-4);
+  const hintGap=44;
+  stickBaseLen=Math.min(H*0.72,W*0.72,rimY-topLimit-hintGap);
   stickBaseLen=Math.max(stickBaseLen,H*0.22);
   stickBaseW=stickBaseLen*0.036;
-  censerW=Math.min(W*0.42,stickBaseLen*0.38);
+  if(!hasCenserAsset()) censerW=Math.min(W*0.42,stickBaseLen*0.38);
   baseY=rimY+6;
   relayoutSticks();
 }
@@ -181,9 +207,9 @@ function recalcTimeShares(){
 
 const ASH_LIMIT=0.3;
 const ASH_AUTO=0.24;
-const BOWL_Y=()=>rimY+10;
-const INSERT_DEPTH=()=>stickBaseLen*0.04;
-const BAMBOO_LEN=()=>stickBaseLen*0.055;
+const BOWL_Y=()=>censerBox?rimY+censerBox.dispH*0.07:rimY+10;
+const INSERT_DEPTH=()=>stickBaseLen*0.09;
+const BAMBOO_LEN=()=>stickBaseLen*0.11;
 
 function calcParams(cfg){
   const s=SZ[cfg.sz];
@@ -419,7 +445,24 @@ function drawBg(){
   ctx.fillStyle=rg; ctx.fillRect(0,0,W,H);
 }
 
-function drawCenserBody(){
+function drawCenserAsh(){
+  censerAsh.forEach(a=>{
+    ctx.fillStyle=`rgba(120,115,108,${a.a})`;
+    ctx.beginPath(); ctx.arc(cx+a.x,BOWL_Y()+a.y,a.r,0,Math.PI*2); ctx.fill();
+  });
+}
+function drawCenserBack(){
+  if(drawCenserImg('censer-back')) return;
+  const bw=censerW, ry=rimY;
+  ctx.beginPath(); ctx.ellipse(cx,ry,bw*0.4,bw*0.08,0,0,Math.PI*2);
+  ctx.fillStyle='#4a3c2c'; ctx.fill();
+  ctx.strokeStyle='rgba(240,200,120,0.22)'; ctx.lineWidth=1.2; ctx.stroke();
+}
+function drawCenserFront(){
+  if(drawCenserImg('censer-front')) return;
+  drawCenserBodyVector();
+}
+function drawCenserBodyVector(){
   const bw=censerW, ry=rimY;
   ctx.beginPath(); ctx.ellipse(cx,ry+40,bw*0.52,bw*0.1,0,0,Math.PI*2);
   ctx.fillStyle='#080604'; ctx.fill();
@@ -438,10 +481,6 @@ function drawCenserBody(){
   ctx.strokeStyle='rgba(220,180,100,0.12)'; ctx.lineWidth=1; ctx.stroke();
   ctx.beginPath(); ctx.ellipse(cx,BOWL_Y(),bw*0.26,bw*0.04,0,0,Math.PI*2);
   ctx.fillStyle='rgba(55,50,45,0.7)'; ctx.fill();
-  censerAsh.forEach(a=>{
-    ctx.fillStyle=`rgba(120,115,108,${a.a})`;
-    ctx.beginPath(); ctx.arc(cx+a.x,BOWL_Y()+a.y,a.r,0,Math.PI*2); ctx.fill();
-  });
   for(const side of [-1,1]){
     ctx.beginPath(); ctx.moveTo(cx+side*bw*0.38,ry+4);
     ctx.quadraticCurveTo(cx+side*bw*0.52,ry+10,cx+side*bw*0.48,ry+20);
@@ -453,7 +492,7 @@ function drawCenserBody(){
     ctx.strokeStyle='#252018'; ctx.lineWidth=2.5; ctx.stroke();
   }
 }
-function drawCenserRim(){
+function drawCenserRimVector(){
   const bw=censerW, ry=rimY;
   ctx.beginPath(); ctx.ellipse(cx,ry,bw*0.4,bw*0.08,0,0,Math.PI*2);
   ctx.fillStyle='#4a3c2c'; ctx.fill();
@@ -465,7 +504,6 @@ function drawCenserRim(){
     ctx.fillStyle='#1a1410'; ctx.fill();
   });
 }
-function drawCenser(){drawCenserBody()}
 
 function drawStick(st){
   const sp=calcParams(st.cfg);
@@ -529,23 +567,13 @@ function roundRect(x,y,w,h,r){
 }
 
 function drawBambooRod(sp){
-  const rodTop=sp.bambooTop, rodBot=sp.rimPoint;
+  const rodTop=sp.bambooTop, rodBot=sp.rimPoint+sp.insertDepth;
   if(rodBot-rodTop<2) return;
   const rw=sp.w*0.48;
   roundRect(sp.x-rw/2,rodTop,rw,rodBot-rodTop,rw*0.15);
   const bg=ctx.createLinearGradient(sp.x-rw/2,rodTop,sp.x+rw/2,rodTop);
   bg.addColorStop(0,'#7a6838');bg.addColorStop(0.3,'#9a8450');bg.addColorStop(0.55,'#8a7844');bg.addColorStop(1,'#6a5a30');
   ctx.fillStyle=bg; ctx.fill();
-  for(let i=0;i<3;i++){
-    const ly=rodTop+(rodBot-rodTop)*(0.25+i*0.22);
-    ctx.strokeStyle='rgba(60,50,25,0.2)'; ctx.lineWidth=0.4;
-    ctx.beginPath(); ctx.moveTo(sp.x-rw*0.4,ly); ctx.lineTo(sp.x+rw*0.4,ly); ctx.stroke();
-  }
-  const bandY=sp.rimPoint-sp.w*0.55;
-  if(bandY>rodTop+1){
-    roundRect(sp.x-rw*0.38,bandY,rw*0.76,sp.w*0.45,0.5);
-    ctx.fillStyle='#a82820'; ctx.fill();
-  }
 }
 
 function drawCoat(sp,t,b){
@@ -845,9 +873,15 @@ document.addEventListener('click',closeMenus);
 document.querySelectorAll('.sc').forEach(s=>s.onclick=()=>{if(!running&&!sessionActive)setScene(s.dataset.k)});
 document.querySelectorAll('.lm').forEach(b=>b.onclick=()=>{if(!sessionActive)setLightMode(b.dataset.m)});
 
+function stickTipsTop(){
+  if(!sticks.length) return rimY-stickBaseLen;
+  let t=rimY;
+  sticks.forEach(st=>{ t=Math.min(t,calcParams(st.cfg).top); });
+  return t;
+}
 function drawHintText(){
   if(!curHint) return;
-  const y=topLimit+26;
+  const y=Math.max(topLimit+16,stickTipsTop()-28);
   ctx.save();
   ctx.textAlign='center'; ctx.textBaseline='top';
   const fs=Math.max(12,Math.min(W*0.04,15));
@@ -930,10 +964,10 @@ function loop(now){
   const burning=currentStick();
   if(burning&&burning.lit&&!burning.done&&phase==='burn') updSmoke(burning,dt);
 
-  drawBg(); drawCenserBody();
+  drawBg(); drawCenserBack(); drawCenserAsh();
   const mid=Math.floor(sticks.length/2);
   [...sticks].sort((a,b)=>Math.abs(a.cfg.slot-mid)-Math.abs(b.cfg.slot-mid)).forEach(drawStick);
-  drawCenserRim();
+  drawCenserFront();
   if(burning&&burning.lit&&!burning.done) drawStickSmoke(burning);
   drawHintText();
   frameLastT=now;

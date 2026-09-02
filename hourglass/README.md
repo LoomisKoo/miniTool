@@ -23,7 +23,7 @@ hourglass/
     └── xiaohongshu/...
 ```
 
-> `src/assets/` 下的图片会自动转 base64 内联进产物，文件名即场景 key（如 `bamboo.webp` → 竹林背景）。注意总产物不能超过 8MB。
+> `src/assets/` 下的图片会自动转 base64 内联进产物，文件名即 key（如 `bamboo.webp` → 竹林背景，`censer-back.png` / `censer-front.png` → 香炉后景/前景）。注意总产物不能超过 8MB。
 
 ## 开发
 
