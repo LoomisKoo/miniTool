@@ -8,9 +8,9 @@
 | --- | --- | --- |
 | `douyin/` | 互动空间 | 已整理规范摘要 |
 | `kuaishou/` | 互动内容世界 | 已整理规范摘要 |
-| `xiaohongshu/` | 小工具 | 搁置（需认证） |
+| `xiaohongshu/` | 小工具 | 官方 Skill 在 `xiaohongshu/minitool-zip-builder/` |
 | `bilibili/` | Toy | 搁置（需内测名额） |
-| `hourglass/` | 烧香计时 | 开发中（见项目内 README） |
+| `hourglass/` | 焚香计时 | 开发中（见项目内 README） |
 
 各平台见对应 `guidelines.md`。小工具项目采用 **共用 `src/` + 各平台 `platforms/` 打包** 结构，示例见 `hourglass/`。
 

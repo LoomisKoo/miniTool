@@ -18,6 +18,15 @@
 
 平台： [抖音虚拟创作平台](https://vcreate.douyin.com/)
 
+## 本仓库 Skill（AI 执行用）
+
+| Skill | 路径 | 用途 |
+| --- | --- | --- |
+| 互动空间内容生成 | [interact-creation/SKILL.md](interact-creation/SKILL.md) | 开发/打包离线 H5：硬约束、自检清单、弹层模板 |
+| 一键上传发布 | [interactive-content-publish/SKILL.md](interactive-content-publish/SKILL.md) | MCP 上传 zip + 图标、创建/更新、提审 |
+
+本仓库小工具示例：`hourglass/`（焚香计时），打包命令 `node hourglass/build.mjs douyin`，产物 `hourglass/dist/douyin-hourglass.zip`。
+
 ## 开发约束（摘要）
 
 ### 包体
@@ -47,7 +56,7 @@
 3. 「发布」提审：约 **1 个工作日**；审核中可撤回
 4. 通过后站内信通知
 
-另有官方「互动空间上传」skill / MCP（`interative_content_mcp`）可打包上传。
+一键发布见 [interactive-content-publish/SKILL.md](interactive-content-publish/SKILL.md)（MCP：`interative_content_mcp`）。
 
 ### AI 调用（可选）
 

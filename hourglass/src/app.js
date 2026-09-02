@@ -729,7 +729,7 @@ function setPickerSec(sec){
   highlightCol(colH); highlightCol(colM); highlightCol(colS);
 }
 
-const clock=$('clock'),btnGo=$('btnGo'),btnAsh=$('btnAsh'),panel=$('panel');
+const clock=$('clock'),btnGo=$('btnGo'),btnAsh=$('btnAsh'),btnPanel=$('btnPanel'),panel=$('panel');
 const mainPresets=$('main-presets'),presetChips=$('presetChips'),toolbarMenus=$('toolbarMenus');
 const lblScene=$('lblScene'),lblLight=$('lblLight');
 
@@ -760,6 +760,7 @@ function ui(){
   const busy=sessionActive;
   presetChips.classList.toggle('hide',busy);
   toolbarMenus.classList.toggle('hide',busy);
+  btnPanel.classList.toggle('is-hidden',busy);
   canvas.style.pointerEvents=sessionActive?'auto':'none';
   syncAshBtn();
 }
@@ -881,8 +882,8 @@ function drawHintText(){
   if(!curHint) return;
   const stickTop=stickTipsTop();
   const fs=Math.max(12,Math.min(W*0.04,15));
-  const smokeClear=sessionActive?Math.max(88,stickBaseLen*0.32):48;
-  const y=Math.max(topLimit+12,stickTop-smokeClear-fs);
+  const smokeClear=sessionActive?Math.max(108,stickBaseLen*0.42):68;
+  const y=Math.max(topLimit+6,stickTop-smokeClear-fs*1.15);
   ctx.save();
   ctx.textAlign='center'; ctx.textBaseline='top';
   ctx.font=`${fs}px "PingFang SC","Microsoft YaHei",sans-serif`;

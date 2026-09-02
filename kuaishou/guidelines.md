@@ -3,7 +3,9 @@
 ## 官方文档
 
 - [开发者接入指南](https://docs.qingque.cn/d/home/eZQBwhW-1V2gw17g5ASOnOsua?identityId=2UbPg3ikvzP)
+- [作品包要求](https://docs.qingque.cn/d/home/eZQBwhW-1V2gw17g5ASOnOsua?identityId=2UbPg3ikvzP#section=h.6klcq9r4wxy3)（接入指南第三节）
 - [创作指引](https://docs.qingque.cn/d/home/eZQDsDHOOo8Ndf2KR41mk_lnW?identityId=2UbPg3ikvzP)
+- [创作者激励活动](https://docs.qingque.cn/d/home/eZQBndlLF7IDDG-81Fhgp6Ydt?identityId=2UbPg3ikvzP)
 
 入口：快手开放平台 → 互动内容平台 → 互动内容世界控制台。当前为定向邀请/白名单。
 
