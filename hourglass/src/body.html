@@ -1,20 +1,28 @@
 <div id="stage"><canvas id="c"></canvas></div>
 
-<div class="toolbar-tr" id="toolbar">
-  <div class="menu-wrap" id="menuScene">
-    <button class="menu-btn" id="btnSceneMenu">环境<span class="sub" id="lblScene">夜雨</span></button>
-    <div class="menu-pop">
-      <button class="menu-item sc on" data-k="night">夜雨</button>
-      <button class="menu-item sc" data-k="bamboo">竹林</button>
-      <button class="menu-item sc" data-k="temple">古寺</button>
-      <button class="menu-item sc" data-k="silent">默照</button>
+<div class="toolbar-tl" id="toolbar">
+  <div class="toolbar-menus" id="toolbarMenus">
+    <div class="menu-wrap" id="menuScene">
+      <button class="glass-btn menu-btn" id="btnSceneMenu">
+        <span class="btn-icon">☁</span>
+        <span class="btn-text">环境<span class="sub" id="lblScene">夜雨</span></span>
+      </button>
+      <div class="menu-pop">
+        <button class="menu-item sc" data-k="night">夜雨</button>
+        <button class="menu-item sc" data-k="bamboo">竹林</button>
+        <button class="menu-item sc" data-k="temple">古寺</button>
+        <button class="menu-item sc on" data-k="silent">默照</button>
+      </div>
     </div>
-  </div>
-  <div class="menu-wrap" id="menuLight">
-    <button class="menu-btn" id="btnLightMenu">点香<span class="sub" id="lblLight">火柴</span></button>
-    <div class="menu-pop">
-      <button class="menu-item lm on" data-m="match">火柴</button>
-      <button class="menu-item lm" data-m="lighter">打火机</button>
+    <div class="menu-wrap" id="menuLight">
+      <button class="glass-btn menu-btn" id="btnLightMenu">
+        <span class="btn-icon">✧</span>
+        <span class="btn-text">点香<span class="sub" id="lblLight">火柴</span></span>
+      </button>
+      <div class="menu-pop">
+        <button class="menu-item lm on" data-m="match">火柴</button>
+        <button class="menu-item lm" data-m="lighter">打火机</button>
+      </div>
     </div>
   </div>
 </div>
@@ -23,16 +31,25 @@
 <div id="timebar"><div id="clock">05:00</div></div>
 
 <div id="main-presets">
-  <button class="chip" data-s="60">1 分</button>
-  <button class="chip on" data-s="300">5 分</button>
-  <button class="chip" data-s="900">15 分</button>
-  <button class="chip" data-s="1500">25 分</button>
-  <button class="chip" data-s="3600">1 时</button>
+  <div class="preset-chips" id="presetChips">
+    <button class="chip" data-s="60">1 分</button>
+    <button class="chip on" data-s="300">5 分</button>
+    <button class="chip" data-s="900">15 分</button>
+    <button class="chip" data-s="1500">25 分</button>
+    <button class="chip" data-s="3600">1 时</button>
+  </div>
+  <button class="chip ash-chip" id="btnAsh" title="弹香灰">
+    <span class="ash-icon">⌇</span> 弹灰
+  </button>
 </div>
 <div id="dock">
-  <button class="dock-btn" id="btnPanel">⏱</button>
+  <button class="dock-btn dock-icon-btn" id="btnPanel" aria-label="自定义时长">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="13" r="7"/><path d="M12 13V9m0-5v2m-4.2 1.8L8.8 8m6.4 2.8L15.2 8"/></svg>
+  </button>
   <button class="dock-main" id="btnGo">点香</button>
-  <button class="dock-btn" id="btnReset">↺</button>
+  <button class="dock-btn dock-icon-btn" id="btnReset" aria-label="重置">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M4 12a8 8 0 0 1 13.7-5.7M20 7v4h-4"/><path d="M20 12a8 8 0 0 1-13.7 5.7M4 17v-4h4"/></svg>
+  </button>
 </div>
 </div>
 <div id="panel">

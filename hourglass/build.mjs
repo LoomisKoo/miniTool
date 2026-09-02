@@ -23,6 +23,24 @@ const style = fs.readFileSync(path.join(__dirname, 'src/style.css'), 'utf8');
 const body = fs.readFileSync(path.join(__dirname, 'src/body.html'), 'utf8');
 const app = fs.readFileSync(path.join(__dirname, 'src/app.js'), 'utf8');
 
+function readAssetMap() {
+  const dir = path.join(__dirname, 'src/assets');
+  if (!fs.existsSync(dir)) return {};
+  const map = {};
+  fs.readdirSync(dir).forEach(f => {
+    const full = path.join(dir, f);
+    const stat = fs.statSync(full);
+    if (!stat.isFile()) return;
+    const key = path.basename(f, path.extname(f));
+    const ext = path.extname(f).slice(1).toLowerCase();
+    const mime = { webp: 'image/webp', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg' }[ext];
+    if (!mime) return;
+    map[key] = `data:${mime};base64,${fs.readFileSync(full).toString('base64')}`;
+  });
+  return map;
+}
+const assetMap = readAssetMap();
+
 function readExtraCss(platformId) {
   const p = path.join(__dirname, 'platforms', platformId, 'extra.css');
   return fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : '';
@@ -46,6 +64,7 @@ function buildOne(platformId) {
   const extraCss = readExtraCss(platformId);
   const platformJson = JSON.stringify(cfg, null, 0);
   const htmlClass = cfg.portraitOnly ? ' class="portrait-only"' : '';
+  const bgImgsJson = Object.keys(assetMap).length ? `window.BG_IMGS=${JSON.stringify(assetMap)};` : '';
 
   const html = `<!DOCTYPE html>
 <html lang="zh-CN"${htmlClass}>
@@ -63,6 +82,7 @@ ${extraCss}
 ${body}
 <script>
 window.PLATFORM=${platformJson};
+${bgImgsJson}
 (function(){
 ${app}
 })();

@@ -10,6 +10,7 @@ hourglass/
 │   ├── app.js           # 逻辑
 │   ├── style.css        # 样式
 │   ├── body.html        # DOM 结构
+│   ├── assets/          # 背景图资（构建时自动内联 base64）
 │   └── config.base.json # 默认配置
 ├── platforms/           # 平台差异
 │   ├── douyin/config.json
@@ -21,6 +22,8 @@ hourglass/
     ├── kuaishou/...
     └── xiaohongshu/...
 ```
+
+> `src/assets/` 下的图片会自动转 base64 内联进产物，文件名即场景 key（如 `bamboo.webp` → 竹林背景）。注意总产物不能超过 8MB。
 
 ## 开发
 
