@@ -125,6 +125,149 @@ function drawCenserImg(key){
   return true;
 }
 
+const LIGHT_PROP={
+  match:{tipNX:0.5,tipNY:0.045,hRatio:0.20,tilt:0.42,side:1},
+  lighter:{tipNX:0.34,tipNY:0.055,hRatio:0.24,tilt:0.28,side:1},
+};
+function lightPhases(mode){
+  return mode==='lighter'
+    ?{strikeEnd:0.34,igniteEnd:0.52,transferStart:0.52}
+    :{strikeEnd:0.40,igniteEnd:0.58,transferStart:0.58};
+}
+function lightStage(p,mode){
+  const ph=lightPhases(mode);
+  if(p<ph.strikeEnd) return 'strike';
+  if(p<ph.igniteEnd) return 'ignite';
+  return 'transfer';
+}
+function drawStrikeSparks(px,py,w,t,intensity){
+  if(intensity<0.08) return;
+  drawEmberSparks(px,py,w,t,17,4+(intensity*10|0),0.55,intensity*0.75);
+}
+function drawPropFlame(px,py,w,intensity,mode,t){
+  if(intensity<=0.03) return;
+  const flick=0.68+Math.sin(t*0.028)*0.22+Math.sin(t*0.051)*0.1;
+  const a=intensity*flick;
+  ctx.save();
+  if(mode==='match'){
+    const fh=w*0.38*(0.45+intensity*0.55);
+    const fw=w*0.16;
+    ctx.globalAlpha=a*0.9;
+    ctx.fillStyle=`rgba(255,${110+intensity*70|0},18,0.9)`;
+    ctx.beginPath();
+    ctx.moveTo(px,py);
+    ctx.quadraticCurveTo(px-fw*0.9,py-fh*0.45,px-fw*0.35,py-fh);
+    ctx.quadraticCurveTo(px,py-fh*1.05,px+fw*0.5,py-fh*0.88);
+    ctx.quadraticCurveTo(px+fw,py-fh*0.4,px,py);
+    ctx.fill();
+    drawEmberSparks(px,py-fh*0.2,w,t,42,5+(intensity*9|0),0.28,0.55*intensity*a);
+  }else{
+    const fh=w*0.32*(0.4+intensity*0.6);
+    ctx.globalAlpha=a*0.85;
+    ctx.fillStyle=`rgba(80,160,255,${0.75*a})`;
+    ctx.beginPath(); ctx.ellipse(px,py-fh*0.42,w*0.05,fh*0.22,0,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle=`rgba(255,${140+intensity*50|0},30,${0.8*a})`;
+    ctx.beginPath();
+    ctx.moveTo(px,py);
+    ctx.quadraticCurveTo(px+w*0.12,py-fh*0.35,px,py-fh);
+    ctx.quadraticCurveTo(px-w*0.08,py-fh*0.3,px,py);
+    ctx.fill();
+    drawEmberSparks(px,py-fh*0.15,w,t,77,4+(intensity*7|0),0.22,0.5*intensity*a);
+  }
+  ctx.restore();
+}
+function drawLightProp(){
+  if(phase!=='light') return;
+  const st=currentStick();
+  if(!st||st.lighting<=0||st.lighting>=1) return;
+  const key=lightMode==='lighter'?'lighter':'match';
+  const img=bgImgs[key];
+  const cfg=LIGHT_PROP[key];
+  if(!img||!cfg) return;
+  const sp=calcParams(st.cfg);
+  const burnY=getBurnY(st,sp);
+  const p=st.lighting;
+  const ph=lightPhases(key);
+  const stage=lightStage(p,key);
+  const dispH=stickBaseLen*cfg.hRatio;
+  const scale=dispH/img.height;
+  const drawW=img.width*scale;
+  const tipX=img.width*cfg.tipNX;
+  const tipY=img.height*cfg.tipNY;
+  const t=performance.now();
+  let tipScreenX,tipScreenY,tilt,alpha=1,flameI=0;
+
+  if(key==='match'){
+    const restX=sp.x+cfg.side*stickBaseW*9;
+    const restY=burnY+stickBaseLen*0.07;
+    if(stage==='strike'){
+      const spg=p/ph.strikeEnd;
+      const swipe=Math.sin(spg*Math.PI*5.2)*stickBaseW*4.8*(1-spg*0.35);
+      tipScreenX=restX+swipe-stickBaseW*5;
+      tipScreenY=restY+Math.sin(spg*Math.PI*4)*stickBaseW*1.6;
+      tilt=cfg.tilt*(0.55+spg*0.35)+Math.sin(spg*Math.PI*5.2)*0.22;
+      alpha=Math.min(1,spg*3.5);
+      drawStrikeSparks(tipScreenX,tipScreenY,stickBaseW*2.2,t,spg);
+    }else if(stage==='ignite'){
+      const ipg=(p-ph.strikeEnd)/(ph.igniteEnd-ph.strikeEnd);
+      tipScreenX=restX-stickBaseW*5;
+      tipScreenY=restY;
+      tilt=cfg.tilt;
+      flameI=ipg;
+    }else{
+      const tpg=(p-ph.transferStart)/(1-ph.transferStart);
+      const approach=1-Math.pow(1-tpg,1.75);
+      const fromX=restX-stickBaseW*5, fromY=restY;
+      const toX=sp.x+cfg.side*stickBaseW*2.2;
+      const toY=burnY-stickBaseW*1.5;
+      tipScreenX=fromX+(toX-fromX)*approach;
+      tipScreenY=fromY+(toY-fromY)*approach;
+      tilt=cfg.tilt*cfg.side*(0.3+approach*0.65);
+      flameI=Math.max(0.35,1-tpg*0.55);
+    }
+  }else{
+    const restX=sp.x+cfg.side*stickBaseW*12;
+    const restY=burnY+stickBaseLen*0.03;
+    if(stage==='strike'){
+      const spg=p/ph.strikeEnd;
+      const press=Math.sin(spg*Math.PI)*stickBaseW*2.8;
+      tipScreenX=restX;
+      tipScreenY=restY+press;
+      tilt=cfg.tilt+press*0.006+Math.sin(spg*Math.PI*2)*0.04;
+      alpha=Math.min(1,spg*3.2);
+    }else if(stage==='ignite'){
+      const ipg=(p-ph.strikeEnd)/(ph.igniteEnd-ph.strikeEnd);
+      tipScreenX=restX;
+      tipScreenY=restY+stickBaseW*2.8;
+      tilt=cfg.tilt+0.02;
+      flameI=ipg;
+    }else{
+      const tpg=(p-ph.transferStart)/(1-ph.transferStart);
+      const approach=1-Math.pow(1-tpg,1.7);
+      const fromX=restX, fromY=restY+stickBaseW*2.8;
+      const toX=sp.x+cfg.side*stickBaseW*2.5;
+      const toY=burnY-stickBaseW*1.2;
+      tipScreenX=fromX+(toX-fromX)*approach;
+      tipScreenY=fromY+(toY-fromY)*approach;
+      tilt=cfg.tilt*(0.35+approach*0.55);
+      flameI=Math.max(0.3,1-tpg*0.5);
+    }
+  }
+
+  ctx.save();
+  ctx.globalAlpha=alpha;
+  ctx.translate(tipScreenX,tipScreenY);
+  ctx.rotate(tilt);
+  ctx.drawImage(img,-tipX*scale,-tipY*scale,drawW,dispH);
+  ctx.restore();
+  if(stage!=='strike'&&flameI>0){
+    const fh=Math.sin(tilt), fx=Math.cos(tilt);
+    const flameX=tipScreenX+tipX*scale*fx-tipY*scale*fh;
+    const flameY=tipScreenY+tipX*scale*fh+tipY*scale*fx;
+    drawPropFlame(flameX,flameY,stickBaseW*2.4,flameI,key,t);
+  }
+}
+
 function relayoutSticks(){
   if(!sticks.length) return;
   stickLayout(totalSec).forEach((cfg,i)=>{ if(sticks[i]) sticks[i].cfg=cfg; });
@@ -608,18 +751,26 @@ function drawEmberSparks(cx,y,w,t,seed,count,spread,intensity){
 function drawEmber(st,sp,y){
   const t=performance.now(),p=st.lighting,w=sp.w;
   if(p>0&&p<1){
-    if(lightMode==='match'&&p<0.2){
-      drawEmberSparks(sp.x,y,w,t,st.cfg.slot,8+p*10|0,0.9+p,0.35+p*0.4);
-    }
-    drawEmberSparks(sp.x,y,w,t,st.cfg.slot+99,6+((p*14)|0),0.55+p*0.45,0.45+p*0.35);
-    if(lightMode==='match'){
-      const fh=3+p*5;
-      ctx.fillStyle=`rgba(255,${100+p*50|0},15,${0.25+p*0.2})`;
-      ctx.beginPath(); ctx.moveTo(sp.x,y); ctx.lineTo(sp.x-w*0.25,y-fh); ctx.lineTo(sp.x+w*0.12,y-fh*0.85); ctx.closePath(); ctx.fill();
-    }else{
-      const fh=4+p*4;
-      ctx.fillStyle=`rgba(255,${130+p*40|0},25,${0.22+p*0.18})`;
-      ctx.beginPath(); ctx.moveTo(sp.x,y); ctx.quadraticCurveTo(sp.x+w*0.35,y-fh*0.5,sp.x,y-fh); ctx.fill();
+    const ph=lightPhases(lightMode);
+    const stage=lightStage(p,lightMode);
+    if(stage==='transfer'){
+      const tpg=(p-ph.transferStart)/(1-ph.transferStart);
+      if(tpg>0.42){
+        const xfer=Math.min(1,(tpg-0.42)/0.58);
+        drawEmberSparks(sp.x,y,w,t,st.cfg.slot+99,4+((xfer*12)|0),0.4+xfer*0.2,0.35+xfer*0.45);
+        if(xfer>0.55){
+          const fi=xfer-0.55;
+          if(lightMode==='match'){
+            const fh=2+fi*4;
+            ctx.fillStyle=`rgba(255,${100+fi*60|0},15,${0.18+fi*0.22})`;
+            ctx.beginPath(); ctx.moveTo(sp.x,y); ctx.lineTo(sp.x-w*0.22,y-fh); ctx.lineTo(sp.x+w*0.1,y-fh*0.85); ctx.closePath(); ctx.fill();
+          }else{
+            const fh=2.5+fi*3.5;
+            ctx.fillStyle=`rgba(255,${120+fi*50|0},25,${0.16+fi*0.2})`;
+            ctx.beginPath(); ctx.moveTo(sp.x,y); ctx.quadraticCurveTo(sp.x+w*0.3,y-fh*0.45,sp.x,y-fh); ctx.fill();
+          }
+        }
+      }
     }
   }else if(st.lit&&!st.done){
     const seed=st.cfg.slot*17;
@@ -902,7 +1053,7 @@ function loop(now){
     if(st){
       sticks.forEach(s=>{ if(s!==st) s.lighting=0; });
       if(st.lighting>0&&st.lighting<1){
-        st.lighting+=dt*(lightMode==='lighter'?0.0013:0.0021);
+        st.lighting+=dt*(lightMode==='lighter'?0.00105:0.00145);
         if(st.lighting>=1){
           st.lighting=0; st.ignited=true; st.lit=true;
           phase='burn'; running=true; stickBurnElapsed=0;
@@ -968,6 +1119,7 @@ function loop(now){
   const mid=Math.floor(sticks.length/2);
   [...sticks].sort((a,b)=>Math.abs(a.cfg.slot-mid)-Math.abs(b.cfg.slot-mid)).forEach(drawStick);
   drawCenserFront();
+  drawLightProp();
   if(burning&&burning.lit&&!burning.done) drawStickSmoke(burning);
   drawHintText();
   frameLastT=now;
