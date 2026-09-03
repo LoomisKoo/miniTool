@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>豆图</title>
+  <link rel="stylesheet" href="./style.css?v=11" />
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <div class="header-text">
+        <h1>豆图</h1>
+        <p id="header-sub">照片转拼豆图纸</p>
+      </div>
+    </header>
+
+    <section class="screen active" id="screen-home">
+      <div class="upload-area">
+        <label class="upload-box" id="upload-box" for="file-input">
+          <span class="upload-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <rect x="3" y="3" width="18" height="18" rx="3"></rect>
+              <circle cx="8.5" cy="8.5" r="1.5"></circle>
+              <path d="M21 15l-5-5L5 21"></path>
+            </svg>
+          </span>
+          <span>选择图片</span>
+          <small>生成可拼的豆格图纸</small>
+        </label>
+      </div>
+    </section>
+
+    <section class="screen" id="screen-edit">
+      <div class="preview-shell">
+        <div class="viewport" id="viewport">
+          <canvas id="preview-canvas"></canvas>
+        </div>
+        <div class="board-nav" id="board-nav">
+          <button type="button" id="btn-board-prev" aria-label="上一板">‹</button>
+          <span id="board-label">全图</span>
+          <button type="button" id="btn-board-next" aria-label="下一板">›</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="group">
+          <div class="row chips-row">
+            <button type="button" class="chip chip-select" id="btn-palette">MARD</button>
+            <button type="button" class="chip chip-select chip-color" id="btn-colors" aria-label="查看豆色">
+              <span class="colors-preview" id="colors-preview"></span>
+            </button>
+            <button type="button" class="chip chip-sm on" id="btn-grid" aria-pressed="true">网格</button>
+            <button type="button" class="chip chip-sm" id="btn-dither" aria-pressed="false">抖动</button>
+            <button type="button" class="chip chip-sm" id="btn-sharp" aria-pressed="false">锐利</button>
+          </div>
+          <div class="row">
+            <span class="label">豆宽</span>
+            <input type="range" id="width-slider" min="16" max="116" value="29" />
+            <span class="val" id="width-val">29</span>
+          </div>
+          <div class="row">
+            <span class="label">限色</span>
+            <input type="range" id="color-slider" min="4" max="40" value="12" />
+            <span class="val" id="color-val">12</span>
+          </div>
+        </div>
+
+        <p class="meta" id="meta-line">—</p>
+      </div>
+
+      <div class="actions">
+        <button class="btn btn-ghost" id="btn-reselect" type="button">重选</button>
+        <button class="btn btn-primary" id="btn-save" type="button">存相册</button>
+      </div>
+    </section>
+  </div>
+
+  <div class="sheet-mask" id="palette-sheet" aria-hidden="true">
+    <button type="button" class="sheet-backdrop" id="palette-sheet-backdrop" aria-label="关闭"></button>
+    <div class="sheet" role="dialog" aria-label="选择色卡">
+      <div class="sheet-handle"></div>
+      <p class="sheet-title">色卡</p>
+      <button type="button" class="sheet-option" data-palette="mard">
+        <span class="sheet-option-main">MARD</span>
+        <span class="sheet-option-sub">221 色 · 国内主流</span>
+      </button>
+      <button type="button" class="sheet-option" data-palette="coco">
+        <span class="sheet-option-main">COCO</span>
+        <span class="sheet-option-sub">291 色</span>
+      </button>
+      <button type="button" class="sheet-cancel" id="palette-sheet-cancel">取消</button>
+    </div>
+  </div>
+
+  <div class="sheet-mask" id="colors-sheet" aria-hidden="true">
+    <button type="button" class="sheet-backdrop" id="colors-sheet-backdrop" aria-label="关闭"></button>
+    <div class="sheet sheet-tall" role="dialog" aria-label="豆色用量">
+      <div class="sheet-handle"></div>
+      <p class="sheet-title">豆色 · 点选可高亮</p>
+      <div class="colors-list" id="colors-list"></div>
+      <button type="button" class="sheet-cancel" id="colors-sheet-cancel">完成</button>
+    </div>
+  </div>
+
+  <input type="file" id="file-input" accept="image/jpeg,image/png,image/webp,image/*" />
+  <div class="toast" id="toast"></div>
+
+  <script src="./palettes.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>
