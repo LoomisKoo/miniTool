@@ -117,7 +117,7 @@ ${app}
     'style.css': fs.statSync(cssPath).size,
     'app.js': fs.statSync(jsPath).size,
   };
-  const zipPath = path.join(__dirname, 'dist', `${platformId}-hourglass.zip`);
+  const zipPath = path.join(__dirname, 'dist', `${platformId}-incense-timer.zip`);
   zipFiles(zipPath, [htmlPath, cssPath, jsPath]);
   reportBuild(cfg, platformId, sizes, fs.statSync(zipPath).size);
 }
@@ -166,7 +166,7 @@ ${app}
   const htmlPath = path.join(outDir, 'index.html');
   fs.writeFileSync(htmlPath, html);
 
-  const zipPath = path.join(__dirname, 'dist', `${platformId}-hourglass.zip`);
+  const zipPath = path.join(__dirname, 'dist', `${platformId}-incense-timer.zip`);
   zipFiles(zipPath, [htmlPath]);
   reportBuild(cfg, platformId, { 'index.html': fs.statSync(htmlPath).size }, fs.statSync(zipPath).size);
 }

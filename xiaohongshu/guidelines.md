@@ -38,14 +38,14 @@ xiaohongshu/
 
 ```bash
 # 1. 打包（小红书走多文件：index.html + style.css + app.js）
-cd hourglass && node build.mjs xiaohongshu
+cd incense-timer && node build.mjs xiaohongshu
 
 # 2. 官方审计
 node ../xiaohongshu/minitool-zip-builder/scripts/audit_artifact.mjs dist/xiaohongshu
 ```
 
-产物：`hourglass/dist/xiaohongshu-hourglass.zip`  
-上架素材：名称「焚香计时」、简介「焚香倒计时，自选时长，看香逐渐燃尽。」、图标 `hourglass/icon.png`
+产物：`incense-timer/dist/xiaohongshu-incense-timer.zip`  
+上架素材：名称「焚香计时」、简介「焚香倒计时，自选时长，看香逐渐燃尽。」、图标 `incense-timer/icon.png`
 
 ## 发布
 

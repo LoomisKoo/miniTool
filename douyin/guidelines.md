@@ -25,7 +25,7 @@
 | 互动空间内容生成 | [interact-creation/SKILL.md](interact-creation/SKILL.md) | 开发/打包离线 H5：硬约束、自检清单、弹层模板 |
 | 一键上传发布 | [interactive-content-publish/SKILL.md](interactive-content-publish/SKILL.md) | MCP 上传 zip + 图标、创建/更新、提审 |
 
-本仓库小工具示例：`hourglass/`（焚香计时），打包命令 `node hourglass/build.mjs douyin`，产物 `hourglass/dist/douyin-hourglass.zip`。
+本仓库小工具示例：`incense-timer/`（焚香计时），打包命令 `node incense-timer/build.mjs douyin`，产物 `incense-timer/dist/douyin-incense-timer.zip`。
 
 ## 开发约束（摘要）
 

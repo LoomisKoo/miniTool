@@ -10,7 +10,19 @@
 | --- | --- |
 | 名称 | 焚香计时 |
 | 简介 | 焚香倒计时，自选时长，看香逐渐燃尽。 |
-| 图标 | `hourglass/icon.png`（各平台上架封面/图标用，不打进 zip 包） |
+| 图标 | `incense-timer/icon.png`（各平台上架封面/图标用，不打进 zip 包） |
+
+### 发布状态
+
+仓库根目录有跨项目 [发布总表](../README.md#发布总表)；此处只记本工具。
+
+| 平台 | 状态 | 版本 | 产物 |
+| --- | --- | --- | --- |
+| 小红书 | ✅ 已上线 | — | `dist/xiaohongshu-incense-timer.zip` |
+| 抖音 | 未上架 | — | `dist/douyin-incense-timer.zip` |
+| 快手 | 未上架 | — | `dist/kuaishou-incense-timer.zip` |
+
+发版后在此更新版本号，并同步根目录总表。
 
 ![图标](icon.png)
 
@@ -49,7 +61,7 @@
 ## 目录
 
 ```
-hourglass/
+incense-timer/
 ├── src/                 # 共用源码
 │   ├── app.js           # 逻辑
 │   ├── style.css        # 样式
@@ -62,7 +74,7 @@ hourglass/
 │   └── xiaohongshu/config.json
 ├── build.mjs            # 打包脚本
 └── dist/                # 产物（git 可忽略）
-    ├── douyin/index.html + douyin-hourglass.zip
+    ├── douyin/index.html + douyin-incense-timer.zip
     ├── kuaishou/...
     └── xiaohongshu/...
 ```
@@ -87,13 +99,13 @@ python3 -m http.server 9876 --directory dist/douyin
 
 ## 上传
 
-各平台上传对应的 `dist/{平台}-hourglass.zip`，包内根目录为 `index.html`。
+各平台上传对应的 `dist/{平台}-incense-timer.zip`，包内根目录为 `index.html`。
 
 | 平台 | 产物 | 差异 |
 | --- | --- | --- |
-| 抖音 | `dist/douyin-hourglass.zip` | 支持横竖屏 |
-| 快手 | `dist/kuaishou-hourglass.zip` | 竖屏优先 + 横屏紧凑样式 |
-| 小红书 | `dist/xiaohongshu-hourglass.zip` | 竖屏；多文件（html+css+js），见 `xiaohongshu/guidelines.md` |
+| 抖音 | `dist/douyin-incense-timer.zip` | 支持横竖屏 |
+| 快手 | `dist/kuaishou-incense-timer.zip` | 竖屏优先 + 横屏紧凑样式 |
+| 小红书 | `dist/xiaohongshu-incense-timer.zip` | 竖屏；多文件（html+css+js），见 `xiaohongshu/guidelines.md` |
 
 平台规范见仓库根目录 `douyin/guidelines.md`、`kuaishou/guidelines.md` 等。
 
@@ -101,7 +113,7 @@ python3 -m http.server 9876 --directory dist/douyin
 
 `platforms/*/config.json` 字段：
 
-- `storagePrefix` — localStorage 前缀，避免多平台调试互相覆盖
+- `storagePrefix` — localStorage 前缀，避免多平台调试互相覆盖（历史原因仍为 `hourglass_*`，已上线端勿改，以免用户本地数据失效）
 - `portraitOnly` — 是否竖屏优先（影响 `html` class 与额外 CSS）
 - `title` — 页面标题
 
