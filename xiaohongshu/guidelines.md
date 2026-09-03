@@ -16,7 +16,7 @@ xiaohongshu/
 │   ├── SKILL.md               # 工作流程
 │   ├── references/            # 详细约束
 │   └── scripts/audit_artifact.mjs
-└── jiugongge/                 # 其他小工具示例
+└── crop-grid/                 # 轻映（照片加工：裁切/圆角/宫格）
 ```
 
 打包前读 `minitool-zip-builder/SKILL.md`，按 reference 逐项核对。
