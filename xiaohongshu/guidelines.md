@@ -29,7 +29,8 @@ xiaohongshu/
 打包前读 `minitool-zip-builder/SKILL.md`，按 reference 逐项核对。
 
 上架素材（轻映）：名称「轻映」、简介「图片裁切与多宫格分图」、图标 `xiaohongshu/crop-grid/icon.png`  
-产物：`xiaohongshu/crop-grid/dist/qingying.zip`
+产物：`xiaohongshu/crop-grid/dist/qingying.zip`  
+状态：**小红书已提审（审核中）**
 
 豆图：名称「豆图」、目录 `xiaohongshu/bead-pattern/`（未上架）
 
