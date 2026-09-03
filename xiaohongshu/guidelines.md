@@ -16,10 +16,22 @@ xiaohongshu/
 │   ├── SKILL.md               # 工作流程
 │   ├── references/            # 详细约束
 │   └── scripts/audit_artifact.mjs
-└── crop-grid/                 # 轻映（照片加工：裁切/圆角/宫格）
+├── crop-grid/                 # 轻映（照片加工：裁切/圆角/宫格）
+│   ├── index.html
+│   └── icon.png
+└── bead-pattern/              # 豆图（照片转拼豆图纸）
+    ├── index.html
+    ├── style.css
+    ├── palettes.js
+    └── app.js
 ```
 
 打包前读 `minitool-zip-builder/SKILL.md`，按 reference 逐项核对。
+
+上架素材（轻映）：名称「轻映」、简介「图片裁切与多宫格分图」、图标 `xiaohongshu/crop-grid/icon.png`  
+产物：`xiaohongshu/crop-grid/dist/qingying.zip`
+
+豆图：名称「豆图」、目录 `xiaohongshu/bead-pattern/`（未上架）
 
 ## 与抖音/快手的核心差异
 
