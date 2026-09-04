@@ -62,7 +62,9 @@
         <p>选择类型并填写内容</p>
       </div>
     </div>
-    <p class="hint" id="hint"></p>
+    <div class="qr-title" id="qr-title" hidden>
+      <span class="qt-type"></span><span class="qt-text"></span>
+    </div>
   </section>
 
   <!-- 输入面板 -->
@@ -73,6 +75,10 @@
         <span class="label">网址 / 链接</span>
         <input type="text" id="in-url" inputmode="url" placeholder="https://…" autocomplete="off" />
       </label>
+      <label class="field">
+        <span class="label">标题（导出显示在码下方）</span>
+        <input type="text" id="in-title-url" maxlength="30" placeholder="留空则自动用内容摘要" autocomplete="off" />
+      </label>
     </section>
 
     <section class="panel" data-panel="text">
@@ -81,6 +87,10 @@
         <textarea id="in-text" rows="4" maxlength="2000" placeholder="想写的话、小抄、通知…"></textarea>
       </label>
       <p class="count" id="text-count">0 / 2000</p>
+      <label class="field">
+        <span class="label">标题（导出显示在码下方）</span>
+        <input type="text" id="in-title-text" maxlength="30" placeholder="留空则自动用内容摘要" autocomplete="off" />
+      </label>
     </section>
 
     <section class="panel" data-panel="wifi">
@@ -114,6 +124,10 @@
           <span class="label">隐藏网络</span>
         </label>
       </div>
+      <label class="field">
+        <span class="label">标题（导出显示在码下方）</span>
+        <input type="text" id="in-title-wifi" maxlength="30" placeholder="留空则自动用内容摘要" autocomplete="off" />
+      </label>
       <p class="field-note">对方扫码后即可连上这个 WiFi，不用手动输密码。</p>
     </section>
 
@@ -159,6 +173,10 @@
             <button type="button" class="select-opt" data-value="mecard">MeCard · 安卓 / 通用<span class="tick"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg></span></button>
           </div>
         </div>
+      </label>
+      <label class="field">
+        <span class="label">标题（导出显示在码下方）</span>
+        <input type="text" id="in-title-card" maxlength="30" placeholder="留空则自动用内容摘要" autocomplete="off" />
       </label>
       <p class="field-note">扫码后可把信息直接存为手机联系人。</p>
     </section>

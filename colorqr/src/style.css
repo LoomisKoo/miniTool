@@ -156,13 +156,24 @@ body {
 .stage-empty p { margin: 0; }
 .stage.empty .stage-empty { display: flex; }
 .stage.empty canvas { display: none; }
-.hint {
-  min-height: 18px;
+/* 导出标题预览（替换原来的“码型…字符”提示，跟 PNG 底部标题条同款配色） */
+.qr-title {
   margin: 12px 0 0;
-  color: var(--ink-2);
-  font-size: 12px;
+  font-size: 13px;
   text-align: center;
   letter-spacing: 0.1px;
+  min-height: 18px;
+  word-break: break-all;
+}
+.qr-title[hidden] { display: none; }
+.qr-title .qt-type {
+  color: #7c5cff;
+  font-weight: 600;
+  margin-right: 4px;
+}
+.qr-title .qt-text {
+  color: #1b1e28;
+  font-weight: 500;
 }
 
 /* ---------- panels ---------- */

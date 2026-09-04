@@ -21,7 +21,8 @@
     veil: 0.78,               // 背景图白色罩强度 0~1
     logo: null,               // HTMLImageElement
     bgImg: null,              // HTMLImageElement
-    bgImageMode: false
+    bgImageMode: false,
+    titles: { url: '', text: '', wifi: '', card: '' }
   };
   var LOGO_MAX = 0.24;
   var MARGIN = 4;
@@ -306,16 +307,17 @@
   }
 
   function showHint(msg) {
-    $('hint').textContent = msg || '';
+    if (msg) console.log('[hint]', msg); // 提示已迁出，预览改用标题
   }
 
   function doRender() {
     renderTimer = null;
     var payload = getPayload();
     if (!payload) {
-      if (typeof payload === 'object') showHint(payload.error);
-      else showHint('');
+      // payload 可能为 null、对象（带 error）或字符串
+      showHint(payload && typeof payload === 'object' ? payload.error : '');
       clearCanvas();
+      renderPreviewTitle();
       return;
     }
     var qr;
@@ -323,6 +325,7 @@
     catch (e) {
       showHint('内容过长放不下了，请精简');
       clearCanvas();
+      renderPreviewTitle();
       return;
     }
     var n = qr.getModuleCount();
@@ -337,16 +340,36 @@
       fg: state.fg, bg: state.bg,
       bgImg: state.bgImg, veil: state.veil, logo: state.logo
     });
-    showHint(makeHint(n, payload.length));
+    renderPreviewTitle();
   }
 
   function makeHint(n, len) {
+    // 旧版预览底部"码型偏大 · 116 字符"类提示，已被标题预览替换（#qr-title），保留以防外部脚本残留引用
     var t = n + MARGIN * 2;
     var size = t <= 33 ? '小巧' : t <= 49 ? '适中' : '偏大';
     var s = '码型' + size + ' · ' + len + ' 字符';
     if (state.logo) s += ' · 已加强容错';
     if (state.bgImg) s += ' · 已开背景图';
     return s;
+  }
+  function renderPreviewTitle() {
+    var el = $('qr-title');
+    if (!el) return;
+    // 用「内容字段是否非空」做显示条件，比 QR payload 宽松 —
+    // 用户刚开始填、WiFi 没填密码、卡片只填了姓名等情况也能看到标题预览
+    var hasContent = false;
+    switch (state.type) {
+      case 'url':  hasContent = !!($('in-url').value || '').trim(); break;
+      case 'text': hasContent = !!($('in-text').value || '').trim(); break;
+      case 'wifi': hasContent = !!($('in-ssid').value || '').trim(); break;
+      case 'card': hasContent = !!($('in-cname').value || '').trim(); break;
+    }
+    var custom = (state.titles && state.titles[state.type] ? state.titles[state.type] : '').trim();
+    if (!hasContent && !custom) { el.hidden = true; return; }
+    var c = captionText();
+    el.querySelector('.qt-type').textContent = c.type || '';
+    el.querySelector('.qt-text').textContent = c.text || '';
+    el.hidden = !(c.type || c.text);
   }
 
   // ---------------- tabs（带滑动条） ----------------
@@ -371,6 +394,7 @@
     }
     persist();
     scheduleRender();
+    renderPreviewTitle();
   }
 
   function bindChips(id, attr, key, after) {
@@ -734,7 +758,8 @@
     try {
       localStorage.setItem(PREFIX + 'pref', JSON.stringify({
         type: state.type, shape: state.shape, finder: state.finder,
-        fg: state.fg, bg: state.bg, veil: Math.round(state.veil * 100) / 100
+        fg: state.fg, bg: state.bg, veil: Math.round(state.veil * 100) / 100,
+        titles: state.titles
       }));
     } catch (e) { /* ignore */ }
   }
@@ -749,6 +774,11 @@
       if (d.fg) state.fg = d.fg;
       if (d.bg) state.bg = d.bg;
       if (typeof d.veil === 'number') state.veil = d.veil;
+      if (d.titles && typeof d.titles === 'object') {
+        for (var k in state.titles) {
+          if (typeof d.titles[k] === 'string') state.titles[k] = d.titles[k];
+        }
+      }
     } catch (e) { /* ignore */ }
   }
 
@@ -770,8 +800,7 @@
       case 'url': text = ($('in-url').value || '').trim(); break;
       case 'text': text = ($('in-text').value || '').replace(/\s+/g, ' '); break;
       case 'wifi':
-        text = '名称：' + ($('in-ssid').value || '').trim();
-        if ($('in-sec').value !== 'nopass' && $('in-pass').value) text += ' · 有密码';
+        text = ($('in-ssid').value || '').trim();
         break;
       case 'card':
         text = ($('in-cname').value || '').trim();
@@ -779,7 +808,8 @@
         if (org) text += ' · ' + org;
         break;
     }
-    return { type: t, text: text };
+    var custom = (state.titles && state.titles[state.type] ? state.titles[state.type] : '').trim();
+    return { type: t, text: custom || text };
   }
 
   function fitText(ctx, s, maxW) {
@@ -957,6 +987,26 @@
     });
     setVeilSlider(state.veil);
     updateColorEntry();
+
+    // ---- 标题输入 ----
+    var titleMap = [
+      { type: 'url',  id: 'in-title-url' },
+      { type: 'text', id: 'in-title-text' },
+      { type: 'wifi', id: 'in-title-wifi' },
+      { type: 'card', id: 'in-title-card' }
+    ];
+    for (var ti = 0; ti < titleMap.length; ti++) {
+      (function (m) {
+        var inp = $(m.id);
+        if (!inp) return;
+        inp.value = state.titles[m.type] || '';
+        inp.addEventListener('input', function () {
+          state.titles[m.type] = inp.value;
+          persist();
+          renderPreviewTitle();
+        });
+      })(titleMap[ti]);
+    }
 
     $('btn-save').addEventListener('click', exportPNG);
     $('btn-close').addEventListener('click', closeSave);
