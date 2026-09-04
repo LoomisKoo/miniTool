@@ -2,5 +2,5 @@
 *.log
 node_modules/
 
-# 打包产物
-incense-timer/dist/
+# 各工具打包产物（工具目录内也有各自 .gitignore）
+**/dist/

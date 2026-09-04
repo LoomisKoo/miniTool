@@ -12,9 +12,11 @@
     image: null,
     paletteId: 'mard',
     width: 29,
-    maxColors: 12,
-    mode: 'average',
+    maxColors: 48,
+    mode: 'dominant',
     dither: false,
+    merge: true,
+    mergeThreshold: 48,
     showGrid: true,
     gridData: null,
     counts: null,
@@ -47,7 +49,8 @@
     btnPalette: document.getElementById('btn-palette'),
     btnGrid: document.getElementById('btn-grid'),
     btnDither: document.getElementById('btn-dither'),
-    btnSharp: document.getElementById('btn-sharp'),
+    btnMerge: document.getElementById('btn-merge'),
+    btnAvg: document.getElementById('btn-avg'),
     btnColors: document.getElementById('btn-colors'),
     colorsPreview: document.getElementById('colors-preview'),
     colorsList: document.getElementById('colors-list'),
@@ -90,16 +93,12 @@
     var i;
     for (i = 0; i < palette.colors.length; i++) {
       var c = palette.colors[i];
-      var lab = rgbToLab(c[1], c[2], c[3]);
       list.push({
         code: c[0],
         r: c[1],
         g: c[2],
         b: c[3],
-        hex: rgbToHex(c[1], c[2], c[3]),
-        L: lab[0],
-        a: lab[1],
-        bLab: lab[2]
+        hex: rgbToHex(c[1], c[2], c[3])
       });
     }
     return list;
@@ -109,40 +108,23 @@
     return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1).toUpperCase();
   }
 
-  function rgbToLab(r, g, b) {
-    var R = r / 255;
-    var G = g / 255;
-    var B = b / 255;
-    R = R > 0.04045 ? Math.pow((R + 0.055) / 1.055, 2.4) : R / 12.92;
-    G = G > 0.04045 ? Math.pow((G + 0.055) / 1.055, 2.4) : G / 12.92;
-    B = B > 0.04045 ? Math.pow((B + 0.055) / 1.055, 2.4) : B / 12.92;
-    var x = (R * 0.4124 + G * 0.3576 + B * 0.1805) / 0.95047;
-    var y = (R * 0.2126 + G * 0.7152 + B * 0.0722) / 1.0;
-    var z = (R * 0.0193 + G * 0.1192 + B * 0.9505) / 1.08883;
-    x = x > 0.008856 ? Math.pow(x, 1 / 3) : 7.787 * x + 16 / 116;
-    y = y > 0.008856 ? Math.pow(y, 1 / 3) : 7.787 * y + 16 / 116;
-    z = z > 0.008856 ? Math.pow(z, 1 / 3) : 7.787 * z + 16 / 116;
-    return [116 * y - 16, 500 * (x - y), 200 * (y - z)];
-  }
-
-  function labDist(a, b) {
-    var dL = a.L - b.L;
-    var da = a.a - b.a;
-    var db = a.bLab - b.bLab;
-    return dL * dL + da * da + db * db;
+  function rgbDist2(r1, g1, b1, r2, g2, b2) {
+    var dr = r1 - r2;
+    var dg = g1 - g2;
+    var db = b1 - b2;
+    return dr * dr + dg * dg + db * db;
   }
 
   function nearestColor(cache, r, g, b) {
-    var lab = rgbToLab(r, g, b);
-    var probe = { L: lab[0], a: lab[1], bLab: lab[2] };
     var best = cache[0];
     var bestD = Infinity;
     var i;
     for (i = 0; i < cache.length; i++) {
-      var d = labDist(probe, cache[i]);
+      var c = cache[i];
+      var d = rgbDist2(r, g, b, c.r, c.g, c.b);
       if (d < bestD) {
         bestD = d;
-        best = cache[i];
+        best = c;
       }
     }
     return best;
@@ -154,21 +136,103 @@
     return v | 0;
   }
 
-  function sampleImage(img, w, h, mode) {
-    work.width = w;
-    work.height = h;
-    workCtx.clearRect(0, 0, w, h);
-    if (mode === 'nearest') {
-      workCtx.imageSmoothingEnabled = false;
-    } else {
-      workCtx.imageSmoothingEnabled = true;
-      workCtx.imageSmoothingQuality = 'high';
-    }
-    workCtx.drawImage(img, 0, 0, w, h);
-    return workCtx.getImageData(0, 0, w, h);
+  function readSourcePixels(img) {
+    var maxSide = 1400;
+    var sw = img.naturalWidth;
+    var sh = img.naturalHeight;
+    var scale = 1;
+    var side = Math.max(sw, sh);
+    if (side > maxSide) scale = maxSide / side;
+    var tw = Math.max(1, Math.round(sw * scale));
+    var th = Math.max(1, Math.round(sh * scale));
+    work.width = tw;
+    work.height = th;
+    workCtx.clearRect(0, 0, tw, th);
+    workCtx.imageSmoothingEnabled = true;
+    workCtx.imageSmoothingQuality = 'high';
+    workCtx.drawImage(img, 0, 0, tw, th);
+    return workCtx.getImageData(0, 0, tw, th);
   }
 
-  function limitColors(mapped, maxColors) {
+  function regionStats(data, x0, y0, x1, y1, mode) {
+    var pixels = data.data;
+    var sw = data.width;
+    var freq = {};
+    var bestKey = null;
+    var bestN = 0;
+    var rSum = 0;
+    var gSum = 0;
+    var bSum = 0;
+    var n = 0;
+    var y;
+    var x;
+    for (y = y0; y < y1; y++) {
+      for (x = x0; x < x1; x++) {
+        var o = (y * sw + x) * 4;
+        if (pixels[o + 3] < 128) continue;
+        var r = pixels[o];
+        var g = pixels[o + 1];
+        var b = pixels[o + 2];
+        n += 1;
+        rSum += r;
+        gSum += g;
+        bSum += b;
+        if (mode === 'dominant') {
+          var key = ((r >> 3) << 10) | ((g >> 3) << 5) | (b >> 3);
+          var bucket = freq[key];
+          if (!bucket) {
+            bucket = { n: 0, r: 0, g: 0, b: 0 };
+            freq[key] = bucket;
+          }
+          bucket.n += 1;
+          bucket.r += r;
+          bucket.g += g;
+          bucket.b += b;
+          if (bucket.n > bestN) {
+            bestN = bucket.n;
+            bestKey = key;
+          }
+        }
+      }
+    }
+    if (n === 0) return { r: 255, g: 255, b: 255 };
+    if (mode === 'dominant' && bestKey != null) {
+      var win = freq[bestKey];
+      return {
+        r: Math.round(win.r / win.n),
+        g: Math.round(win.g / win.n),
+        b: Math.round(win.b / win.n)
+      };
+    }
+    return {
+      r: Math.round(rSum / n),
+      g: Math.round(gSum / n),
+      b: Math.round(bSum / n)
+    };
+  }
+
+  function sampleCells(img, w, h, mode) {
+    var src = readSourcePixels(img);
+    var samples = new Array(w * h);
+    var sx = src.width / w;
+    var sy = src.height / h;
+    var y;
+    var x;
+    for (y = 0; y < h; y++) {
+      var y0 = Math.floor(y * sy);
+      var y1 = Math.max(y0 + 1, Math.floor((y + 1) * sy));
+      if (y1 > src.height) y1 = src.height;
+      for (x = 0; x < w; x++) {
+        var x0 = Math.floor(x * sx);
+        var x1 = Math.max(x0 + 1, Math.floor((x + 1) * sx));
+        if (x1 > src.width) x1 = src.width;
+        samples[y * w + x] = regionStats(src, x0, y0, x1, y1, mode);
+      }
+    }
+    return samples;
+  }
+
+  function limitColors(mapped, samples, maxColors) {
     var counts = {};
     var i;
     for (i = 0; i < mapped.length; i++) {
@@ -180,61 +244,93 @@
 
     codes.sort(function (a, b) { return counts[b] - counts[a]; });
     var keep = {};
-    for (i = 0; i < maxColors; i++) keep[codes[i]] = true;
-
     var keepList = [];
+    var byCode = {};
     for (i = 0; i < mapped.length; i++) {
-      if (keep[mapped[i].code]) {
-        var exists = false;
-        var j;
-        for (j = 0; j < keepList.length; j++) {
-          if (keepList[j].code === mapped[i].code) {
-            exists = true;
-            break;
-          }
-        }
-        if (!exists) keepList.push(mapped[i]);
-      }
+      byCode[mapped[i].code] = mapped[i];
+    }
+    for (i = 0; i < maxColors; i++) {
+      keep[codes[i]] = true;
+      keepList.push(byCode[codes[i]]);
     }
 
     for (i = 0; i < mapped.length; i++) {
       if (!keep[mapped[i].code]) {
-        mapped[i] = nearestFromList(keepList, mapped[i].r, mapped[i].g, mapped[i].b);
+        var s = samples[i];
+        mapped[i] = nearestColor(keepList, s.r, s.g, s.b);
       }
     }
     return mapped;
   }
 
-  function nearestFromList(list, r, g, b) {
-    var lab = rgbToLab(r, g, b);
-    var probe = { L: lab[0], a: lab[1], bLab: lab[2] };
-    var best = list[0];
-    var bestD = Infinity;
+  function mergeSimilarRegions(mapped, w, h, threshold) {
+    var total = w * h;
+    var visited = new Uint8Array(total);
+    var thr2 = threshold * threshold;
+    var out = mapped.slice();
+    var dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
     var i;
-    for (i = 0; i < list.length; i++) {
-      var d = labDist(probe, list[i]);
-      if (d < bestD) {
-        bestD = d;
-        best = list[i];
+    for (i = 0; i < total; i++) {
+      if (visited[i]) continue;
+      var queue = [i];
+      var region = [];
+      var codeCount = {};
+      visited[i] = 1;
+      while (queue.length) {
+        var cur = queue.pop();
+        region.push(cur);
+        var c0 = mapped[cur];
+        codeCount[c0.code] = (codeCount[c0.code] || 0) + 1;
+        var cx = cur % w;
+        var cy = (cur / w) | 0;
+        var d;
+        for (d = 0; d < 4; d++) {
+          var nx = cx + dirs[d][0];
+          var ny = cy + dirs[d][1];
+          if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+          var ni = ny * w + nx;
+          if (visited[ni]) continue;
+          var c1 = mapped[ni];
+          if (rgbDist2(c0.r, c0.g, c0.b, c1.r, c1.g, c1.b) > thr2) continue;
+          visited[ni] = 1;
+          queue.push(ni);
+        }
       }
+      var bestCode = mapped[region[0]].code;
+      var bestN = 0;
+      var k;
+      for (k in codeCount) {
+        if (codeCount[k] > bestN) {
+          bestN = codeCount[k];
+          bestCode = k;
+        }
+      }
+      var bead = mapped[region[0]];
+      var r;
+      for (r = 0; r < region.length; r++) {
+        if (mapped[region[r]].code === bestCode) {
+          bead = mapped[region[r]];
+          break;
+        }
+      }
+      for (r = 0; r < region.length; r++) out[region[r]] = bead;
     }
-    return best;
+    return out;
   }
 
-  function applyDither(data, cache, maxColors) {
-    var w = data.width;
-    var h = data.height;
+  function applyDither(samples, w, h, cache) {
     var buf = new Float32Array(w * h * 3);
     var i;
     for (i = 0; i < w * h; i++) {
-      buf[i * 3] = data.data[i * 4];
-      buf[i * 3 + 1] = data.data[i * 4 + 1];
-      buf[i * 3 + 2] = data.data[i * 4 + 2];
+      buf[i * 3] = samples[i].r;
+      buf[i * 3 + 1] = samples[i].g;
+      buf[i * 3 + 2] = samples[i].b;
     }
-
     var mapped = new Array(w * h);
-    for (var y = 0; y < h; y++) {
-      for (var x = 0; x < w; x++) {
+    var y;
+    var x;
+    for (y = 0; y < h; y++) {
+      for (x = 0; x < w; x++) {
         var idx = y * w + x;
         var r = clampByte(buf[idx * 3]);
         var g = clampByte(buf[idx * 3 + 1]);
@@ -250,7 +346,7 @@
         distribute(buf, w, h, x + 1, y + 1, er, eg, eb, 1 / 16);
       }
     }
-    return limitColors(mapped, maxColors);
+    return mapped;
   }
 
   function distribute(buf, w, h, x, y, er, eg, eb, factor) {
@@ -271,21 +367,23 @@
     state.boardsY = Math.ceil(h / BOARD);
 
     var cache = buildPaletteCache(getPalette());
-    var data = sampleImage(img, w, h, state.mode);
+    var samples = sampleCells(img, w, h, state.mode);
     var mapped;
     var i;
-    var o;
 
     if (state.dither) {
-      mapped = applyDither(data, cache, state.maxColors);
+      mapped = applyDither(samples, w, h, cache);
     } else {
       mapped = new Array(w * h);
       for (i = 0; i < w * h; i++) {
-        o = i * 4;
-        mapped[i] = nearestColor(cache, data.data[o], data.data[o + 1], data.data[o + 2]);
+        mapped[i] = nearestColor(cache, samples[i].r, samples[i].g, samples[i].b);
       }
-      mapped = limitColors(mapped, state.maxColors);
     }
+
+    if (state.merge) {
+      mapped = mergeSimilarRegions(mapped, w, h, state.mergeThreshold);
+    }
+    mapped = limitColors(mapped, samples, state.maxColors);
 
     var counts = {};
     for (i = 0; i < mapped.length; i++) {
@@ -359,6 +457,7 @@
     for (y = y0; y < y1; y++) {
       for (x = x0; x < x1; x++) {
         var c = mapped[y * w + x];
+        // 选中色号定位：仅淡化其它格子，选中色号保持原色
         var dim = state.highlightCode && state.highlightCode !== c.code;
         targetCtx.fillStyle = dim ? mixHex(c.hex, '#FFFFFF', 0.72) : c.hex;
         var px = (x - x0) * cell + gap;
@@ -472,13 +571,13 @@
       state.highlightCode = null;
       return;
     }
-    if (state.highlightCode) {
-      var i;
-      for (i = 0; i < list.length; i++) {
-        if (list[i].code === state.highlightCode) return;
-      }
+    // 仅在用户点选过的色号仍存在时保留；否则不高亮，避免整图被冲白变淡
+    if (!state.highlightCode) return;
+    var i;
+    for (i = 0; i < list.length; i++) {
+      if (list[i].code === state.highlightCode) return;
     }
-    state.highlightCode = list[0].code;
+    state.highlightCode = null;
   }
 
   function renderLegend() {
@@ -513,6 +612,24 @@
   function renderColorsList(list) {
     if (!list) list = sortedCounts();
     els.colorsList.innerHTML = '';
+
+    // 首格：全选（取消高亮，显示全部豆色）
+    var clearBtn = document.createElement('button');
+    clearBtn.type = 'button';
+    clearBtn.className = 'colors-item' + (state.highlightCode ? '' : ' is-on');
+    clearBtn.setAttribute('data-clear', '1');
+    clearBtn.setAttribute('aria-label', '全选');
+    clearBtn.innerHTML =
+      '<span class="colors-clear" aria-hidden="true">' +
+      '<svg viewBox="0 0 24 24" fill="currentColor">' +
+      '<rect x="3.5" y="3.5" width="7.6" height="7.6" rx="1.8"></rect>' +
+      '<rect x="12.9" y="3.5" width="7.6" height="7.6" rx="1.8"></rect>' +
+      '<rect x="3.5" y="12.9" width="7.6" height="7.6" rx="1.8"></rect>' +
+      '<rect x="12.9" y="12.9" width="7.6" height="7.6" rx="1.8"></rect>' +
+      '</svg></span>' +
+      '<span class="colors-item-code">全选</span>';
+    els.colorsList.appendChild(clearBtn);
+
     var i;
     for (i = 0; i < list.length; i++) {
       var item = list[i];
@@ -626,7 +743,7 @@
     octx.fillRect(0, 0, out.width, out.height);
     octx.fillStyle = '#1a1a1a';
     octx.font = 'bold 16px sans-serif';
-    octx.fillText('豆图 · ' + getPalette().name, pad, 24);
+    octx.fillText('兔格拼豆 · ' + getPalette().name, pad, 24);
     octx.font = '12px sans-serif';
     octx.fillStyle = '#666';
     var title =
@@ -745,6 +862,14 @@
   els.colorsSheetCancel.addEventListener('click', closeColorsSheet);
 
   els.colorsList.addEventListener('click', function (e) {
+    var clear = findEl(e.target, '[data-clear]', els.colorsList);
+    if (clear) {
+      state.highlightCode = null;
+      renderPreview();
+      renderLegend();
+      closeColorsSheet();
+      return;
+    }
     var btn = findEl(e.target, '[data-code]', els.colorsList);
     if (!btn) return;
     var code = btn.getAttribute('data-code');
@@ -767,16 +892,23 @@
     scheduleRegen();
   });
 
-  els.btnSharp.addEventListener('click', function () {
-    state.mode = state.mode === 'nearest' ? 'average' : 'nearest';
-    setChip(els.btnSharp, state.mode === 'nearest');
+  els.btnMerge.addEventListener('click', function () {
+    state.merge = !state.merge;
+    setChip(els.btnMerge, state.merge);
+    scheduleRegen();
+  });
+
+  els.btnAvg.addEventListener('click', function () {
+    state.mode = state.mode === 'average' ? 'dominant' : 'average';
+    setChip(els.btnAvg, state.mode === 'average');
     scheduleRegen();
   });
 
   syncPaletteButton();
   setChip(els.btnGrid, state.showGrid);
   setChip(els.btnDither, state.dither);
-  setChip(els.btnSharp, state.mode === 'nearest');
+  setChip(els.btnMerge, state.merge);
+  setChip(els.btnAvg, state.mode === 'average');
 
   els.btnBoardPrev.addEventListener('click', function () {
     var total = state.boardsX * state.boardsY;

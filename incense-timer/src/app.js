@@ -21,31 +21,40 @@ const SCENES={
 let curScene='silent';
 let lightMode=localStorage.getItem(storeKey('lightMode'))||'match';
 
-const SZ={s:{len:.36,w:.58},m:{len:.56,w:.78},l:{len:.76,w:.98}};
+/* 一炷香 = 30 分钟；最多 5 炷 → 上限 2.5 小时 */
+const STICK_UNIT_SEC=1800;
+const MAX_STICKS=5;
+const MAX_SEC=STICK_UNIT_SEC*MAX_STICKS;
 
 function stickLayout(sec){
-  let sizeList;
-  if(sec<=90) sizeList=['s'];
-  else if(sec<=360) sizeList=['m'];
-  else if(sec<=720) sizeList=['m','s','s'];
-  else if(sec<=1200) sizeList=['l','m','s'];
-  else if(sec<=1800) sizeList=['l','m','m','s'];
-  else{
-    const n=Math.min(5,2+Math.ceil(sec/600));
-    sizeList=Array.from({length:n},(_,i)=>i===Math.floor(n/2)?'l':i%2?'m':'s');
+  sec=Math.min(MAX_SEC,Math.max(1,sec));
+  const n=Math.min(MAX_STICKS,Math.max(1,Math.ceil(sec/STICK_UNIT_SEC)));
+  const shares=[];
+  let left=sec;
+  for(let i=0;i<n;i++){
+    const share=Math.min(STICK_UNIT_SEC,left);
+    shares.push(share);
+    left-=share;
   }
-  const n=sizeList.length, mid=Math.floor(n/2);
-  const sorted=sizeList.map(sz=>({sz,len:SZ[sz].len})).sort((a,b)=>b.len-a.len);
+  const order=shares.map((timeSec,i)=>({timeSec,i}))
+    .sort((a,b)=>b.timeSec-a.timeSec||a.i-b.i);
   const placed=new Array(n);
-  placed[mid]=sorted[0].sz;
+  const mid=Math.floor(n/2);
+  placed[mid]=order[0];
   let si=1;
   for(let d=1;si<n;d++){
-    if(mid-d>=0&&si<n) placed[mid-d]=sorted[si++].sz;
-    if(mid+d<n&&si<n) placed[mid+d]=sorted[si++].sz;
+    if(mid-d>=0&&si<n) placed[mid-d]=order[si++];
+    if(mid+d<n&&si<n) placed[mid+d]=order[si++];
   }
-  const maxSpread=censerW*0.32;
-  const step=n>1?Math.min(18,maxSpread/(n-1)):0;
-  return placed.map((sz,i)=>({sz,x:(i-(n-1)/2)*step,tilt:(i-(n-1)/2)*0.018,slot:i}));
+  const mouth=Math.max(censerW*0.34,W*0.055);
+  const step=n>1?Math.min(10,mouth/(n-1)):0;
+  return placed.map((p,i)=>({
+    timeSec:p.timeSec,
+    lenRatio:p.timeSec/STICK_UNIT_SEC,
+    x:(i-(n-1)/2)*step,
+    tilt:(i-(n-1)/2)*0.012,
+    slot:i
+  }));
 }
 
 function buildLightSequence(n){
@@ -68,7 +77,7 @@ const COPY={
   done:['香已尽，灰犹在','计时已毕'],
   pause:['香火暂歇'],
   trivia:[
-    '古代「一炷香」约计三十分钟，因香材与粗细而异',
+    '古代「一炷香」约计三十分钟，五炷香约两个半时辰',
     '唐宋时用焚香计时，称「香漏」或「火计时」',
     '「焚香的工夫」即指一段完整计时段',
     '线香约每分钟燃去三四毫米，视长度可估剩余时间',
@@ -149,8 +158,7 @@ function resize(){
     lastUiH=br.height|0;
   }
   topLimit=40;
-  const toolbarRoot=document.getElementById('toolbar');
-  if(toolbarRoot) topLimit=Math.max(topLimit,toolbarRoot.getBoundingClientRect().bottom+10);
+  /* 顶部环境栏已移至底部，不再占用画布顶距 */
 
   const censerBelow=56,margin=8;
   if(hasCenserAsset()){
@@ -161,10 +169,12 @@ function resize(){
     rimY=Math.max(rimY,topLimit+56);
   }
 
-  const hintGap=44;
-  stickBaseLen=Math.min(H*0.72,W*0.72,rimY-topLimit-hintGap);
-  stickBaseLen=Math.max(stickBaseLen,H*0.22);
-  stickBaseW=stickBaseLen*0.036;
+  const hintGap=52;
+  const avail=Math.max(rimY-topLimit-hintGap,H*0.16);
+  /* 一炷完整香约占可用高度的一半多，避免过长 */
+  stickBaseLen=Math.min(H*0.32,W*0.42,avail*0.72);
+  stickBaseLen=Math.max(stickBaseLen,H*0.14);
+  stickBaseW=stickBaseLen*0.040;
   if(!hasCenserAsset()) censerW=Math.min(W*0.42,stickBaseLen*0.38);
   baseY=rimY+6;
   relayoutSticks();
@@ -178,7 +188,11 @@ addEventListener('resize',scheduleResize); scheduleResize();
 const bottomUi=document.getElementById('bottom-ui');
 if(bottomUi&&window.ResizeObserver) new ResizeObserver(entries=>{
   const h=entries[0].contentRect.height|0;
-  if(Math.abs(h-lastUiH)>3){ lastUiH=h; scheduleResize(); }
+  if(Math.abs(h-lastUiH)>3){
+    lastUiH=h;
+    /* 点香后底部控件显隐不再重算香炉位置，避免跳动 */
+    if(!sessionActive) scheduleResize();
+  }
 }).observe(bottomUi);
 
 let sticks=[],maxBurnLen=1;
@@ -191,18 +205,14 @@ function initSticks(){
     const sp=calcParams(cfg);
     maxBurnLen=Math.max(maxBurnLen,sp.coatLen);
     sticks.push({cfg,progress:0,done:false,ash:0,lighting:0,lit:false,ignited:false,
-      ashParticles:[],shakeT:0,smokeEmit:0,smokePhase:Math.random()*6.28,timeShare:0,
+      ashParticles:[],shakeT:0,smokeEmit:0,smokePhase:Math.random()*6.28,timeShare:cfg.timeSec,
       ashFalling:[]});
   });
-  const totalCoat=sticks.reduce((s,st)=>s+calcParams(st.cfg).coatLen,0);
-  sticks.forEach(st=>{ st.timeShare=totalSec*(calcParams(st.cfg).coatLen/totalCoat); });
 }
 
 function recalcTimeShares(){
   if(!sticks.length) return;
-  const totalCoat=sticks.reduce((s,st)=>s+calcParams(st.cfg).coatLen,0);
-  if(totalCoat<=0) return;
-  sticks.forEach(st=>{ st.timeShare=totalSec*(calcParams(st.cfg).coatLen/totalCoat); });
+  sticks.forEach(st=>{ st.timeShare=st.cfg.timeSec||0; });
 }
 
 const ASH_LIMIT=0.3;
@@ -212,10 +222,10 @@ const INSERT_DEPTH=()=>stickBaseLen*0.09;
 const BAMBOO_LEN=()=>stickBaseLen*0.11;
 
 function calcParams(cfg){
-  const s=SZ[cfg.sz];
-  const w=stickBaseW*s.w;
+  /* 竹签等长；可燃段按时长比例；粗细统一 */
+  const w=stickBaseW;
   const bambooLen=BAMBOO_LEN();
-  const coatLen=Math.max(stickBaseLen*s.len-bambooLen,stickBaseLen*0.06);
+  const coatLen=Math.max(stickBaseLen*(cfg.lenRatio||1),stickBaseLen*0.02);
   const rimPoint=rimY;
   const bambooTop=rimPoint-bambooLen;
   const top=bambooTop-coatLen;
@@ -339,7 +349,7 @@ function spawnAshBurst(st,sp,gentle){
   }
   st.ash=0;
   st.shakeT=performance.now();
-  if(!gentle){ sfxAsh(); vibe([6,12,6]); }
+  if(!gentle){ sfxAsh(); vibe([18,40,22]); }
   return true;
 }
 
@@ -633,7 +643,13 @@ canvas.addEventListener('pointerdown',e=>{
 /* 音效 / 震动 */
 let actx=null;
 function ensureAudio(){if(!actx)actx=new(window.AudioContext||window.webkitAudioContext)();return actx}
-function vibe(ms){try{navigator.vibrate&&navigator.vibrate(ms)}catch(_){}}
+function vibe(ms){
+  try{
+    if(!navigator.vibrate) return;
+    navigator.vibrate(0);
+    navigator.vibrate(ms);
+  }catch(_){}
+}
 function sfxIgnite(mode){
   if(mode==='lighter') sfxLighter(); else sfxMatch();
 }
@@ -703,12 +719,13 @@ function startNoise(){
 }
 function stopNoise(){try{noiseNode&&noiseNode.stop();}catch(_){} noiseNode=null}
 
-/* iOS 滚轮 */
+/* iOS 滚轮：上限 2:30:00（分列随「时」切换，秒列不反复重建以免抖动） */
 function buildPicker(col,max,val){
   col.innerHTML=''; for(let i=0;i<=max;i++){
     const d=document.createElement('div'); d.className='p-item';
     d.textContent=String(i).padStart(2,'0'); d.dataset.v=i; col.appendChild(d);
   }
+  val=Math.min(max,Math.max(0,val|0));
   col.scrollTop=val*ITEM_H; highlightCol(col);
 }
 function highlightCol(col){
@@ -717,21 +734,73 @@ function highlightCol(col){
   });
 }
 const colH=$('colH'),colM=$('colM'),colS=$('colS');
-buildPicker(colH,23,0); buildPicker(colM,59,5); buildPicker(colS,59,0);
-[colH,colM,colS].forEach(c=>c.addEventListener('scroll',()=>highlightCol(c),{passive:true}));
+let pickerLock=false,pickerTimer=0;
+function colVal(col){return Math.round(col.scrollTop/ITEM_H)}
+function syncPickerLimits(){
+  if(pickerLock) return;
+  pickerLock=true;
+  const h=Math.min(2,Math.max(0,colVal(colH)));
+  if(colVal(colH)!==h) colH.scrollTop=h*ITEM_H;
+  const maxM=h>=2?30:59;
+  const curMaxM=colM.querySelectorAll('.p-item').length-1;
+  let m=Math.max(0,colVal(colM));
+  if(curMaxM!==maxM){
+    buildPicker(colM,maxM,Math.min(m,maxM));
+    m=Math.min(m,maxM);
+  }else if(m>maxM){
+    colM.scrollTop=maxM*ITEM_H;
+    m=maxM;
+  }
+  /* 秒列始终 0–59；仅在正好 2:30 时钉在 00，避免重建导致抖动 */
+  if(colS.querySelectorAll('.p-item').length-1!==59) buildPicker(colS,59,colVal(colS));
+  if(h>=2&&m>=30&&colVal(colS)!==0) colS.scrollTop=0;
+  highlightCol(colH); highlightCol(colM); highlightCol(colS);
+  pickerLock=false;
+}
+buildPicker(colH,2,0); buildPicker(colM,59,5); buildPicker(colS,59,0);
+[colH,colM,colS].forEach(c=>c.addEventListener('scroll',()=>{
+  if(pickerLock) return;
+  highlightCol(c);
+  clearTimeout(pickerTimer);
+  pickerTimer=setTimeout(syncPickerLimits,120);
+},{passive:true}));
 function readPickerSec(){
-  return Math.round(colH.scrollTop/ITEM_H)*3600+Math.round(colM.scrollTop/ITEM_H)*60+Math.round(colS.scrollTop/ITEM_H);
+  const sec=colVal(colH)*3600+colVal(colM)*60+colVal(colS);
+  return Math.min(MAX_SEC,Math.max(0,sec));
 }
 function setPickerSec(sec){
-  colH.scrollTop=Math.floor(sec/3600)*ITEM_H;
-  colM.scrollTop=Math.floor(sec%3600/60)*ITEM_H;
-  colS.scrollTop=(sec%60)*ITEM_H;
-  highlightCol(colH); highlightCol(colM); highlightCol(colS);
+  sec=Math.min(MAX_SEC,Math.max(0,sec|0));
+  const h=Math.floor(sec/3600);
+  const m=Math.floor(sec%3600/60);
+  const s=sec%60;
+  clearTimeout(pickerTimer);
+  pickerLock=true;
+  buildPicker(colH,2,h);
+  buildPicker(colM,h>=2?30:59,m);
+  buildPicker(colS,59,h>=2&&m>=30?0:s);
+  pickerLock=false;
 }
 
 const clock=$('clock'),btnGo=$('btnGo'),btnAsh=$('btnAsh'),btnPanel=$('btnPanel'),panel=$('panel');
-const mainPresets=$('main-presets'),presetChips=$('presetChips'),toolbarMenus=$('toolbarMenus');
-const lblScene=$('lblScene'),lblLight=$('lblLight');
+const mainPresets=$('main-presets'),presetChips=$('presetChips'),presetsRow=$('presetsRow');
+const btnScene=$('btnScene'),sceneWrap=$('sceneWrap');
+
+function applySceneThumb(el,k){
+  if(!el) return;
+  const sc=SCENES[k];
+  const src=sc&&sc.img&&window.BG_IMGS&&window.BG_IMGS[sc.img];
+  if(src){
+    el.style.backgroundImage='url('+src+')';
+    el.style.backgroundColor='';
+  }else{
+    el.style.backgroundImage='none';
+    el.style.backgroundColor=(sc&&sc.bg&&sc.bg[0])||'#080706';
+  }
+}
+function syncSceneThumbs(){
+  applySceneThumb(btnScene,curScene);
+  document.querySelectorAll('.scene-opt').forEach(el=>applySceneThumb(el,el.dataset.k));
+}
 
 function fmt(sec){
   sec=Math.max(0,Math.ceil(sec));
@@ -754,13 +823,15 @@ function ui(){
   lastClockSec=-1;
   lastAshReady=null; lastAshShow=null;
   syncClock();
-  btnGo.classList.toggle('run',running);
+  const paused=sessionActive&&phase==='burn'&&!running;
+  const mode=running?'pause':(paused?'play':'idle');
+  btnGo.dataset.mode=mode;
   btnGo.classList.toggle('busy',false);
-  btnGo.textContent=running?'⏸':(sessionActive&&phase==='burn'&&!running?'▶':'点香');
+  btnGo.setAttribute('aria-label',mode==='pause'?'暂停':mode==='play'?'继续':'点香');
   const busy=sessionActive;
-  presetChips.classList.toggle('hide',busy);
-  toolbarMenus.classList.toggle('hide',busy);
+  if(presetsRow) presetsRow.classList.toggle('hide',busy);
   btnPanel.classList.toggle('is-hidden',busy);
+  if(busy&&sceneWrap) sceneWrap.classList.remove('open');
   canvas.style.pointerEvents=sessionActive?'auto':'none';
   syncAshBtn();
 }
@@ -778,7 +849,7 @@ function syncAshBtn(){
 }
 
 function applyTime(sec,sync=true){
-  totalSec=Math.max(1,sec); remainSec=totalSec; censerAsh=[];
+  totalSec=Math.min(MAX_SEC,Math.max(1,sec)); remainSec=totalSec; censerAsh=[];
   document.documentElement.style.setProperty('--clock-w',totalSec>=3600?'8.5ch':'5.5ch');
   initSticks(); if(sync) setPickerSec(totalSec);
   document.querySelectorAll('#presetChips .chip').forEach(c=>c.classList.toggle('on',+c.dataset.s===totalSec));
@@ -824,23 +895,26 @@ function resetAll(){
   stopNoise(); censerAsh=[]; applyTime(readPickerSec()||totalSec); ui();
 }
 
-function openPanel(){if(!sessionActive)panel.classList.add('open')}
+function openPanel(){
+  if(sessionActive) return;
+  setPickerSec(totalSec);
+  panel.classList.add('open');
+}
 function closePanel(){panel.classList.remove('open')}
 
-function closeMenus(){document.querySelectorAll('.menu-wrap').forEach(w=>w.classList.remove('open'))}
+function closeMenus(){if(sceneWrap) sceneWrap.classList.remove('open')}
 
 function setLightMode(m){
   lightMode=m;
   localStorage.setItem(storeKey('lightMode'),m);
   document.querySelectorAll('.lm').forEach(b=>b.classList.toggle('on',b.dataset.m===m));
-  lblLight.textContent=LIGHT_NAMES[m];
   closeMenus();
 }
 function setScene(k){
   curScene=k;
   document.querySelectorAll('.sc').forEach(s=>s.classList.toggle('on',s.dataset.k===k));
   document.body.style.background=SCENES[k].bg[0];
-  lblScene.textContent=SCENE_NAMES[k];
+  applySceneThumb(btnScene,k);
   if(running) startNoise(); else stopNoise();
   closeMenus();
 }
@@ -857,20 +931,21 @@ $('panel-bg').onclick=closePanel;
 $('btnCancel').onclick=closePanel;
 $('btnApply').onclick=()=>{applyTime(readPickerSec()||300);closePanel()};
 document.querySelectorAll('#presetChips .chip').forEach(c=>c.onclick=()=>{if(!sessionActive)applyTime(+c.dataset.s)});
-document.querySelectorAll('.menu-btn').forEach(btn=>{
-  btn.onclick=e=>{
+if(btnScene){
+  btnScene.onclick=e=>{
     e.stopPropagation();
     if(sessionActive) return;
-    const wrap=btn.closest('.menu-wrap');
-    const open=wrap.classList.contains('open');
-    closeMenus();
-    if(!open) wrap.classList.add('open');
+    sceneWrap.classList.toggle('open');
   };
-});
-document.querySelectorAll('.menu-pop').forEach(p=>p.onclick=e=>e.stopPropagation());
+}
+if(sceneWrap){
+  const pop=$('scenePop');
+  if(pop) pop.onclick=e=>e.stopPropagation();
+}
 document.addEventListener('click',closeMenus);
 document.querySelectorAll('.sc').forEach(s=>s.onclick=()=>{if(!running&&!sessionActive)setScene(s.dataset.k)});
 document.querySelectorAll('.lm').forEach(b=>b.onclick=()=>{if(!sessionActive)setLightMode(b.dataset.m)});
+syncSceneThumbs();
 
 function stickTipsTop(){
   if(!sticks.length) return rimY-stickBaseLen;

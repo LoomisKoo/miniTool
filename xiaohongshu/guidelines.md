@@ -5,34 +5,30 @@
 - [小工具服务协议](https://agree.xiaohongshu.com/h5/terms/ZXXY20260630004/-1)
 - [创作服务平台 · 小工具](https://creator.xiaohongshu.com/new/red-app)（上传入口）
 
-## 本仓库规范（权威）
+## 本目录内容
 
-小红书与抖音/快手要求不同，**以本目录官方 Skill 为准**：
+本目录**只放平台规范与 Skill**，产品源码在仓库根目录各工具文件夹。
 
 ```
 xiaohongshu/
 ├── guidelines.md              # 本文件（入口摘要）
-├── minitool-zip-builder/      # 官方打包 Skill v1.6.0
-│   ├── SKILL.md               # 工作流程
-│   ├── references/            # 详细约束
-│   └── scripts/audit_artifact.mjs
-├── crop-grid/                 # 轻映（照片加工：裁切/圆角/宫格）
-│   ├── index.html
-│   └── icon.png
-└── bead-pattern/              # 豆图（照片转拼豆图纸）
-    ├── index.html
-    ├── style.css
-    ├── palettes.js
-    └── app.js
+└── minitool-zip-builder/      # 官方打包 Skill v1.6.0
+    ├── SKILL.md               # 工作流程
+    ├── references/            # 详细约束
+    └── scripts/audit_artifact.mjs
 ```
 
 打包前读 `minitool-zip-builder/SKILL.md`，按 reference 逐项核对。
 
-上架素材（轻映）：名称「轻映」、简介「图片裁切与多宫格分图」、图标 `xiaohongshu/crop-grid/icon.png`  
-产物：`xiaohongshu/crop-grid/dist/qingying.zip`  
-状态：**小红书已提审（审核中）**
+### 上架素材与产物
 
-豆图：名称「豆图」、目录 `xiaohongshu/bead-pattern/`（未上架）
+| 工具 | 名称 | 简介 | 图标 | 小红书 zip |
+| --- | --- | --- | --- | --- |
+| 轻映 | 轻映 | 图片裁切与多宫格分图 | `crop-grid/icon.png` | `crop-grid/dist/xiaohongshu-qingying.zip` |
+| 兔格拼豆 | 兔格拼豆 | 照片转拼豆色号图纸 | `bead-pattern/icon.png` | `bead-pattern/dist/xiaohongshu-bead-pattern.zip` |
+| 焚香计时 | 焚香计时 | 焚香倒计时，自选时长，看香逐渐燃尽。 | `incense-timer/icon.png` | `incense-timer/dist/xiaohongshu-incense-timer.zip` |
+
+轻映状态：**小红书已提审（审核中）**
 
 ## 与抖音/快手的核心差异
 
@@ -47,18 +43,33 @@ xiaohongshu/
 
 完整禁止项、JSBridge、性能预算见 `minitool-zip-builder/references/`。
 
-## 焚香计时 · 打包流程
+## 顶部安全区（必遵）
+
+容器顶部有系统导航/关闭等按钮，**可交互控件与重要文案不得顶到屏幕最上沿**。
+
+- 顶部预留高度约 **导航栏高度 `44px`**，再叠加安全区：
+  ```css
+  --safe-t: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
+  --nav-h: 44px; /* 约等于一般导航栏高度 */
+  .top-ui { top: calc(12px + var(--safe-t) + var(--nav-h)); }
+  /* 或整页：padding-top: calc(var(--safe-t) + var(--nav-h)); */
+  ```
+- 安全区须用 `var(--safe-area-inset-*, env(...))` 组合（模拟器注入变量，真机用 `env()`），并配合 `viewport-fit=cover`。
+- 以后开发页面均遵循：内容避开顶部安全区，避免与系统按钮重叠。
+
+## 打包流程（通用）
 
 ```bash
-# 1. 打包（小红书走多文件：index.html + style.css + app.js）
+# 1. 在工具目录打包小红书
 cd incense-timer && node build.mjs xiaohongshu
+# 或: cd crop-grid && node build.mjs xiaohongshu
+# 或: cd bead-pattern && node build.mjs xiaohongshu
 
 # 2. 官方审计
 node ../xiaohongshu/minitool-zip-builder/scripts/audit_artifact.mjs dist/xiaohongshu
 ```
 
-产物：`incense-timer/dist/xiaohongshu-incense-timer.zip`  
-上架素材：名称「焚香计时」、简介「焚香倒计时，自选时长，看香逐渐燃尽。」、图标 `incense-timer/icon.png`
+产物命名：`dist/xiaohongshu-{工具}.zip`
 
 ## 发布
 

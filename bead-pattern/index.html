@@ -3,15 +3,16 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <title>豆图</title>
-  <link rel="stylesheet" href="./style.css?v=11" />
+  <title>兔格拼豆</title>
+  <link rel="icon" href="icon.png" type="image/png" />
+  <link rel="stylesheet" href="./style.css" />
 </head>
 <body>
   <div class="app">
     <header class="header">
       <div class="header-text">
-        <h1>豆图</h1>
-        <p id="header-sub">照片转拼豆图纸</p>
+        <h1>兔格拼豆</h1>
+        <p id="header-sub">照片转拼豆色号图纸</p>
       </div>
     </header>
 
@@ -51,8 +52,9 @@
               <span class="colors-preview" id="colors-preview"></span>
             </button>
             <button type="button" class="chip chip-sm on" id="btn-grid" aria-pressed="true">网格</button>
+            <button type="button" class="chip chip-sm on" id="btn-merge" aria-pressed="true">合并</button>
             <button type="button" class="chip chip-sm" id="btn-dither" aria-pressed="false">抖动</button>
-            <button type="button" class="chip chip-sm" id="btn-sharp" aria-pressed="false">锐利</button>
+            <button type="button" class="chip chip-sm" id="btn-avg" aria-pressed="false">均值</button>
           </div>
           <div class="row">
             <span class="label">豆宽</span>
@@ -61,8 +63,8 @@
           </div>
           <div class="row">
             <span class="label">限色</span>
-            <input type="range" id="color-slider" min="4" max="40" value="12" />
-            <span class="val" id="color-val">12</span>
+            <input type="range" id="color-slider" min="8" max="80" value="48" />
+            <span class="val" id="color-val">48</span>
           </div>
         </div>
 
