@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 打包飞飞乐 — 小红书 / 快手（离线 zip，禁 CDN）
+ * 打包纸灯夜航 — 小红书 / 快手（离线 zip，禁 CDN）
  * 用法:
  *   node build.mjs
  *   node build.mjs xiaohongshu kuaishou
@@ -21,7 +21,6 @@ const style = fs.readFileSync(path.join(__dirname, 'src/style.css'), 'utf8');
 const body = fs.readFileSync(path.join(__dirname, 'src/body.html'), 'utf8');
 const app = fs.readFileSync(path.join(__dirname, 'src/app.js'), 'utf8');
 const iconSrc = path.join(__dirname, 'assets/icon.jpg');
-const birdSrc = path.join(__dirname, 'assets/bird.png');
 
 function assertOffline(text) {
   if (/(?:src|href)=["']https?:\/\//i.test(text)) throw new Error('产物含外链资源');
@@ -36,7 +35,7 @@ function assertXhs(html) {
 
 function report(cfg, platformId, outDir, zipPath) {
   const fmt = n => `${(n / 1024).toFixed(1)} KB`;
-  const files = ['index.html', 'style.css', 'app.js', 'assets/icon.jpg', 'assets/bird.png'];
+  const files = ['index.html', 'style.css', 'app.js', 'assets/icon.jpg'];
   const sizes = {};
   let total = 0;
   for (const f of files) {
@@ -69,7 +68,7 @@ function buildOne(platformId) {
 <meta charset="UTF-8">
 <meta name="viewport" content="${VIEWPORT}">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="theme-color" content="#6bb8de">
+<meta name="theme-color" content="#1a1430">
 <title>${cfg.title}</title>
 <!-- platform:${cfg.id} desc:${cfg.desc || ''} -->
 <link rel="icon" href="./assets/icon.jpg">
@@ -90,9 +89,8 @@ ${body}
   fs.writeFileSync(path.join(outDir, 'style.css'), style);
   fs.writeFileSync(path.join(outDir, 'app.js'), app);
   fs.copyFileSync(iconSrc, path.join(outDir, 'assets/icon.jpg'));
-  fs.copyFileSync(birdSrc, path.join(outDir, 'assets/bird.png'));
 
-  const zipPath = path.join(__dirname, 'dist', `${platformId}-flappy-bird.zip`);
+  const zipPath = path.join(__dirname, 'dist', `${platformId}-paper-lantern.zip`);
   if (fs.existsSync(zipPath)) fs.unlinkSync(zipPath);
   execSync(`zip -q -r "${zipPath}" index.html style.css app.js assets -x '*.DS_Store'`, {
     cwd: outDir,
