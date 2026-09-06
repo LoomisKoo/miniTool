@@ -19,7 +19,9 @@
 | 焚香计时 | `incense-timer/` | ✅ 已上线 | — | — | — | 当前仅小红书 |
 | 轻映 | `crop-grid/` | 审核中 | — | — | — | 名称「轻映」· `*-qingying.zip` |
 | 兔格拼豆 | `bead-pattern/` | — | — | — | — | 未上架 · `*-bead-pattern.zip` |
-| 彩码 | `colorqr/` | — | — | — | — | 开发中 · `*-colorqr.zip` |
+| 彩码 | `colorqr/` | — | — | — | — | 开发中 · 含花束模式 · `*-colorqr.zip` |
+| 星空跳一跳 | `xingkong-jump/` | — | — | — | — | 开发中 · 简介「跳一跳星空改良版」· `*-xingkong-jump.zip` |
+| 飞飞鸟 | `flappy-bird/` | — | — | — | — | 开发中 · Flappy Bird 类 · `*-flappy-bird.zip` |
 
 ## 待开发点子
 
@@ -38,7 +40,8 @@
    - 品类与口径见 `KooNotes/projects/minitool.md` 第 10 条
 11. 解压工具 / App
 12. 抛圈小游戏（套圈）
-13. 跳一跳小游戏
+13. ~~跳一跳小游戏~~ → 开发中：[`xingkong-jump/`](xingkong-jump/)「星空跳一跳」
+14. Flappy Bird 类小游戏 → 开发中：[`flappy-bird/`](flappy-bird/)「飞飞鸟」
 
 ## 平台与规范
 
