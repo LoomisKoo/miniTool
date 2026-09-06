@@ -44,7 +44,6 @@
     bird: null,
     pipes: [],
     groundX: 0,
-    clouds: [],
     t: 0,
     lastTs: 0,
     flapFlash: 0,
@@ -81,19 +80,6 @@
       swing: 0,
       glow: 1,
     };
-  }
-
-  function makeClouds() {
-    const list = [];
-    for (let i = 0; i < 4; i++) {
-      list.push({
-        x: Math.random() * W,
-        y: H * (0.06 + Math.random() * 0.28),
-        s: 0.7 + Math.random() * 0.9,
-        v: 6 + Math.random() * 14,
-      });
-    }
-    return list;
   }
 
   function gapSize() {
@@ -163,7 +149,6 @@
     state.bird = makeBird();
     state.pipes = [];
     state.groundX = 0;
-    state.clouds = makeClouds();
     state.t = 0;
     state.flapFlash = 0;
     const u = unit();
@@ -288,21 +273,6 @@
     if (scrolling) {
       // 连续累加，绘制时再按 tile 取模，避免 % 与 tile 不一致造成卡顿
       state.groundX -= speed * dt;
-      for (const c of state.clouds) {
-        c.x -= c.v * u * dt * 0.35;
-        if (c.x < -140 * u) {
-          c.x = W + 40;
-          c.y = H * (0.08 + Math.random() * 0.22);
-        }
-      }
-    } else if (state.mode === 'ready') {
-      for (const c of state.clouds) {
-        c.x -= c.v * u * dt * 0.12;
-        if (c.x < -140 * u) {
-          c.x = W + 40;
-          c.y = H * (0.08 + Math.random() * 0.22);
-        }
-      }
     }
 
     if (state.mode !== 'play') {
@@ -415,21 +385,6 @@
     ctx.quadraticCurveTo(W * 0.94, gy - 10 * u, W, gy - 28 * u);
     ctx.lineTo(W, gy);
     ctx.closePath();
-    ctx.fill();
-  }
-
-  function drawCloud(c) {
-    const u = unit();
-    const s = c.s * u;
-    const x = c.x, y = c.y;
-    // 夜雾条带，不再画白天积云
-    ctx.fillStyle = 'rgba(120,100,160,0.12)';
-    ctx.beginPath();
-    ctx.ellipse(x, y, 52 * s, 10 * s, -0.08, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = 'rgba(150,125,180,0.1)';
-    ctx.beginPath();
-    ctx.ellipse(x + 18 * s, y - 4 * s, 36 * s, 7 * s, 0.05, 0, Math.PI * 2);
     ctx.fill();
   }
 
@@ -695,7 +650,6 @@
 
   function render() {
     drawSky();
-    for (const c of state.clouds) drawCloud(c);
     for (const p of state.pipes) drawPipe(p);
     drawGround();
     if (state.bird) drawBird(state.bird);
@@ -875,13 +829,11 @@
     resize();
     if (state.mode === 'ready') {
       state.bird = makeBird();
-      state.clouds = makeClouds();
     }
   });
 
   resize();
   state.bird = makeBird();
-  state.clouds = makeClouds();
   {
     const spacing = 210 * unit();
     let x = W * 0.72;

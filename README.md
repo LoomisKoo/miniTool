@@ -21,7 +21,7 @@
 | 兔格拼豆 | `bead-pattern/` | — | — | — | — | 未上架 · `*-bead-pattern.zip` |
 | 彩码 | `colorqr/` | — | — | — | — | 开发中 · 含花束模式 · `*-colorqr.zip` |
 | 星空跳一跳 | `xingkong-jump/` | — | — | — | — | 开发中 · 简介「跳一跳星空改良版」· `*-xingkong-jump.zip` |
-| 纸灯夜航 | `paper-lantern/` | — | — | — | — | 简介「休闲小游戏，杀时间必备」· `*-paper-lantern.zip` |
+| 纸灯夜航 | `paper-lantern/` | ✅ 已上线 | — | — | — | 简介「休闲小游戏，杀时间必备」· `*-paper-lantern.zip` |
 
 ## 待开发点子
 
@@ -41,7 +41,7 @@
 11. 解压工具 / App
 12. 抛圈小游戏（套圈）
 13. ~~跳一跳小游戏~~ → 开发中：[`xingkong-jump/`](xingkong-jump/)「星空跳一跳」
-14. 纸灯夜航（休闲飞灯）→ [`paper-lantern/`](paper-lantern/)「纸灯夜航」
+14. ~~纸灯夜航（休闲飞灯）~~ → 小红书已上线：[`paper-lantern/`](paper-lantern/)「纸灯夜航」
 
 ## 平台与规范
 

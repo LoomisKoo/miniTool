@@ -27,8 +27,10 @@ xiaohongshu/
 | 轻映 | 轻映 | 图片裁切与多宫格分图 | `crop-grid/icon.png` | `crop-grid/dist/xiaohongshu-qingying.zip` |
 | 兔格拼豆 | 兔格拼豆 | 照片转拼豆色号图纸 | `bead-pattern/icon.png` | `bead-pattern/dist/xiaohongshu-bead-pattern.zip` |
 | 焚香计时 | 焚香计时 | 焚香倒计时，自选时长，看香逐渐燃尽。 | `incense-timer/icon.png` | `incense-timer/dist/xiaohongshu-incense-timer.zip` |
+| 纸灯夜航 | 纸灯夜航 | 休闲小游戏，杀时间必备 | `paper-lantern/assets/icon.jpg` | `paper-lantern/dist/xiaohongshu-paper-lantern.zip` |
 
-轻映状态：**小红书已提审（审核中）**
+轻映状态：**小红书已提审（审核中）**  
+纸灯夜航状态：**小红书已上线**
 
 ## 与抖音/快手的核心差异
 
