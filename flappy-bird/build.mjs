@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 打包飞飞鸟 — 小红书 / 快手（离线 zip，禁 CDN）
+ * 打包飞飞乐 — 小红书 / 快手（离线 zip，禁 CDN）
  * 用法:
  *   node build.mjs
  *   node build.mjs xiaohongshu kuaishou

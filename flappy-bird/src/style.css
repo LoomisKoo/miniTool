@@ -35,7 +35,7 @@ html, body {
 
 #hud {
   position: fixed;
-  top: calc(16px + var(--safe-top));
+  top: calc(52px + var(--safe-top));
   left: 0;
   right: 0;
   display: flex;
@@ -48,12 +48,6 @@ html, body {
 
 .score {
   min-width: 64px;
-  padding: 6px 18px 8px;
-  border-radius: 999px;
-  background: rgba(255, 250, 240, 0.28);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border: 1.5px solid rgba(255,255,255,0.55);
   font-size: 42px;
   font-weight: 800;
   letter-spacing: 1px;
@@ -69,9 +63,11 @@ html, body {
 }
 
 .icon-btn {
-  position: absolute;
+  position: fixed;
   right: 16px;
-  top: 2px;
+  top: auto;
+  bottom: calc(20px + var(--safe-bot));
+  z-index: 6;
   width: 42px;
   height: 42px;
   border-radius: 14px;
