@@ -16,7 +16,7 @@
   let muted = false;
   let audioCtx = null;
   const birdImg = new Image();
-  birdImg.src = 'assets/bird.png';
+  birdImg.src = './assets/bird.png';
   let birdReady = false;
   birdImg.onload = () => { birdReady = true; };
 
@@ -80,22 +80,28 @@
 
   function gapSize() {
     const u = unit();
-    const base = 118 * u;
-    const shrink = Math.min(state.score * 1.2 * u, 28 * u);
-    return Math.max(base - shrink, 92 * u);
+    const base = 128 * u;
+    const shrink = Math.min(state.score * 1.4 * u, 28 * u);
+    return Math.max(base - shrink, 102 * u);
   }
 
   function pipeW() {
-    return 58 * unit();
+    return 54 * unit();
   }
 
-  function spawnPipe(x) {
+  function spawnPipe(x, opts) {
     const u = unit();
     const ground = groundH();
-    const gap = gapSize();
-    const topMin = 70 * u;
-    const topMax = H - ground - gap - 70 * u;
-    const top = topMin + Math.random() * Math.max(20, topMax - topMin);
+    const gap = (opts && opts.gap) || gapSize();
+    const topMin = 80 * u;
+    const topMax = H - ground - gap - 80 * u;
+    let top;
+    if (opts && opts.centerY != null) {
+      top = opts.centerY - gap * 0.5;
+      top = Math.max(topMin, Math.min(topMax, top));
+    } else {
+      top = topMin + Math.random() * Math.max(20, topMax - topMin);
+    }
     return { x, top, gap, scored: false };
   }
 
@@ -112,9 +118,13 @@
     state.clouds = makeClouds();
     state.t = 0;
     state.flapFlash = 0;
-    const spacing = 210 * unit();
-    let x = W + 40;
-    for (let i = 0; i < 4; i++) {
+    const u = unit();
+    const spacing = 220 * u;
+    // 第一根稍远、对准小鸟，空隙与正常关卡接近
+    let x = W + 180 * u;
+    state.pipes.push(spawnPipe(x, { centerY: H * 0.42, gap: 136 * u }));
+    x += spacing;
+    for (let i = 0; i < 3; i++) {
       state.pipes.push(spawnPipe(x));
       x += spacing;
     }
@@ -147,7 +157,8 @@
     if (state.mode !== 'play') return;
     state.armed = true;
     const u = unit();
-    state.bird.vy = -7.2 * u;
+    // 单次上升约 38*u，略强仍可在空隙内微调
+    state.bird.vy = -340 * u;
     state.flapFlash = 1;
     beep(620, 0.08, 'square', 0.07);
   }
@@ -180,9 +191,9 @@
   function hitTest() {
     const b = state.bird;
     const g = groundH();
-    const hr = b.r; // 与绘制身体对齐
-    if (b.y + hr >= H - g) return true;
-    if (b.y - hr <= 0) return true;
+    const hr = b.r * 0.85; // 略小于可视半径，手感更友好
+    if (b.y + b.r * 0.9 >= H - g) return true;
+    if (b.y - b.r * 0.9 <= 0) return true;
     const pw = pipeW();
     for (const p of state.pipes) {
       if (b.x + hr > p.x && b.x - hr < p.x + pw) {
@@ -222,12 +233,12 @@
       return;
     }
 
-    b.vy += 22 * u * dt;
-    b.vy = Math.min(b.vy, 14 * u);
-    b.y += b.vy;
-    b.rot = Math.max(-0.55, Math.min(1.1, b.vy / (10 * u)));
+    b.vy += 1520 * u * dt;
+    b.vy = Math.min(b.vy, 720 * u);
+    b.y += b.vy * dt;
+    b.rot = Math.max(-0.5, Math.min(1.0, b.vy / (480 * u)));
 
-    const spacing = 210 * u;
+    const spacing = 220 * u;
     for (const p of state.pipes) {
       p.x -= speed * dt;
       if (!p.scored && p.x + pipeW() < b.x) {

@@ -72,13 +72,13 @@ function buildOne(platformId) {
 <meta name="theme-color" content="#6bb8de">
 <title>${cfg.title}</title>
 <!-- platform:${cfg.id} desc:${cfg.desc || ''} -->
-<link rel="icon" href="assets/icon.jpg">
-<link rel="apple-touch-icon" href="assets/icon.jpg">
-<link rel="stylesheet" href="style.css">
+<link rel="icon" href="./assets/icon.jpg">
+<link rel="apple-touch-icon" href="./assets/icon.jpg">
+<link rel="stylesheet" href="./style.css">
 </head>
 <body>
 ${body}
-<script src="app.js"></script>
+<script src="./app.js"></script>
 </body>
 </html>
 `;
