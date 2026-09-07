@@ -36,29 +36,19 @@
       <div class="preview-shell">
         <div class="viewport" id="viewport">
           <canvas id="preview-canvas"></canvas>
-          <div class="view-tools" id="view-tools">
-            <button type="button" class="vt-btn" id="btn-fit" aria-label="恢复大小" title="恢复大小">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M4 9V4h5"></path>
-                <path d="M20 9V4h-5"></path>
-                <path d="M4 15v5h5"></path>
-                <path d="M20 15v5h-5"></path>
-              </svg>
-            </button>
-            <button type="button" class="vt-btn" id="btn-3d-reset" aria-label="重置视角" title="重置视角">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M12 3a9 9 0 1 0 9 9"></path>
-                <path d="M21 3v6h-6"></path>
-              </svg>
-            </button>
-            <button type="button" class="vt-btn vt-switch" id="btn-3d" aria-pressed="false">3D</button>
-          </div>
           <p class="view-hint" id="view-hint"></p>
         </div>
-        <div class="board-nav" id="board-nav">
-          <button type="button" id="btn-board-prev" aria-label="上一板">‹</button>
-          <span id="board-label">全图</span>
-          <button type="button" id="btn-board-next" aria-label="下一板">›</button>
+        <div class="preview-bar" id="preview-bar">
+          <div class="board-nav" id="board-nav">
+            <button type="button" class="bar-btn bar-btn-icon" id="btn-board-prev" aria-label="上一板">‹</button>
+            <span id="board-label">全图</span>
+            <button type="button" class="bar-btn bar-btn-icon" id="btn-board-next" aria-label="下一板">›</button>
+            <button type="button" class="bar-btn" id="btn-board-all" hidden>全图</button>
+          </div>
+          <div class="view-tools" id="view-tools">
+            <button type="button" class="bar-btn" id="btn-fit">复位</button>
+            <button type="button" class="bar-btn vt-switch" id="btn-3d" aria-pressed="false">3D</button>
+          </div>
         </div>
       </div>
 
@@ -70,7 +60,7 @@
               <span class="colors-preview" id="colors-preview"></span>
             </button>
             <button type="button" class="chip chip-sm on" id="btn-grid" aria-pressed="true">网格</button>
-            <button type="button" class="chip chip-sm on" id="btn-merge" aria-pressed="true">合并</button>
+            <button type="button" class="chip chip-sm" id="btn-merge" aria-pressed="false">合并</button>
             <button type="button" class="chip chip-sm" id="btn-dither" aria-pressed="false">抖动</button>
             <button type="button" class="chip chip-sm" id="btn-avg" aria-pressed="false">均值</button>
           </div>
@@ -78,6 +68,11 @@
             <span class="label">豆宽</span>
             <input type="range" id="width-slider" min="16" max="116" value="29" />
             <span class="val" id="width-val">29</span>
+          </div>
+          <div class="row">
+            <span class="label">拼板</span>
+            <button type="button" class="chip chip-select board-select" id="btn-board-size">29×29</button>
+            <button type="button" class="chip chip-sm on board-seam" id="btn-seam" aria-pressed="true">分板线</button>
           </div>
           <div class="row">
             <span class="label">限色</span>
@@ -113,6 +108,53 @@
     </div>
   </div>
 
+  <div class="sheet-mask" id="board-size-sheet" aria-hidden="true">
+    <button type="button" class="sheet-backdrop" id="board-size-sheet-backdrop" aria-label="关闭"></button>
+    <div class="sheet sheet-tall" role="dialog" aria-label="拼板规格">
+      <div class="sheet-handle"></div>
+      <p class="sheet-title">拼板规格</p>
+      <div class="sheet-scroll">
+        <button type="button" class="sheet-option" data-board-size="14">
+          <span class="sheet-option-main">14×14</span>
+          <span class="sheet-option-sub">小号方板</span>
+        </button>
+        <button type="button" class="sheet-option" data-board-size="15">
+          <span class="sheet-option-main">15×15</span>
+          <span class="sheet-option-sub">小号方板</span>
+        </button>
+        <button type="button" class="sheet-option" data-board-size="16">
+          <span class="sheet-option-main">16×16</span>
+          <span class="sheet-option-sub">练习小板</span>
+        </button>
+        <button type="button" class="sheet-option" data-board-size="22">
+          <span class="sheet-option-main">22×22</span>
+          <span class="sheet-option-sub">中号方板</span>
+        </button>
+        <button type="button" class="sheet-option" data-board-size="28">
+          <span class="sheet-option-main">28×28</span>
+          <span class="sheet-option-sub">近标准板</span>
+        </button>
+        <button type="button" class="sheet-option is-active" data-board-size="29">
+          <span class="sheet-option-main">29×29</span>
+          <span class="sheet-option-sub">标准大方板 · 默认</span>
+        </button>
+        <button type="button" class="sheet-option" data-board-size="32">
+          <span class="sheet-option-main">32×32</span>
+          <span class="sheet-option-sub">大号方板</span>
+        </button>
+        <button type="button" class="sheet-option" data-board-size="40">
+          <span class="sheet-option-main">40×40</span>
+          <span class="sheet-option-sub">加大方板</span>
+        </button>
+        <button type="button" class="sheet-option" data-board-size="52">
+          <span class="sheet-option-main">52×52</span>
+          <span class="sheet-option-sub">超大方板</span>
+        </button>
+      </div>
+      <button type="button" class="sheet-cancel" id="board-size-sheet-cancel">取消</button>
+    </div>
+  </div>
+
   <div class="sheet-mask" id="colors-sheet" aria-hidden="true">
     <button type="button" class="sheet-backdrop" id="colors-sheet-backdrop" aria-label="关闭"></button>
     <div class="sheet sheet-tall" role="dialog" aria-label="豆色用量">
@@ -129,6 +171,22 @@
       <div class="sheet-handle"></div>
       <p class="sheet-title">图纸选项</p>
       <p class="exp-scope" id="export-scope"></p>
+      <div class="exp-list" id="exp-board-mode" hidden>
+        <label class="exp-opt">
+          <input type="radio" name="exp-board-mode" id="exp-mode-full" value="full" checked />
+          <span class="exp-box" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg>
+          </span>
+          <span class="exp-main">导出全图<small>整幅拼图一张（含分板线）</small></span>
+        </label>
+        <label class="exp-opt">
+          <input type="radio" name="exp-board-mode" id="exp-mode-each" value="each" />
+          <span class="exp-box" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg>
+          </span>
+          <span class="exp-main">分板逐个导出<small>每板一张，含本板用量</small></span>
+        </label>
+      </div>
       <div class="exp-list">
         <label class="exp-opt">
           <input type="checkbox" id="exp-axes" />
@@ -170,6 +228,6 @@
   <div class="toast" id="toast"></div>
 
   <script src="./palettes.js"></script>
-  <script src="./app.js"></script>
+  <script src="./app.js?v=20260907r"></script>
 </body>
 </html>

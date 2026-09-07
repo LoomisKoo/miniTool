@@ -1,16 +1,17 @@
 (function () {
   'use strict';
 
-  var BOARD = 29;
   var CELL = 16;
-  var EXPORT_CELL = 28;
+  // 真实豆距约 5mm；按 300DPI 导出，打印「实际大小」时每格≈5mm
+  var BEAD_MM = 5;
+  var PRINT_DPI = 300;
+  var EXPORT_CELL = Math.round(BEAD_MM / 25.4 * PRINT_DPI); // ≈59
 
   var GRID_COLOR = '#c7c7cc';
   var SEAM_COLOR = '#ff3b30';
 
-  // 2D 预览视图：内容像素里每格 = PRE_CS，格线 = PRE_GAP
+  // 2D 预览视图：内容像素里每格 = PRE_CS；格线叠画在格子上，不占空间
   var PRE_CS = 16;
-  var PRE_GAP = 1;
   var CODE_SHOW_CELL = 30; // 屏幕像素每格 ≥ 该值时在格内绘制色号
   var CODE_SHOW_FONT = 0.36;
   var MAX_ZOOM = 6.5; // 相对内容像素的最大放大倍数（格宽最大约 104px）
@@ -19,12 +20,14 @@
     image: null,
     paletteId: 'mard',
     width: 29,
+    boardSize: 29,
     maxColors: 48,
     mode: 'dominant',
     dither: false,
-    merge: true,
+    merge: false,
     mergeThreshold: 48,
     showGrid: true,
+    showSeam: true,
     gridData: null,
     counts: null,
     height: 0,
@@ -35,7 +38,7 @@
     busy: false,
     view: { mode: '2d', s: 1, tx: 0, ty: 0, fitS: 1 },
     view3d: { yaw: 0, pitch: 0.5, zoom: 1, init: false, baseF: 0, hFactor: 1, roundness: 1 },
-    exp: { axes: false, codes: true, legend: true, meta: true }
+    exp: { axes: false, codes: true, legend: true, meta: true, boardMode: 'full' }
   };
 
   var els = {
@@ -58,6 +61,7 @@
     toast: document.getElementById('toast'),
     btnPalette: document.getElementById('btn-palette'),
     btnGrid: document.getElementById('btn-grid'),
+    btnSeam: document.getElementById('btn-seam'),
     btnDither: document.getElementById('btn-dither'),
     btnMerge: document.getElementById('btn-merge'),
     btnAvg: document.getElementById('btn-avg'),
@@ -67,12 +71,16 @@
     paletteSheet: document.getElementById('palette-sheet'),
     paletteSheetBackdrop: document.getElementById('palette-sheet-backdrop'),
     paletteSheetCancel: document.getElementById('palette-sheet-cancel'),
+    boardSizeSheet: document.getElementById('board-size-sheet'),
+    boardSizeSheetBackdrop: document.getElementById('board-size-sheet-backdrop'),
+    boardSizeSheetCancel: document.getElementById('board-size-sheet-cancel'),
+    btnBoardSize: document.getElementById('btn-board-size'),
     colorsSheet: document.getElementById('colors-sheet'),
     colorsSheetBackdrop: document.getElementById('colors-sheet-backdrop'),
     colorsSheetCancel: document.getElementById('colors-sheet-cancel'),
     btnFit: document.getElementById('btn-fit'),
-    btn3dReset: document.getElementById('btn-3d-reset'),
     btn3d: document.getElementById('btn-3d'),
+    btnBoardAll: document.getElementById('btn-board-all'),
     viewHint: document.getElementById('view-hint'),
     exportSheet: document.getElementById('export-sheet'),
     exportSheetBackdrop: document.getElementById('export-sheet-backdrop'),
@@ -82,7 +90,10 @@
     expAxes: document.getElementById('exp-axes'),
     expCodes: document.getElementById('exp-codes'),
     expLegend: document.getElementById('exp-legend'),
-    expMeta: document.getElementById('exp-meta')
+    expMeta: document.getElementById('exp-meta'),
+    expBoardMode: document.getElementById('exp-board-mode'),
+    expModeFull: document.getElementById('exp-mode-full'),
+    expModeEach: document.getElementById('exp-mode-each')
   };
 
   var ctx = els.canvas.getContext('2d');
@@ -90,7 +101,6 @@
   var workCtx = work.getContext('2d');
   var toastTimer = null;
   var regenTimer = null;
-  var flatCache = { key: '', cv: null }; // 3D 大图平面模式纹理缓存
   var freshImage = false; // 新图刚载入时展示一次操作提示
 
   function toast(msg) {
@@ -113,40 +123,65 @@
     return p;
   }
 
+  function rgbToHex(r, g, b) {
+    return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1).toUpperCase();
+  }
+
+  // sRGB → CIE Lab（D65），用于感知色差匹配
+  function rgbToLab(r, g, b) {
+    r /= 255;
+    g /= 255;
+    b /= 255;
+    r = r > 0.04045 ? Math.pow((r + 0.055) / 1.055, 2.4) : r / 12.92;
+    g = g > 0.04045 ? Math.pow((g + 0.055) / 1.055, 2.4) : g / 12.92;
+    b = b > 0.04045 ? Math.pow((b + 0.055) / 1.055, 2.4) : b / 12.92;
+    var x = (r * 0.4124564 + g * 0.3575761 + b * 0.1804375) / 0.95047;
+    var y = r * 0.2126729 + g * 0.7151522 + b * 0.072175;
+    var z = (r * 0.0193339 + g * 0.119192 + b * 0.9503041) / 1.08883;
+    function f(t) {
+      return t > 0.008856 ? Math.pow(t, 1 / 3) : (7.787037 * t + 16 / 116);
+    }
+    x = f(x);
+    y = f(y);
+    z = f(z);
+    return { L: 116 * y - 16, A: 500 * (x - y), B: 200 * (y - z) };
+  }
+
+  function labDist2(L1, A1, B1, L2, A2, B2) {
+    var dL = L1 - L2;
+    var dA = A1 - A2;
+    var dB = B1 - B2;
+    return dL * dL + dA * dA + dB * dB;
+  }
+
   function buildPaletteCache(palette) {
     var list = [];
     var i;
     for (i = 0; i < palette.colors.length; i++) {
       var c = palette.colors[i];
+      var lab = rgbToLab(c[1], c[2], c[3]);
       list.push({
         code: c[0],
         r: c[1],
         g: c[2],
         b: c[3],
-        hex: rgbToHex(c[1], c[2], c[3])
+        hex: rgbToHex(c[1], c[2], c[3]),
+        L: lab.L,
+        A: lab.A,
+        B: lab.B
       });
     }
     return list;
   }
 
-  function rgbToHex(r, g, b) {
-    return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1).toUpperCase();
-  }
-
-  function rgbDist2(r1, g1, b1, r2, g2, b2) {
-    var dr = r1 - r2;
-    var dg = g1 - g2;
-    var db = b1 - b2;
-    return dr * dr + dg * dg + db * db;
-  }
-
   function nearestColor(cache, r, g, b) {
+    var lab = rgbToLab(r, g, b);
     var best = cache[0];
     var bestD = Infinity;
     var i;
     for (i = 0; i < cache.length; i++) {
       var c = cache[i];
-      var d = rgbDist2(r, g, b, c.r, c.g, c.b);
+      var d = labDist2(lab.L, lab.A, lab.B, c.L, c.A, c.B);
       if (d < bestD) {
         bestD = d;
         best = c;
@@ -291,7 +326,9 @@
   function mergeSimilarRegions(mapped, w, h, threshold) {
     var total = w * h;
     var visited = new Uint8Array(total);
-    var thr2 = threshold * threshold;
+    // 原 threshold 按 RGB 欧氏距离；换 Lab 后约 /2.8 对齐原先合并强度
+    var thrLab = Math.max(4, threshold / 2.8);
+    var thr2 = thrLab * thrLab;
     var out = mapped.slice();
     var dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
     var i;
@@ -316,7 +353,7 @@
           var ni = ny * w + nx;
           if (visited[ni]) continue;
           var c1 = mapped[ni];
-          if (rgbDist2(c0.r, c0.g, c0.b, c1.r, c1.g, c1.b) > thr2) continue;
+          if (labDist2(c0.L, c0.A, c0.B, c1.L, c1.A, c1.B) > thr2) continue;
           visited[ni] = 1;
           queue.push(ni);
         }
@@ -388,8 +425,8 @@
     var w = state.width;
     var h = Math.max(1, Math.round(w * img.naturalHeight / img.naturalWidth));
     state.height = h;
-    state.boardsX = Math.ceil(w / BOARD);
-    state.boardsY = Math.ceil(h / BOARD);
+    state.boardsX = Math.ceil(w / state.boardSize);
+    state.boardsY = Math.ceil(h / state.boardSize);
 
     // 几何（图/宽）变化才复位视图；调色/限色/合并/抖动保持当前缩放位置
     var geomKey = w + 'x' + img.naturalWidth + 'x' + img.naturalHeight;
@@ -440,7 +477,7 @@
     if (freshImage) {
       freshImage = false;
       showPreviewHint(state.view.mode === '3d'
-        ? '单指拖动旋转视角 · 双指/滚轮缩放'
+        ? '单指拖动旋转视角 · 双指/滚轮缩放 · 双击放大/复位'
         : '单指拖动平移 · 双指缩放 · 双击放大/复位');
     }
   }
@@ -458,18 +495,19 @@
     }
     var bx = index % state.boardsX;
     var by = (index / state.boardsX) | 0;
-    var x0 = bx * BOARD;
-    var y0 = by * BOARD;
+    var bs = state.boardSize;
+    var x0 = bx * bs;
+    var y0 = by * bs;
     return {
       x0: x0,
       y0: y0,
-      x1: Math.min(state.width, x0 + BOARD),
-      y1: Math.min(state.height, y0 + BOARD)
+      x1: Math.min(state.width, x0 + bs),
+      y1: Math.min(state.height, y0 + bs)
     };
   }
 
   function isBoardSeam(globalCoord) {
-    return globalCoord > 0 && globalCoord % BOARD === 0;
+    return globalCoord > 0 && globalCoord % state.boardSize === 0;
   }
 
   function drawPattern(targetCtx, cell, showGrid, rect, forExport) {
@@ -482,16 +520,10 @@
     var y1 = rect.y1;
     var pw = x1 - x0;
     var ph = y1 - y0;
-    var gap = showGrid ? 1 : 0;
-    var canvasW = pw * cell + gap;
-    var canvasH = ph * cell + gap;
+    var canvasW = pw * cell;
+    var canvasH = ph * cell;
     targetCtx.canvas.width = canvasW;
     targetCtx.canvas.height = canvasH;
-
-    if (showGrid) {
-      targetCtx.fillStyle = GRID_COLOR;
-      targetCtx.fillRect(0, 0, canvasW, canvasH);
-    }
 
     var y;
     var x;
@@ -501,24 +533,42 @@
         // 选中色号定位：仅淡化其它格子，选中色号保持原色
         var dim = state.highlightCode && state.highlightCode !== c.code;
         targetCtx.fillStyle = dim ? mixHex(c.hex, '#FFFFFF', 0.72) : c.hex;
-        var px = (x - x0) * cell + gap;
-        var py = (y - y0) * cell + gap;
-        targetCtx.fillRect(px, py, cell - gap, cell - gap);
+        var px = (x - x0) * cell;
+        var py = (y - y0) * cell;
+        targetCtx.fillRect(px, py, cell, cell);
       }
     }
 
-    // 分板缝：盖住对应 gap 线，整条只画一次
-    if (state.boardsX * state.boardsY > 1) {
+    // 格线叠画（细线，不挤占格面）
+    if (showGrid) {
+      targetCtx.strokeStyle = GRID_COLOR;
+      targetCtx.lineWidth = 1;
+      targetCtx.beginPath();
+      for (x = 0; x <= pw; x++) {
+        var gx = x * cell + 0.5;
+        targetCtx.moveTo(gx, 0);
+        targetCtx.lineTo(gx, canvasH);
+      }
+      for (y = 0; y <= ph; y++) {
+        var gy = y * cell + 0.5;
+        targetCtx.moveTo(0, gy);
+        targetCtx.lineTo(canvasW, gy);
+      }
+      targetCtx.stroke();
+    }
+
+    // 分板缝：叠在图案之上
+    if (state.showSeam && state.boardsX * state.boardsY > 1) {
       var seamW = Math.max(2, Math.round(cell / 10));
       targetCtx.fillStyle = SEAM_COLOR;
       for (x = x0 + 1; x < x1; x++) {
         if (isBoardSeam(x)) {
-          targetCtx.fillRect((x - x0) * cell + gap - Math.floor(seamW / 2), 0, seamW, canvasH);
+          targetCtx.fillRect((x - x0) * cell - Math.floor(seamW / 2), 0, seamW, canvasH);
         }
       }
       for (y = y0 + 1; y < y1; y++) {
         if (isBoardSeam(y)) {
-          targetCtx.fillRect(0, (y - y0) * cell + gap - Math.floor(seamW / 2), canvasW, seamW);
+          targetCtx.fillRect(0, (y - y0) * cell - Math.floor(seamW / 2), canvasW, seamW);
         }
       }
     }
@@ -534,8 +584,8 @@
           targetCtx.fillStyle = lum > 160 ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.75)';
           targetCtx.fillText(
             bead.code,
-            (x - x0) * cell + gap + (cell - gap) / 2,
-            (y - y0) * cell + gap + (cell - gap) / 2
+            (x - x0) * cell + cell / 2,
+            (y - y0) * cell + cell / 2
           );
         }
       }
@@ -567,14 +617,12 @@
     var rect = boardRect(state.boardIndex);
     var pw = rect.x1 - rect.x0;
     var ph = rect.y1 - rect.y0;
-    var gap = state.showGrid ? PRE_GAP : 0;
     return {
       rect: rect,
       pw: Math.max(0, pw),
       ph: Math.max(0, ph),
-      gap: gap,
-      cw: pw * PRE_CS + gap,
-      ch: ph * PRE_CS + gap
+      cw: pw * PRE_CS,
+      ch: ph * PRE_CS
     };
   }
 
@@ -600,18 +648,20 @@
     // 最远只能回落到「铺满视口」，最近放大到 MAX_ZOOM 倍
     s = Math.max(fitS, Math.min(MAX_ZOOM, s));
     state.view.s = s;
-    var edge = 44;
     var cw = m.cw * s;
     var ch = m.ch * s;
+    // 允许任意格点落到视口中心，避免双击角落放大后被硬夹紧跳动
+    var edgeX = Math.max(44, v.vw * 0.5);
+    var edgeY = Math.max(44, v.vh * 0.5);
     if (cw <= v.vw) {
       state.view.tx = (v.vw - cw) / 2;
     } else {
-      state.view.tx = Math.max(v.vw - cw - edge, Math.min(edge, state.view.tx));
+      state.view.tx = Math.max(v.vw - cw - edgeX, Math.min(edgeX, state.view.tx));
     }
     if (ch <= v.vh) {
       state.view.ty = (v.vh - ch) / 2;
     } else {
-      state.view.ty = Math.max(v.vh - ch - edge, Math.min(edge, state.view.ty));
+      state.view.ty = Math.max(v.vh - ch - edgeY, Math.min(edgeY, state.view.ty));
     }
   }
 
@@ -650,7 +700,7 @@
     var m = previewMetrics();
     var v = viewportSize();
     if (!state.gridData || !m.pw || !m.ph) return;
-    clampView2d();
+    if (!fit2dAnim) clampView2d();
     var vw = v.vw;
     var vh = v.vh;
     var dpr = syncCanvasSize(vw, vh);
@@ -658,7 +708,6 @@
     var tx = state.view.tx;
     var ty = state.view.ty;
     var rect = m.rect;
-    var gap = m.gap;
     var i;
     var j;
 
@@ -671,20 +720,17 @@
     var ymin = (0 - ty) / s;
     var xmax = (vw - tx) / s;
     var ymax = (vh - ty) / s;
-    var i0 = Math.max(0, Math.floor((xmin - gap) / PRE_CS));
-    var j0 = Math.max(0, Math.floor((ymin - gap) / PRE_CS));
-    var i1 = Math.min(m.pw, Math.ceil((xmax - gap) / PRE_CS));
-    var j1 = Math.min(m.ph, Math.ceil((ymax - gap) / PRE_CS));
+    var i0 = Math.max(0, Math.floor(xmin / PRE_CS));
+    var j0 = Math.max(0, Math.floor(ymin / PRE_CS));
+    var i1 = Math.min(m.pw, Math.ceil(xmax / PRE_CS));
+    var j1 = Math.min(m.ph, Math.ceil(ymax / PRE_CS));
     if (i1 <= i0) i1 = i0 + 1;
     if (j1 <= j0) j1 = j0 + 1;
 
-    if (gap) {
-      ctx.fillStyle = GRID_COLOR;
-      ctx.fillRect(0, 0, m.cw, m.ch);
-    }
-
     var mapped = state.gridData;
     var wAll = state.width;
+    // 略微外扩，避免缩放变换后亚像素缝露底
+    var cellDraw = PRE_CS + 0.75;
     for (j = j0; j < j1; j++) {
       var gr = rect.y0 + j;
       for (i = i0; i < i1; i++) {
@@ -695,22 +741,44 @@
           col = mixHex(col, '#FFFFFF', 0.72);
         }
         ctx.fillStyle = col;
-        ctx.fillRect(i * PRE_CS + gap, j * PRE_CS + gap, PRE_CS - gap, PRE_CS - gap);
+        ctx.fillRect(i * PRE_CS, j * PRE_CS, cellDraw, cellDraw);
       }
     }
 
+    // 格线叠画：线宽按屏幕约 1px，不挤占格面、开关不偏移
+    if (state.showGrid) {
+      ctx.strokeStyle = GRID_COLOR;
+      ctx.lineWidth = 1 / Math.max(0.001, s);
+      ctx.beginPath();
+      var gi0 = Math.max(0, i0);
+      var gi1 = Math.min(m.pw, i1);
+      var gj0 = Math.max(0, j0);
+      var gj1 = Math.min(m.ph, j1);
+      for (i = gi0; i <= gi1; i++) {
+        var gx = i * PRE_CS;
+        ctx.moveTo(gx, gj0 * PRE_CS);
+        ctx.lineTo(gx, gj1 * PRE_CS);
+      }
+      for (j = gj0; j <= gj1; j++) {
+        var gy = j * PRE_CS;
+        ctx.moveTo(gi0 * PRE_CS, gy);
+        ctx.lineTo(gi1 * PRE_CS, gy);
+      }
+      ctx.stroke();
+    }
+
     // 分板红线（整图模式且多板时）
-    if (state.boardIndex < 0 && state.boardsX * state.boardsY > 1) {
+    if (state.showSeam && state.boardIndex < 0 && state.boardsX * state.boardsY > 1) {
       var seamW = Math.max(2, Math.round(PRE_CS / 8));
       ctx.fillStyle = SEAM_COLOR;
       for (i = 1; i < m.pw; i++) {
         if (isBoardSeam(rect.x0 + i)) {
-          ctx.fillRect(i * PRE_CS + gap - Math.floor(seamW / 2), 0, seamW, m.ch);
+          ctx.fillRect(i * PRE_CS - Math.floor(seamW / 2), 0, seamW, m.ch);
         }
       }
       for (j = 1; j < m.ph; j++) {
         if (isBoardSeam(rect.y0 + j)) {
-          ctx.fillRect(0, j * PRE_CS + gap - Math.floor(seamW / 2), m.cw, seamW);
+          ctx.fillRect(0, j * PRE_CS - Math.floor(seamW / 2), m.cw, seamW);
         }
       }
     }
@@ -730,7 +798,7 @@
             hex = mixHex(hex, '#FFFFFF', 0.72);
           }
           ctx.fillStyle = luma(hex) > 160 ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.85)';
-          ctx.fillText(bead.code, i * PRE_CS + (PRE_CS + gap) / 2, j * PRE_CS + (PRE_CS + gap) / 2);
+          ctx.fillText(bead.code, i * PRE_CS + PRE_CS / 2, j * PRE_CS + PRE_CS / 2);
         }
       }
     }
@@ -754,7 +822,6 @@
   }
 
   // ---------- 3D 视图 ----------
-  var BEAD3D_LIMIT = 2200; // 逐豆空心圆柱上限，超过用平面贴图近似
   var BEAD_SEGS = 16;      // 圆周分段（越多越圆）
 
   function shadeHex(hex, f) {
@@ -763,23 +830,13 @@
     return mixHex(hex, '#FFFFFF', Math.min(1, f));
   }
 
-  function flatTexture3d(m) {
-    var key = (state.gen || 0) + '|' + state.boardIndex + '|' + m.pw + 'x' + m.ph + '|' + (state.showGrid ? 1 : 0) + '|' + state.width + 'x' + state.height;
-    if (flatCache.key === key && flatCache.cv) return flatCache.cv;
-    var maxSide = 1560;
-    var cell = Math.max(2, Math.floor(maxSide / Math.max(m.pw, m.ph)));
-    var cv = document.createElement('canvas');
-    drawPattern(cv.getContext('2d'), cell, state.showGrid, boardRect(state.boardIndex), false);
-    flatCache.key = key;
-    flatCache.cv = cv;
-    return cv;
-  }
-
   function easeInOut(t) {
     return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
   }
 
   var morphAnim = null;
+  var fit2dAnim = null;
+  var zoom3dAnim = null;
 
   // 估算某姿态下铺满视口所需焦距；pad=0 时与 2D fit 对齐
   function viewBasis(yaw, pitch) {
@@ -898,10 +955,10 @@
     var halfX = (pw - 1) / 2;
     var halfZ = (ph - 1) / 2;
     var hB = 0.52 * hFactor;
-    // 圆外半径 / 方半宽：有格线时与 2D 格缝比例一致，全程保留缝以便颜色可插值
+    // 圆外半径 / 方半宽：方块铺满格，圆柱略收以露底板
     var ro = 0.46;
-    var sq = state.showGrid ? (0.5 * (PRE_CS - PRE_GAP) / PRE_CS) : 0.5;
-    var ri = 0.17;
+    var sq = 0.5;
+    var ri = 0.20;
     var plateM = 0.55;
     var halfExt = ro * roundness + sq * (1 - roundness);
     // 0=贴近 2D，1=完整 3D；底板/缝色随此连续变化
@@ -945,6 +1002,11 @@
       for (var k2 = 1; k2 < pts.length; k2++) ctx.lineTo(SX(pts[k2]), SY(pts[k2]));
       ctx.closePath();
       ctx.fill();
+      // 同色描边，抹掉相邻面片之间的细缝
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.35;
+      ctx.lineJoin = 'round';
+      ctx.stroke();
     }
 
     // 底板与格缝底色随 t3d 插值：2D 灰格线 ↔ 3D 黑底板，避免突变
@@ -972,7 +1034,8 @@
     }
 
     var totalCells = pw * ph;
-    var segs = totalCells > 1400 ? 10 : BEAD_SEGS;
+    // 大图降分段保流畅，始终圆柱体像素（不再退化成平面格子贴图）
+    var segs = totalCells > 6000 ? 8 : totalCells > 2500 ? 10 : totalCells > 1400 ? 12 : Math.max(BEAD_SEGS, 20);
     var cosT = new Array(segs);
     var sinT = new Array(segs);
     var si;
@@ -1013,16 +1076,16 @@
       return pts;
     }
 
-    // 圆↔方 1:1 变形；空心仅顶面暗孔
+    // 实心圆柱 + 顶面暗孔（不挖井，侧面看不到空心穿模）
     function drawBead(cx, cz, hex) {
       var topO = ringAt(cx, hB, cz, false);
       if (!topO) return;
-      var topI = roundness > 0.2 ? ringAt(cx, hB, cz, true) : null;
       var botO = hFactor > 0.06 ? ringAt(cx, 0, cz, false) : null;
+      var topI = roundness > 0.25 ? ringAt(cx, hB, cz, true) : null;
       var wall = shadeHex(hex, -0.36);
       var wallDark = shadeHex(hex, -0.58);
       var rim = roundness > 0.5 ? shadeHex(hex, 0.08) : hex;
-      var hole = mixHex(hex, '#0c0c10', 0.78);
+      var hole = mixHex(hex, '#0a0a0e', 0.82);
       var i;
       var n1 = segs - 1;
       if (botO) {
@@ -1037,96 +1100,116 @@
           fillPolyPts([topO[i], topO[j], botO[j], botO[i]], facing > 0.35 ? wall : wallDark);
         }
       }
+      // 整圆顶面一次铺满，避免环带接缝
       fillPolyPts(topO, rim);
-      if (topI && roundness > 0.25) fillPolyPts(topI, hole);
+      if (topI) fillPolyPts(topI, hole);
     }
 
-    if (totalCells <= BEAD3D_LIMIT) {
-      var order = [];
-      var jj, ii;
-      for (jj = 0; jj < ph; jj++) {
-        for (ii = 0; ii < pw; ii++) {
-          var cu = toU(ii - halfX, hB * 0.5, jj - halfZ);
-          if (!cu) continue;
-          order.push([ii, jj, cu[2]]);
-        }
+    var order = [];
+    var jj, ii;
+    for (jj = 0; jj < ph; jj++) {
+      for (ii = 0; ii < pw; ii++) {
+        var cu = toU(ii - halfX, hB * 0.5, jj - halfZ);
+        if (!cu) continue;
+        order.push([ii, jj, cu[2]]);
       }
-      order.sort(function (a, b) { return b[2] - a[2]; });
+    }
+    order.sort(function (a, b) { return b[2] - a[2]; });
 
-      var oi;
+    var oi;
+    for (oi = 0; oi < order.length; oi++) {
+      var oc = order[oi];
+      ii = oc[0];
+      jj = oc[1];
+      var bead = baseCellAt(rect.x0 + ii, rect.y0 + jj);
+      drawBead(ii - halfX, jj - halfZ, bead.hex);
+    }
+
+    // 接近俯视扁平且够大时画出色号，与 2D 放大态衔接（随 t3d 淡出）
+    var cellPx = F / Math.max(0.2, eyeR - lookY);
+    var codeFade = Math.max(0, Math.min(1, (1 - t3d) * 1.35)) *
+      Math.max(0, Math.min(1, (pitch - 0.95) / 0.4));
+    if (codeFade > 0.05 && cellPx >= CODE_SHOW_CELL * 0.92) {
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.globalAlpha = codeFade;
+      ctx.font = Math.round(cellPx * CODE_SHOW_FONT) + 'px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
       for (oi = 0; oi < order.length; oi++) {
-        var oc = order[oi];
+        oc = order[oi];
         ii = oc[0];
         jj = oc[1];
-        var bead = baseCellAt(rect.x0 + ii, rect.y0 + jj);
-        drawBead(ii - halfX, jj - halfZ, bead.hex);
-      }
-
-      // 接近俯视扁平且够大时画出色号，与 2D 放大态衔接（随 t3d 淡出）
-      var cellPx = F / Math.max(0.2, eyeR - lookY);
-      var codeFade = Math.max(0, Math.min(1, (1 - t3d) * 1.35)) *
-        Math.max(0, Math.min(1, (pitch - 0.95) / 0.4));
-      if (codeFade > 0.05 && cellPx >= CODE_SHOW_CELL * 0.92) {
-        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-        ctx.globalAlpha = codeFade;
-        ctx.font = Math.round(cellPx * CODE_SHOW_FONT) + 'px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        for (oi = 0; oi < order.length; oi++) {
-          oc = order[oi];
-          ii = oc[0];
-          jj = oc[1];
-          var bead2 = baseCellAt(rect.x0 + ii, rect.y0 + jj);
-          var hex2 = bead2.hex;
-          if (state.highlightCode && state.highlightCode !== bead2.code) {
-            hex2 = mixHex(hex2, '#FFFFFF', 0.72);
-          }
-          var cu2 = toU(ii - halfX, hB, jj - halfZ);
-          if (!cu2) continue;
-          ctx.fillStyle = luma(hex2) > 160 ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.85)';
-          ctx.fillText(bead2.code, SX(cu2), SY(cu2));
+        var bead2 = baseCellAt(rect.x0 + ii, rect.y0 + jj);
+        var hex2 = bead2.hex;
+        if (state.highlightCode && state.highlightCode !== bead2.code) {
+          hex2 = mixHex(hex2, '#FFFFFF', 0.72);
         }
-        ctx.globalAlpha = 1;
+        var cu2 = toU(ii - halfX, hB, jj - halfZ);
+        if (!cu2) continue;
+        ctx.fillStyle = luma(hex2) > 160 ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.85)';
+        ctx.fillText(bead2.code, SX(cu2), SY(cu2));
       }
-    } else {
-      var tex = flatTexture3d(m);
-      var texW = tex.width;
-      var texH = tex.height;
-      var zA = -maxZ;
-      var zB = maxZ;
-      var S = Math.max(6, Math.min(48, Math.ceil(Math.max(pw, ph) * 0.7)));
-      var pTl, pTr, pBl;
-      for (si = 0; si < S; si++) {
-        var zz0 = zA + (zB - zA) * si / S;
-        var zz1 = zA + (zB - zA) * (si + 1) / S;
-        var sy0 = Math.floor(texH * si / S);
-        var sy1 = Math.floor(texH * (si + 1) / S);
-        var sh = Math.max(1, sy1 - sy0);
-        pTl = toU(-maxX, hB, zz0);
-        pTr = toU(maxX, hB, zz0);
-        pBl = toU(-maxX, hB, zz1);
-        if (!pTl || !pTr || !pBl) continue;
-        var wTex = texW;
-        var a3 = (SX(pTr) - SX(pTl)) / wTex;
-        var b3 = (SY(pTr) - SY(pTl)) / wTex;
-        var c3 = (SX(pBl) - SX(pTl)) / sh;
-        var d3 = (SY(pBl) - SY(pTl)) / sh;
-        ctx.setTransform(
-          a3 * dpr, b3 * dpr, c3 * dpr, d3 * dpr,
-          (SX(pTl) - c3 * sy0) * dpr, (SY(pTl) - d3 * sy0) * dpr
-        );
-        ctx.drawImage(tex, 0, sy0, wTex, sh, 0, sy0, wTex, sh);
-      }
+      ctx.globalAlpha = 1;
+    }
+
+    // 2D↔3D 过渡：格线叠在顶面，随 t3d 淡出/淡入
+    var gridFade = state.showGrid ? Math.max(0, Math.min(1, 1 - t3d * 1.2)) : 0;
+    if (gridFade > 0.02) {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.globalAlpha = gridFade;
+      ctx.strokeStyle = GRID_COLOR;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      var yGrid = hB + 0.004;
+      var xMinG = -halfX - 0.5;
+      var xMaxG = halfX + 0.5;
+      var zMinG = -halfZ - 0.5;
+      var zMaxG = halfZ + 0.5;
+      var gi;
+      var uA;
+      var uB;
+      for (gi = 0; gi <= pw; gi++) {
+        var xe = gi - halfX - 0.5;
+        uA = toU(xe, yGrid, zMinG);
+        uB = toU(xe, yGrid, zMaxG);
+        if (uA && uB) {
+          ctx.moveTo(SX(uA), SY(uA));
+          ctx.lineTo(SX(uB), SY(uB));
+        }
+      }
+      for (gi = 0; gi <= ph; gi++) {
+        var ze = gi - halfZ - 0.5;
+        uA = toU(xMinG, yGrid, ze);
+        uB = toU(xMaxG, yGrid, ze);
+        if (uA && uB) {
+          ctx.moveTo(SX(uA), SY(uA));
+          ctx.lineTo(SX(uB), SY(uB));
+        }
+      }
+      ctx.stroke();
+      ctx.globalAlpha = 1;
     }
   }
 
   function updateBoardLabel() {
     var total = state.boardsX * state.boardsY;
+    var multi = total > 1;
+    els.btnBoardPrev.hidden = !multi;
+    els.btnBoardNext.hidden = !multi;
+    if (els.btnBoardAll) {
+      els.btnBoardAll.hidden = !(multi && state.boardIndex >= 0);
+    }
+    if (!multi) {
+      els.boardLabel.hidden = true;
+      els.boardLabel.textContent = '';
+      return;
+    }
+    els.boardLabel.hidden = false;
+    // 固定文案长度，避免箭头左右跳动
     if (state.boardIndex < 0) {
-      els.boardLabel.textContent = '全图 · ' + state.boardsX + '×' + state.boardsY + ' 板';
+      els.boardLabel.textContent = '全图';
     } else {
-      els.boardLabel.textContent = '第 ' + (state.boardIndex + 1) + '/' + total + ' 板';
+      els.boardLabel.textContent = (state.boardIndex + 1) + '/' + total;
     }
   }
 
@@ -1139,6 +1222,7 @@
       state.width + '×' + state.height + ' · ' +
       colors + '色 · ' + total + '颗 · ' +
       cmW + '×' + cmH + 'cm · ' +
+      state.boardSize + '×' + state.boardSize + '拼板 · ' +
       state.boardsX + '×' + state.boardsY + '板';
     els.headerSub.textContent = getPalette().name + ' · ' + state.width + ' 豆宽';
   }
@@ -1263,6 +1347,47 @@
     closeSheet(els.paletteSheet);
   }
 
+  function syncBoardSizeButton() {
+    if (!els.btnBoardSize || !els.boardSizeSheet) return;
+    var bs = state.boardSize;
+    els.btnBoardSize.textContent = bs + '×' + bs;
+    var options = els.boardSizeSheet.querySelectorAll('[data-board-size]');
+    var i;
+    for (i = 0; i < options.length; i++) {
+      var opt = options[i];
+      if (Number(opt.getAttribute('data-board-size')) === bs) {
+        opt.classList.add('is-active');
+      } else {
+        opt.classList.remove('is-active');
+      }
+    }
+  }
+
+  function openBoardSizeSheet() {
+    syncBoardSizeButton();
+    openSheet(els.boardSizeSheet);
+  }
+
+  function closeBoardSizeSheet() {
+    closeSheet(els.boardSizeSheet);
+  }
+
+  function applyBoardSize(size) {
+    size = Number(size);
+    if (!size || size === state.boardSize) {
+      closeBoardSizeSheet();
+      return;
+    }
+    state.boardSize = size;
+    state.boardsX = Math.ceil(state.width / size);
+    state.boardsY = Math.ceil(state.height / size);
+    if (state.boardIndex >= state.boardsX * state.boardsY) state.boardIndex = -1;
+    syncBoardSizeButton();
+    closeBoardSizeSheet();
+    updateMeta();
+    if (state.gridData) fitView();
+  }
+
   function openColorsSheet() {
     renderColorsList();
     openSheet(els.colorsSheet);
@@ -1292,26 +1417,87 @@
     img.src = url;
   }
 
-  function exportDataUrl() {
+  function roundRectPath(ctx, x, y, w, h, r) {
+    var rr = Math.min(r, w / 2, h / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + rr, y);
+    ctx.arcTo(x + w, y, x + w, y + h, rr);
+    ctx.arcTo(x + w, y + h, x, y + h, rr);
+    ctx.arcTo(x, y + h, x, y, rr);
+    ctx.arcTo(x, y, x + w, y, rr);
+    ctx.closePath();
+  }
+
+  function contrastInk(hex) {
+    // 相对亮度，保证色块内文字与背景有足够反差
+    var r = parseInt(hex.slice(1, 3), 16);
+    var g = parseInt(hex.slice(3, 5), 16);
+    var b = parseInt(hex.slice(5, 7), 16);
+    var y = (r * 299 + g * 587 + b * 114) / 1000;
+    if (y >= 170) return '#1a1a1a';
+    if (y <= 90) return '#ffffff';
+    return y >= 140 ? '#111111' : '#ffffff';
+  }
+
+  // 写入 JPEG JFIF 密度，便于打印按 DPI 还原真实尺寸
+  function jpegDataUrlWithDpi(dataUrl, dpi) {
+    try {
+      var parts = dataUrl.split(',');
+      if (parts.length < 2 || dataUrl.indexOf('image/jpeg') < 0) return dataUrl;
+      var bin = atob(parts[1]);
+      var bytes = new Uint8Array(bin.length);
+      var i;
+      for (i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      // SOI + APP0 JFIF
+      if (bytes.length < 20 || bytes[0] !== 0xff || bytes[1] !== 0xd8) return dataUrl;
+      var off = 2;
+      if (bytes[off] !== 0xff || bytes[off + 1] !== 0xe0) return dataUrl;
+      // APP0: FF E0 | lenHi lenLo | 'J','F','I','F',0 | ver | units | Xdens | Ydens
+      var jfif = off + 4;
+      if (bytes[jfif] !== 0x4a || bytes[jfif + 1] !== 0x46) return dataUrl;
+      var densOff = jfif + 7; // units at +7, X at +8,+9, Y at +10,+11 relative to JFIF start... 
+      // jfif+5,6 = version; jfif+7 = units; jfif+8,9 = X; jfif+10,11 = Y
+      bytes[jfif + 7] = 1; // 1 = DPI
+      bytes[jfif + 8] = (dpi >> 8) & 0xff;
+      bytes[jfif + 9] = dpi & 0xff;
+      bytes[jfif + 10] = (dpi >> 8) & 0xff;
+      bytes[jfif + 11] = dpi & 0xff;
+      var chunk = 0x8000;
+      var out = '';
+      for (i = 0; i < bytes.length; i += chunk) {
+        var slice = bytes.subarray(i, Math.min(i + chunk, bytes.length));
+        out += String.fromCharCode.apply(null, slice);
+      }
+      return 'data:image/jpeg;base64,' + btoa(out);
+    } catch (err) {
+      return dataUrl;
+    }
+  }
+
+  function exportDataUrl(boardIdx) {
     var exp = state.exp;
     var axes = !!exp.axes;
     var showLegend = !!exp.legend;
     var showMeta = !!exp.meta;
+    var useIdx = boardIdx == null ? state.boardIndex : boardIdx;
 
-    var rect = boardRect(state.boardIndex);
+    var rect = boardRect(useIdx);
     var pw = rect.x1 - rect.x0;
     var ph = rect.y1 - rect.y0;
+
+    // 固定格宽：300DPI 下 1 格 = 5mm，打印「实际大小」即实物豆距
+    var cell = EXPORT_CELL;
 
     // 图案画布（含格线/分板线/格内色号开关）
     var pattern = document.createElement('canvas');
     var pctx = pattern.getContext('2d');
-    drawPattern(pctx, EXPORT_CELL, state.showGrid, rect, true);
+    drawPattern(pctx, cell, state.showGrid, rect, true);
 
     // 本板色号用量列表（按用量降序）
     var counts = state.counts || {};
     var list = Object.keys(counts).map(function (k) { return counts[k]; });
     list.sort(function (a, b) { return b.n - a.n; });
-    if (state.boardIndex >= 0) {
+    if (useIdx >= 0) {
       var local = {};
       var yy;
       var xx;
@@ -1326,20 +1512,28 @@
       });
     }
 
-    var pad = 16;
-    var cell = EXPORT_CELL;
-    var gap = state.showGrid ? 1 : 0;
+    var pad = Math.max(28, Math.round(cell * 0.5));
     var axisTop = axes ? Math.round(cell * 0.75) : 0;
-    var axisLeft = axes ? Math.max(20, Math.round(cell * 0.9)) : 0;
-    var metaH = showMeta ? 50 : 0;
+    var axisLeft = axes ? Math.max(32, Math.round(cell * 0.9)) : 0;
+    var metaH = showMeta ? Math.round(cell * 2.2) : 0;
     var x0 = pad + axisLeft;
     var y0 = pad + metaH + axisTop;
 
+    // 图例：圆角正方形 = 图纸格面边长
+    var sw = cell;
+    var swR = Math.max(8, Math.round(sw * 0.2));
+    var itemGapX = Math.max(6, Math.round(sw * 0.12));
+    var itemGapY = Math.max(8, Math.round(sw * 0.14));
+    var countGap = Math.max(4, Math.round(sw * 0.08));
+    var countH = Math.max(16, Math.round(sw * 0.32));
+    var itemH = sw + countGap + countH;
     var outW = x0 + pattern.width + pad;
-    var legendCols = Math.max(1, Math.min(6, Math.floor((outW - pad * 2 - 6) / 96)));
+    var legendCols = showLegend && list.length
+      ? Math.max(1, Math.floor((outW - pad * 2 + itemGapX) / (sw + itemGapX)))
+      : 1;
     var legendRows = showLegend && list.length ? Math.ceil(list.length / legendCols) : 0;
-    var legendTop = y0 + pattern.height + (legendRows ? 18 : 0);
-    var legendH = legendRows ? legendRows * 24 + 6 : 0;
+    var legendTop = y0 + pattern.height + (legendRows ? Math.round(cell * 0.35) : 0);
+    var legendH = legendRows ? legendRows * (itemH + itemGapY) - itemGapY : 0;
     var outH = (showLegend && list.length)
       ? legendTop + legendH + pad
       : y0 + pattern.height + pad;
@@ -1352,22 +1546,29 @@
     octx.fillRect(0, 0, outW, outH);
 
     if (showMeta) {
+      var titleSize = Math.max(34, Math.round(cell * 0.58));
+      var subSize = Math.max(22, Math.round(cell * 0.4));
+      var tipSize = Math.max(16, Math.round(cell * 0.3));
       octx.fillStyle = '#1a1a1a';
-      octx.font = 'bold 16px sans-serif';
-      octx.fillText('兔格拼豆 · ' + getPalette().name, pad, pad + 16);
-      octx.font = '12px sans-serif';
-      octx.fillStyle = '#666';
+      octx.font = 'bold ' + titleSize + 'px sans-serif';
+      octx.fillText('兔格拼豆 · ' + getPalette().name, pad, pad + Math.round(titleSize * 0.95));
+      octx.font = subSize + 'px sans-serif';
+      octx.fillStyle = '#444';
       var title = state.width + '×' + state.height + ' · ' +
-        (state.boardIndex < 0 ? '全图' : '第' + (state.boardIndex + 1) + '板');
+        (useIdx < 0 ? '全图' : '第' + (useIdx + 1) + '板') +
+        ' · 每格' + BEAD_MM + 'mm';
       if (axes) title += ' · 坐标版';
-      octx.fillText(title, pad, pad + 36);
+      octx.fillText(title, pad, pad + titleSize + Math.round(subSize * 1.15));
+      octx.fillStyle = '#777';
+      octx.font = tipSize + 'px sans-serif';
+      octx.fillText('打印请选「实际大小 / 100%」，勿勾选适应页面（' + PRINT_DPI + ' DPI）', pad, pad + titleSize + subSize + Math.round(tipSize * 1.9));
     }
 
     octx.drawImage(pattern, x0, y0);
 
     // 行列坐标
     if (axes && pw > 0 && ph > 0) {
-      var axFont = Math.max(10, Math.round(cell * 0.42));
+      var axFont = Math.max(16, Math.round(cell * 0.42));
       octx.font = axFont + 'px sans-serif';
       octx.textAlign = 'center';
       octx.textBaseline = 'middle';
@@ -1375,8 +1576,7 @@
       var i;
       var j;
       for (i = 0; i < pw; i++) {
-        // drawPattern 中每列左缘 = i*cell+gap、宽 cell-gap，故中心 = i*cell+(cell+gap)/2
-        var colCx = x0 + i * cell + (cell + gap) / 2;
+        var colCx = x0 + i * cell + cell / 2;
         octx.fillText(String(rect.x0 + i + 1), colCx, y0 - axisTop / 2 - 1);
         octx.fillStyle = 'rgba(0,0,0,0.08)';
         octx.fillRect(colCx - 0.5, y0 - 2, 1, 4);
@@ -1384,8 +1584,8 @@
       }
       octx.textAlign = 'right';
       for (j = 0; j < ph; j++) {
-        var rowCy = y0 + j * cell + (cell + gap) / 2;
-        octx.fillText(String(rect.y0 + j + 1), x0 - 6, rowCy);
+        var rowCy = y0 + j * cell + cell / 2;
+        octx.fillText(String(rect.y0 + j + 1), x0 - 8, rowCy);
         octx.fillStyle = 'rgba(0,0,0,0.08)';
         octx.fillRect(x0 - 2, rowCy - 0.5, 4, 1);
         octx.fillStyle = '#333';
@@ -1394,23 +1594,51 @@
       octx.textBaseline = 'alphabetic';
     }
 
-    // 用量图例
+    // 用量图例（紧凑左起排布，色块边长 = 格面 × 2）
     if (showLegend && list.length) {
-      var colW = (outW - pad * 2) / legendCols;
-      octx.font = '12px sans-serif';
+      var codeFont = Math.max(18, Math.round(sw * 0.38));
+      var countFont = Math.max(15, Math.round(sw * 0.28));
       for (var k = 0; k < list.length; k++) {
         var item = list[k];
-        var lx = pad + (k % legendCols) * colW;
-        var lyy = legendTop + ((k / legendCols) | 0) * 24;
+        var col = k % legendCols;
+        var row = (k / legendCols) | 0;
+        var lx = pad + col * (sw + itemGapX);
+        var ly = legendTop + row * (itemH + itemGapY);
         octx.fillStyle = item.hex;
-        octx.fillRect(lx, lyy, 12, 12);
-        octx.strokeStyle = 'rgba(0,0,0,0.15)';
-        octx.strokeRect(lx + 0.5, lyy + 0.5, 11, 11);
-        octx.fillStyle = '#333';
-        octx.fillText(item.code + ' ' + item.n, lx + 16, lyy + 11);
+        roundRectPath(octx, lx, ly, sw, sw, swR);
+        octx.fill();
+        octx.strokeStyle = 'rgba(0,0,0,0.14)';
+        octx.lineWidth = Math.max(1, Math.round(sw * 0.02));
+        roundRectPath(octx, lx + 0.5, ly + 0.5, sw - 1, sw - 1, swR);
+        octx.stroke();
+        octx.fillStyle = contrastInk(item.hex);
+        octx.font = '700 ' + codeFont + 'px sans-serif';
+        octx.textAlign = 'center';
+        octx.textBaseline = 'middle';
+        octx.fillText(item.code, lx + sw / 2, ly + sw / 2 + 1);
+        octx.fillStyle = '#444';
+        octx.font = '600 ' + countFont + 'px sans-serif';
+        octx.textBaseline = 'top';
+        octx.fillText(String(item.n), lx + sw / 2, ly + sw + countGap);
       }
+      octx.textAlign = 'start';
+      octx.textBaseline = 'alphabetic';
     }
-    return out.toDataURL('image/png');
+
+    return jpegDataUrlWithDpi(out.toDataURL('image/jpeg', 0.92), PRINT_DPI);
+  }
+
+  function saveOneDataUrl(dataUrl, filename) {
+    if (window.xhs && window.xhs.miniTool && window.xhs.miniTool.writeTempFile) {
+      return window.xhs.miniTool.writeTempFile({ data: dataUrl }).then(function (res) {
+        return window.xhs.miniTool.saveImageToPhotosAlbum({ filePath: res.filePath });
+      });
+    }
+    var a = document.createElement('a');
+    a.href = dataUrl;
+    a.download = filename || 'bead-pattern.jpg';
+    a.click();
+    return Promise.resolve();
   }
 
   function saveToAlbum() {
@@ -1418,7 +1646,10 @@
     state.busy = true;
     els.btnSave.disabled = true;
     els.exportGo.disabled = true;
-    var dataUrl = exportDataUrl();
+
+    var total = state.boardsX * state.boardsY;
+    var boardMode = state.exp.boardMode || 'full';
+    var useEach = boardMode === 'each' && total > 1;
 
     function done(ok, msg) {
       state.busy = false;
@@ -1427,10 +1658,9 @@
       toast(ok ? (msg || '已保存到相册') : (msg || '保存失败'));
     }
 
-    if (window.xhs && window.xhs.miniTool && window.xhs.miniTool.writeTempFile) {
-      window.xhs.miniTool.writeTempFile({ data: dataUrl }).then(function (res) {
-        return window.xhs.miniTool.saveImageToPhotosAlbum({ filePath: res.filePath });
-      }).then(function () {
+    if (!useEach) {
+      var dataUrl = exportDataUrl(-1);
+      saveOneDataUrl(dataUrl, 'bead-pattern-full.jpg').then(function () {
         done(true);
       }).catch(function (err) {
         done(false, (err && err.errMsg) || '保存失败');
@@ -1438,12 +1668,25 @@
       return;
     }
 
-    // local fallback for browser preview
-    var a = document.createElement('a');
-    a.href = dataUrl;
-    a.download = 'bead-pattern.png';
-    a.click();
-    done(true, '已下载图纸');
+    // 分板逐个导出
+    var idx = 0;
+    function next() {
+      if (idx >= total) {
+        done(true, '已导出 ' + total + ' 张分板图纸');
+        return;
+      }
+      var boardNo = idx + 1;
+      var url = exportDataUrl(idx);
+      var name = 'bead-pattern-board-' + boardNo + '.jpg';
+      saveOneDataUrl(url, name).then(function () {
+        idx += 1;
+        // 浏览器连下多张时稍作间隔，避免被拦
+        setTimeout(next, 180);
+      }).catch(function (err) {
+        done(false, (err && err.errMsg) || ('第' + boardNo + '板保存失败'));
+      });
+    }
+    next();
   }
 
   function setChip(btn, on) {
@@ -1495,32 +1738,75 @@
   }
 
   function zoomAt2d(cx, cy, factor) {
-    if (!state.gridData || state.view.mode !== '2d') return;
+    if (!state.gridData || state.view.mode !== '2d' || fit2dAnim) return;
     var minS = state.view.fitS || 1;
     var s0 = state.view.s || minS;
     var s1;
     if (factor) {
-      s1 = s0 * factor;
-    } else {
-      // 双击：已放大则回落到铺满，否则放大两档
-      s1 = s0 > minS * 1.35 ? minS : Math.max(minS * 1.01, s0 * 2.3);
+      s1 = Math.max(minS, Math.min(MAX_ZOOM, s0 * factor));
+      var wx = (cx - state.view.tx) / s0;
+      var wy = (cy - state.view.ty) / s0;
+      state.view.s = s1;
+      state.view.tx = cx - wx * s1;
+      state.view.ty = cy - wy * s1;
+      clampView2d();
+      renderPreview();
+      return;
     }
-    s1 = Math.max(minS, Math.min(MAX_ZOOM, s1));
-    var wx = (cx - state.view.tx) / s0;
-    var wy = (cy - state.view.ty) / s0;
-    state.view.s = s1;
-    state.view.tx = cx - wx * s1;
-    state.view.ty = cy - wy * s1;
-    clampView2d();
-    renderPreview();
+    // 双击：放大则回落到铺满，否则放大两档（均带动画）
+    if (s0 > minS * 1.35) {
+      animateFit2d();
+      return;
+    }
+    s1 = Math.max(minS * 1.01, Math.min(MAX_ZOOM, s0 * 2.3));
+    animateZoom2d(cx, cy, s1);
   }
 
   function zoomAt3d(factor) {
-    if (!state.gridData || state.view.mode !== '3d' || morphAnim) return;
+    if (!state.gridData || state.view.mode !== '3d' || morphAnim || zoom3dAnim) return;
     var s3 = state.view3d;
     var z0 = s3.zoom == null ? 1 : s3.zoom;
     s3.zoom = Math.max(0.45, Math.min(3.5, z0 * factor));
     renderPreview();
+  }
+
+  function animateZoom3d(z1) {
+    if (!state.gridData || state.view.mode !== '3d' || morphAnim || zoom3dAnim) return;
+    var s3 = state.view3d;
+    var z0 = s3.zoom == null ? 1 : s3.zoom;
+    z1 = Math.max(0.45, Math.min(3.5, z1));
+    if (Math.abs(z0 - z1) < 0.02) return;
+    zoom3dAnim = {
+      t0: performance.now(),
+      dur: 380,
+      z0: z0,
+      z1: z1
+    };
+    tickZoom3d();
+  }
+
+  function tickZoom3d() {
+    if (!zoom3dAnim) return;
+    var a = zoom3dAnim;
+    var t = (performance.now() - a.t0) / a.dur;
+    if (t < 0) t = 0;
+    if (t > 1) t = 1;
+    var e = easeInOut(t);
+    state.view3d.zoom = a.z0 + (a.z1 - a.z0) * e;
+    renderPreview();
+    if (t < 1) {
+      requestAnimationFrame(tickZoom3d);
+      return;
+    }
+    zoom3dAnim = null;
+    state.view3d.zoom = a.z1;
+    renderPreview();
+  }
+
+  function zoomToggle3d() {
+    if (!state.gridData || state.view.mode !== '3d' || morphAnim) return;
+    var z0 = state.view3d.zoom == null ? 1 : state.view3d.zoom;
+    animateZoom3d(z0 > 1.35 ? 1 : 2.2);
   }
 
   function syncModeUI() {
@@ -1528,8 +1814,118 @@
     els.btn3d.textContent = is3 ? '2D' : '3D';
     els.btn3d.classList.toggle('vt-on', is3);
     els.btn3d.setAttribute('aria-pressed', is3 ? 'true' : 'false');
-    els.btnFit.hidden = is3;
-    els.btn3dReset.hidden = !is3;
+  }
+
+  // 锚点插值：插值「视口中心对应的内容坐标」+ 缩放，避免 s/tx/ty 各自线性插值导致跳动
+  function startView2dAnim(s1, wx1, wy1, dur) {
+    if (morphAnim) return;
+    var v = viewportSize();
+    var s0 = state.view.s || 1;
+    var tx0 = state.view.tx || 0;
+    var ty0 = state.view.ty || 0;
+    var wx0 = (v.vw / 2 - tx0) / s0;
+    var wy0 = (v.vh / 2 - ty0) / s0;
+    if (Math.abs(s0 - s1) < 0.002 && Math.abs(wx0 - wx1) < 0.05 && Math.abs(wy0 - wy1) < 0.05) {
+      state.view.s = s1;
+      state.view.tx = v.vw / 2 - wx1 * s1;
+      state.view.ty = v.vh / 2 - wy1 * s1;
+      clampView2d();
+      renderPreview();
+      return;
+    }
+    fit2dAnim = {
+      t0: performance.now(),
+      dur: dur || 400,
+      s0: s0,
+      s1: s1,
+      wx0: wx0,
+      wy0: wy0,
+      wx1: wx1,
+      wy1: wy1,
+      vw: v.vw,
+      vh: v.vh
+    };
+    tickFit2d();
+  }
+
+  function animateFit2d() {
+    if (!state.gridData || state.view.mode !== '2d') {
+      fitView();
+      return;
+    }
+    var m = previewMetrics();
+    var v = viewportSize();
+    if (!m.pw || !m.ph) return;
+    var fitS = Math.min(v.vw / m.cw, v.vh / m.ch);
+    state.view.fitS = fitS;
+    // 终点：内容中心对准视口中心
+    startView2dAnim(fitS, m.cw / 2, m.ch / 2, 420);
+  }
+
+  function animateZoom2d(cx, cy, s1) {
+    if (!state.gridData || state.view.mode !== '2d') return;
+    var s0 = state.view.s || 1;
+    // 保持双击点下的内容坐标不变，只改缩放
+    var wx = (cx - state.view.tx) / s0;
+    var wy = (cy - state.view.ty) / s0;
+    var v = viewportSize();
+    fit2dAnim = {
+      t0: performance.now(),
+      dur: 380,
+      s0: s0,
+      s1: s1,
+      anchor: true,
+      ax: cx,
+      ay: cy,
+      awx: wx,
+      awy: wy,
+      vw: v.vw,
+      vh: v.vh
+    };
+    tickFit2d();
+  }
+
+  function tickFit2d() {
+    if (!fit2dAnim) return;
+    var a = fit2dAnim;
+    var t = (performance.now() - a.t0) / a.dur;
+    if (t < 0) t = 0;
+    if (t > 1) t = 1;
+    var e = easeInOut(t);
+    var s = a.s0 + (a.s1 - a.s0) * e;
+    state.view.s = s;
+    if (a.anchor) {
+      state.view.tx = a.ax - a.awx * s;
+      state.view.ty = a.ay - a.awy * s;
+    } else {
+      var wx = a.wx0 + (a.wx1 - a.wx0) * e;
+      var wy = a.wy0 + (a.wy1 - a.wy0) * e;
+      state.view.tx = a.vw / 2 - wx * s;
+      state.view.ty = a.vh / 2 - wy * s;
+    }
+    renderPreview();
+    if (t < 1) {
+      requestAnimationFrame(tickFit2d);
+      return;
+    }
+    fit2dAnim = null;
+    if (a.anchor) {
+      state.view.s = a.s1;
+      state.view.tx = a.ax - a.awx * a.s1;
+      state.view.ty = a.ay - a.awy * a.s1;
+      // 锚点缩放结束后用宽松夹紧，保留双击点位置，避免角落跳动
+      clampView2d();
+    } else {
+      fitView2d();
+    }
+    renderPreview();
+  }
+
+  function doResetView() {
+    if (!state.gridData) return;
+    var in3d = state.view.mode === '3d' || (morphAnim && morphAnim.dir === 'to3d');
+    if (in3d) reset3dView();
+    else animateFit2d();
   }
 
   function setViewMode3d(on) {
@@ -1616,7 +2012,7 @@
         panY0: fromPanY, panY1: 0
       };
       syncModeUI();
-      showPreviewHint('单指拖动旋转视角 · 双指/滚轮缩放');
+      showPreviewHint('单指拖动旋转视角 · 双指/滚轮缩放 · 双击放大/复位');
       tickMorph();
     } else {
       // 3D→2D：压扁俯视并对齐铺满取景，再切 2D
@@ -1746,7 +2142,7 @@
   }
 
   function isToolBtn(target) {
-    return !!findEl(target, '.vt-btn', els.viewport);
+    return !!findEl(target, '.bar-btn', document.getElementById('preview-bar'));
   }
 
   function onVpDown(e) {
@@ -1766,11 +2162,15 @@
       gd.travX = 0;
       gd.travY = 0;
       var now = Date.now();
-      if (state.view.mode === '2d' && now - gd.lastTapT < 340 &&
+      if (now - gd.lastTapT < 340 &&
         Math.abs(p.x - gd.lastTapX) < 46 && Math.abs(p.y - gd.lastTapY) < 46) {
         gd.lastTapT = 0;
         gd.tapBlock = true;
-        zoomAt2d(p.x, p.y, 0);
+        if (state.view.mode === '2d') {
+          zoomAt2d(p.x, p.y, 0);
+        } else if (state.view.mode === '3d') {
+          zoomToggle3d();
+        }
       } else {
         gd.lastTapT = now;
         gd.lastTapX = p.x;
@@ -1811,11 +2211,12 @@
       if (gd.tapBlock) return;
       if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) return;
       if (state.view.mode === '2d') {
+        if (fit2dAnim) return;
         state.view.tx += dx;
         state.view.ty += dy;
         requestRender();
       } else {
-        if (morphAnim) return;
+        if (morphAnim || zoom3dAnim) return;
         var s3 = state.view3d;
         // 自然轨道：右拖物体右转 → yaw 取负；上拖抬高视角 → pitch 随 dy 正向
         s3.yaw = (s3.yaw || 0) - dx * 0.012;
@@ -1828,6 +2229,7 @@
       if (!q) return;
       var k = q.d / gd.pinch.d0;
       if (state.view.mode === '2d') {
+        if (fit2dAnim) return;
         var minS = state.view.fitS || 1;
         var s1 = Math.max(minS, Math.min(MAX_ZOOM, gd.pinch.s0 * k));
         var wxx = (gd.pinch.ax - gd.pinch.tx0) / gd.pinch.s0;
@@ -1837,7 +2239,7 @@
         state.view.ty = q.my - wyy * s1;
         requestRender();
       } else {
-        if (morphAnim) return;
+        if (morphAnim || zoom3dAnim) return;
         // 双指只缩放，不附带旋转，避免挪动时误缩放感
         var s32 = state.view3d;
         s32.zoom = Math.max(0.45, Math.min(3.5, gd.pinch.zoom0 * k));
@@ -1860,8 +2262,10 @@
       gd.tapBlock = false;
     } else if (gd.count === 0) {
       gd.pinch = null;
+      var wasTapZoom = gd.tapBlock;
       gd.tapBlock = false;
-      if (state.view.mode === '2d') {
+      // 双击缩放动画进行中或刚触发时不夹紧，避免抬手瞬间偏移跳动
+      if (state.view.mode === '2d' && !fit2dAnim && !wasTapZoom) {
         clampView2d();
       }
       renderPreview();
@@ -1873,19 +2277,26 @@
     els.expCodes.checked = !!state.exp.codes;
     els.expLegend.checked = !!state.exp.legend;
     els.expMeta.checked = !!state.exp.meta;
+    var mode = state.exp.boardMode === 'each' ? 'each' : 'full';
+    if (els.expModeFull) els.expModeFull.checked = mode === 'full';
+    if (els.expModeEach) els.expModeEach.checked = mode === 'each';
   }
 
   function openExportSheet() {
     if (!state.gridData || state.busy) return;
     syncExpBoxes();
+    var total = state.boardsX * state.boardsY;
+    var multi = total > 1;
+    if (els.expBoardMode) {
+      els.expBoardMode.hidden = !multi;
+    }
     if (els.exportScope) {
-      var total = state.boardsX * state.boardsY;
-      if (total <= 1) {
+      if (!multi) {
         els.exportScope.textContent = '将导出整幅图纸（单板）';
-      } else if (state.boardIndex < 0) {
-        els.exportScope.textContent = '当前为全图预览 → 导出整幅拼图（含分板线）。拼豆时一般按板制作，可先切到单板再导出。';
+      } else if (state.exp.boardMode === 'each') {
+        els.exportScope.textContent = '将依次导出 ' + total + ' 张分板图纸（每板含本板用量）';
       } else {
-        els.exportScope.textContent = '当前为第 ' + (state.boardIndex + 1) + '/' + total + ' 板 → 只导出这一板（含本板用量），适合按板拼豆。';
+        els.exportScope.textContent = '将导出整幅拼图（含分板线）';
       }
     }
     openSheet(els.exportSheet);
@@ -1976,6 +2387,14 @@
     renderPreview();
   });
 
+  if (els.btnSeam) {
+    els.btnSeam.addEventListener('click', function () {
+      state.showSeam = !state.showSeam;
+      setChip(els.btnSeam, state.showSeam);
+      renderPreview();
+    });
+  }
+
   els.btnDither.addEventListener('click', function () {
     state.dither = !state.dither;
     setChip(els.btnDither, state.dither);
@@ -1996,9 +2415,53 @@
 
   syncPaletteButton();
   setChip(els.btnGrid, state.showGrid);
+  if (els.btnSeam) setChip(els.btnSeam, state.showSeam);
   setChip(els.btnDither, state.dither);
   setChip(els.btnMerge, state.merge);
   setChip(els.btnAvg, state.mode === 'average');
+
+  // 预览手势 + 视图工具栏（优先绑定，避免后续可选控件异常阻断）
+  els.viewport.addEventListener('pointerdown', onVpDown);
+  els.viewport.addEventListener('pointermove', onVpMove);
+  els.viewport.addEventListener('pointerup', onVpUp);
+  els.viewport.addEventListener('pointercancel', onVpUp);
+  els.viewport.addEventListener('wheel', function (e) {
+    if (!state.gridData || morphAnim || fit2dAnim || zoom3dAnim) return;
+    e.preventDefault();
+    var factor = Math.exp(-e.deltaY * 0.0016);
+    if (state.view.mode === '2d') {
+      var r = els.viewport.getBoundingClientRect();
+      zoomAt2d(e.clientX - r.left, e.clientY - r.top, factor);
+    } else {
+      zoomAt3d(factor);
+    }
+  }, { passive: false });
+
+  els.btn3d.addEventListener('click', function () {
+    var going3d = morphAnim ? morphAnim.dir === 'to3d' : state.view.mode === '3d';
+    setViewMode3d(!going3d);
+  });
+  els.btnFit.addEventListener('click', doResetView);
+  if (els.btnBoardAll) {
+    els.btnBoardAll.addEventListener('click', function () {
+      if (!state.gridData) return;
+      state.boardIndex = -1;
+      fitView();
+    });
+  }
+
+  // 拼板规格（可选，DOM 缺失时不影响预览交互）
+  if (els.btnBoardSize && els.boardSizeSheet) {
+    els.btnBoardSize.addEventListener('click', openBoardSizeSheet);
+    els.boardSizeSheetBackdrop.addEventListener('click', closeBoardSizeSheet);
+    els.boardSizeSheetCancel.addEventListener('click', closeBoardSizeSheet);
+    els.boardSizeSheet.addEventListener('click', function (e) {
+      var btn = findEl(e.target, '[data-board-size]', els.boardSizeSheet);
+      if (!btn) return;
+      applyBoardSize(btn.getAttribute('data-board-size'));
+    });
+    syncBoardSizeButton();
+  }
 
   els.btnBoardPrev.addEventListener('click', function () {
     var total = state.boardsX * state.boardsY;
@@ -2028,36 +2491,6 @@
     fitView();
   });
 
-  // 预览手势 + 视图工具栏
-  els.viewport.addEventListener('pointerdown', onVpDown);
-  els.viewport.addEventListener('pointermove', onVpMove);
-  els.viewport.addEventListener('pointerup', onVpUp);
-  els.viewport.addEventListener('pointercancel', onVpUp);
-  els.viewport.addEventListener('wheel', function (e) {
-    if (!state.gridData || morphAnim) return;
-    e.preventDefault();
-    var factor = Math.exp(-e.deltaY * 0.0016);
-    if (state.view.mode === '2d') {
-      var r = els.viewport.getBoundingClientRect();
-      zoomAt2d(e.clientX - r.left, e.clientY - r.top, factor);
-    } else {
-      zoomAt3d(factor);
-    }
-  }, { passive: false });
-
-  els.btn3d.addEventListener('click', function () {
-    var going3d = morphAnim ? morphAnim.dir === 'to3d' : state.view.mode === '3d';
-    setViewMode3d(!going3d);
-  });
-  els.btnFit.addEventListener('click', function () {
-    if (!state.gridData) return;
-    fitView();
-  });
-  els.btn3dReset.addEventListener('click', function () {
-    if (!state.gridData) return;
-    reset3dView();
-  });
-
   // 导出图纸选项
   els.exportSheetBackdrop.addEventListener('click', closeExportSheet);
   els.exportSheetCancel.addEventListener('click', closeExportSheet);
@@ -2074,6 +2507,20 @@
   els.expMeta.addEventListener('change', function () {
     state.exp.meta = els.expMeta.checked;
   });
+  function onBoardModeChange() {
+    if (els.expModeEach && els.expModeEach.checked) state.exp.boardMode = 'each';
+    else state.exp.boardMode = 'full';
+    if (els.exportScope) {
+      var total = state.boardsX * state.boardsY;
+      if (total > 1) {
+        els.exportScope.textContent = state.exp.boardMode === 'each'
+          ? ('将依次导出 ' + total + ' 张分板图纸（每板含本板用量）')
+          : '将导出整幅拼图（含分板线）';
+      }
+    }
+  }
+  if (els.expModeFull) els.expModeFull.addEventListener('change', onBoardModeChange);
+  if (els.expModeEach) els.expModeEach.addEventListener('change', onBoardModeChange);
 
   syncModeUI();
   showPreviewHint(null);
