@@ -60,6 +60,23 @@ html, body {
   padding: 4px 16px 12px;
 }
 
+/* 编辑模式：预览框固定高度不变，底部内容超高时整屏纵向滚动 */
+#screen-edit { overflow: hidden; }
+#screen-edit.edit-mode { overflow-y: auto; overscroll-behavior-y: contain; -webkit-overflow-scrolling: touch; }
+/* 关闭 grow/shrink，只按 JS 锁定的 height 走，避免被工具条挤压 */
+#screen-edit.edit-mode .preview-shell { flex: none; }
+#screen-edit.edit-mode .panel { max-height: none; overflow: visible; }
+#screen-edit.edit-mode .meta { flex-shrink: 0; }
+/* 底部操作栏吸底常驻：内容不满时贴底、超高滚动时固定可视底部 */
+#screen-edit.edit-mode .actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  margin-top: auto;
+  padding-top: 10px;
+  background: var(--bg);
+}
+
 .screen.active { display: flex; }
 
 #screen-home {
@@ -507,6 +524,56 @@ html, body {
 .chip-color .cp-muted {
   color: inherit;
   opacity: 0.7;
+  font-weight: 500;
+}
+
+/* 手绘编辑工具条 */
+.et-group[hidden] { display: none; }
+
+.et-group {
+  padding: 10px 14px 12px;
+}
+
+.et-tools,
+.et-acts {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.et-acts { margin-top: 8px; }
+
+.et-tools .chip { flex: 1; }
+.et-paint { flex: 1.25; padding: 0 10px; }
+.et-act { flex: 1; }
+.et-act:disabled { opacity: 0.4; }
+
+.et-paint .cp {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: inherit;
+}
+
+.et-paint .cp-swatch {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
+  flex-shrink: 0;
+}
+
+.et-paint .cp-code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+}
+
+.et-paint .cp-muted {
+  opacity: 0.75;
   font-weight: 500;
 }
 

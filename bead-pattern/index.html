@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <title>兔格拼豆</title>
   <link rel="icon" href="icon.png" type="image/png" />
-  <link rel="stylesheet" href="./style.css" />
+  <link rel="stylesheet" href="./style.css?v=20260907b" />
 </head>
 <body>
   <div class="app">
@@ -33,7 +33,7 @@
     </section>
 
     <section class="screen" id="screen-edit">
-      <div class="preview-shell">
+      <div class="preview-shell" id="preview-shell">
         <div class="viewport" id="viewport">
           <canvas id="preview-canvas"></canvas>
           <p class="view-hint" id="view-hint"></p>
@@ -47,12 +47,26 @@
           </div>
           <div class="view-tools" id="view-tools">
             <button type="button" class="bar-btn" id="btn-fit">复位</button>
+            <button type="button" class="bar-btn vt-switch" id="btn-edit" aria-pressed="false">编辑</button>
             <button type="button" class="bar-btn vt-switch" id="btn-3d" aria-pressed="false">3D</button>
           </div>
         </div>
       </div>
 
       <div class="panel">
+        <div class="group et-group" id="et-group" hidden>
+          <div class="et-tools">
+            <button type="button" class="chip et-tool on" data-tool="brush">画笔</button>
+            <button type="button" class="chip et-tool" data-tool="eraser">橡皮</button>
+            <button type="button" class="chip et-tool" data-tool="dropper">取色</button>
+            <button type="button" class="chip chip-select et-paint" id="et-paint" aria-label="选择画笔豆色"></button>
+          </div>
+          <div class="et-acts">
+            <button type="button" class="chip et-act" id="et-undo" disabled>撤销</button>
+            <button type="button" class="chip et-act" id="et-redo" disabled>重做</button>
+            <button type="button" class="chip et-act et-clear" id="et-clear">清空手绘</button>
+          </div>
+        </div>
         <div class="group">
           <div class="row chips-row">
             <button type="button" class="chip chip-select" id="btn-palette">MARD</button>
@@ -162,6 +176,16 @@
       <p class="sheet-title">豆色 · 点选可高亮</p>
       <div class="colors-list" id="colors-list"></div>
       <button type="button" class="sheet-cancel" id="colors-sheet-cancel">完成</button>
+    </div>
+  </div>
+
+  <div class="sheet-mask" id="pick-sheet" aria-hidden="true">
+    <button type="button" class="sheet-backdrop" id="pick-sheet-backdrop" aria-label="关闭"></button>
+    <div class="sheet sheet-tall" role="dialog" aria-label="选择画笔豆色">
+      <div class="sheet-handle"></div>
+      <p class="sheet-title">画笔豆色 · 点选</p>
+      <div class="colors-list" id="pick-list"></div>
+      <button type="button" class="sheet-cancel" id="pick-sheet-cancel">完成</button>
     </div>
   </div>
 
