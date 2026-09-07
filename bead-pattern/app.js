@@ -25,7 +25,7 @@
     mode: 'dominant',
     dither: false,
     merge: false,
-    mergeThreshold: 48,
+    mergeThreshold: 40,
     showGrid: true,
     showSeam: true,
     gridData: null,
@@ -96,9 +96,11 @@
     expModeEach: document.getElementById('exp-mode-each')
   };
 
-  var ctx = els.canvas.getContext('2d');
+  // 强制 sRGB：宽色域屏（P3）默认 display-p3 会让 getImageData 偏色，和色卡对不上
+  var CTX_OPTS = { colorSpace: 'srgb', willReadFrequently: true };
+  var ctx = els.canvas.getContext('2d', { colorSpace: 'srgb' }) || els.canvas.getContext('2d');
   var work = document.createElement('canvas');
-  var workCtx = work.getContext('2d');
+  var workCtx = work.getContext('2d', CTX_OPTS) || work.getContext('2d');
   var toastTimer = null;
   var regenTimer = null;
   var freshImage = false; // 新图刚载入时展示一次操作提示
@@ -127,30 +129,38 @@
     return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1).toUpperCase();
   }
 
-  // sRGB → CIE Lab（D65），用于感知色差匹配
-  function rgbToLab(r, g, b) {
-    r /= 255;
-    g /= 255;
-    b /= 255;
-    r = r > 0.04045 ? Math.pow((r + 0.055) / 1.055, 2.4) : r / 12.92;
-    g = g > 0.04045 ? Math.pow((g + 0.055) / 1.055, 2.4) : g / 12.92;
-    b = b > 0.04045 ? Math.pow((b + 0.055) / 1.055, 2.4) : b / 12.92;
-    var x = (r * 0.4124564 + g * 0.3575761 + b * 0.1804375) / 0.95047;
-    var y = r * 0.2126729 + g * 0.7151522 + b * 0.072175;
-    var z = (r * 0.0193339 + g * 0.119192 + b * 0.9503041) / 1.08883;
-    function f(t) {
-      return t > 0.008856 ? Math.pow(t, 1 / 3) : (7.787037 * t + 16 / 116);
-    }
-    x = f(x);
-    y = f(y);
-    z = f(z);
-    return { L: 116 * y - 16, A: 500 * (x - y), B: 200 * (y - z) };
+  function srgbToLinear(c) {
+    c /= 255;
+    return c > 0.04045 ? Math.pow((c + 0.055) / 1.055, 2.4) : c / 12.92;
   }
 
-  function labDist2(L1, A1, B1, L2, A2, B2) {
-    var dL = L1 - L2;
-    var dA = A1 - A2;
-    var dB = B1 - B2;
+  function linearToSrgb(c) {
+    c = c > 0.0031308 ? 1.055 * Math.pow(c, 1 / 2.4) - 0.055 : 12.92 * c;
+    return clampByte(Math.round(c * 255));
+  }
+
+  // sRGB → Oklab（对齐 perlerbeads.zippland.com 感知距离）
+  function rgbToOklab(r, g, b) {
+    r = srgbToLinear(r);
+    g = srgbToLinear(g);
+    b = srgbToLinear(b);
+    var l = 0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b;
+    var m = 0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b;
+    var s = 0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b;
+    var l_ = Math.pow(l, 1 / 3);
+    var m_ = Math.pow(m, 1 / 3);
+    var s_ = Math.pow(s, 1 / 3);
+    return {
+      L: 0.2104542553 * l_ + 0.7936177850 * m_ - 0.0040720468 * s_,
+      A: 1.9779984951 * l_ - 2.4285922050 * m_ + 0.4505937099 * s_,
+      B: 0.0259040371 * l_ + 0.7827717662 * m_ - 0.8086757660 * s_
+    };
+  }
+
+  function oklabDist2(a, b) {
+    var dL = a.L - b.L;
+    var dA = a.A - b.A;
+    var dB = a.B - b.B;
     return dL * dL + dA * dA + dB * dB;
   }
 
@@ -159,35 +169,42 @@
     var i;
     for (i = 0; i < palette.colors.length; i++) {
       var c = palette.colors[i];
-      var lab = rgbToLab(c[1], c[2], c[3]);
+      var ok = rgbToOklab(c[1], c[2], c[3]);
       list.push({
         code: c[0],
         r: c[1],
         g: c[2],
         b: c[3],
         hex: rgbToHex(c[1], c[2], c[3]),
-        L: lab.L,
-        A: lab.A,
-        B: lab.B
+        L: ok.L,
+        A: ok.A,
+        B: ok.B
       });
     }
     return list;
   }
 
   function nearestColor(cache, r, g, b) {
-    var lab = rgbToLab(r, g, b);
+    var ok = rgbToOklab(r, g, b);
     var best = cache[0];
     var bestD = Infinity;
     var i;
     for (i = 0; i < cache.length; i++) {
       var c = cache[i];
-      var d = labDist2(lab.L, lab.A, lab.B, c.L, c.A, c.B);
+      var d = oklabDist2(ok, c);
       if (d < bestD) {
         bestD = d;
         best = c;
       }
     }
     return best;
+  }
+
+  function rgbDist2(r1, g1, b1, r2, g2, b2) {
+    var dr = r1 - r2;
+    var dg = g1 - g2;
+    var db = b1 - b2;
+    return dr * dr + dg * dg + db * db;
   }
 
   function clampByte(v) {
@@ -208,12 +225,17 @@
     work.width = tw;
     work.height = th;
     workCtx.clearRect(0, 0, tw, th);
-    workCtx.imageSmoothingEnabled = true;
-    workCtx.imageSmoothingQuality = 'high';
+    // 不平滑缩放，避免边界糊成灰边（对齐 perler-beads）
+    workCtx.imageSmoothingEnabled = false;
     workCtx.drawImage(img, 0, 0, tw, th);
-    return workCtx.getImageData(0, 0, tw, th);
+    try {
+      return workCtx.getImageData(0, 0, tw, th, { colorSpace: 'srgb' });
+    } catch (e) {
+      return workCtx.getImageData(0, 0, tw, th);
+    }
   }
 
+  // 格内主导色：出现次数最多的像素 RGB（非均值）——对齐 Zippland/perler-beads
   function regionStats(data, x0, y0, x1, y1, mode) {
     var pixels = data.data;
     var sw = data.width;
@@ -234,41 +256,72 @@
         var g = pixels[o + 1];
         var b = pixels[o + 2];
         n += 1;
-        rSum += r;
-        gSum += g;
-        bSum += b;
-        if (mode === 'dominant') {
-          var key = ((r >> 3) << 10) | ((g >> 3) << 5) | (b >> 3);
-          var bucket = freq[key];
-          if (!bucket) {
-            bucket = { n: 0, r: 0, g: 0, b: 0 };
-            freq[key] = bucket;
-          }
-          bucket.n += 1;
-          bucket.r += r;
-          bucket.g += g;
-          bucket.b += b;
-          if (bucket.n > bestN) {
-            bestN = bucket.n;
-            bestKey = key;
-          }
+        if (mode === 'average') {
+          rSum += srgbToLinear(r);
+          gSum += srgbToLinear(g);
+          bSum += srgbToLinear(b);
+          continue;
+        }
+        var key = (r << 16) | (g << 8) | b;
+        var bucket = freq[key];
+        if (!bucket) {
+          bucket = { n: 0, r: r, g: g, b: b };
+          freq[key] = bucket;
+        }
+        bucket.n += 1;
+        if (bucket.n > bestN) {
+          bestN = bucket.n;
+          bestKey = key;
         }
       }
     }
     if (n === 0) return { r: 255, g: 255, b: 255 };
-    if (mode === 'dominant' && bestKey != null) {
-      var win = freq[bestKey];
+    if (mode === 'average') {
       return {
-        r: Math.round(win.r / win.n),
-        g: Math.round(win.g / win.n),
-        b: Math.round(win.b / win.n)
+        r: linearToSrgb(rSum / n),
+        g: linearToSrgb(gSum / n),
+        b: linearToSrgb(bSum / n)
       };
     }
-    return {
-      r: Math.round(rSum / n),
-      g: Math.round(gSum / n),
-      b: Math.round(bSum / n)
-    };
+    // 精确色过于分散（JPEG）→ 5bit 主导色
+    if (bestN < 2 || (n > 40 && bestN * 12 < n)) {
+      freq = {};
+      bestKey = null;
+      bestN = 0;
+      for (y = y0; y < y1; y++) {
+        for (x = x0; x < x1; x++) {
+          var o2 = (y * sw + x) * 4;
+          if (pixels[o2 + 3] < 128) continue;
+          var r2 = pixels[o2];
+          var g2 = pixels[o2 + 1];
+          var b2 = pixels[o2 + 2];
+          var k2 = ((r2 >> 3) << 10) | ((g2 >> 3) << 5) | (b2 >> 3);
+          var bk = freq[k2];
+          if (!bk) {
+            bk = { n: 0, r: 0, g: 0, b: 0 };
+            freq[k2] = bk;
+          }
+          bk.n += 1;
+          bk.r += r2;
+          bk.g += g2;
+          bk.b += b2;
+          if (bk.n > bestN) {
+            bestN = bk.n;
+            bestKey = k2;
+          }
+        }
+      }
+      if (bestKey != null) {
+        var win = freq[bestKey];
+        return {
+          r: Math.round(win.r / win.n),
+          g: Math.round(win.g / win.n),
+          b: Math.round(win.b / win.n)
+        };
+      }
+    }
+    var top = freq[bestKey];
+    return { r: top.r, g: top.g, b: top.b };
   }
 
   function sampleCells(img, w, h, mode) {
@@ -294,10 +347,12 @@
 
   function limitColors(mapped, samples, maxColors) {
     var counts = {};
+    var byCode = {};
     var i;
     for (i = 0; i < mapped.length; i++) {
-      var code = mapped[i].code;
-      counts[code] = (counts[code] || 0) + 1;
+      var c = mapped[i];
+      counts[c.code] = (counts[c.code] || 0) + 1;
+      byCode[c.code] = c;
     }
     var codes = Object.keys(counts);
     if (codes.length <= maxColors) return mapped;
@@ -305,15 +360,10 @@
     codes.sort(function (a, b) { return counts[b] - counts[a]; });
     var keep = {};
     var keepList = [];
-    var byCode = {};
-    for (i = 0; i < mapped.length; i++) {
-      byCode[mapped[i].code] = mapped[i];
-    }
     for (i = 0; i < maxColors; i++) {
       keep[codes[i]] = true;
       keepList.push(byCode[codes[i]]);
     }
-
     for (i = 0; i < mapped.length; i++) {
       if (!keep[mapped[i].code]) {
         var s = samples[i];
@@ -323,12 +373,11 @@
     return mapped;
   }
 
+  // BFS 相似色连通域合并（对齐 perler-beads：RGB 欧氏距离 < 阈值）
   function mergeSimilarRegions(mapped, w, h, threshold) {
     var total = w * h;
     var visited = new Uint8Array(total);
-    // 原 threshold 按 RGB 欧氏距离；换 Lab 后约 /2.8 对齐原先合并强度
-    var thrLab = Math.max(4, threshold / 2.8);
-    var thr2 = thrLab * thrLab;
+    var thr2 = threshold * threshold;
     var out = mapped.slice();
     var dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
     var i;
@@ -353,7 +402,7 @@
           var ni = ny * w + nx;
           if (visited[ni]) continue;
           var c1 = mapped[ni];
-          if (labDist2(c0.L, c0.A, c0.B, c1.L, c1.A, c1.B) > thr2) continue;
+          if (rgbDist2(c0.r, c0.g, c0.b, c1.r, c1.g, c1.b) > thr2) continue;
           visited[ni] = 1;
           queue.push(ni);
         }
@@ -419,6 +468,17 @@
     buf[idx + 2] += eb * factor;
   }
 
+  // 抗锯齿灰边：很暗→黑、很亮且灰→白，避免描边变毛
+  function cleanSampleRgb(r, g, b) {
+    var max = r > g ? (r > b ? r : b) : (g > b ? g : b);
+    var min = r < g ? (r < b ? r : b) : (g < b ? g : b);
+    var chroma = max - min;
+    var luma = 0.299 * r + 0.587 * g + 0.114 * b;
+    if (luma < 42 && chroma < 55) return { r: 0, g: 0, b: 0 };
+    if (luma > 242 && chroma < 28) return { r: 255, g: 255, b: 255 };
+    return { r: r, g: g, b: b };
+  }
+
   function mapImage() {
     if (!state.image) return;
     var img = state.image;
@@ -428,16 +488,20 @@
     state.boardsX = Math.ceil(w / state.boardSize);
     state.boardsY = Math.ceil(h / state.boardSize);
 
-    // 几何（图/宽）变化才复位视图；调色/限色/合并/抖动保持当前缩放位置
     var geomKey = w + 'x' + img.naturalWidth + 'x' + img.naturalHeight;
     var geomChanged = geomKey !== state.geomKey;
     state.geomKey = geomKey;
 
     var cache = buildPaletteCache(getPalette());
-    var samples = sampleCells(img, w, h, state.mode);
+    var samples;
     var mapped;
     var i;
 
+    // 主色/均值：格内采样（对齐 zippland）；抖动同路径
+    samples = sampleCells(img, w, h, state.mode === 'average' ? 'average' : 'dominant');
+    for (i = 0; i < samples.length; i++) {
+      samples[i] = cleanSampleRgb(samples[i].r, samples[i].g, samples[i].b);
+    }
     if (state.dither) {
       mapped = applyDither(samples, w, h, cache);
     } else {
@@ -696,11 +760,12 @@
     return r * 0.299 + g * 0.587 + b * 0.114;
   }
 
-  function render2d() {
+  function render2d(opts) {
+    opts = opts || {};
     var m = previewMetrics();
     var v = viewportSize();
     if (!state.gridData || !m.pw || !m.ph) return;
-    if (!fit2dAnim) clampView2d();
+    if (!fit2dAnim && !opts.skipClear) clampView2d();
     var vw = v.vw;
     var vh = v.vh;
     var dpr = syncCanvasSize(vw, vh);
@@ -710,9 +775,11 @@
     var rect = m.rect;
     var i;
     var j;
+    var baseA = opts.alpha != null ? opts.alpha : 1;
 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, vw, vh);
+    if (!opts.skipClear) ctx.clearRect(0, 0, vw, vh);
+    ctx.globalAlpha = baseA;
     ctx.setTransform(dpr * s, 0, 0, dpr * s, dpr * tx, dpr * ty);
 
     // 可视内容范围（content px）
@@ -802,6 +869,7 @@
         }
       }
     }
+    ctx.globalAlpha = 1;
   }
 
   function renderPreview() {
@@ -832,6 +900,18 @@
 
   function easeInOut(t) {
     return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+  }
+
+  function smoothstep(edge0, edge1, x) {
+    var t = (x - edge0) / Math.max(1e-6, edge1 - edge0);
+    if (t <= 0) return 0;
+    if (t >= 1) return 1;
+    return t * t * (3 - 2 * t);
+  }
+
+  // 把总进度 e 映射到 [a,b] 区间内的 0→1
+  function stagger(e, a, b) {
+    return smoothstep(a, b, e);
   }
 
   var morphAnim = null;
@@ -923,15 +1003,18 @@
     };
   }
 
-  function render3d() {
+  function render3d(opts) {
+    opts = opts || {};
     var m = previewMetrics();
     var v = viewportSize();
     if (!state.gridData || !m.pw || !m.ph) return;
     var vw = v.vw;
     var vh = v.vh;
     var dpr = syncCanvasSize(vw, vh);
+    var baseA = opts.alpha != null ? opts.alpha : 1;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, vw, vh);
+    if (!opts.skipClear) ctx.clearRect(0, 0, vw, vh);
+    ctx.globalAlpha = baseA;
 
     var s3 = state.view3d;
     if (!s3.init) {
@@ -1034,8 +1117,19 @@
     }
 
     var totalCells = pw * ph;
-    // 大图降分段保流畅，始终圆柱体像素（不再退化成平面格子贴图）
-    var segs = totalCells > 6000 ? 8 : totalCells > 2500 ? 10 : totalCells > 1400 ? 12 : Math.max(BEAD_SEGS, 20);
+    // LOD：极远才退化成小圆点；顶面/侧面整路径一次填充（Canvas 无原生圆柱，用整环代替多片拼接）
+    var cellPxEst = F / Math.max(0.2, eyeR - lookY);
+    var lod = 3;
+    if (cellPxEst < 2.5 || totalCells > 16000) lod = 0;
+    else if (cellPxEst < 5 || totalCells > 9000) lod = 1;
+    else if (cellPxEst < 9 || totalCells > 5000) lod = 2;
+    var segs = lod >= 3
+      ? (cellPxEst > 24 ? 28 : cellPxEst > 14 ? 22 : 16)
+      : lod === 2 ? 14 : 10;
+    var drawWalls = lod >= 1 && hFactor > 0.05 && roundness > 0.35;
+    var drawInner = lod >= 2 && roundness > 0.55 && hFactor > 0.1;
+    var flatSquare = roundness < 0.28;
+    var useDotLod = lod === 0 && !flatSquare && roundness > 0.6;
     var cosT = new Array(segs);
     var sinT = new Array(segs);
     var si;
@@ -1044,77 +1138,226 @@
       cosT[si] = Math.cos(ang);
       sinT[si] = Math.sin(ang);
     }
-
-    function outlineOffset(i) {
-      var c = cosT[i];
-      var s = sinT[i];
-      var circX = c * ro;
-      var circZ = s * ro;
-      var ax = Math.abs(c);
-      var az = Math.abs(s);
+    var offO = new Array(segs);
+    var offI = new Array(segs);
+    for (si = 0; si < segs; si++) {
+      var c0 = cosT[si];
+      var s0 = sinT[si];
+      var circX = c0 * ro;
+      var circZ = s0 * ro;
+      var ax = Math.abs(c0);
+      var az = Math.abs(s0);
       var k = sq / Math.max(ax, az, 1e-6);
-      return [circX * roundness + c * k * (1 - roundness), circZ * roundness + s * k * (1 - roundness)];
+      var ox = circX * roundness + c0 * k * (1 - roundness);
+      var oz = circZ * roundness + s0 * k * (1 - roundness);
+      offO[si] = [ox, oz];
+      var len = Math.sqrt(ox * ox + oz * oz) || 1;
+      var ir = ri * Math.max(0.15, roundness);
+      offI[si] = [ox / len * ir, oz / len * ir];
     }
 
-    function ringAt(cx, y, cz, useInner) {
+    function ringFrom(cx, y, cz, offs) {
       var pts = [];
       var i;
       for (i = 0; i < segs; i++) {
-        var o = outlineOffset(i);
-        var ox = o[0];
-        var oz = o[1];
-        if (useInner) {
-          var ir = ri * roundness;
-          var len = Math.sqrt(ox * ox + oz * oz) || 1;
-          ox = ox / len * ir;
-          oz = oz / len * ir;
-        }
-        var u = toU(cx + ox, y, cz + oz);
+        var u = toU(cx + offs[i][0], y, cz + offs[i][1]);
         if (!u) return null;
         pts.push(u);
       }
       return pts;
     }
 
-    // 实心圆柱 + 顶面暗孔（不挖井，侧面看不到空心穿模）
-    function drawBead(cx, cz, hex) {
-      var topO = ringAt(cx, hB, cz, false);
-      if (!topO) return;
-      var botO = hFactor > 0.06 ? ringAt(cx, 0, cz, false) : null;
-      var topI = roundness > 0.25 ? ringAt(cx, hB, cz, true) : null;
-      var wall = shadeHex(hex, -0.36);
-      var wallDark = shadeHex(hex, -0.58);
-      var rim = roundness > 0.5 ? shadeHex(hex, 0.08) : hex;
-      var hole = mixHex(hex, '#0a0a0e', 0.82);
+    function pathRing(pts, reverse) {
+      var n = pts.length;
       var i;
-      var n1 = segs - 1;
-      if (botO) {
-        for (i = 0; i < segs; i++) {
-          var j = i === n1 ? 0 : i + 1;
-          var o0 = outlineOffset(i);
-          var o1 = outlineOffset(j);
-          var mx = (o0[0] + o1[0]) * 0.5;
-          var mz = (o0[1] + o1[1]) * 0.5;
-          var facing = mx * (eyex - cx) + mz * (eyez - cz);
-          if (facing < 0) continue;
-          fillPolyPts([topO[i], topO[j], botO[j], botO[i]], facing > 0.35 ? wall : wallDark);
+      if (!reverse) {
+        ctx.moveTo(SX(pts[0]), SY(pts[0]));
+        for (i = 1; i < n; i++) ctx.lineTo(SX(pts[i]), SY(pts[i]));
+      } else {
+        ctx.moveTo(SX(pts[n - 1]), SY(pts[n - 1]));
+        for (i = n - 2; i >= 0; i--) ctx.lineTo(SX(pts[i]), SY(pts[i]));
+      }
+      ctx.closePath();
+    }
+
+    // 整环一次填充（evenodd 挖孔），无片间拼缝
+    function fillRing(outer, inner, color) {
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      pathRing(outer, false);
+      if (inner) pathRing(inner, true);
+      ctx.fill('evenodd');
+    }
+
+    function fillPolySolid(pts, color) {
+      if (!pts || pts.length < 3) return;
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      pathRing(pts, false);
+      ctx.fill();
+    }
+
+    var cxWall = 0;
+    var czWall = 0;
+
+    // 可见外壁连成一条带，一次填充
+    function fillWallBand(top, bot, offs, outward, colorLit, colorDark) {
+      var flags = new Array(segs);
+      var i;
+      var any = false;
+      var litSum = 0;
+      var litN = 0;
+      for (i = 0; i < segs; i++) {
+        var j = i === segs - 1 ? 0 : i + 1;
+        var mx = (offs[i][0] + offs[j][0]) * 0.5;
+        var mz = (offs[i][1] + offs[j][1]) * 0.5;
+        var facing = mx * (eyex - cxWall) + mz * (eyez - czWall);
+        if (!outward) facing = -facing;
+        flags[i] = facing > 0.02;
+        if (flags[i]) {
+          any = true;
+          litSum += facing;
+          litN += 1;
         }
       }
-      // 整圆顶面一次铺满，避免环带接缝
-      fillPolyPts(topO, rim);
-      if (topI) fillPolyPts(topI, hole);
+      if (!any) return;
+      ctx.fillStyle = (litN ? litSum / litN : 0) > 0.28 ? colorLit : colorDark;
+      ctx.beginPath();
+      var first = -1;
+      for (i = 0; i < segs; i++) {
+        var prev = i === 0 ? segs - 1 : i - 1;
+        if (flags[i] && !flags[prev]) {
+          first = i;
+          break;
+        }
+      }
+      if (first < 0) first = 0;
+      var idx = first;
+      var guard = 0;
+      var started = false;
+      var p;
+      while (guard < segs && flags[idx]) {
+        p = top[idx];
+        if (!started) {
+          ctx.moveTo(SX(p), SY(p));
+          started = true;
+        } else {
+          ctx.lineTo(SX(p), SY(p));
+        }
+        idx = idx === segs - 1 ? 0 : idx + 1;
+        guard += 1;
+      }
+      var last = idx === 0 ? segs - 1 : idx - 1;
+      idx = last;
+      guard = 0;
+      while (guard < segs && flags[idx]) {
+        p = bot[idx];
+        ctx.lineTo(SX(p), SY(p));
+        idx = idx === 0 ? segs - 1 : idx - 1;
+        guard += 1;
+      }
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    function drawBead(cx, cz, hex) {
+      var cu = toU(cx, hB * 0.55, cz);
+      if (!cu) return;
+      var sx = SX(cu);
+      var sy = SY(cu);
+      var margin = cellPxEst * 1.3 + 10;
+      if (sx < -margin || sy < -margin || sx > vw + margin || sy > vh + margin) return;
+
+      if (flatSquare) {
+        var hs = sq * 0.998;
+        var sqTop = [
+          toU(cx - hs, hB, cz - hs),
+          toU(cx + hs, hB, cz - hs),
+          toU(cx + hs, hB, cz + hs),
+          toU(cx - hs, hB, cz + hs)
+        ];
+        if (!(sqTop[0] && sqTop[1] && sqTop[2] && sqTop[3])) return;
+        if (drawWalls && hFactor > 0.08) {
+          var botS = [
+            toU(cx - hs, 0, cz - hs),
+            toU(cx + hs, 0, cz - hs),
+            toU(cx + hs, 0, cz + hs),
+            toU(cx - hs, 0, cz + hs)
+          ];
+          if (botS[0] && botS[1] && botS[2] && botS[3]) {
+            var wallSq = shadeHex(hex, -0.4);
+            var faces = [
+              [sqTop[0], sqTop[1], botS[1], botS[0], 0, -1],
+              [sqTop[1], sqTop[2], botS[2], botS[1], 1, 0],
+              [sqTop[2], sqTop[3], botS[3], botS[2], 0, 1],
+              [sqTop[3], sqTop[0], botS[0], botS[3], -1, 0]
+            ];
+            var fi;
+            for (fi = 0; fi < 4; fi++) {
+              var f = faces[fi];
+              if (f[4] * (eyex - cx) + f[5] * (eyez - cz) < 0) continue;
+              fillPolySolid([f[0], f[1], f[2], f[3]], wallSq);
+            }
+          }
+        }
+        fillPolySolid(sqTop, hex);
+        return;
+      }
+
+      if (useDotLod) {
+        var rad = Math.max(0.45, (ro * 0.85 * F) / cu[2]);
+        ctx.fillStyle = hex;
+        ctx.beginPath();
+        ctx.arc(sx, sy, rad, 0, Math.PI * 2);
+        ctx.fill();
+        return;
+      }
+
+      var topO = ringFrom(cx, hB, cz, offO);
+      if (!topO) return;
+      var holeAmt = Math.max(0, Math.min(1, (roundness - 0.28) / 0.45));
+      var topI = holeAmt > 0.04 ? ringFrom(cx, hB, cz, offI) : null;
+      var botO = drawWalls ? ringFrom(cx, 0, cz, offO) : null;
+      var botI = drawInner && topI && holeAmt > 0.35 ? ringFrom(cx, 0.015, cz, offI) : null;
+      var wall = shadeHex(hex, -0.32);
+      var wallDark = shadeHex(hex, -0.52);
+      var wallIn = shadeHex(hex, -0.42);
+      var wallInLit = shadeHex(hex, -0.22);
+      var rim = shadeHex(hex, 0.06);
+
+      cxWall = cx;
+      czWall = cz;
+      if (botO) fillWallBand(topO, botO, offO, true, wall, wallDark);
+      if (botI && topI) fillWallBand(topI, botI, offI, false, wallInLit, wallIn);
+
+      if (topI && holeAmt > 0.45) {
+        fillRing(topO, topI, rim);
+      } else if (topI && holeAmt > 0.04) {
+        fillRing(topO, null, rim);
+        ctx.globalAlpha = holeAmt * baseA;
+        fillRing(topI, null, mixHex(hex, '#0a0a0e', 0.75));
+        ctx.globalAlpha = baseA;
+      } else {
+        fillRing(topO, null, rim);
+      }
     }
 
     var order = [];
     var jj, ii;
+    var needSort = !useDotLod;
     for (jj = 0; jj < ph; jj++) {
       for (ii = 0; ii < pw; ii++) {
-        var cu = toU(ii - halfX, hB * 0.5, jj - halfZ);
-        if (!cu) continue;
-        order.push([ii, jj, cu[2]]);
+        var cu0 = toU(ii - halfX, hB * 0.5, jj - halfZ);
+        if (!cu0) continue;
+        var sx0 = SX(cu0);
+        var sy0 = SY(cu0);
+        var m0 = cellPxEst * 1.5 + 12;
+        if (sx0 < -m0 || sy0 < -m0 || sx0 > vw + m0 || sy0 > vh + m0) continue;
+        if (needSort) order.push([ii, jj, cu0[2]]);
+        else order.push([ii, jj, 0]);
       }
     }
-    order.sort(function (a, b) { return b[2] - a[2]; });
+    if (needSort) order.sort(function (a, b) { return b[2] - a[2]; });
 
     var oi;
     for (oi = 0; oi < order.length; oi++) {
@@ -1126,12 +1369,12 @@
     }
 
     // 接近俯视扁平且够大时画出色号，与 2D 放大态衔接（随 t3d 淡出）
-    var cellPx = F / Math.max(0.2, eyeR - lookY);
+    var cellPx = cellPxEst;
     var codeFade = Math.max(0, Math.min(1, (1 - t3d) * 1.35)) *
       Math.max(0, Math.min(1, (pitch - 0.95) / 0.4));
     if (codeFade > 0.05 && cellPx >= CODE_SHOW_CELL * 0.92) {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.globalAlpha = codeFade;
+      ctx.globalAlpha = codeFade * baseA;
       ctx.font = Math.round(cellPx * CODE_SHOW_FONT) + 'px sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
@@ -1149,14 +1392,19 @@
         ctx.fillStyle = luma(hex2) > 160 ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.85)';
         ctx.fillText(bead2.code, SX(cu2), SY(cu2));
       }
-      ctx.globalAlpha = 1;
+      ctx.globalAlpha = baseA;
     }
 
-    // 2D↔3D 过渡：格线叠在顶面，随 t3d 淡出/淡入
-    var gridFade = state.showGrid ? Math.max(0, Math.min(1, 1 - t3d * 1.2)) : 0;
+    // 2D↔3D 过渡：格线与形态分阶段淡入淡出（由 morph 写入 morphGrid）
+    var gridFade = 0;
+    if (state.showGrid) {
+      if (s3.morphGrid != null) gridFade = s3.morphGrid;
+      else if (!morphAnim) gridFade = state.view.mode === '2d' ? 1 : 0;
+      else gridFade = Math.max(0, Math.min(1, 1 - t3d * 1.15));
+    }
     if (gridFade > 0.02) {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.globalAlpha = gridFade;
+      ctx.globalAlpha = gridFade * baseA;
       ctx.strokeStyle = GRID_COLOR;
       ctx.lineWidth = 1;
       ctx.beginPath();
@@ -1187,8 +1435,56 @@
         }
       }
       ctx.stroke();
-      ctx.globalAlpha = 1;
+      ctx.globalAlpha = baseA;
     }
+
+    // 分板红线（全图多板且开关开启；线宽贴近 2D，过渡期淡入淡出）
+    if (state.showSeam && state.boardIndex < 0 && state.boardsX * state.boardsY > 1) {
+      var seamFade = 1;
+      if (s3.morphSeam != null) seamFade = s3.morphSeam;
+      if (seamFade > 0.02) {
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.globalAlpha = seamFade * baseA;
+        ctx.strokeStyle = SEAM_COLOR;
+        // 过渡用 morphSeamW；稳态 3D 固定细线，避免放大后 disproportionately 变粗
+        var seamW = s3.morphSeamW != null ? s3.morphSeamW : 1.5;
+        ctx.lineWidth = seamW;
+        ctx.lineCap = 'butt';
+        ctx.lineJoin = 'miter';
+        ctx.beginPath();
+        var ySeam = hB + 0.01;
+        var xMinS = -halfX - 0.5;
+        var xMaxS = halfX + 0.5;
+        var zMinS = -halfZ - 0.5;
+        var zMaxS = halfZ + 0.5;
+        var si2;
+        var uS0;
+        var uS1;
+        for (si2 = 1; si2 < pw; si2++) {
+          if (!isBoardSeam(rect.x0 + si2)) continue;
+          var xs = si2 - halfX - 0.5;
+          uS0 = toU(xs, ySeam, zMinS);
+          uS1 = toU(xs, ySeam, zMaxS);
+          if (uS0 && uS1) {
+            ctx.moveTo(SX(uS0), SY(uS0));
+            ctx.lineTo(SX(uS1), SY(uS1));
+          }
+        }
+        for (si2 = 1; si2 < ph; si2++) {
+          if (!isBoardSeam(rect.y0 + si2)) continue;
+          var zs = si2 - halfZ - 0.5;
+          uS0 = toU(xMinS, ySeam, zs);
+          uS1 = toU(xMaxS, ySeam, zs);
+          if (uS0 && uS1) {
+            ctx.moveTo(SX(uS0), SY(uS0));
+            ctx.lineTo(SX(uS1), SY(uS1));
+          }
+        }
+        ctx.stroke();
+        ctx.globalAlpha = baseA;
+      }
+    }
+    ctx.globalAlpha = 1;
   }
 
   function updateBoardLabel() {
@@ -1973,11 +2269,13 @@
     var fitFr = framingMatch2d(fitS, (v.vw - m.cw * fitS) / 2, (v.vh - m.ch * fitS) / 2,
       m.pw, m.ph, m.cw, m.ch, v.vw, v.vh, flatH);
     var matchF = fitFr.F;
-    var dur = 780;
+    var dur = 980;
 
     if (on) {
-      // 2D→3D：F/pan 与当前 2D 格心严格对齐，再同时回中升起
+      // 2D→3D：先保持俯视方格+格线，再升起变圆、格线淡出
       state.view.mode = '3d';
+      var seamWFrom = 1.5;
+      var seamWTo = 1.5;
       if (!morphAnim) {
         var s2 = state.view.s || fitS;
         var fr = framingMatch2d(s2, state.view.tx, state.view.ty,
@@ -1991,6 +2289,12 @@
         s3.morphF = fr.F;
         s3.panX = fr.panX;
         s3.panY = fr.panY;
+        s3.morphGrid = state.showGrid ? 1 : 0;
+        s3.morphSeam = (state.showSeam && state.boardIndex < 0 && state.boardsX * state.boardsY > 1) ? 1 : 0;
+        // 与当前 2D 屏上线宽对齐（内容 2px × s），避免切入瞬间突然变粗
+        seamWFrom = Math.max(1, Math.min(4, 2 * s2));
+        seamWTo = 1.5;
+        s3.morphSeamW = seamWFrom;
         fromYaw = topYaw;
         fromPitch = topPitch;
         fromH = flatH;
@@ -1998,6 +2302,9 @@
         fromF = fr.F;
         fromPanX = fr.panX;
         fromPanY = fr.panY;
+      } else {
+        seamWFrom = s3.morphSeamW != null ? s3.morphSeamW : 1.5;
+        seamWTo = 1.5;
       }
       morphAnim = {
         dir: 'to3d',
@@ -2009,15 +2316,20 @@
         r0: fromR, r1: 1,
         f0: fromF, f1: orbitF,
         panX0: fromPanX, panX1: 0,
-        panY0: fromPanY, panY1: 0
+        panY0: fromPanY, panY1: 0,
+        seamW0: seamWFrom,
+        seamW1: seamWTo
       };
       syncModeUI();
       showPreviewHint('单指拖动旋转视角 · 双指/滚轮缩放 · 双击放大/复位');
       tickMorph();
     } else {
-      // 3D→2D：压扁俯视并对齐铺满取景，再切 2D
+      // 3D→2D：先对齐 2D 取景，再交叉淡入淡出
       state.view.mode = '3d';
       if (!s3.baseF) s3.baseF = orbitF;
+      fitView2d();
+      var seamW0b = s3.morphSeamW != null ? s3.morphSeamW : 1.5;
+      var seamW1b = Math.max(1, Math.min(4, 2 * fitS));
       morphAnim = {
         dir: 'to2d',
         t0: performance.now(),
@@ -2028,7 +2340,9 @@
         r0: fromR, r1: 0,
         f0: fromF, f1: matchF,
         panX0: fromPanX, panX1: 0,
-        panY0: fromPanY, panY1: 0
+        panY0: fromPanY, panY1: 0,
+        seamW0: seamW0b,
+        seamW1: seamW1b
       };
       syncModeUI();
       showPreviewHint('单指拖动平移 · 双指缩放 · 双击放大/复位');
@@ -2044,15 +2358,71 @@
     if (t > 1) t = 1;
     var e = easeInOut(t);
     var s3 = state.view3d;
+    var to3d = ma.dir === 'to3d';
+    var v = viewportSize();
+    var dpr = syncCanvasSize(v.vw, v.vh);
 
-    s3.yaw = ma.yaw0 + (ma.yaw1 - ma.yaw0) * e;
-    s3.pitch = ma.pitch0 + (ma.pitch1 - ma.pitch0) * e;
-    s3.hFactor = ma.h0 + (ma.h1 - ma.h0) * e;
-    s3.roundness = ma.r0 + (ma.r1 - ma.r0) * e;
-    s3.morphF = ma.f0 + (ma.f1 - ma.f0) * e;
-    s3.panX = (ma.panX0 || 0) + ((ma.panX1 || 0) - (ma.panX0 || 0)) * e;
-    s3.panY = (ma.panY0 || 0) + ((ma.panY1 || 0) - (ma.panY0 || 0)) * e;
-    render3d();
+    // 2D/3D 整层交叉淡入淡出：格线与分板线跟着图层渐隐渐现，避免硬切
+    var eCam;
+    var eH;
+    var eR;
+    var eFrame;
+    var eGrid;
+    var eSeam;
+    var eSeamT;
+    var a2d;
+    var a3d;
+    var hasSeam = state.showSeam && state.boardIndex < 0 && state.boardsX * state.boardsY > 1;
+    var w0 = ma.seamW0 != null ? ma.seamW0 : 1.5;
+    var w1 = ma.seamW1 != null ? ma.seamW1 : 1.5;
+    if (to3d) {
+      eCam = stagger(e, 0.22, 0.95);
+      eH = stagger(e, 0.18, 0.88);
+      eR = stagger(e, 0.38, 1.0);
+      eFrame = stagger(e, 0.12, 0.82);
+      a2d = 1 - stagger(e, 0.0, 0.42);
+      a3d = stagger(e, 0.08, 0.48);
+      eGrid = 1 - stagger(e, 0.35, 0.75);
+      eSeam = hasSeam ? 1 : 0;
+      eSeamT = stagger(e, 0.0, 0.9);
+    } else if (ma.dir === 'to2d') {
+      eCam = stagger(e, 0.0, 0.55);
+      eH = stagger(e, 0.1, 0.68);
+      eR = stagger(e, 0.05, 0.58);
+      eFrame = stagger(e, 0.12, 0.75);
+      a3d = 1 - stagger(e, 0.52, 1.0);
+      a2d = stagger(e, 0.48, 1.0);
+      eGrid = stagger(e, 0.32, 0.68);
+      eSeam = hasSeam ? 1 : 0;
+      eSeamT = stagger(e, 0.0, 0.9);
+    } else {
+      eCam = e;
+      eH = e;
+      eR = e;
+      eFrame = e;
+      a2d = 0;
+      a3d = 1;
+      eGrid = 0;
+      eSeam = hasSeam ? 1 : 0;
+      eSeamT = e;
+    }
+
+    s3.yaw = ma.yaw0 + (ma.yaw1 - ma.yaw0) * eCam;
+    s3.pitch = ma.pitch0 + (ma.pitch1 - ma.pitch0) * eCam;
+    s3.hFactor = ma.h0 + (ma.h1 - ma.h0) * eH;
+    s3.roundness = ma.r0 + (ma.r1 - ma.r0) * eR;
+    s3.morphF = ma.f0 + (ma.f1 - ma.f0) * eFrame;
+    s3.panX = (ma.panX0 || 0) + ((ma.panX1 || 0) - (ma.panX0 || 0)) * eFrame;
+    s3.panY = (ma.panY0 || 0) + ((ma.panY1 || 0) - (ma.panY0 || 0)) * eFrame;
+    s3.morphGrid = state.showGrid ? eGrid : 0;
+    s3.morphSeam = eSeam;
+    s3.morphSeamW = w0 + (w1 - w0) * eSeamT;
+    s3.morphProg = e;
+
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, v.vw, v.vh);
+    if (a3d > 0.02) render3d({ skipClear: true, alpha: a3d });
+    if (a2d > 0.02) render2d({ skipClear: true, alpha: a2d });
   }
 
   function tickMorph() {
@@ -2066,6 +2436,10 @@
     }
     var s3 = state.view3d;
     morphAnim = null;
+    s3.morphGrid = null;
+    s3.morphSeam = null;
+    s3.morphSeamW = null;
+    s3.morphProg = null;
     if (m.dir === 'to2d') {
       state.view.mode = '2d';
       s3.hFactor = 1;
