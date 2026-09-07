@@ -36,6 +36,24 @@
       <div class="preview-shell">
         <div class="viewport" id="viewport">
           <canvas id="preview-canvas"></canvas>
+          <div class="view-tools" id="view-tools">
+            <button type="button" class="vt-btn" id="btn-fit" aria-label="恢复大小" title="恢复大小">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 9V4h5"></path>
+                <path d="M20 9V4h-5"></path>
+                <path d="M4 15v5h5"></path>
+                <path d="M20 15v5h-5"></path>
+              </svg>
+            </button>
+            <button type="button" class="vt-btn" id="btn-3d-reset" aria-label="重置视角" title="重置视角">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 3a9 9 0 1 0 9 9"></path>
+                <path d="M21 3v6h-6"></path>
+              </svg>
+            </button>
+            <button type="button" class="vt-btn vt-switch" id="btn-3d" aria-pressed="false">3D</button>
+          </div>
+          <p class="view-hint" id="view-hint"></p>
         </div>
         <div class="board-nav" id="board-nav">
           <button type="button" id="btn-board-prev" aria-label="上一板">‹</button>
@@ -73,7 +91,7 @@
 
       <div class="actions">
         <button class="btn btn-ghost" id="btn-reselect" type="button">重选</button>
-        <button class="btn btn-primary" id="btn-save" type="button">存相册</button>
+        <button class="btn btn-primary" id="btn-save" type="button">导出图纸</button>
       </div>
     </section>
   </div>
@@ -102,6 +120,49 @@
       <p class="sheet-title">豆色 · 点选可高亮</p>
       <div class="colors-list" id="colors-list"></div>
       <button type="button" class="sheet-cancel" id="colors-sheet-cancel">完成</button>
+    </div>
+  </div>
+
+  <div class="sheet-mask" id="export-sheet" aria-hidden="true">
+    <button type="button" class="sheet-backdrop" id="export-sheet-backdrop" aria-label="关闭"></button>
+    <div class="sheet" role="dialog" aria-label="图纸选项">
+      <div class="sheet-handle"></div>
+      <p class="sheet-title">图纸选项</p>
+      <p class="exp-scope" id="export-scope"></p>
+      <div class="exp-list">
+        <label class="exp-opt">
+          <input type="checkbox" id="exp-axes" />
+          <span class="exp-box" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg>
+          </span>
+          <span class="exp-main">行列坐标<small>顶行列号 + 左侧行号</small></span>
+        </label>
+        <label class="exp-opt">
+          <input type="checkbox" id="exp-codes" />
+          <span class="exp-box" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg>
+          </span>
+          <span class="exp-main">格内色号<small>每格标注豆色编号</small></span>
+        </label>
+        <label class="exp-opt">
+          <input type="checkbox" id="exp-legend" />
+          <span class="exp-box" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg>
+          </span>
+          <span class="exp-main">用量图例<small>色块 + 编号 + 颗数</small></span>
+        </label>
+        <label class="exp-opt">
+          <input type="checkbox" id="exp-meta" />
+          <span class="exp-box" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg>
+          </span>
+          <span class="exp-main">标题信息<small>品牌 + 尺寸 + 第几板</small></span>
+        </label>
+      </div>
+      <div class="exp-actions">
+        <button type="button" class="btn btn-ghost" id="export-sheet-cancel">取消</button>
+        <button type="button" class="btn btn-primary" id="export-go">保存图纸</button>
+      </div>
     </div>
   </div>
 
