@@ -59,12 +59,10 @@
   const restLen = [];   // 节 i→i+1 静止长度
   for (let k = 0; k < PER; k++) restLen.push((k === 0 ? 0.028 : TUBE_GAP) + tubeLen(k));
   const strandCool = [];
-  const pluckCool = []; // 按「串×节」冷却，滑动到哪节拨哪节
   // 每串独立风感：相位 / 增益 / 滞后 / 回落阻尼 —— 风停后回落略有参差
   const strandWind = [];
   for (let j = 0; j < N_STRAND; j++) {
     strandCool.push(0);
-    for (let k = 0; k < PER; k++) pluckCool.push(0);
     strandWind.push({
       ph: j * 0.61 + (j % 5) * 0.17,
       gain: 0.72 + (j % 7) * 0.055 + (j & 1) * 0.06,
@@ -152,7 +150,7 @@
     rodMesh.position.set(0, ROD_Y, 0);
     scene.add(rodMesh);
 
-    // 两端吊到窗楣
+    // 两端吊到廊檐
     hangL = new THREE.Mesh(new THREE.CylinderGeometry(0.003, 0.003, ANCHOR_Y - ROD_Y, 5), wood(0xb0a083, 0.35, 0.55));
     hangR = hangL.clone();
     hangL.position.set(-ROD_HALF, (ANCHOR_Y + ROD_Y) / 2, 0);
@@ -355,9 +353,6 @@
     for (let j = 0; j < N_STRAND; j++) {
       if (strandCool[j] > 0) strandCool[j] = Math.max(0, strandCool[j] - dt);
     }
-    for (let i = 0; i < pluckCool.length; i++) {
-      if (pluckCool[i] > 0) pluckCool[i] = Math.max(0, pluckCool[i] - dt);
-    }
     for (let s = 0; s < sub; s++) {
       for (let j = 0; j < N_STRAND; j++) {
         pinHang(j);
@@ -373,30 +368,24 @@
         for (let i = 1; i <= PER; i++) {
           const p = pts[i];
           let vx = (p.x - p.px) * damp;
-          // 竖直速度多阻尼，抑制绳子“伸缩弹”
           let vy = (p.y - p.py) * damp * 0.9;
           let vz = (p.z - p.pz) * damp;
           p.px = p.x; p.py = p.y; p.pz = p.z;
           const depth = i / PER;
           const wF = (0.01 + depth * 0.024) * h;
           const wob = 0.0022 * Math.sin(windT * 1.05 + sw.ph + i * 0.35) * windAmp * windFade;
-          // 风只推水平，不往竖直加力
           p.x += vx + (sw.lx * wF + wob * h);
           p.y += vy - G * h * h;
           p.z += vz + sw.lz * wF;
         }
-        // 多轮定长，压住拉伸感
         for (let it = 0; it < 7; it++) satisfyConstraints(j);
       }
     }
   }
 
-  // 拨动：软拉帘——轻推速度、沿串与邻串平滑衰减，不瞬移位置
-  function pluckStrand(j, k, dirX, dirZ, speedPx) {
-    const keyCool = j * PER + k;
-    if (pluckCool[keyCool] > 0) return false;
-    pluckCool[keyCool] = 0.07;
-    const amp = Math.min(0.012, 0.0028 + speedPx / 110000);
+  // 拨动：软冲量沿绳向下传，邻串轻带；之后交给物理自然回落
+  function pluckStrand(j, k, dirX, dirZ, strength) {
+    const amp = Math.min(0.014, 0.0065 + (strength || 0.5) * 0.007);
     const dd = Math.hypot(dirX, dirZ) || 1;
     const ix = (dirX / dd) * amp;
     const iz = (dirZ / dd) * amp;
@@ -411,7 +400,6 @@
     for (let d = 1; d <= PER - k; d++) {
       softKick(strand, k + 1 + d, 0.58 * Math.pow(0.7, d));
     }
-    // 邻串像帘面一起被带起
     for (const off of [-2, -1, 1, 2]) {
       const nj = j + off;
       if (nj < 0 || nj >= N_STRAND) continue;
@@ -421,6 +409,16 @@
       softKick(np, Math.min(PER, k + 2), side * 0.55);
       softKick(np, Math.max(1, k), side * 0.4);
     }
+  }
+
+  /** 离开某串再碰到才再拨；停在同一串上不连响 */
+  function strikeStrandEnter(j, k, dirX, dirZ, strength, s) {
+    if (s.lastJ === j) return false;
+    s.lastJ = j;
+    pluckStrand(j, k, dirX, dirZ, strength);
+    const pose = tubePose[j][Math.min(PER - 1, k)];
+    const sc = toPx(pose.x, pose.y, pose.z);
+    fire(j, Math.min(PER - 1, k), 0.12 + Math.min(0.1, (strength || 0.5) * 0.08), false, sc[0], sc[1]);
     return true;
   }
 
@@ -503,7 +501,7 @@
       setTimeout(() => {
         const j = Math.min(N_STRAND - 1, ((i / 7) * (N_STRAND - 1)) | 0);
         const k = PER - 1;
-        pluckStrand(j, k, 1, 0, 100);
+        pluckStrand(j, k, 1, 0);
         const pose = tubePose[j][k];
         const sc = toPx(pose.x, pose.y, pose.z);
         fire(j, k, 0.18, false, sc[0], sc[1]);
@@ -532,26 +530,49 @@
         const cx = a.x + abx * t, cy = a.y + aby * t, cz = a.z + abz * t;
         const dx = wp.x - cx, dy = wp.y - cy, dz = (wp.z - cz) * 0.45;
         const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
-        const hitR = 0.034 + tubeR() * 4;
+        const hitR = 0.042 + tubeR() * 4.5;
         if (d < hitR && d < bestD) { bestD = d; best = [j, k]; }
       }
     }
     return best;
   }
-  function isUI(el) { return el && el.closest && el.closest('.hud, .banner, .overlay, button, .btn'); }
+  function isUI(el) { return el && el.closest && el.closest('.hud, .overlay, button, .btn'); }
   function started() { return startOv.classList.contains('hidden'); }
+
+  function samplePluckAlong(s, x0, y0, x1, y1) {
+    const dist = Math.hypot(x1 - x0, y1 - y0);
+    const steps = Math.max(1, Math.ceil(dist / 12));
+    const strength = Math.min(1.2, 0.45 + dist / 80);
+    const dirX = (x1 - x0) * 0.002 || 0.08;
+    for (let i = 1; i <= steps; i++) {
+      const t = i / steps;
+      const cx = x0 + (x1 - x0) * t;
+      const cy = y0 + (y1 - y0) * t;
+      const wp = worldAt(cx, cy);
+      if (!wp) {
+        s.lastJ = -1;
+        continue;
+      }
+      const p = pickBell(wp);
+      if (!p) {
+        s.lastJ = -1;
+        continue;
+      }
+      strikeStrandEnter(p[0], p[1], dirX, 0, strength, s);
+    }
+  }
 
   function onDown(e) {
     if (!started() || isUI(e.target)) return;
     const sid = e.pointerId != null ? e.pointerId : 0;
     const wp = worldAt(e.clientX, e.clientY);
-    pointers.set(sid, {
-      x0: e.clientX, y0: e.clientY, px: e.clientX, py: e.clientY,
-      t: performance.now(), prevW: wp ? wp.clone() : null,
-      lastJ: -1, lastK: -1, moved: false
-    });
+    const s = { px: e.clientX, py: e.clientY, lastJ: -1 };
+    pointers.set(sid, s);
     WC.audio.resume();
-    // 点击不给力，只有滑动经过风铃才拨
+    if (wp) {
+      const p = pickBell(wp);
+      if (p) strikeStrandEnter(p[0], p[1], 0.08, 0, 0.55, s);
+    }
   }
 
   function onMove(e) {
@@ -559,32 +580,11 @@
     const sid = e.pointerId != null ? e.pointerId : 0;
     const s = pointers.get(sid);
     if (!s) return;
-    const now = performance.now();
-    const dx = e.clientX - s.px, dy = e.clientY - s.py;
-    const distPx = Math.hypot(dx, dy);
-    const speed = distPx / Math.max(1, now - s.t) * 1000;
-    s.px = e.clientX; s.py = e.clientY; s.t = now;
-    if (distPx > 4) s.moved = true;
-
-    const wp = worldAt(e.clientX, e.clientY);
-    if (!wp) return;
-    const dwx = s.prevW ? wp.x - s.prevW.x : 0;
-    const dwz = s.prevW ? wp.z - s.prevW.z : 0;
-    if (s.prevW) s.prevW.copy(wp);
-
-    // 轻滑即可带起，同一节可持续软拉（冷却限频）
-    if (!s.moved || speed < 22 || distPx < 1.2) return;
-    const p = pickBell(wp);
-    if (!p) return;
-    s.lastJ = p[0]; s.lastK = p[1];
-    const dirX = Math.abs(dwx) + Math.abs(dwz) > 1e-5 ? dwx : dx * 0.002;
-    const dirZ = Math.abs(dwx) + Math.abs(dwz) > 1e-5 ? dwz : 0;
-    if (pluckStrand(p[0], p[1], dirX || 0.08, dirZ, speed)) {
-      const pose = tubePose[p[0]][p[1]];
-      const sc = toPx(pose.x, pose.y, pose.z);
-      const pw = Math.min(0.2, 0.035 + speed / 14000);
-      fire(p[0], p[1], pw, false, sc[0], sc[1]);
-    }
+    const x0 = s.px, y0 = s.py;
+    const x1 = e.clientX, y1 = e.clientY;
+    if (Math.hypot(x1 - x0, y1 - y0) < 2) return;
+    s.px = x1; s.py = y1;
+    samplePluckAlong(s, x0, y0, x1, y1);
   }
 
   function onUp(e) {
@@ -642,7 +642,7 @@
       for (let i = 0; i < 6; i++) {
         setTimeout(() => {
           const j = Math.min(N_STRAND - 1, ((i / 5) * (N_STRAND - 1)) | 0);
-          pluckStrand(j, Math.min(PER - 1, 2 + (i % 3)), 0.4, 0, 120);
+          pluckStrand(j, Math.min(PER - 1, 2 + (i % 3)), 0.4, 0);
           const pose = tubePose[j][Math.min(PER - 1, 2)];
           const sc = toPx(pose.x, pose.y, pose.z);
           fire(j, Math.min(PER - 1, 2), 0.18, false, sc[0], sc[1]);

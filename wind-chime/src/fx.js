@@ -1,9 +1,7 @@
-/* 微风铃语 - 仲夏夜全宽窗背景 + 柔和碰撞光点
- * 顶：木窗楣（下沿与 3D 吊绳起点对齐，dynamic anchorY）
- * 中：窗洞 = 全宽星空（繁星 / 月光 / 萤火），无左右墙或黑边
- * 底：木窗台（sillY 下方），风铃底部留白靠相机构图保证
- * 窗外路灯：暖光锥里缓慢洒落微光星 / 月牙，随风飘荡
- * #fxCv：碰撞后几点微光小星/月牙散落到窗台
+/* 微风铃语 - 夜色庭院背景 + 柔和碰撞光点
+ * 全幅夜空（月光 / 萤火），无窗框 / 无廊檐（挂点只靠 3D 横杆）
+ * 底：薄雾远影；高路灯：灯柱 + 暖光锥，星/月/许愿字从光里洒落
+ * #fxCv：碰撞后几点微光小星/月牙散落
  */
 (function () {
   const WC = window.WC = window.WC || {};
@@ -22,10 +20,10 @@
   let wishRaining = false;
   let wishIdx = 0;
   let anchorY = -1;
-  let sillY = 0;
+  let groundY = 0;
 
   function topEdge() {
-    return (anchorY > 0 ? anchorY : Math.max(24, H * 0.06));
+    return (anchorY > 0 ? anchorY : Math.max(28, H * 0.07));
   }
 
   function resize() {
@@ -36,13 +34,13 @@
     }
     sky.setTransform(dpr, 0, 0, dpr, 0, 0);
     fx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    sillY = Math.round(H * 0.86);
+    groundY = Math.round(H * 0.9);
     build();
   }
 
   function build() {
     const te = topEdge();
-    const ySpan = Math.max(40, sillY - te - 20);
+    const ySpan = Math.max(40, groundY - te - 20);
     stars = [];
     const n = Math.round((W * ySpan) / 7000) + 90;
     for (let i = 0; i < n; i++) {
@@ -60,7 +58,7 @@
     const nFl = 16 + ((W / 180) | 0);
     for (let i = 0; i < nFl; i++) {
       const x = 20 + Math.random() * (W - 40);
-      const y = te + 30 + Math.random() * Math.max(40, sillY - te - 60);
+      const y = te + 30 + Math.random() * Math.max(40, groundY - te - 60);
       fireflies.push({
         x, y,
         tx: x + (Math.random() - 0.5) * 80,
@@ -74,12 +72,13 @@
         tint: Math.random()
       });
     }
-    const ch = Math.max(40, sillY - te);
+    // 高路灯：灯头低于月亮，长灯柱落到地面
+    const ch = Math.max(40, groundY - te);
     lamp = {
       x: W * 0.76,
-      y: te + ch * 0.28,
-      poleBot: sillY - 4,
-      glowR: Math.min(W, ch) * 0.88
+      y: te + ch * 0.36,
+      poleBot: groundY - 4,
+      glowR: Math.min(W, ch) * 0.92
     };
     lampDust = [];
     spawnAcc = 0;
@@ -97,26 +96,41 @@
     return g;
   }
 
-  function drawMullion() {
-    const te = topEdge();
-    // 轻薄暖木楣，少线条
-    const g = grad(0, te, '#1c1410', '#3a2a1c');
-    sky.fillStyle = g; sky.fillRect(0, 0, W, te);
-    sky.fillStyle = 'rgba(255,220,170,0.12)'; sky.fillRect(0, te - 1.5, W, 1.5);
+  /** 庭院薄雾 + 远影 */
+  function drawCourtyardMist() {
+    const mistTop = groundY - H * 0.22;
+
+    // 远山 / 树影软剪影
+    sky.fillStyle = 'rgba(6, 10, 22, 0.45)';
+    sky.beginPath();
+    sky.moveTo(0, groundY + 20);
+    sky.lineTo(0, groundY - 8);
+    sky.quadraticCurveTo(W * 0.12, groundY - 38, W * 0.22, groundY - 14);
+    sky.quadraticCurveTo(W * 0.35, groundY - 48, W * 0.48, groundY - 18);
+    sky.quadraticCurveTo(W * 0.62, groundY - 42, W * 0.78, groundY - 12);
+    sky.quadraticCurveTo(W * 0.9, groundY - 28, W, groundY - 6);
+    sky.lineTo(W, groundY + 20);
+    sky.closePath();
+    sky.fill();
+
+    const mist = sky.createLinearGradient(0, mistTop, 0, H);
+    mist.addColorStop(0, 'rgba(18, 24, 48, 0)');
+    mist.addColorStop(0.35, 'rgba(22, 28, 52, 0.22)');
+    mist.addColorStop(0.7, 'rgba(12, 14, 28, 0.55)');
+    mist.addColorStop(1, 'rgba(6, 8, 16, 0.88)');
+    sky.fillStyle = mist;
+    sky.fillRect(0, mistTop, W, H - mistTop);
+
+    // 地面一线极淡反射，像湿石或青砖
+    sky.fillStyle = 'rgba(180, 200, 255, 0.04)';
+    sky.fillRect(0, groundY - 1, W, 2);
   }
 
-  function drawSill() {
-    const g = grad(sillY - 6, H, '#2a1c12', '#0e0906');
-    sky.fillStyle = g;
-    sky.fillRect(0, sillY - 6, W, H - sillY + 6);
-    sky.fillStyle = 'rgba(255,220,170,0.14)'; sky.fillRect(0, sillY - 6, W, 1.8);
-  }
-
+  /** 高路灯：灯柱 + 光锥 */
   function drawLamp() {
     if (!lamp) return;
     const lx = lamp.x, ly = lamp.y, bot = lamp.poleBot, gr = lamp.glowR;
     const pulse = 0.94 + 0.06 * Math.sin(t * 0.7);
-    // 月光场景略收一点，仍明显亮
     const dim = mode === 0 ? 0.88 : 1;
 
     sky.globalCompositeOperation = 'lighter';
@@ -178,14 +192,13 @@
   function spawnWishChar(ch) {
     if (!lamp || !ch) return;
     const gr = lamp.glowR;
-    // 与星/月同一光锥区域洒落
     const ang = (Math.random() - 0.5) * 1.1;
     const dist = 8 + Math.random() * gr * 0.55;
     lampDust.push({
       kind: 'char',
       ch: ch,
       x: lamp.x + Math.sin(ang) * dist * 0.65,
-      y: lamp.y + 22 + Math.random() * dist * 0.9,
+      y: lamp.y + 18 + Math.random() * dist * 0.85,
       vx: (Math.random() - 0.5) * 6,
       vy: 4 + Math.random() * 10,
       r: 8 + Math.random() * 12,
@@ -215,7 +228,6 @@
     wishIdx = 0;
     wishSpawnAcc = 0;
     wishRaining = true;
-    // 清掉已有星/月洒落，之后只循环洒字
     for (let i = lampDust.length - 1; i >= 0; i--) {
       if (lampDust[i].kind !== 'char') lampDust.splice(i, 1);
     }
@@ -250,7 +262,7 @@
       lampDust.push({
         kind,
         x: lamp.x + Math.sin(ang) * dist * 0.65,
-        y: lamp.y + 22 + Math.random() * dist * 0.9,
+        y: lamp.y + 18 + Math.random() * dist * 0.85,
         vx: (Math.random() - 0.5) * 6,
         vy: 4 + Math.random() * 10,
         r: kind === 'moon' ? (3.2 + Math.random() * 3.2) : (2.2 + Math.random() * 3.2),
@@ -316,7 +328,6 @@
   }
 
   function groundStackHeight(x, rr) {
-    // 近似堆叠，避免 O(n) 扫全表
     return Math.min(28, (rr || 8) * (0.2 + Math.random() * 0.9));
   }
 
@@ -340,7 +351,6 @@
     }
     const dustCap = 96;
     if (lampDust.length > dustCap) {
-      // 优先去掉最早未落地的
       let over = lampDust.length - dustCap;
       for (let i = 0; i < lampDust.length && over > 0; i++) {
         if (!lampDust[i].settled) {
@@ -355,7 +365,7 @@
     const wx = windX * 28;
     const wy = windY * 8;
     const te = topEdge();
-    const ground = sillY - 6;
+    const ground = groundY - 4;
 
     for (let i = lampDust.length - 1; i >= 0; i--) {
       const p = lampDust[i];
@@ -381,8 +391,7 @@
         } else {
           p.y = ground - p.stackH;
         }
-        const glow = 0.88;
-        p._a = Math.min(1, lifeK * 1.6) * glow;
+        p._a = Math.min(1, lifeK * 1.6) * 0.88;
         continue;
       }
 
@@ -404,7 +413,6 @@
         p.life = Math.max(p.life, p.t + 14 + Math.random() * 12);
       }
 
-      // 稳定亮度，不闪
       p._a = Math.min(1, lifeK * 1.5) * 0.86;
     }
   }
@@ -459,7 +467,7 @@
       p.vy += p.g * dt * 0.55;
       p.x += p.vx * dt; p.y += p.vy * dt;
       p.vx *= 0.985; p.rot += p.vrot * dt;
-      if (p.y > sillY - 6) { p.y = sillY - 6; p.life = p.t + 0.2; }
+      if (p.y > groundY - 4) { p.y = groundY - 4; p.life = p.t + 0.2; }
       const alpha = Math.min(1, lifeK * 1.5) * 0.85;
       const col = 'rgba(' + p.col[0] + ',' + p.col[1] + ',' + p.col[2] + ',';
       if (p.kind === 'moon') drawMoonGlyph(fx, p.x, p.y, p.r, col, alpha * 0.85, p.rot);
@@ -486,7 +494,7 @@
     sky.lineWidth = 1.2;
     const n = 8 + ((windAmt * 10) | 0);
     for (let i = 0; i < n; i++) {
-      const y0 = te + 20 + ((i * 97 + t * 40) % Math.max(40, sillY - te - 40));
+      const y0 = te + 20 + ((i * 97 + t * 40) % Math.max(40, groundY - te - 40));
       const x0 = ((i * 137 + t * (60 + windAmt * 80) * Math.cos(dir)) % (W + 80)) - 40;
       const len = 28 + windAmt * 50 + (i % 3) * 10;
       sky.globalAlpha = a * (0.45 + 0.55 * Math.sin(t * 2.2 + i));
@@ -500,11 +508,10 @@
       );
       sky.stroke();
     }
-    // 微尘
     sky.fillStyle = 'rgba(255,248,230,' + (a * 0.9) + ')';
     for (let i = 0; i < 12; i++) {
       const x = ((i * 89 + t * (40 + windAmt * 70) * Math.cos(dir)) % (W + 20));
-      const y = te + 30 + ((i * 53 + t * 18) % (sillY - te - 50));
+      const y = te + 30 + ((i * 53 + t * 18) % (groundY - te - 50));
       sky.globalAlpha = a * (0.3 + 0.7 * ((Math.sin(t * 4 + i) + 1) * 0.5));
       sky.beginPath();
       sky.arc(x, y, 1 + (i % 2), 0, 6.2832);
@@ -524,39 +531,34 @@
 
   function update(dt) {
     t += dt;
-    sky.fillStyle = '#0a0710';
+    const te = topEdge();
+    const ch = Math.max(10, groundY - te);
+
+    // 全幅夜空，不再裁成「窗洞」
+    const ng = grad(0, H,
+      mode === 0 ? '#07091a' : '#0a1428',
+      mode === 0 ? '#10143a' : '#0c1a30'
+    );
+    sky.fillStyle = ng;
     sky.fillRect(0, 0, W, H);
 
-    const te = topEdge();
-    const ch = Math.max(10, sillY - te);
-    sky.save();
-    sky.beginPath();
-    sky.rect(0, te, W, ch);
-    sky.clip();
-
-    const ng = grad(te, sillY,
-      mode === 0 ? '#07091a' : '#0d1830',
-      mode === 0 ? '#12153a' : '#0d1830'
-    );
-    sky.fillStyle = ng; sky.fillRect(0, te, W, ch);
-
-    // 月光：左上角月亮 + 柔晕
+    // 月光：左上角月亮 + 大面积柔晕
     if (mode === 0) {
-      const mr = Math.min(W * 0.5, ch) * 0.085;
-      const mx = W * 0.16, my = te + ch * 0.12;
+      const mr = Math.min(W, H) * 0.055;
+      const mx = W * 0.14, my = Math.max(22, Math.min(te - 8, H * 0.07));
       sky.globalCompositeOperation = 'lighter';
-      const wash = sky.createRadialGradient(mx, my, mr * 0.3, mx, my, Math.max(W, ch) * 0.7);
-      wash.addColorStop(0, 'rgba(255,244,220,0.12)');
-      wash.addColorStop(0.35, 'rgba(220,230,255,0.04)');
+      const wash = sky.createRadialGradient(mx, my, mr * 0.3, mx, my, Math.max(W, H) * 0.75);
+      wash.addColorStop(0, 'rgba(255,244,220,0.14)');
+      wash.addColorStop(0.35, 'rgba(220,230,255,0.05)');
       wash.addColorStop(1, 'rgba(200,210,255,0)');
       sky.fillStyle = wash;
-      sky.fillRect(0, te, W, ch);
-      const halo = sky.createRadialGradient(mx, my, 0, mx, my, mr * 3.2);
+      sky.fillRect(0, 0, W, H);
+      const halo = sky.createRadialGradient(mx, my, 0, mx, my, mr * 3.4);
       halo.addColorStop(0, 'rgba(255,248,230,0.55)');
-      halo.addColorStop(0.35, 'rgba(255,240,210,0.18)');
+      halo.addColorStop(0.35, 'rgba(255,240,210,0.16)');
       halo.addColorStop(1, 'rgba(255,240,210,0)');
       sky.fillStyle = halo;
-      sky.beginPath(); sky.arc(mx, my, mr * 3.2, 0, 6.2832); sky.fill();
+      sky.beginPath(); sky.arc(mx, my, mr * 3.4, 0, 6.2832); sky.fill();
       sky.globalCompositeOperation = 'source-over';
       sky.fillStyle = 'rgba(255,248,230,0.92)';
       sky.beginPath(); sky.arc(mx, my, mr, 0, 6.2832); sky.fill();
@@ -564,7 +566,7 @@
 
     const starMax = mode === 0 ? 0.28 : 0.5;
     for (const s of stars) {
-      if (mode === 0 && s.y > te + ch * 0.85) continue;
+      if (mode === 0 && s.y > te + ch * 0.88) continue;
       const br = starMax * (0.9 + s.amp * Math.sin(t * s.sp + s.ph));
       if (br <= 0.03) continue;
       sky.fillStyle = s.tint < 0.1 ? 'rgba(205,225,255,' + br + ')' : (s.tint < 0.18 ? 'rgba(255,243,214,' + br + ')' : 'rgba(255,255,255,' + br + ')');
@@ -574,9 +576,8 @@
     const flAmt = mode === 1 ? 1 : 0;
     if (flAmt > 0.02) {
       sky.globalCompositeOperation = 'lighter';
-      const yLo = te + 12, yHi = sillY - 12;
+      const yLo = te + 12, yHi = groundY - 12;
       for (const f of fireflies) {
-        // 慢速游荡：朝目标点缓飞，到了再换点
         const dx = f.tx - f.x, dy = f.ty - f.y;
         const dist = Math.hypot(dx, dy) || 1;
         if (dist < 18 || Math.random() < dt * 0.12) {
@@ -599,7 +600,6 @@
         if (f.y < yLo) { f.y = yLo; f.vy = Math.abs(f.vy) * 0.4; }
         if (f.y > yHi) { f.y = yHi; f.vy = -Math.abs(f.vy) * 0.4; }
 
-        // 呼吸：只变亮度，光晕半径固定；单层柔晕
         f.flashT -= dt;
         if (f.flashT <= 0) {
           f.flash = 1;
@@ -623,14 +623,11 @@
       sky.globalCompositeOperation = 'source-over';
     }
 
+    drawCourtyardMist();
     drawLamp();
     stepLampDust(dt);
     drawLampDust();
     drawWindFx();
-    sky.restore();
-
-    drawMullion();
-    drawSill();
     drawFxLayer(dt);
   }
 
