@@ -244,11 +244,71 @@
     }
   })();
 
+  // 省名简称（一字）；显示名用 PROV_ORDER（广西/广东，非全称）
+  const PROV_ABBR = {
+    '北京': '京', '天津': '津', '河北': '冀', '山西': '晋', '内蒙古': '蒙',
+    '辽宁': '辽', '吉林': '吉', '黑龙江': '黑',
+    '上海': '沪', '江苏': '苏', '浙江': '浙', '安徽': '皖', '福建': '闽', '江西': '赣', '山东': '鲁',
+    '河南': '豫', '湖北': '鄂', '湖南': '湘',
+    '广东': '粤', '广西': '桂', '海南': '琼',
+    '重庆': '渝', '四川': '川', '贵州': '贵', '云南': '云', '西藏': '藏',
+    '陕西': '陕', '甘肃': '甘', '青海': '青', '宁夏': '宁', '新疆': '新',
+    '香港': '港', '澳门': '澳', '台湾': '台'
+  };
+  // 省重心（格点均值），供标签定位
+  const provLabel = Array.from({ length: PROV_ORDER.length + 1 }, () => null);
+  (function buildProvLabels() {
+    const sumLat = new Float64Array(PROV_ORDER.length + 1);
+    const sumLon = new Float64Array(PROV_ORDER.length + 1);
+    const cnt = new Uint32Array(PROV_ORDER.length + 1);
+    const pr0 = Math.max(0, Math.floor((90 - 54.5) / CELL));
+    const pr1 = Math.min(ROWS - 1, Math.floor((90 - 15.5) / CELL));
+    const pc0 = Math.max(0, Math.floor((72.5 + 180) / CELL));
+    const pc1 = Math.min(COLS - 1, Math.floor((135.5 + 180) / CELL));
+    for (let r = pr0; r <= pr1; r++) {
+      const base = r * COLS;
+      const lat = latOf(r);
+      for (let c = pc0; c <= pc1; c++) {
+        const id = provGrid[base + c];
+        if (!id) continue;
+        sumLat[id] += lat;
+        sumLon[id] += lonOf(c);
+        cnt[id]++;
+      }
+    }
+    for (let id = 1; id <= PROV_ORDER.length; id++) {
+      if (!cnt[id]) continue;
+      const name = PROV_ORDER[id - 1];
+      provLabel[id] = {
+        name,
+        abbr: PROV_ABBR[name] || name.charAt(0),
+        lat: sumLat[id] / cnt[id],
+        lon: sumLon[id] / cnt[id],
+        n: cnt[id]
+      };
+    }
+    // 港澳格点极少，栅格重心偏北，用更贴近视觉中心的坐标
+    const tinyFix = { '香港': [22.28, 114.16], '澳门': [22.18, 113.55] };
+    for (let id = 1; id <= PROV_ORDER.length; id++) {
+      const p = provLabel[id];
+      if (!p || !tinyFix[p.name]) continue;
+      p.lat = tinyFix[p.name][0];
+      p.lon = tinyFix[p.name][1];
+    }
+  })();
+
   function landGapPx(globe) {
     if (globe) return 7.5;
     const gz = globeMaxZ();
     const t = clamp((cam.zoom - gz) / Math.max(28, gz * 5), 0, 1);
-    return 10.5 - t * 2.5;
+    let gap = 10.5 - t * 2.5; // 10.5 → 8
+    // 最大约 3 个缩放档（按钮 ×1.75）内再加密
+    const zTop3 = MAXZ / (1.75 * 1.75);
+    if (cam.zoom >= zTop3) {
+      const u = clamp((cam.zoom - zTop3) / Math.max(1e-6, MAXZ - zTop3), 0, 1);
+      gap = 5.6 - u * 1.8; // 5.6 → 3.8
+    }
+    return gap;
   }
   function landDotR(spacingPx) {
     return Math.min(2.4, Math.max(1.05, spacingPx * 0.3));
@@ -294,35 +354,53 @@
     }
   }
 
-  // 平面：按屏幕等距布点，高低纬密度一致
+  // 陆地点阵：按屏幕目标间距换算成经纬度步进（可小于 CELL，高倍时一格内多点）
+  // 步进锚定全球网格，拖动不闪烁
+  function landStepDeg(gapPx, zoomLike) {
+    return Math.max(0.04, gapPx / Math.max(zoomLike, 0.01));
+  }
+
+  // 平面：按陆地格点步进，高低纬密度一致
   function paintFlat(a) {
     if (a <= 0.01) return;
     const zoom = cam.zoom;
     const gap = landGapPx(false);
     const rr = landDotR(gap);
+    const stepDeg = landStepDeg(gap, zoom);
     const buckets = Array.from({ length: PROV_ORDER.length + 1 }, () => []);
     ctx.globalAlpha = a;
     ctx.fillStyle = '#f5f7f9';
     ctx.fillRect(0, 0, CW, CH);
 
-    const x0 = (gap * 0.5) % gap;
-    const y0 = (gap * 0.5) % gap;
-    for (let y = y0; y < CH + gap; y += gap) {
-      for (let x = x0; x < CW + gap; x += gap) {
-        const lon = wrapLon(cam.lon + (x - CW / 2) / zoom);
-        const lat = cam.lat - (y - CH / 2) / zoom;
-        if (lat > 89.9 || lat < -89.9) continue;
+    const pad = gap * 2;
+    const lonL = cam.lon - (CW / 2 + pad) / zoom;
+    const lonR = cam.lon + (CW / 2 + pad) / zoom;
+    const latT = cam.lat + (CH / 2 + pad) / zoom;
+    const latB = cam.lat - (CH / 2 + pad) / zoom;
+    const i0 = Math.floor((90 - latT) / stepDeg);
+    const i1 = Math.ceil((90 - latB) / stepDeg);
+    const j0 = Math.floor((lonL + 180) / stepDeg);
+    const j1 = Math.ceil((lonR + 180) / stepDeg);
+
+    for (let i = i0; i <= i1; i++) {
+      const lat = 90 - (i + 0.5) * stepDeg;
+      if (lat > 89.9 || lat < -89.9) continue;
+      for (let j = j0; j <= j1; j++) {
+        const lon = wrapLon(-180 + (j + 0.5) * stepDeg);
         const cell = landAtLatLon(lat, lon);
         if (!cell) continue;
-        const pid = paintProvId(cell[0], cell[1]);
-        buckets[pid].push(x, y, rr);
+        const x = (wrapLon(lon - cam.lon)) * zoom + CW / 2;
+        const y = (cam.lat - lat) * zoom + CH / 2;
+        if (x < -gap || x > CW + gap || y < -gap || y > CH + gap) continue;
+        buckets[paintProvId(cell[0], cell[1])].push(x, y, rr);
       }
     }
     fillProvBuckets(buckets);
+    paintProvLabels(false);
     ctx.globalAlpha = 1;
   }
 
-  // 球面：同样按屏幕等距采样再反投影
+  // 球面：同样按目标间距的地理网格采样再投影
   function paintGlobe(a) {
     if (a <= 0.01) return;
     const zoom = cam.zoom, R = zoom * K;
@@ -344,22 +422,28 @@
 
     const gap = landGapPx(true);
     const rDot = landDotR(gap);
+    const stepDeg = landStepDeg(gap, zoom);
     const buckets = Array.from({ length: PROV_ORDER.length + 1 }, () => []);
-    const x0 = (gap * 0.5) % gap;
-    const y0 = (gap * 0.5) % gap;
-    for (let y = y0; y < CH + gap; y += gap) {
-      for (let x = x0; x < CW + gap; x += gap) {
-        const dx = x - cx, dy = y - cy;
-        if (dx * dx + dy * dy > R * R) continue;
-        const g = geoAtScreen(x, y);
-        if (!g) continue;
-        const cell = landAtLatLon(g.lat, g.lon);
+    const s0 = Math.sin(rad(cam.lat)), c0 = Math.cos(rad(cam.lat));
+    const iMax = Math.ceil(180 / stepDeg);
+    const jMax = Math.ceil(360 / stepDeg);
+
+    for (let i = 0; i < iMax; i++) {
+      const lat = 90 - (i + 0.5) * stepDeg;
+      if (lat > 89.9 || lat < -89.9) continue;
+      const sLat = Math.sin(rad(lat)), cLat = Math.cos(rad(lat));
+      for (let j = 0; j < jMax; j++) {
+        const lon = -180 + (j + 0.5) * stepDeg;
+        const cell = landAtLatLon(lat, lon);
         if (!cell) continue;
-        const pid = paintProvId(cell[0], cell[1]);
-        // 边缘略小，保持球体感
-        const t = Math.sqrt(dx * dx + dy * dy) / R;
-        const rad = rDot * (1 - t * 0.18);
-        buckets[pid].push(x, y, rad);
+        const dl = rad(wrapLon(lon - cam.lon));
+        const zz = s0 * sLat + c0 * cLat * Math.cos(dl);
+        if (zz < 0.03) continue;
+        const x = cx + cLat * Math.sin(dl) * R;
+        const y = cy - (c0 * sLat - s0 * cLat * Math.cos(dl)) * R;
+        if (x < cx - R - gap || x > cx + R + gap || y < cy - R - gap || y > cy + R + gap) continue;
+        const t = Math.sqrt((x - cx) * (x - cx) + (y - cy) * (y - cy)) / R;
+        buckets[paintProvId(cell[0], cell[1])].push(x, y, rDot * (1 - t * 0.18));
       }
     }
     fillProvBuckets(buckets);
@@ -371,6 +455,7 @@
     sh.addColorStop(1, 'rgba(40,40,50,.28)');
     ctx.fillStyle = sh;
     ctx.fillRect(cx - R, cy - R, 2 * R, 2 * R);
+    paintProvLabels(true);
     ctx.restore();
 
     ctx.globalAlpha = a;
@@ -378,6 +463,31 @@
     ctx.lineWidth = 1.2;
     ctx.beginPath(); ctx.arc(cx, cy, R, 0, TAU); ctx.stroke();
     ctx.globalAlpha = 1;
+  }
+
+  function paintProvLabels(globe) {
+    // 全球视野字太挤；放大到能辨省时再标
+    if (cam.zoom < (globe ? globeMaxZ() * 0.85 : 8)) return;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    for (let id = 1; id < provLabel.length; id++) {
+      const p = provLabel[id];
+      if (!p) continue;
+      const g = screenPos(p.lat, p.lon);
+      if (!g) continue;
+      if (g.x < 8 || g.x > CW - 8 || g.y < 8 || g.y > CH - 8) continue;
+      // 省面在屏幕上的大致半径：√格数 × 格宽 × zoom
+      const rPx = Math.sqrt(p.n) * CELL * cam.zoom * 0.45;
+      if (rPx < 11) continue;
+      const useAbbr = rPx < 26 || (p.name.length >= 3 && rPx < 34);
+      const text = useAbbr ? p.abbr : p.name;
+      const fs = Math.round(clamp(useAbbr ? rPx * 0.42 : rPx * 0.28, 9, 15));
+      ctx.font = `650 ${fs}px "PingFang SC",-apple-system,sans-serif`;
+      ctx.fillStyle = 'rgba(255,255,255,.72)';
+      ctx.fillText(text, g.x + 0.6, g.y + 0.8);
+      ctx.fillStyle = 'rgba(32,38,48,.78)';
+      ctx.fillText(text, g.x, g.y);
+    }
   }
 
   /* ================= 美食标记（canvas，避免上千 DOM） ================= */
@@ -417,7 +527,7 @@
     };
   }
 
-  // 聚合格网：屏幕最小间距偏大，全国/省域视野强制粗格 + 屏幕二次合并
+  // 聚合格网：仅随缩放档位变化；拖动/旋转不重算
   let aggDegHeld = 8;
   function foodMinSepPx() {
     return 58;
@@ -425,7 +535,6 @@
   function foodAggDeg() {
     const minSepPx = foodMinSepPx();
     const raw = minSepPx / Math.max(cam.zoom, 0.01);
-    // 更粗：全国约 8–12°，省域约 2–4°，最细 0.35°
     const steps = [12, 8, 5, 3, 2, 1, 0.5, 0.35];
     let desired = steps[0];
     for (let i = 0; i < steps.length; i++) {
@@ -445,23 +554,25 @@
     return aggDegHeld;
   }
 
-  // 屏幕距离过近的聚合再合并，避免相邻格网仍挤在一起
-  function mergeByScreen(items, minPx) {
+  // 地理距离二次合并（与相机平移无关，缩放不变时结果稳定）
+  function mergeByGeo(items, minDeg) {
     if (items.length < 2) return items;
     const used = new Uint8Array(items.length);
     const out = [];
+    const dist = (a, b) => {
+      const dLat = a.lat - b.lat;
+      let dLon = wrapLon(a.lon - b.lon);
+      const cos = Math.cos(rad((a.lat + b.lat) * 0.5));
+      return Math.hypot(dLat, dLon * cos);
+    };
     for (let i = 0; i < items.length; i++) {
       if (used[i]) continue;
       let cur = {
         n: items[i].n,
         lat: items[i].lat,
         lon: items[i].lon,
-        x: items[i].x,
-        y: items[i].y,
-        z: items[i].z,
         i: items[i].i,
         ids: items[i].ids.slice(),
-        hasSel: items[i].hasSel,
         key: items[i].key
       };
       used[i] = 1;
@@ -470,15 +581,13 @@
         grew = false;
         for (let j = 0; j < items.length; j++) {
           if (used[j]) continue;
-          if (Math.hypot(cur.x - items[j].x, cur.y - items[j].y) > minPx) continue;
+          if (dist(cur, items[j]) > minDeg) continue;
           const tn = cur.n + items[j].n;
           cur.lat = (cur.lat * cur.n + items[j].lat * items[j].n) / tn;
-          cur.lon = (cur.lon * cur.n + items[j].lon * items[j].n) / tn;
+          cur.lon = wrapLon((cur.lon * cur.n + items[j].lon * items[j].n) / tn);
+          // 经度平均在日界线附近可能不准，改用向量和
           cur.n = tn;
           cur.ids.push(...items[j].ids);
-          if (items[j].hasSel) { cur.hasSel = true; cur.i = items[j].i; }
-          const g = screenPos(cur.lat, cur.lon);
-          if (g) { cur.x = g.x; cur.y = g.y; cur.z = g.z; }
           used[j] = 1;
           grew = true;
         }
@@ -486,6 +595,47 @@
       out.push(cur);
     }
     return out;
+  }
+
+  let foodClusterCache = { key: '', items: [] };
+  function foodClusterKey() {
+    return foodAggDeg() + '@' + Math.round(cam.zoom * 40);
+  }
+  function ensureFoodClusters() {
+    const key = foodClusterKey();
+    if (foodClusterCache.key === key) return foodClusterCache.items;
+    const agg = foodAggDeg();
+    const buckets = new Map();
+    for (let i = 0; i < PLACES.length; i++) {
+      const p = PLACES[i];
+      const gi = Math.floor((p.lat + 90) / agg);
+      const gj = Math.floor((p.lon + 180) / agg);
+      const k = gi + ':' + gj;
+      let b = buckets.get(k);
+      if (!b) {
+        b = { n: 0, lat: 0, lon: 0, i: i, ids: [], key: k };
+        buckets.set(k, b);
+      }
+      b.n += 1;
+      b.lat += p.lat;
+      b.lon += p.lon;
+      b.ids.push(i);
+      if (b.n === 1) b.i = i;
+    }
+    const items = [];
+    for (const b of buckets.values()) {
+      items.push({
+        n: b.n,
+        lat: b.lat / b.n,
+        lon: b.lon / b.n,
+        i: b.i,
+        ids: b.ids,
+        key: b.key
+      });
+    }
+    const minDeg = foodMinSepPx() / Math.max(cam.zoom, 0.01);
+    foodClusterCache = { key, items: mergeByGeo(items, minDeg) };
+    return foodClusterCache.items;
   }
 
   function foodDotRadius(count) {
@@ -540,55 +690,26 @@
     const flat = isFlat();
     const agg = foodAggDeg();
     const m = 36;
-    const buckets = new Map();
+    const clusters = ensureFoodClusters();
     hitList = [];
 
-    for (let i = 0; i < PLACES.length; i++) {
-      const p = PLACES[i];
-      const gi = Math.floor((p.lat + 90) / agg);
-      const gj = Math.floor((p.lon + 180) / agg);
-      const key = gi + ':' + gj;
-      let b = buckets.get(key);
-      if (!b) {
-        b = { n: 0, lat: 0, lon: 0, i: i, hasSel: false, ids: [], key };
-        buckets.set(key, b);
-      }
-      b.n += 1;
-      b.lat += p.lat;
-      b.lon += p.lon;
-      b.ids.push(i);
-      if (i === sel) { b.hasSel = true; b.i = i; }
-      else if (!b.hasSel && b.n === 1) b.i = i;
-    }
-
-    // 地理格 → 屏幕点，再按像素距离二次合并
-    const projected = [];
-    for (const b of buckets.values()) {
+    let selDrawn = false;
+    for (const b of clusters) {
       const count = b.n;
-      const useLat = (b.hasSel && count === 1) ? PLACES[sel].lat : (b.lat / count);
-      const useLon = (b.hasSel && count === 1) ? PLACES[sel].lon : (b.lon / count);
+      const hasSel = sel >= 0 && b.ids.indexOf(sel) >= 0;
+      let useLat = b.lat, useLon = b.lon, useI = b.i;
+      if (hasSel && count === 1) {
+        useLat = PLACES[sel].lat;
+        useLon = PLACES[sel].lon;
+        useI = sel;
+      } else if (hasSel) {
+        useI = sel;
+      }
       const g = screenPos(useLat, useLon);
       if (!g) continue;
       if (g.x < -m || g.x > CW + m || g.y < -m || g.y > CH + m) continue;
-      projected.push({
-        n: count,
-        lat: useLat,
-        lon: useLon,
-        x: g.x,
-        y: g.y,
-        z: g.z || 1,
-        i: b.i,
-        ids: b.ids.slice(),
-        hasSel: b.hasSel,
-        key: b.key
-      });
-    }
-    const merged = mergeByScreen(projected, foodMinSepPx());
 
-    let selDrawn = false;
-    for (const b of merged) {
-      const count = b.n;
-      let hi = (b.hasSel && count === 1);
+      let hi = hasSel && count === 1;
       if (selClusterKey) {
         hi = hi || b.key === selClusterKey || b.ids.some(id => {
           const p = PLACES[id];
@@ -598,31 +719,31 @@
         });
       }
 
-      const baseR = foodDotRadius(count) * (flat ? 1 : (0.72 + 0.28 * b.z));
+      const baseR = foodDotRadius(count) * (flat ? 1 : (0.72 + 0.28 * (g.z || 1)));
       const fill = count > 1 ? '#c44532' : '#d85a42';
       const label = count > 1
         ? Math.min(99, count)
-        : (PLACES[b.i].n || '?').charAt(0);
+        : (PLACES[useI].n || '?').charAt(0);
 
-      const rr = drawFoodMarker(b.x, b.y, baseR, fill, label, hi);
+      const rr = drawFoodMarker(g.x, g.y, baseR, fill, label, hi);
 
       hitList.push({
         kind: count > 1 ? 'cluster' : 'place',
-        i: b.i,
+        i: useI,
         ids: b.ids.slice(),
         key: b.key,
         n: count,
-        x: b.x, y: b.y,
+        x: g.x, y: g.y,
         r: rr + (flat ? 14 : 10),
-        lon: b.lon, lat: b.lat
+        lon: useLon, lat: useLat
       });
 
       if (hi && count === 1) {
         selDrawn = true;
         selDot.hidden = false;
         selDot.style.opacity = '1';
-        selDot.style.setProperty('--x', (Math.round(b.x * 10) / 10) + 'px');
-        selDot.style.setProperty('--y', (Math.round((b.y - rr - 10) * 10) / 10) + 'px');
+        selDot.style.setProperty('--x', (Math.round(g.x * 10) / 10) + 'px');
+        selDot.style.setProperty('--y', (Math.round((g.y - rr - 10) * 10) / 10) + 'px');
         selDot.style.setProperty('--sc', '1');
         selLab.textContent = PLACES[sel].n;
       }

@@ -135,8 +135,8 @@ input { font-family: inherit; }
   display: flex; align-items: center; justify-content: center;
   box-shadow: 0 2px 8px rgba(196, 69, 50, .28); }
 
-/* ============ Sheet / Dialog（浮在 tab 上方，不遮挡） ============ */
-.sheet, .cluster-dlg {
+/* ============ Sheet（浮在 tab 上方） / 聚合（地图区域内） ============ */
+.sheet {
   position: fixed; left: 12px; right: 12px; z-index: 21;
   bottom: calc(var(--tab-stack) + 8px);
   background: rgba(255,255,255,.97);
@@ -145,22 +145,23 @@ input { font-family: inherit; }
   transform: translateY(calc(100% + 80px));
   transition: transform .32s cubic-bezier(.32,.72,.25,1);
   display: flex; flex-direction: column;
-  pointer-events: none; }
-/* 单点：高度随内容，过长可滚 */
-.sheet {
+  pointer-events: none;
   height: auto;
-  max-height: min(48vh, calc(100dvh - var(--tab-stack) - 96px));
-}
-/* 聚合：固定高度，底部直角 */
+  max-height: min(48vh, calc(100dvh - var(--tab-stack) - 96px)); }
+.sheet.open { transform: translateY(0); pointer-events: auto; }
+/* 聚合：贴在 mapwrap 底部，随地图页走 */
 .cluster-dlg {
-  z-index: 23;
-  left: 0; right: 0;
-  bottom: var(--tab-stack);
-  border-radius: 18px 18px 0 0;
-  height: min(42vh, calc(100dvh - var(--tab-stack) - 96px));
-  max-height: min(42vh, calc(100dvh - var(--tab-stack) - 96px));
-}
-.sheet.open, .cluster-dlg.open { transform: translateY(0); pointer-events: auto; }
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 12;
+  background: rgba(255,255,255,.97);
+  backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+  border-radius: 18px 18px 0 0; box-shadow: var(--shadow);
+  transform: translateY(calc(100% + 24px));
+  transition: transform .32s cubic-bezier(.32,.72,.25,1);
+  display: flex; flex-direction: column;
+  pointer-events: none;
+  height: min(42%, 280px);
+  max-height: 48%; }
+.cluster-dlg.open { transform: translateY(0); pointer-events: auto; }
 
 .grabber { width: 36px; height: 4px; border-radius: 3px; background: rgba(40,48,60,.16);
   margin: 9px auto 4px; flex-shrink: 0; }

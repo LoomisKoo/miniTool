@@ -25,6 +25,16 @@
         <button id="zout" aria-label="缩小">－</button>
         <button id="zreset" aria-label="回到世界">⌂</button>
       </div>
+      <!-- 聚合列表：挂在地图区域内，不贴根容器底 -->
+      <section class="cluster-dlg" id="clusterDlg" aria-hidden="true">
+        <div class="grabber"></div>
+        <div class="cluster-head">
+          <h2 id="cTitle">附近美食</h2>
+          <p id="cSub"></p>
+          <button class="cluster-close" id="clusterClose" aria-label="关闭">×</button>
+        </div>
+        <div class="cluster-scroll"><div class="cluster-list" id="clusterList"></div></div>
+      </section>
     </div>
   </section>
 
@@ -68,23 +78,13 @@
     </div>
   </section>
 
-  <!-- 聚合列表（固定高度，列表可滚；item 简介最多 2 行） -->
-  <section class="cluster-dlg" id="clusterDlg" aria-hidden="true">
-    <div class="grabber"></div>
-    <div class="cluster-head">
-      <h2 id="cTitle">附近美食</h2>
-      <p id="cSub"></p>
-      <button class="cluster-close" id="clusterClose" aria-label="关闭">×</button>
-    </div>
-    <div class="cluster-scroll"><div class="cluster-list" id="clusterList"></div></div>
-  </section>
 </div>
 
 <div class="toast" id="toast"></div>
 
-<script src="land.js?v=20260908e"></script>
-<script src="prov-land.js?v=20260908e"></script>
-<script src="data.js?v=20260908e"></script>
-<script src="app.js?v=20260908e"></script>
+<script src="land.js?v=20260908g"></script>
+<script src="prov-land.js?v=20260908g"></script>
+<script src="data.js?v=20260908g"></script>
+<script src="app.js?v=20260908h"></script>
 </body>
 </html>

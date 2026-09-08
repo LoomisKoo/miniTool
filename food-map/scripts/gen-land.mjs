@@ -109,6 +109,22 @@ for (const rings of polygons) {
   }
 }
 
+// 南极盖补洞：扫描线在极点附近常漏填（南极中间空心）。
+// 取南纬「陆地足够密实」的最南一圈，其以南整圈填为陆地。
+{
+  let capFrom = -1;
+  for (let r = 0; r < ROWS; r++) {
+    const lat = 90 - (r + 0.5) * CELL;
+    if (lat > -75) continue;
+    let n = 0;
+    for (let c = 0; c < COLS; c++) if (rowBits[r][c]) n++;
+    if (n >= COLS * 0.5) capFrom = r;
+  }
+  if (capFrom >= 0) {
+    for (let r = capFrom + 1; r < ROWS; r++) rowBits[r].fill(1);
+  }
+}
+
 const bytes = Buffer.alloc(ROWS * Math.ceil(COLS / 8));
 for (let r = 0; r < ROWS; r++) {
   for (let c = 0; c < COLS; c++) {
