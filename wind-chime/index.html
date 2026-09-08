@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="theme-color" content="#0d0f2a" />
+<title>风铃物语</title>
+<link rel="icon" href="assets/icon.jpg" />
+<link rel="apple-touch-icon" href="assets/icon.jpg" />
+<link rel="stylesheet" href="src/style.css" />
+</head>
+<body>
+<div class="layers">
+  <canvas id="skyCv"></canvas>
+  <div id="stage3d"></div>
+  <canvas id="fxCv"></canvas>
+</div>
+
+<header class="hud hud-title">
+  <div class="brand"><span class="brand-cn">风铃物语</span></div>
+</header>
+
+<footer class="hud hud-bottom">
+  <div class="btn-row">
+    <button type="button" class="gbtn" id="themeBtn" aria-label="切换夜空" title="切换夜空">
+      <span class="gico">◈</span><span class="glab" id="themeLab">月光</span>
+    </button>
+    <button type="button" class="gbtn" id="wishBtn" aria-label="许愿" title="许愿">
+      <span class="gico">✧</span><span class="glab">许愿</span>
+    </button>
+    <button type="button" class="gbtn" id="muteBtn" aria-label="静音" title="静音">
+      <span class="gico ico-on">◉</span><span class="gico ico-off">⊘</span><span class="glab">声音</span>
+    </button>
+  </div>
+</footer>
+
+<div class="banner hide" id="banner"><span id="bannerTxt"></span></div>
+
+<div class="overlay ov-start" id="startOv">
+  <div class="panel panel-start">
+    <div class="title-orn">✦</div>
+    <h1 class="start-title">风铃物语</h1>
+    <ul class="start-list">
+      <li>有夜风路过 · 它轻声作响</li>
+      <li>指尖划过 · 惊起星光点点</li>
+      <li>轻拨铃管 · 聆听金属余韵</li>
+    </ul>
+    <button type="button" class="btn btn-main" id="startBtn">开 始</button>
+    <p class="start-foot">建议佩戴耳机 · 滑动风铃发声</p>
+  </div>
+</div>
+
+<div class="overlay ov-wish hidden" id="wishOv">
+  <div class="wish-card" id="wishCard">
+    <div class="wish-star">✧</div>
+    <p class="wish-date" id="wishDate"></p>
+    <p class="wish-hint">写下今夜的心愿，或点选一句</p>
+    <textarea id="wishInput" class="wish-input" rows="2" maxlength="36" placeholder="愿……"></textarea>
+    <div class="wish-chips" id="wishChips"></div>
+    <button type="button" class="btn btn-main wish-go" id="wishGoBtn">开始许愿</button>
+    <div class="wish-foot">点开始后，字会从灯下洒落</div>
+  </div>
+</div>
+
+<script src="vendor/three.min.js"></script>
+<script src="src/audio.js"></script>
+<script src="src/fx.js"></script>
+<script src="src/app.js"></script>
+</body>
+</html>
