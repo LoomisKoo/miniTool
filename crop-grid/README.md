@@ -14,7 +14,7 @@
 | 抖音 | `dist/douyin-qingying.zip` |
 | 快手 | `dist/kuaishou-qingying.zip` |
 
-状态：小红书审核中。
+状态：小红书 / 快手 ✅ 已上线。
 
 ## 打包
 

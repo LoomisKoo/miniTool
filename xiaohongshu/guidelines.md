@@ -22,15 +22,16 @@ xiaohongshu/
 
 ### 上架素材与产物
 
-| 工具 | 名称 | 简介 | 图标 | 小红书 zip |
-| --- | --- | --- | --- | --- |
-| 轻映 | 轻映 | 图片裁切与多宫格分图 | `crop-grid/icon.png` | `crop-grid/dist/xiaohongshu-qingying.zip` |
-| 兔格拼豆 | 兔格拼豆 | 照片转拼豆色号图纸 | `bead-pattern/icon.png` | `bead-pattern/dist/xiaohongshu-bead-pattern.zip` |
-| 焚香计时 | 焚香计时 | 焚香倒计时，自选时长，看香逐渐燃尽。 | `incense-timer/icon.png` | `incense-timer/dist/xiaohongshu-incense-timer.zip` |
-| 纸灯夜航 | 纸灯夜航 | 休闲小游戏，杀时间必备 | `paper-lantern/assets/icon.jpg` | `paper-lantern/dist/xiaohongshu-paper-lantern.zip` |
+| 工具 | 名称 | 简介 | 状态 | 图标 | 小红书 zip |
+| --- | --- | --- | --- | --- | --- |
+| 风铃物语 | 风铃物语 | 治愈系梦幻风铃 | 待提审 | `wind-chime/assets/icon.jpg` | `wind-chime/dist/xiaohongshu-wind-chime.zip` |
+| 兔格拼豆 | 兔格拼豆 | 照片转拼豆色号图纸 | ✅ 已上线 | `bead-pattern/icon.png` | `bead-pattern/dist/xiaohongshu-bead-pattern.zip` |
+| 焚香计时 | 焚香计时 | 焚香倒计时，自选时长，看香逐渐燃尽。 | ✅ 已上线 | `incense-timer/icon.png` | `incense-timer/dist/xiaohongshu-incense-timer.zip` |
+| 轻映 | 轻映 | 图片裁切与多宫格分图 | ✅ 已上线 | `crop-grid/icon.png` | `crop-grid/dist/xiaohongshu-qingying.zip` |
+| 星空跳一跳 | 星空跳一跳 | 跳一跳星空改良版 | ✅ 已上线 | `xingkong-jump/assets/icon.jpg` | `xingkong-jump/dist/xiaohongshu-xingkong-jump.zip` |
+| 纸灯夜航 | 纸灯夜航 | 休闲小游戏，杀时间必备 | ✅ 已上线 | `paper-lantern/assets/icon.jpg` | `paper-lantern/dist/xiaohongshu-paper-lantern.zip` |
 
-轻映状态：**小红书已提审（审核中）**  
-纸灯夜航状态：**小红书已上线**
+跨项目总表见根目录 [README 发布总表](../README.md#发布总表)（小红书 / 快手状态一致）。
 
 ## 与抖音/快手的核心差异
 

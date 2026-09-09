@@ -1,6 +1,18 @@
-# 微风铃语 · wind-chime
+# 风铃物语 · wind-chime
 
-夜色庭院里的多节风铃小工具（three.js 3D · Web Audio 全合成音效 · 纯离线）
+夜色庭院里的多节风铃小工具（three.js 3D · Web Audio 合成铃音/风声 · `assets/bgm.mp3` 循环 BGM · 纯离线）
+
+声音开关同时控制：BGM、风声、敲击。
+
+仓库根目录有跨项目 [发布总表](../README.md#发布总表)；此处只记本工具。
+
+## 状态
+
+| 平台 | 状态 | 产物 |
+| --- | --- | --- |
+| 小红书 | 待提审 | `dist/xiaohongshu-wind-chime.zip` |
+| 抖音 | 未上架 | `dist/douyin-wind-chime.zip` |
+| 快手 | 待提审 | `dist/kuaishou-wind-chime.zip` |
 
 ## 场景
 
@@ -33,4 +45,4 @@
 - `src/app.js` 3D 风铃 / 物理 / 交互
 - `build.mjs` → `dist/{平台}-wind-chime.zip`
 
-> 图标 `assets/icon.jpg` 为占位图，上线前请替换为风铃主题图。
+> 图标 `assets/icon.jpg`（源文件 `assets/icon.svg`）按游戏内画面绘制。

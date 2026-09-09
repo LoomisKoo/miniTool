@@ -11,7 +11,7 @@
 | 平台 | 状态 | 产物 |
 | --- | --- | --- |
 | 小红书 | ✅ 已上线 | `dist/xiaohongshu-paper-lantern.zip` |
-| 快手 | — | `dist/kuaishou-paper-lantern.zip` |
+| 快手 | ✅ 已上线 | `dist/kuaishou-paper-lantern.zip` |
 
 ## 打包
 
