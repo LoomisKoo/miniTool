@@ -18,10 +18,12 @@
   const endScore = document.getElementById('endScore');
   const endBest = document.getElementById('endBest');
   const endSpark = document.getElementById('endSpark');
+  const endCombo = document.getElementById('endCombo');
 
   let W = 0, H = 0, dpr = 1;
   let muted = false;
   let audioCtx = null;
+  let musicGain = null, musicTimer = null, musicPlaying = false;
 
   // 固定星点，避免每帧随机闪烁
   const starField = [];
@@ -41,6 +43,7 @@
     sparks: 0,
     sparkCombo: 0,
     best: 0,
+    bestCombo: 0,
     bird: null,
     pipes: [],
     groundX: 0,
@@ -48,6 +51,7 @@
     lastTs: 0,
     flapFlash: 0,
     armed: false,
+    floatScores: [],
   };
 
   try {
@@ -95,7 +99,7 @@
 
   function makeSparks(pipe) {
     const u = unit();
-    const count = 1 + ((Math.random() * 2) | 0);
+    const count = 1;
     const list = [];
     for (let i = 0; i < count; i++) {
       list.push({
@@ -144,6 +148,8 @@
     state.score = 0;
     state.sparks = 0;
     state.sparkCombo = 0;
+    state.bestCombo = 0;
+    state.floatScores = [];
     scoreEl.textContent = '0';
     sparkEl.textContent = '0';
     state.bird = makeBird();
@@ -153,7 +159,7 @@
     state.flapFlash = 0;
     const u = unit();
     const spacing = 220 * u;
-    let x = W + 180 * u;
+    let x = W + 70 * u;
     state.pipes.push(spawnPipe(x, { centerY: H * 0.42, gap: 136 * u }));
     x += spacing;
     for (let i = 0; i < 3; i++) {
@@ -169,6 +175,38 @@
       if (AC) audioCtx = new AC();
     }
     if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+  }
+
+  function musicTick() {
+    if (!musicPlaying || muted || !audioCtx) return;
+    const scale = [220, 261.63, 293.66, 329.63, 392, 440];
+    const now = audioCtx.currentTime;
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.type = 'triangle';
+    o.frequency.value = scale[(Math.random() * scale.length) | 0];
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.exponentialRampToValueAtTime(0.035, now + 0.03);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.72);
+    o.connect(g); g.connect(musicGain || audioCtx.destination);
+    o.start(now); o.stop(now + 0.76);
+    musicTimer = setTimeout(musicTick, 360 + Math.random() * 260);
+  }
+
+  function startMusic() {
+    ensureAudio();
+    if (!audioCtx || musicPlaying) return;
+    musicGain = audioCtx.createGain();
+    musicGain.gain.value = 0.7;
+    musicGain.connect(audioCtx.destination);
+    musicPlaying = true;
+    musicTick();
+  }
+
+  function stopMusic() {
+    musicPlaying = false;
+    if (musicTimer) clearTimeout(musicTimer);
+    musicTimer = null;
   }
 
   function beep(freq, dur, type, vol) {
@@ -192,7 +230,7 @@
     const u = unit();
     state.bird.vy = -340 * u;
     state.flapFlash = 1;
-    beep(520, 0.09, 'triangle', 0.06);
+    beep(520, 0.09, 'triangle', 0.13);
   }
 
   function startPlay() {
@@ -204,11 +242,13 @@
     endOv.classList.remove('show');
     expOv.classList.remove('show');
     state.lastTs = performance.now();
+    startMusic();
   }
 
   function die() {
     if (state.mode !== 'play') return;
     state.mode = 'dead';
+    stopMusic();
     state.sparkCombo = 0;
     beep(180, 0.22, 'sawtooth', 0.09);
     setTimeout(() => beep(120, 0.28, 'sawtooth', 0.07), 90);
@@ -219,6 +259,7 @@
     endScore.textContent = String(state.score);
     endBest.innerHTML = '<span class="dot"></span>最高 ' + state.best;
     endSpark.innerHTML = '<span class="dot spark"></span>灯火 ' + state.sparks;
+    endCombo.innerHTML = '<span class="dot spark"></span>最大连击 ×' + state.bestCombo;
     bestNum.textContent = String(state.best);
     endOv.classList.add('show');
   }
@@ -253,11 +294,12 @@
           s.got = true;
           state.sparks += 1;
           state.sparkCombo += 1;
-          const add = state.sparkCombo; // 连击：1,2,3…
+          state.bestCombo = Math.max(state.bestCombo, state.sparkCombo);
+          const add = Math.min(32, Math.pow(2, state.sparkCombo - 1));
           state.score += add;
           scoreEl.textContent = String(state.score);
           sparkEl.textContent = String(state.sparks);
-          beep(720 + Math.min(state.sparkCombo, 8) * 60, 0.07, 'sine', 0.055);
+          state.floatScores.push({ text: '+' + add, life: 1, y: b.y - b.r * 2.4 });
         }
       }
     }
@@ -269,6 +311,12 @@
     const speed = scrolling ? (148 + Math.min(state.score * 3.5, 70)) * u : 0;
     state.t += dt;
     state.flapFlash = Math.max(0, state.flapFlash - dt * 3.2);
+    for (let i = state.floatScores.length - 1; i >= 0; i--) {
+      const f = state.floatScores[i];
+      f.life -= dt;
+      f.y -= 30 * unit() * dt;
+      if (f.life <= 0) state.floatScores.splice(i, 1);
+    }
 
     if (scrolling) {
       // 连续累加，绘制时再按 tile 取模，避免 % 与 tile 不一致造成卡顿
@@ -307,7 +355,6 @@
         p.scored = true;
         state.score += 1;
         scoreEl.textContent = String(state.score);
-        beep(760, 0.07, 'triangle', 0.055);
       }
     }
     state.pipes = state.pipes.filter(p => {
@@ -648,11 +695,27 @@
     ctx.restore();
   }
 
+  function drawFloatScores() {
+    const u = unit();
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.font = '800 ' + (22 * u) + 'px "PingFang SC", sans-serif';
+    for (const f of state.floatScores) {
+      ctx.globalAlpha = Math.max(0, f.life);
+      ctx.fillStyle = '#ffe9a8';
+      ctx.shadowColor = '#ff9a4a';
+      ctx.shadowBlur = 10 * u;
+      ctx.fillText(f.text, state.bird.x, f.y);
+    }
+    ctx.restore();
+  }
+
   function render() {
     drawSky();
     for (const p of state.pipes) drawPipe(p);
     drawGround();
     if (state.bird) drawBird(state.bird);
+    drawFloatScores();
     drawIdleHint();
   }
 
@@ -741,6 +804,7 @@
     const lines = [
       ['穿过门洞', String(state.score)],
       ['收集灯火', String(state.sparks)],
+      ['最大连击', '×' + state.bestCombo],
       ['历史最高', String(state.best)],
     ];
     lines.forEach(function (row, i) {
