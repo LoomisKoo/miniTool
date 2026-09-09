@@ -8,11 +8,13 @@
 - 简介：照片转拼豆色号图纸
 - 图标：`icon.png`
 
-| 平台 | 状态 | 产物 |
-| --- | --- | --- |
-| 小红书 | ✅ 已上线 | `dist/xiaohongshu-bead-pattern.zip` |
-| 抖音 | 未上架 | `dist/douyin-bead-pattern.zip` |
-| 快手 | ✅ 已上线 | `dist/kuaishou-bead-pattern.zip` |
+| 平台 | 状态 | 版本 | 产物 |
+| --- | --- | --- | --- |
+| 小红书 | 审核中 | 1.0.1 | `dist/xiaohongshu-bead-pattern.zip` |
+| 抖音 | 未上架 | — | `dist/douyin-bead-pattern.zip` |
+| 快手 | 审核中 | 1.0.1 | `dist/kuaishou-bead-pattern.zip` |
+
+发版后在此更新版本号，并同步根目录总表。
 
 ## 默认参数
 

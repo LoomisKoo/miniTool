@@ -53,7 +53,7 @@ function buildOne(platformId) {
     if (f === 'index.html') {
       const html = fs
         .readFileSync(src, 'utf8')
-        .replace(/href="\.\/style\.css\?v=\d+"/g, 'href="./style.css"');
+        .replace(/\?v=[^"']+/g, '');
       fs.writeFileSync(dest, html);
     } else {
       fs.copyFileSync(src, dest);

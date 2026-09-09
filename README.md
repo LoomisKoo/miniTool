@@ -18,7 +18,7 @@
 | --- | --- | --- | --- | --- | --- | --- |
 | 焚香计时 | `incense-timer/` | ✅ 已上线 | — | ✅ 已上线 | — | `*-incense-timer.zip` |
 | 轻映 | `crop-grid/` | ✅ 已上线 | — | ✅ 已上线 | — | 名称「轻映」· `*-qingying.zip` |
-| 兔格拼豆 | `bead-pattern/` | ✅ 已上线 | — | ✅ 已上线 | — | `*-bead-pattern.zip` |
+| 兔格拼豆 | `bead-pattern/` | 审核中 | — | 审核中 | — | 1.0.1 · `*-bead-pattern.zip` |
 | 彩码 | `colorqr/` | — | — | — | — | 开发中 · 含花束模式 · `*-colorqr.zip` |
 | 星空跳一跳 | `xingkong-jump/` | ✅ 已上线 | — | ✅ 已上线 | — | 简介「跳一跳星空改良版」· `*-xingkong-jump.zip` |
 | 纸灯夜航 | `paper-lantern/` | ✅ 已上线 | — | ✅ 已上线 | — | 简介「休闲小游戏，杀时间必备」· `*-paper-lantern.zip` |
