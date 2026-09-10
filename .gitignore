@@ -4,3 +4,14 @@ node_modules/
 
 # 各工具打包产物（工具目录内也有各自 .gitignore）
 **/dist/
+
+# iOS / Xcode
+xcuserdata/
+*.xcuserstate
+DerivedData/
+build/
+*.ipa
+*.dSYM.zip
+*.mobileprovision
+*.xcscmblueprint
+.swiftpm/

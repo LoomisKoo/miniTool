@@ -4,27 +4,61 @@
 
 参考：[继B站/小红书/抖音后，快手也启动「互动内容平台」内测](https://mp.weixin.qq.com/s/9AnbudCgh9kAY12FbP1bbg)
 
+## 仓库结构
+
+```text
+miniTool/
+├── README.md                  # 本文件：总表与入口
+├── docs/                      # 跨工具统一规范
+│   ├── platforms/             # H5 内容平台规范索引
+│   └── ios/                   # iOS 总规范 / 开发 / 发布
+├── xiaohongshu/               # 小红书规范与 Skill（只放规范）
+├── douyin/                    # 抖音规范（只放规范）
+├── kuaishou/                  # 快手规范（只放规范）
+├── bilibili/                  # B站规范（搁置）
+└── <工具>/                    # 一个工具一个目录
+    ├── README.md
+    ├── platforms/             # 该工具的 H5 发布配置
+    ├── ios/                   # 该工具的原生 iOS 工程
+    ├── build.mjs              # H5 打包脚本
+    └── dist/                  # 打包产物（git 忽略）
+```
+
 ## 目录约定
 
 - **平台目录**（`douyin/` / `kuaishou/` / `xiaohongshu/` / `bilibili/`）：只放规范与 Skill
-- **工具目录**（根下独立文件夹）：产品源码 + `platforms/` + `build.mjs` + `dist/`
+- **工具目录**（根下独立文件夹）：产品源码 + `platforms/` + `ios/` + `build.mjs` + `dist/`
+- **`platforms/`**：只表示 H5 内容平台适配，**不放 iOS**
+- **`ios/`**：原生 iOS 工程，一个工具一个，独立上架
 - **安装包命名**：`dist/{平台}-{工具}.zip`
+
+> 三种「平台」的辨析（根目录规范 / 工具内 `platforms/` / 工具内 `ios/`）见 [`docs/README.md`](docs/README.md)。
+
+## 开发方式
+
+| 目标 | 入口 |
+| --- | --- |
+| 写 / 改 H5 小工具并打包 zip | [`docs/platforms/`](docs/platforms/README.md) · [`.claude/minitool-zip-builder/SKILL.md`](.claude/minitool-zip-builder/SKILL.md) |
+| 新建 / 开发 iOS App | [`docs/ios/README.md`](docs/ios/README.md) · [`docs/ios/development.md`](docs/ios/development.md) |
+| 上架 iOS / 配买断与订阅 | [`docs/ios/release.md`](docs/ios/release.md) |
 
 ## 发布总表
 
 跨项目上架状态；发版时同步改这里。版本以各工具自身为准，本表为镜像。
 
-| 工具 | 目录 | 小红书 | 抖音 | 快手 | B站 | 备注 |
-| --- | --- | --- | --- | --- | --- | --- |
-| 焚香计时 | `incense-timer/` | ✅ 已上线 | — | ✅ 已上线 | — | `*-incense-timer.zip` |
-| 轻映 | `crop-grid/` | ✅ 已上线 | — | ✅ 已上线 | — | 名称「轻映」· `*-qingying.zip` |
-| 兔格拼豆 | `bead-pattern/` | 审核中 | — | 审核中 | — | 1.0.1 · `*-bead-pattern.zip` |
-| 彩码 | `colorqr/` | — | — | — | — | 开发中 · 含花束模式 · `*-colorqr.zip` |
-| 星空跳一跳 | `xingkong-jump/` | ✅ 已上线 | — | ✅ 已上线 | — | 简介「跳一跳星空改良版」· `*-xingkong-jump.zip` |
-| 纸灯夜航 | `paper-lantern/` | ✅ 已上线 | — | ✅ 已上线 | — | 简介「休闲小游戏，杀时间必备」· `*-paper-lantern.zip` |
-| 图轻 | `tuqing/` | — | — | — | — | 开发中 · 图片瘦身防二次压缩 · `*-tuqing.zip` |
-| 寻味 | `food-map/` | — | — | — | — | 开发中 · 点阵地图美食图鉴 · `*-xunwei.zip` |
-| 风铃物语 | `wind-chime/` | 待提审 | — | 待提审 | — | 治愈系梦幻风铃 · `*-wind-chime.zip` |
+| 工具 | 目录 | 小红书 | 抖音 | 快手 | B站 | iOS | 备注 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 焚香计时 | `incense-timer/` | ✅ 已上线 | — | ✅ 已上线 | — | — | `*-incense-timer.zip` |
+| 轻映 | `crop-grid/` | ✅ 已上线 | — | ✅ 已上线 | — | 未开始 | 名称「轻映」· `*-qingying.zip` |
+| 兔格拼豆 | `bead-pattern/` | 审核中 | — | 审核中 | — | 开发中 1.0.0 | 1.0.1 · `*-bead-pattern.zip` · iOS 已对齐 H5 主要功能（含 3D / 手绘 / 分板） |
+| 彩码 | `colorqr/` | — | — | — | — | 未开始 | 开发中 · 含花束模式 · `*-colorqr.zip` |
+| 星空跳一跳 | `xingkong-jump/` | ✅ 已上线 | — | ✅ 已上线 | — | — | 简介「跳一跳星空改良版」· `*-xingkong-jump.zip` |
+| 纸灯夜航 | `paper-lantern/` | ✅ 已上线 | — | ✅ 已上线 | — | — | 简介「休闲小游戏，杀时间必备」· `*-paper-lantern.zip` |
+| 图轻 | `tuqing/` | — | — | — | — | 未开始 | 开发中 · 图片瘦身防二次压缩 · `*-tuqing.zip` |
+| 寻味 | `food-map/` | — | — | — | — | — | 开发中 · 点阵地图美食图鉴 · `*-xunwei.zip` |
+| 风铃物语 | `wind-chime/` | 待提审 | — | 待提审 | — | — | 治愈系梦幻风铃 · `*-wind-chime.zip` |
+
+iOS 一列 `未开始` 表示已规划原生版本、`ios/` 工程尚未建立；工程建好后改为此处版本号。命名与技术选型见 [`docs/ios/README.md`](docs/ios/README.md)。
 
 ## 待开发点子
 
@@ -55,7 +89,9 @@
 | `xiaohongshu/` | 小工具 | 官方 Skill 在 `xiaohongshu/minitool-zip-builder/` |
 | `bilibili/` | Toy | 搁置（需内测名额） |
 
-各平台见对应 `guidelines.md`。推荐结构：共用源码 + `platforms/` + `build.mjs`（示例 `incense-timer/`、`colorqr/`；轻映/拼豆现阶段扁平源码同样走 `build.mjs`）。
+各平台见对应 `guidelines.md`，索引在 [`docs/platforms/`](docs/platforms/README.md)。推荐结构：共用源码 + `platforms/` + `build.mjs`（示例 `incense-timer/`、`colorqr/`；轻映/拼豆现阶段扁平源码同样走 `build.mjs`）。
+
+原生 iOS 不用 `platforms/`，统一放各工具的 `ios/`，规范见 [`docs/ios/`](docs/ios/README.md)。
 
 ## 跨平台共性（抖音 / 快手）
 
