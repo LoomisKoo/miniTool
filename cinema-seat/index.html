@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover">
+  <meta name="theme-color" content="#111116">
+  <title>观影模拟器</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <main id="app">
+    <section id="homeView" class="view home-view">
+      <header class="top-nav home-nav">
+        <div class="nav-note">影院格式 · 观感模拟</div>
+      </header>
+      <div class="home-scroll">
+        <div class="hero-copy">
+          <p class="eyebrow">你的座位，你的视角</p>
+          <h1>选一个位置，<br><em>坐进去看看。</em></h1>
+          <p class="hero-desc">同一块银幕，换个位置，观感可能完全不同。<br>先选影厅，再进入你的第一视角。</p>
+        </div>
+        <div class="section-label"><span>01</span>选择影厅格式</div>
+        <button id="hallSelectBtn" class="hall-select-btn"><span id="hallSelectText">普通激光厅</span></button>
+        <div id="hallDetail" class="hall-detail"></div>
+        <div id="hallPicker" class="hall-picker hidden">
+          <div class="hall-picker-card">
+            <div class="hall-picker-head"><strong>选择影厅</strong><button id="closeHallPicker" class="modal-close">×</button></div>
+            <div id="hallList" class="hall-list"></div>
+            <div id="hallPickerDetail" class="hall-picker-detail"></div>
+            <button id="confirmHall" class="primary-btn modal-confirm">确定</button>
+          </div>
+        </div>
+        <div class="section-label home-step"><span>02</span>选择观影位置</div>
+        <div id="homeSeatPicker" class="home-seat-picker"></div>
+        <div class="vision-settings">
+          <div class="vision-setting">
+            <span class="mini-label">近视度数</span>
+            <div id="homeNearPicker" class="vision-picker"></div>
+          </div>
+          <div class="vision-setting">
+            <span class="mini-label">散光度数</span>
+            <div id="homeAstigPicker" class="vision-picker"></div>
+          </div>
+        </div>
+        <button id="enterBtn" class="primary-btn">进入影厅</button>
+      </div>
+    </section>
+
+    <section id="theatreView" class="view theatre-view hidden">
+      <canvas id="theatreCanvas" aria-label="电影院观感模拟画面"></canvas>
+      <div class="theatre-shade"></div>
+      <header class="top-nav theatre-nav">
+        <button id="backBtn" class="icon-btn" aria-label="返回">←</button>
+          <button id="hallSwitchBtn" class="hall-switch-btn">
+          <strong id="theatreTitle">普通激光厅</strong>
+          </button>
+        <button id="orientationBtn" class="round-btn" aria-label="切换横竖屏">↔</button>
+      </header>
+      <div class="theatre-bottom">
+        <div class="bottom-head">
+          <strong id="seatHint">中央位置，画面与字幕最均衡</strong>
+        </div>
+        <div class="seat-line">
+          <div id="seatPicker" class="seat-picker"></div>
+          <div class="vision-controls">
+            <button id="nearBtn" class="text-btn">近视 <b id="nearValue">0度</b></button>
+            <button id="astigBtn" class="text-btn">散光 <b id="astigValue">0度</b></button>
+          </div>
+        </div>
+        <div class="theatre-actions">
+          <button id="sampleBtn" class="secondary-btn">播放视频 <span>▶</span></button>
+          <button id="chooseVideoBtn" class="secondary-btn">选择视频 <span>＋</span></button>
+          <button id="soundTextBtn" class="secondary-btn">试听左右声道 <span>◖</span></button>
+        </div>
+      </div>
+      <div id="toast" class="toast"></div>
+    </section>
+  </main>
+  <input id="videoPicker" type="file" accept="video/*" hidden>
+  <div id="seatModal" class="modal hidden">
+    <div class="seat-modal-card">
+      <div class="modal-head">
+        <div>
+          <h2>选择座位</h2>
+        </div>
+        <button id="closeSeatModal" class="modal-close" aria-label="关闭">×</button>
+      </div>
+      <div class="seat-map-toolbar">
+        <span>座位图</span>
+        <div>
+          <button id="seatZoomOut" aria-label="缩小座位图">−</button>
+          <b id="seatZoomValue">100%</b>
+          <button id="seatZoomIn" aria-label="放大座位图">＋</button>
+          <button id="seatZoomReset">复位</button>
+        </div>
+      </div>
+      <div class="seat-map-shell">
+        <div id="rowLabels" class="row-label-column"></div>
+        <div id="seatTrack" class="seat-track">
+          <div class="seat-map-stage">
+            <div id="screenSign" class="screen-sign">银幕</div>
+            <div class="seat-center-line"></div>
+            <div class="best-zone"></div>
+            <div id="seatMap" class="seat-map"></div>
+          </div>
+          <div id="seatZoomSpacer" class="seat-zoom-spacer" aria-hidden="true"></div>
+        </div>
+      </div>
+      <div class="seat-legend"><span><i class="legend-current"></i>当前座位</span><span><i class="legend-free"></i>可选座位</span></div>
+      <div id="modalHallType" class="modal-hall-type"></div>
+      <button id="confirmSeat" class="primary-btn modal-confirm">确定</button>
+    </div>
+  </div>
+  <div id="visionModal" class="modal hidden">
+    <div class="vision-modal-card">
+      <div class="modal-head">
+        <div><h2 id="visionModalTitle">选择度数</h2></div>
+        <button id="closeVisionModal" class="modal-close" aria-label="关闭">×</button>
+      </div>
+      <div id="visionOptions" class="vision-options"></div>
+    </div>
+  </div>
+  <script src="../wind-chime/vendor/three.min.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>
