@@ -4,44 +4,54 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover">
   <meta name="theme-color" content="#111116">
-  <title>观影模拟器</title>
+  <title>观影座舱</title>
   <link rel="stylesheet" href="./style.css">
 </head>
 <body>
   <main id="app">
     <section id="homeView" class="view home-view">
+      <div class="home-bg" aria-hidden="true"></div>
       <header class="top-nav home-nav">
-        <div class="nav-note">影院格式 · 观感模拟</div>
+        <div class="brand"><span class="brand-dot"></span>观影座舱</div>
       </header>
       <div class="home-scroll">
         <div class="hero-copy">
-          <p class="eyebrow">你的座位，你的视角</p>
-          <h1>选一个位置，<br><em>坐进去看看。</em></h1>
-          <p class="hero-desc">同一块银幕，换个位置，观感可能完全不同。<br>先选影厅，再进入你的第一视角。</p>
+          <h1>先坐一遍，<em>再买票。</em></h1>
         </div>
-        <div class="section-label"><span>01</span>选择影厅格式</div>
-        <button id="hallSelectBtn" class="hall-select-btn"><span id="hallSelectText">普通激光厅</span></button>
-        <div id="hallDetail" class="hall-detail"></div>
-        <div id="hallPicker" class="hall-picker hidden">
-          <div class="hall-picker-card">
-            <div class="hall-picker-head"><strong>选择影厅</strong><button id="closeHallPicker" class="modal-close">×</button></div>
-            <div id="hallList" class="hall-list"></div>
-            <div id="hallPickerDetail" class="hall-picker-detail"></div>
-            <button id="confirmHall" class="primary-btn modal-confirm">确定</button>
+
+        <section class="panel">
+          <div class="panel-head"><h2>影厅格式</h2></div>
+          <button id="hallSelectBtn" class="hall-current">
+            <span class="hall-current-art"></span>
+            <span class="hall-current-text">
+              <strong id="hallSelectText">普通激光厅</strong>
+              <em id="hallSelectSub">清晰 · 均衡 · 性价比</em>
+            </span>
+            <span id="hallSelectPrice" class="hall-current-price">舒适观看</span>
+            <span class="chev">›</span>
+          </button>
+          <div id="hallDetail" class="hall-detail"></div>
+        </section>
+        <section class="panel">
+          <div class="panel-head"><h2>观影位置</h2></div>
+          <div id="homeSeatPicker" class="home-seat-picker"></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head"><h2>视力模拟</h2></div>
+          <div class="vision-settings">
+            <div class="vision-row">
+              <span class="vision-name">近视</span>
+              <div id="homeNearPicker" class="vision-picker"></div>
+            </div>
+            <div class="vision-row">
+              <span class="vision-name">散光</span>
+              <div id="homeAstigPicker" class="vision-picker"></div>
+            </div>
           </div>
-        </div>
-        <div class="section-label home-step"><span>02</span>选择观影位置</div>
-        <div id="homeSeatPicker" class="home-seat-picker"></div>
-        <div class="vision-settings">
-          <div class="vision-setting">
-            <span class="mini-label">近视度数</span>
-            <div id="homeNearPicker" class="vision-picker"></div>
-          </div>
-          <div class="vision-setting">
-            <span class="mini-label">散光度数</span>
-            <div id="homeAstigPicker" class="vision-picker"></div>
-          </div>
-        </div>
+        </section>
+      </div>
+      <div class="home-cta">
         <button id="enterBtn" class="primary-btn">进入影厅</button>
       </div>
     </section>
@@ -77,6 +87,16 @@
     </section>
   </main>
   <input id="videoPicker" type="file" accept="video/*" hidden>
+  <div id="hallPicker" class="hall-picker hidden">
+    <div class="hall-picker-card">
+      <div class="hall-picker-head"><strong>选择影厅</strong><button id="closeHallPicker" class="modal-close">×</button></div>
+      <div class="hall-picker-scroll">
+        <div id="hallList" class="hall-list"></div>
+        <div id="hallPickerDetail" class="hall-picker-detail"></div>
+      </div>
+      <div class="hall-picker-foot"><button id="confirmHall" class="primary-btn modal-confirm">确定</button></div>
+    </div>
+  </div>
   <div id="seatModal" class="modal hidden">
     <div class="seat-modal-card">
       <div class="modal-head">

@@ -50,13 +50,14 @@ miniTool/
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 焚香计时 | `incense-timer/` | ✅ 已上线 | — | ✅ 已上线 | — | — | `*-incense-timer.zip` |
 | 轻映 | `crop-grid/` | ✅ 已上线 | — | ✅ 已上线 | — | 未开始 | 名称「轻映」· `*-qingying.zip` |
-| 兔格拼豆 | `bead-pattern/` | 审核中 | — | 审核中 | — | 开发中 1.0.0 | 1.0.1 · `*-bead-pattern.zip` · iOS 已对齐 H5 主要功能（含 3D / 手绘 / 分板） |
+| 兔格拼豆 | `bead-pattern/` | ✅ 已上线 | — | ✅ 已上线 | — | 开发中 1.0.0 | 1.0.1 · `*-bead-pattern.zip` · iOS 已对齐 H5 主要功能（含 3D / 手绘 / 分板） |
 | 彩码 | `colorqr/` | — | — | — | — | 未开始 | 开发中 · 含花束模式 · `*-colorqr.zip` |
 | 星空跳一跳 | `xingkong-jump/` | ✅ 已上线 | — | ✅ 已上线 | — | — | 简介「跳一跳星空改良版」· `*-xingkong-jump.zip` |
 | 纸灯夜航 | `paper-lantern/` | ✅ 已上线 | — | ✅ 已上线 | — | — | 简介「休闲小游戏，杀时间必备」· `*-paper-lantern.zip` |
 | 图轻 | `tuqing/` | — | — | — | — | 未开始 | 开发中 · 图片瘦身防二次压缩 · `*-tuqing.zip` |
 | 寻味 | `food-map/` | — | — | — | — | — | 开发中 · 点阵地图美食图鉴 · `*-xunwei.zip` |
-| 风铃物语 | `wind-chime/` | 待提审 | — | 待提审 | — | — | 治愈系梦幻风铃 · `*-wind-chime.zip` |
+| 风铃物语 | `wind-chime/` | ✅ 已上线 | — | ✅ 已上线 | — | — | 治愈系梦幻风铃 · `*-wind-chime.zip` |
+| 观影座舱 | `cinema-seat/` | — | — | — | — | — | 开发中 · 第一视角影厅观感模拟 · `*-cinema-seat.zip` |
 
 iOS 一列 `未开始` 表示已规划原生版本、`ios/` 工程尚未建立；工程建好后改为此处版本号。命名与技术选型见 [`docs/ios/README.md`](docs/ios/README.md)。
 

@@ -32,6 +32,11 @@
   var pendingHall = 0;
   var seatZoom = 1;
   var seatFitZoom = 1;
+  var seatFitsView = true;
+  var seatVisualW = 0;
+  var seatVisualH = 0;
+  var seatOffsetX = 0;
+  var seatOffsetY = 0;
   var canvas = document.getElementById('theatreCanvas');
   var renderer = null, scene = null, camera = null, hallGroup = null;
   var screenTexture = null, sampleCanvas = null, sampleCtx = null;
@@ -73,8 +78,7 @@
       var card = document.createElement('button');
       card.className = 'hall-card' + (index === activeHall ? ' selected' : '');
       card.setAttribute('data-hall', hall.id);
-      card.setAttribute('data-family', hall.family);
-      card.innerHTML = '<div class="hall-art"></div><h2>' + hall.name + '</h2><p>' + hall.short + '</p><span class="hall-price">' + hall.price + '</span>';
+      card.innerHTML = '<h2>' + hall.name + '</h2><p>' + hall.short + '</p><span class="hall-price">' + hall.price + '</span>';
       card.addEventListener('click', function () {
         pendingHall = index;
         renderHallList();
@@ -93,8 +97,7 @@
   function confirmHall() {
     state.hall = pendingHall;
     normalizeSeat();
-    renderHallList(); renderHallDetail(state.hall); renderHomeSeatPicker();
-    byId('hallSelectText').textContent = currentHall().name;
+    renderHallList(); renderHallDetail(state.hall); renderHomeSeatPicker(); renderHomeHall();
     hideDialog(byId('hallPicker'));
     if (renderer) buildTheatre();
   }
@@ -126,12 +129,33 @@
     renderOneVisionPicker('homeAstigPicker', astigLevels, 'astig');
   }
 
+  function renderHomeHall() {
+    var hall = currentHall();
+    byId('hallSelectText').textContent = hall.name;
+    byId('hallSelectSub').textContent = hall.short;
+    byId('hallSelectPrice').textContent = hall.price;
+    byId('hallSelectBtn').setAttribute('data-family', hall.family);
+  }
+
   function renderHomeSeatPicker() {
     var picker = byId('homeSeatPicker');
     picker.innerHTML = '';
+    var seat = currentSeat();
+    var hall = currentHall();
     var button = document.createElement('button');
-    button.className = 'hall-select-btn seat-select-btn';
-    button.textContent = currentSeat().badge + ' · ' + currentSeat().name;
+    button.className = 'seat-card';
+    var dotX = (seat.col - .5) / hall.cols * 100;
+    var dotY = (seat.row - .5) / hall.rows * 100;
+    button.innerHTML =
+      '<span class="seat-card-map">' +
+        '<span class="seat-card-screen"></span>' +
+        '<span class="seat-card-dot" style="left:' + (14 + dotX * .72).toFixed(1) + '%;top:' + (44 + dotY * .4).toFixed(1) + '%"></span>' +
+      '</span>' +
+      '<span class="seat-card-text">' +
+        '<strong>' + seat.badge + '</strong>' +
+        '<em>' + seat.name + ' · 共 ' + hall.rows + ' 排 ' + hall.cols + ' 座</em>' +
+      '</span>' +
+      '<span class="chev">›</span>';
     button.addEventListener('click', openSeatModal);
     picker.appendChild(button);
   }
@@ -159,8 +183,11 @@
     var screenRatio = currentHall().family === 'giant' ? .9 : (currentHall().family === 'premium' ? .8 : .72);
     var stage = map.parentNode;
     var track = stage.parentNode;
-    var trackWidth = track.getBoundingClientRect().width || 300;
-    var baseStageWidth = Math.max(trackWidth, seatTotal + 68);
+    // clientWidth/Height 不受横屏 rotate(90deg) 影响
+    var trackWidth = track.clientWidth || 300;
+    var trackHeight = track.clientHeight || 180;
+    // 舞台按内容宽度，避免被拉满后银幕视觉偏左
+    var baseStageWidth = seatTotal + 68;
     var screenWidth = Math.max(150, Math.round(seatTotal * screenRatio));
     var screenSign = byId('screenSign');
     var rowTop = (screenSign ? screenSign.offsetHeight : 21) + 16;
@@ -174,28 +201,37 @@
     var bestHeight = Math.max(29, (bestEndRow - bestStartRow + 1) * 29);
     var bestLeft = groupStart + (bestStartCol - 1) * seatUnit - 2;
     var bestRight = groupStart + bestEndCol * seatUnit - 2;
+    var visualW = baseStageWidth * seatZoom;
+    var visualH = baseStageHeight * seatZoom;
+    seatVisualW = visualW;
+    seatVisualH = visualH;
+    seatOffsetX = visualW < trackWidth ? (trackWidth - visualW) / 2 : 0;
+    seatOffsetY = visualH < trackHeight ? (trackHeight - visualH) / 2 : 0;
     var labelPadding = 4;
-    labels.style.top = (rowTop * seatZoom - labelPadding) + 'px';
-    labels.style.width = '32px';
+    var labelWidth = 32;
+    // 排号栏在 shell 坐标里定位，而座位在轨道内居中（seatOffsetX）。
+    // 让它横向跟着座位组走、并始终留 4px 间隙，否则座位居中后两者会隔很远。
+    labels.style.left = Math.round(track.offsetLeft + seatOffsetX + groupStart * seatZoom - labelWidth - 4) + 'px';
+    labels.style.top = (seatOffsetY + rowTop * seatZoom - labelPadding) + 'px';
+    labels.style.width = labelWidth + 'px';
     labels.style.height = (hallRows() * 29 * seatZoom + labelPadding * 2) + 'px';
     labels.style.setProperty('--label-height', (hallRows() * 29 * seatZoom + labelPadding * 2) + 'px');
     labels.style.setProperty('--label-scale', seatZoom);
     labels.style.transform = 'translateY(-' + byId('seatTrack').scrollTop + 'px)';
     stage.style.width = Math.round(baseStageWidth) + 'px';
     stage.style.height = Math.round(baseStageHeight) + 'px';
-    stage.style.transform = 'scale(' + seatZoom + ')';
-    stage.style.transformOrigin = 'top left';
+    stage.style.marginLeft = '0px';
+    stage.style.marginTop = '0px';
+    stage.style.transformOrigin = '0 0';
+    stage.style.transform = 'translate(' + seatOffsetX + 'px,' + seatOffsetY + 'px) scale(' + seatZoom + ')';
     stage.style.setProperty('--seat-zoom', seatZoom);
     var spacer = byId('seatZoomSpacer');
     if (spacer) {
-      spacer.style.left = Math.round(baseStageWidth) + 'px';
+      spacer.style.left = '0px';
       spacer.style.top = '0px';
-      spacer.style.width = Math.round(baseStageWidth * Math.max(0, seatZoom - 1)) + 'px';
-      spacer.style.height = Math.round(baseStageHeight * Math.max(0, seatZoom - 1)) + 'px';
+      spacer.style.width = Math.ceil(Math.max(visualW, trackWidth)) + 'px';
+      spacer.style.height = Math.ceil(Math.max(visualH, trackHeight)) + 'px';
     }
-    stage.style.marginLeft = seatZoom < 1
-      ? Math.max(0, (trackWidth - baseStageWidth * seatZoom) / 2) + 'px'
-      : '0px';
     stage.classList.toggle('show-seat-numbers', seatZoom >= 1.35);
     stage.style.setProperty('--screen-width', screenWidth + 'px');
     stage.style.setProperty('--seat-top', rowTop + 'px');
@@ -208,7 +244,7 @@
     syncRowLabels();
     if (!shouldBuild) {
       byId('seatZoomValue').textContent = Math.round(seatZoom * 100) + '%';
-      byId('seatTrack').classList.toggle('is-fit', seatZoom <= seatFitZoom + .001);
+      byId('seatTrack').classList.toggle('is-fit', seatIsFit());
       syncRowLabels();
       return;
     }
@@ -238,7 +274,7 @@
     }
     byId('modalHallType').textContent = currentHall().name;
     byId('seatZoomValue').textContent = Math.round(seatZoom * 100) + '%';
-    byId('seatTrack').classList.toggle('is-fit', seatZoom <= seatFitZoom + .001);
+    byId('seatTrack').classList.toggle('is-fit', seatIsFit());
   }
   function syncRowLabels() {
     var labels = byId('rowLabels');
@@ -252,6 +288,36 @@
   function hideDialog(element) {
     element.classList.add('hidden');
   }
+  function seatIsFit() {
+    return seatFitsView && seatZoom <= seatFitZoom + .001;
+  }
+  // 滚动边界必须按缩放后的实际可视尺寸算：舞台的布局盒是未缩放尺寸，
+  // 直接读 scrollWidth/scrollHeight 会比可视内容大，能一路拖到座位全部移出视野。
+  function seatScrollLimit(track) {
+    return {
+      x: Math.max(0, seatVisualW - track.clientWidth),
+      y: Math.max(0, seatVisualH - track.clientHeight)
+    };
+  }
+  function clampSeatScroll(track) {
+    if (!track) return;
+    var limit = seatScrollLimit(track);
+    if (track.scrollLeft > limit.x) track.scrollLeft = limit.x;
+    if (track.scrollTop > limit.y) track.scrollTop = limit.y;
+    if (track.scrollLeft < 0) track.scrollLeft = 0;
+    if (track.scrollTop < 0) track.scrollTop = 0;
+  }
+  function centerSeatTrack(track) {
+    if (!track) return;
+    if (seatIsFit()) {
+      track.scrollLeft = 0;
+      track.scrollTop = 0;
+      return;
+    }
+    var limit = seatScrollLimit(track);
+    track.scrollLeft = limit.x / 2;
+    track.scrollTop = limit.y / 2;
+  }
   function openSeatModal() {
     pendingSeat.row = state.row; pendingSeat.col = state.col;
     showDialog(byId('seatModal'));
@@ -261,19 +327,20 @@
     byId('rowLabels').classList.add('no-zoom-transition');
     seatZoom = 1;
     renderSeatMap();
-    var baseWidth = parseFloat(stage.style.width) || track.getBoundingClientRect().width;
+    var baseWidth = parseFloat(stage.style.width) || track.clientWidth;
     var baseHeight = parseFloat(stage.style.height) || (42 + hallRows() * 29);
     var fitZoom = Math.min(track.clientWidth / baseWidth, track.clientHeight / baseHeight, 1);
-    seatFitZoom = clamp(fitZoom, .45, 1);
+    if (!isFinite(fitZoom) || fitZoom <= 0) fitZoom = 1;
+    seatFitZoom = clamp(fitZoom, .2, 1);
+    // 真实缩放低于最小缩放下限时，画面其实放不下：此时不能当「已整屏放下」处理，否则会锁死滚动。
+    seatFitsView = fitZoom >= seatFitZoom - .001;
     seatZoom = Number(seatFitZoom.toFixed(2));
     renderSeatMap();
-    track.scrollLeft = seatZoom <= seatFitZoom + .001 ? 0 : Math.max(0, (track.scrollWidth - track.clientWidth) / 2);
-    track.scrollTop = 0;
+    centerSeatTrack(track);
     syncRowLabels();
     requestAnimationFrame(function () {
       renderSeatMap(false);
-      track.scrollLeft = 0;
-      track.scrollTop = 0;
+      centerSeatTrack(track);
       syncRowLabels();
       requestAnimationFrame(function () {
         stage.classList.remove('no-zoom-transition');
@@ -291,20 +358,29 @@
     }
     var rect = track.getBoundingClientRect();
     var oldZoom = seatZoom;
-    var oldMargin = parseFloat(stageMargin(stage)) || 0;
-    var focalX = clientX == null ? rect.width / 2 : clientX - rect.left;
-    var focalY = clientY == null ? rect.height / 2 : clientY - rect.top;
-    var contentX = (track.scrollLeft + focalX - oldMargin) / oldZoom;
-    var contentY = (track.scrollTop + focalY) / oldZoom;
-    var next = clamp(Number(nextZoom.toFixed(2)), .45, 1.8);
+    var oldOffsetX = seatOffsetX;
+    var oldOffsetY = seatOffsetY;
+    var focalX = track.clientWidth / 2;
+    var focalY = track.clientHeight / 2;
+    if (!isSeatRotated() && clientX != null && clientY != null) {
+      focalX = clientX - rect.left;
+      focalY = clientY - rect.top;
+    }
+    var contentX = (track.scrollLeft + focalX - oldOffsetX) / oldZoom;
+    var contentY = (track.scrollTop + focalY - oldOffsetY) / oldZoom;
+    var next = clamp(Number(nextZoom.toFixed(2)), Math.min(.45, seatFitZoom), 1.8);
     var rebuildSeats = (seatZoom < 1.35) !== (next < 1.35);
     var applyFrame = function (zoom, rebuild) {
       seatZoom = zoom;
       renderSeatMap(rebuild);
-      var newMargin = parseFloat(stageMargin(stage)) || 0;
-      var isFullyVisible = seatZoom <= seatFitZoom + .001;
-      track.scrollLeft = isFullyVisible ? 0 : Math.max(0, contentX * seatZoom + newMargin - focalX);
-      track.scrollTop = isFullyVisible ? 0 : Math.max(0, contentY * seatZoom - focalY);
+      var isFullyVisible = seatIsFit();
+      if (isFullyVisible) {
+        track.scrollLeft = 0;
+        track.scrollTop = 0;
+      } else {
+        track.scrollLeft = Math.max(0, contentX * seatZoom + seatOffsetX - focalX);
+        track.scrollTop = Math.max(0, contentY * seatZoom + seatOffsetY - focalY);
+      }
       syncRowLabels();
     };
     stage.classList.add('no-zoom-transition');
@@ -334,8 +410,18 @@
     };
     zoomAnimation = requestAnimationFrame(tick);
   }
-  function stageMargin(stage) {
-    return stage && stage.style.marginLeft ? stage.style.marginLeft : '0';
+  function resetSeatZoom() {
+    var track = byId('seatTrack');
+    if (!track) return;
+    if (zoomAnimation) {
+      cancelAnimationFrame(zoomAnimation);
+      zoomAnimation = 0;
+    }
+    var wasZoomedIn = seatZoom >= 1.35;
+    seatZoom = Number(seatFitZoom.toFixed(2));
+    renderSeatMap(wasZoomedIn);
+    centerSeatTrack(track);
+    syncRowLabels();
   }
   function changeSeatZoom(delta) {
     var track = byId('seatTrack'), rect = track.getBoundingClientRect();
@@ -344,6 +430,32 @@
   var pinchPointers = {};
   var pinchStartDistance = 0;
   var pinchStartZoom = 1;
+  var panPointerId = null;
+  var panActive = false;
+  var panStartX = 0;
+  var panStartY = 0;
+  var panLastX = 0;
+  var panLastY = 0;
+  var PAN_THRESHOLD = 6;
+  function isSeatLandscape() {
+    return document.body.classList.contains('orientation-landscape')
+      || byId('seatModal').classList.contains('orientation-landscape');
+  }
+  // 只有竖屏视口下才真的加了 .rotate-90（见 applyLandscapeRotation）
+  function isSeatRotated() {
+    return byId('seatModal').classList.contains('rotate-90');
+  }
+  function seatTrackScrollable() {
+    var track = byId('seatTrack');
+    if (!track) return false;
+    return track.scrollWidth > track.clientWidth + 1 || track.scrollHeight > track.clientHeight + 1;
+  }
+  // 整屏 rotate(90deg) 时 touch-action 为 none，原生滚动失效，只能靠手动接管指针；
+  // 视口本身就是横屏时不旋转，走浏览器原生滚动/点击。
+  // 是否可拖拽取决于内容是否真的溢出，而不是「当前缩放是否大于适配缩放」。
+  function canPanSeatMap() {
+    return isSeatRotated() && seatTrackScrollable();
+  }
   function pointerDistance(a, b) {
     return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
   }
@@ -353,25 +465,70 @@
     track.addEventListener('pointerdown', function (event) {
       pinchPointers[event.pointerId] = event;
       if (Object.keys(pinchPointers).length === 2) {
+        panPointerId = null;
+        panActive = false;
         var points = Object.values(pinchPointers);
         pinchStartDistance = pointerDistance(points[0], points[1]);
         pinchStartZoom = seatZoom;
+        return;
+      }
+      // 这里刻意不 setPointerCapture：一旦捕获，click 会被轨道截获，座位按钮就永远点不中。
+      // 等拖动超过阈值、确认是拖拽而不是点击时，再接管指针。
+      if (canPanSeatMap() && Object.keys(pinchPointers).length === 1) {
+        panPointerId = event.pointerId;
+        panActive = false;
+        panStartX = event.clientX;
+        panStartY = event.clientY;
       }
     });
     track.addEventListener('pointermove', function (event) {
       if (!pinchPointers[event.pointerId]) return;
       pinchPointers[event.pointerId] = event;
       var ids = Object.keys(pinchPointers);
-      if (ids.length !== 2 || !pinchStartDistance) return;
-      event.preventDefault();
-      var points = [pinchPointers[ids[0]], pinchPointers[ids[1]]];
-      setSeatZoom(pinchStartZoom * pointerDistance(points[0], points[1]) / pinchStartDistance,
-        (points[0].clientX + points[1].clientX) / 2,
-        (points[0].clientY + points[1].clientY) / 2, false);
+      if (ids.length === 2 && pinchStartDistance) {
+        event.preventDefault();
+        var points = [pinchPointers[ids[0]], pinchPointers[ids[1]]];
+        setSeatZoom(pinchStartZoom * pointerDistance(points[0], points[1]) / pinchStartDistance,
+          (points[0].clientX + points[1].clientX) / 2,
+          (points[0].clientY + points[1].clientY) / 2, false);
+        return;
+      }
+      // 整屏 rotate(90deg) 后本地轴与屏幕轴互换：local.x = 屏幕 y，local.y = -屏幕 x。
+      // 两个方向的符号按实机手感校准过，改其中一个会让横向/纵向其中一轴反过来。
+      if (panPointerId === event.pointerId && canPanSeatMap()) {
+        if (!panActive) {
+          if (Math.hypot(event.clientX - panStartX, event.clientY - panStartY) < PAN_THRESHOLD) return;
+          panActive = true;
+          panLastX = panStartX;
+          panLastY = panStartY;
+          try { track.setPointerCapture(event.pointerId); } catch (err) {}
+        }
+        event.preventDefault();
+        var dx = event.clientX - panLastX;
+        var dy = event.clientY - panLastY;
+        panLastX = event.clientX;
+        panLastY = event.clientY;
+        track.scrollLeft += dy;
+        track.scrollTop -= dx;
+        clampSeatScroll(track);
+        syncRowLabels();
+      }
     });
+    track.addEventListener('wheel', function (event) {
+      if (!canPanSeatMap()) return;
+      event.preventDefault();
+      track.scrollLeft += event.deltaY;
+      track.scrollTop -= event.deltaX;
+      clampSeatScroll(track);
+      syncRowLabels();
+    }, { passive: false });
     ['pointerup', 'pointercancel', 'pointerleave'].forEach(function (type) {
       track.addEventListener(type, function (event) {
         delete pinchPointers[event.pointerId];
+        if (panPointerId === event.pointerId) {
+          panPointerId = null;
+          panActive = false;
+        }
         if (Object.keys(pinchPointers).length < 2) pinchStartDistance = 0;
       });
     });
@@ -586,7 +743,9 @@
   }
   function resizeRenderer() {
     if (!renderer) return;
-    var w = Math.max(1, window.innerWidth), h = Math.max(1, window.innerHeight);
+    var view = byId('theatreView');
+    var w = Math.max(1, view.clientWidth || window.innerWidth);
+    var h = Math.max(1, view.clientHeight || window.innerHeight);
     renderer.setSize(w, h, false);
     camera.aspect = w / h; camera.updateProjectionMatrix();
   }
@@ -723,27 +882,35 @@
     });
     showDialog(modal);
   }
+  // 竖屏视口才需要把内容旋转 90° 摆成「横版」给横着拿手机的用户看；
+  // 视口本身已经是横屏（抖音等允许横屏）时内容天然是横的，再转就整个侧躺了。
+  function applyLandscapeRotation(isLandscape) {
+    var rotate = !!isLandscape && window.innerHeight > window.innerWidth;
+    byId('theatreView').classList.toggle('rotate-90', rotate);
+    byId('seatModal').classList.toggle('rotate-90', rotate);
+    byId('visionModal').classList.toggle('rotate-90', rotate);
+    return rotate;
+  }
   function toggleOrientation() {
-    var isPortrait = window.matchMedia('(orientation: portrait)').matches;
-    var target = isPortrait ? 'landscape' : 'portrait';
-    if (screen.orientation && screen.orientation.lock) {
-      screen.orientation.lock(target).catch(function () {
-        showToast('请使用系统旋转功能切换方向');
-      });
-    } else {
-      showToast('当前设备不支持锁定屏幕方向');
-    }
+    var theatreView = byId('theatreView');
+    var isLandscape = theatreView.classList.toggle('orientation-landscape');
+    document.body.classList.toggle('orientation-landscape', isLandscape);
+    document.documentElement.classList.toggle('orientation-landscape', isLandscape);
+    byId('seatModal').classList.toggle('orientation-landscape', isLandscape);
+    byId('visionModal').classList.toggle('orientation-landscape', isLandscape);
+    applyLandscapeRotation(isLandscape);
+    resizeRenderer();
+    renderTheatre();
   }
   function switchHall() {
     state.hall = (state.hall + 1) % halls.length;
     normalizeSeat();
-    renderHallList(); renderHallDetail(); renderHomeSeatPicker();
-    byId('hallSelectText').textContent = currentHall().name;
+    renderHallList(); renderHallDetail(); renderHomeSeatPicker(); renderHomeHall();
     updateTheatreLabels(); buildTheatre();
     showToast('已切换：' + currentHall().name);
   }
   function bind() {
-    renderHallList(); renderHallDetail(); renderHomeSeatPicker(); renderVisionPickers(); applyVision();
+    renderHallList(); renderHallDetail(); renderHomeSeatPicker(); renderHomeHall(); renderVisionPickers(); applyVision();
     byId('enterBtn').addEventListener('click', openTheatre);
     byId('backBtn').addEventListener('click', closeTheatre);
     byId('hallSwitchBtn').addEventListener('click', switchHall);
@@ -761,10 +928,7 @@
     byId('confirmSeat').addEventListener('click', confirmSeat);
     byId('seatZoomOut').addEventListener('click', function () { changeSeatZoom(-.25); });
     byId('seatZoomIn').addEventListener('click', function () { changeSeatZoom(.25); });
-    byId('seatZoomReset').addEventListener('click', function () {
-      var track = byId('seatTrack'), rect = track.getBoundingClientRect();
-      setSeatZoom(seatFitZoom, rect.left + rect.width / 2, rect.top + rect.height / 2, true);
-    });
+    byId('seatZoomReset').addEventListener('click', resetSeatZoom);
     bindSeatPinch();
     byId('seatModal').addEventListener('click', function (event) { if (event.target === byId('seatModal')) closeSeatModal(); });
     byId('soundTextBtn').addEventListener('click', playSoundField);
@@ -795,6 +959,14 @@
     });
     byId('orientationBtn').addEventListener('click', toggleOrientation);
     window.addEventListener('resize', function () {
+      // 视口横竖切换时重新决定要不要旋转（手机横过来 / 桌面拖窗口都会触发）
+      var rotatedBefore = isSeatRotated();
+      if (document.body.classList.contains('orientation-landscape')) {
+        var rotatedNow = applyLandscapeRotation(true);
+        if (rotatedNow !== rotatedBefore && !byId('seatModal').classList.contains('hidden')) {
+          resetSeatZoom();
+        }
+      }
       if (byId('theatreView').classList.contains('hidden')) return;
       resizeRenderer(); renderTheatre();
     });
