@@ -28,6 +28,8 @@
 
   var state = {
     image: null,
+    sourceImage: null, // 未裁切的源图，裁切始终基于它
+    cropRect: null,    // 累积裁切区域（相对源图归一化 {x,y,w,h}），null 表示未裁切
     paletteId: 'mard',
     width: 29,
     boardSize: 29,
@@ -82,6 +84,17 @@
     btnMerge: document.getElementById('btn-merge'),
     btnAvg: document.getElementById('btn-avg'),
     btnColors: document.getElementById('btn-colors'),
+    btnCrop: document.getElementById('btn-crop'),
+    cropScreen: document.getElementById('crop-screen'),
+    cropViewport: document.getElementById('crop-viewport'),
+    cropCanvas: document.getElementById('crop-canvas'),
+    cropRatioChips: document.getElementById('crop-ratio-chips'),
+    cropZoom: document.getElementById('crop-zoom'),
+    cropRotate: document.getElementById('crop-rotate'),
+    cropFlip: document.getElementById('crop-flip'),
+    cropCancel: document.getElementById('crop-cancel'),
+    cropReset: document.getElementById('crop-reset'),
+    cropConfirm: document.getElementById('crop-confirm'),
     colorsPreview: document.getElementById('colors-preview'),
     colorsList: document.getElementById('colors-list'),
     paletteSheet: document.getElementById('palette-sheet'),
@@ -103,7 +116,6 @@
     exportSheetCancel: document.getElementById('export-sheet-cancel'),
     exportGo: document.getElementById('export-go'),
     exportShare: document.getElementById('export-share'),
-    exportShareWrap: document.getElementById('export-share-wrap'),
     exportScope: document.getElementById('export-scope'),
     exportBusy: document.getElementById('export-busy'),
     exportBusyText: document.getElementById('export-busy-text'),
@@ -1879,27 +1891,39 @@
     closeSheet(els.colorsSheet);
   }
 
-  function loadFile(file) {
+  // 载入一张 Image 作为当前工作图（裁切后回填也走这里）
+  function adoptImage(img, opts) {
+    var keepSource = !!(opts && opts.keepSource);
+    state.image = img;
+    // 换图：源图与累积裁切区域一起重置；裁切后回填则保留源图
+    if (!keepSource) {
+      state.sourceImage = img;
+      state.cropRect = null;
+    }
+    state.boardIndex = -1;
+    state.highlightCode = null;
+    // 新图：清空上张图的手绘/撤销记录，重置编辑状态
+    state.gridData = null;
+    state.autoGrid = null;
+    state.gridW = 0;
+    state.editOn = false;
+    state.brush = null;
+    els.screenEdit.classList.remove('edit-mode');
+    unlockPvRatio();
+    flushEdits();
+    showScreen('edit');
+    freshImage = true;
+    syncShareBtn();
+    mapImage();
+  }
+
+  function loadFile(file, opts) {
     if (!file) return;
     var url = URL.createObjectURL(file);
     var img = new Image();
     img.onload = function () {
       URL.revokeObjectURL(url);
-      state.image = img;
-      state.boardIndex = -1;
-      state.highlightCode = null;
-      // 新图：清空上张图的手绘/撤销记录，重置编辑状态
-      state.gridData = null;
-      state.autoGrid = null;
-      state.gridW = 0;
-      state.editOn = false;
-      state.brush = null;
-      els.screenEdit.classList.remove('edit-mode');
-      unlockPvRatio();
-      flushEdits();
-      showScreen('edit');
-      freshImage = true;
-      mapImage();
+      adoptImage(img, opts);
     };
     img.onerror = function () {
       URL.revokeObjectURL(url);
@@ -1908,6 +1932,744 @@
     img.src = url;
   }
 
+  // ================= 图片裁切（搬自 crop-grid，去掉拼图 / 宫格 / 圆角） =================
+  var CROP_RATIOS = [
+    { id: 'orig', label: '原始' },
+    { id: '1:1', label: '1:1', w: 1, h: 1 },
+    { id: '3:4', label: '3:4', w: 3, h: 4 },
+    { id: '4:3', label: '4:3', w: 4, h: 3 },
+    { id: '9:16', label: '9:16', w: 9, h: 16 },
+    { id: '16:9', label: '16:9', w: 16, h: 9 },
+    { id: 'free', label: '自由' }
+  ];
+  var CROP_MIN_SIDE = 64;      // 裁切框最小边（屏幕像素）
+  var CROP_MAX_OUT = 1600;     // 输出最长边上限（与拼豆处理上限 1400 留一点余量）
+  var CROP_ZOOM_MAX = 500;     // 缩放上限（%，相对 minScale）
+
+  var crop = {
+    image: null,          // 始终是未裁切的源图
+    initRect: null,       // 本次打开时的有效区域（源图坐标，像素）
+    initRatioId: 'orig',  // 本次打开时的比例
+    initSnapshot: null,   // 本次打开时的视图快照，用于判断"未做修改"
+    vw: 0, vh: 0, dpr: 1,
+    scale: 1, minScale: 1, zoomExtra: 0,
+    offsetX: 0, offsetY: 0,
+    rotation: 0,          // 弧度
+    flipX: 1,
+    cropX: 0, cropY: 0, cropW: 0, cropH: 0,
+    targetW: 0, targetH: 0,
+    ratioId: 'orig',
+    dragging: false, dragMode: 'pan', resizeHandle: null,
+    velX: 0, velY: 0, inertiaRaf: 0,
+    pinchStartDist: 0, pinchStartScale: 1,
+    lastX: 0, lastY: 0, lastMoveT: 0
+  };
+
+  function cropCtx() {
+    return els.cropCanvas.getContext('2d');
+  }
+
+  function cropRatio() {
+    var s = crop;
+    if (!s.image) return 1;
+    if (s.ratioId === 'orig') return s.image.naturalWidth / s.image.naturalHeight;
+    if (s.ratioId === 'free') {
+      if (s.cropW > 0 && s.cropH > 0) return s.cropW / s.cropH;
+      return s.image.naturalWidth / s.image.naturalHeight;
+    }
+    var r = CROP_RATIOS.filter(function (x) { return x.id === s.ratioId; })[0];
+    return r && r.w ? r.w / r.h : 1;
+  }
+
+  // 旋转后的图片包围盒（未旋转时退化为图片自身显示尺寸）
+  function cropBoxAt(scale) {
+    var img = crop.image;
+    var dw = img.naturalWidth * scale;
+    var dh = img.naturalHeight * scale;
+    var cos = Math.abs(Math.cos(crop.rotation));
+    var sin = Math.abs(Math.sin(crop.rotation));
+    return { w: dw * cos + dh * sin, h: dw * sin + dh * cos };
+  }
+
+  function cropSetRect(x, y, w, h) {
+    var s = crop;
+    w = Math.max(CROP_MIN_SIDE, Math.min(w, s.vw));
+    h = Math.max(CROP_MIN_SIDE, Math.min(h, s.vh));
+    x = Math.max(0, Math.min(x, s.vw - w));
+    y = Math.max(0, Math.min(y, s.vh - h));
+    s.cropX = x;
+    s.cropY = y;
+    s.cropW = w;
+    s.cropH = h;
+  }
+
+  // 给定比例，算出能放进视口的裁切框尺寸（free 模式留一点边距）
+  function cropFrameForRatio(ratio, free) {
+    var s = crop;
+    var maxW = s.vw * (free ? 0.86 : 1);
+    var maxH = s.vh * (free ? 0.86 : 1);
+    var w = maxW;
+    var h = w / ratio;
+    if (h > maxH) { h = maxH; w = h * ratio; }
+    return { w: w, h: h };
+  }
+
+  function cropComputeTarget() {
+    var f = cropFrameForRatio(cropRatio(), crop.ratioId === 'free');
+    crop.targetW = f.w;
+    crop.targetH = f.h;
+  }
+
+  // 某比例是否在预设列表里，命中则返回对应 id，否则 'free'
+  function cropMatchRatio(ratio) {
+    var ids = CROP_RATIOS;
+    for (var i = 0; i < ids.length; i++) {
+      var r = ids[i];
+      if (r.id === 'free') continue;
+      var rr = r.id === 'orig' ? crop.image.naturalWidth / crop.image.naturalHeight : r.w / r.h;
+      if (Math.abs(rr - ratio) / ratio < 0.004) return r.id;
+    }
+    return 'free';
+  }
+
+  // 本次打开时的目标视图：初始区域铺满裁切框
+  // 前提：rotation 为 0，镜像是开的
+  function cropInitViewTarget() {
+    var s = crop;
+    var img = s.image;
+    var nw = img.naturalWidth;
+    var nh = img.naturalHeight;
+    var ir = s.initRect;
+    var free = s.ratioId === 'free';
+    var f = cropFrameForRatio(free ? ir.w / ir.h : cropRatio(), free);
+    var minScale = Math.max(f.w / nw, f.h / nh);
+    var k = Math.max(f.w / ir.w, f.h / ir.h, minScale);
+    var zoom = Math.min(CROP_ZOOM_MAX, Math.max(0, (k / minScale - 1) * 100));
+    var scale = minScale * (1 + zoom / 100);
+    return {
+      cropW: f.w,
+      cropH: f.h,
+      cropX: (s.vw - f.w) / 2,
+      cropY: (s.vh - f.h) / 2,
+      zoomExtra: zoom,
+      // 框恒居中，所以偏移只负责把初始区域中心对到视口中心
+      offsetX: (nw / 2 - (ir.x + ir.w / 2)) * scale,
+      offsetY: (nh / 2 - (ir.y + ir.h / 2)) * scale,
+      rotation: 0,
+      flipX: 1
+    };
+  }
+
+  // 从目标视图对象反推快照（用于判断"打开后未做修改"）
+  function cropSnapshotOf(target) {
+    var img = crop.image;
+    var minScale = Math.max(target.cropW / img.naturalWidth, target.cropH / img.naturalHeight);
+    return {
+      cropX: target.cropX,
+      cropY: target.cropY,
+      cropW: target.cropW,
+      cropH: target.cropH,
+      offsetX: target.offsetX,
+      offsetY: target.offsetY,
+      scale: minScale * (1 + target.zoomExtra / 100),
+      rotation: target.rotation,
+      flipX: target.flipX
+    };
+  }
+
+  function cropSameAsInit() {
+    var a = crop;
+    var b = crop.initSnapshot;
+    if (!b) return false;
+    function near(x, y, t) { return Math.abs(x - y) <= t; }
+    return near(a.cropX, b.cropX, 1) && near(a.cropY, b.cropY, 1) &&
+      near(a.cropW, b.cropW, 1) && near(a.cropH, b.cropH, 1) &&
+      near(a.offsetX, b.offsetX, 1) && near(a.offsetY, b.offsetY, 1) &&
+      near(a.scale, b.scale, 0.001) && near(a.flipX, b.flipX, 1e-6) &&
+      Math.abs(a.rotation - b.rotation) < 1e-4;
+  }
+
+  // 屏幕上的一块矩形 → 源图归一化矩形（覆盖 0/90/180/270 旋转与镜像）
+  function cropToSourceRect(r) {
+    var s = crop;
+    var img = s.image;
+    var nw = img.naturalWidth;
+    var nh = img.naturalHeight;
+    var cos = Math.cos(s.rotation);
+    var sin = Math.sin(s.rotation);
+    if (Math.abs(cos) < 1e-9) cos = 0;
+    if (Math.abs(sin) < 1e-9) sin = 0;
+    var pts = [
+      [r.x, r.y],
+      [r.x + r.w, r.y],
+      [r.x, r.y + r.h],
+      [r.x + r.w, r.y + r.h]
+    ];
+    var minX = Infinity;
+    var minY = Infinity;
+    var maxX = -Infinity;
+    var maxY = -Infinity;
+    for (var i = 0; i < pts.length; i++) {
+      var ux = pts[i][0] - s.vw / 2 - s.offsetX;
+      var uy = pts[i][1] - s.vh / 2 - s.offsetY;
+      var u2 = ux * cos + uy * sin;
+      var v = -ux * sin + uy * cos;
+      var u = u2 * s.flipX;
+      var px = u / s.scale + nw / 2;
+      var py = v / s.scale + nh / 2;
+      if (px < minX) minX = px;
+      if (px > maxX) maxX = px;
+      if (py < minY) minY = py;
+      if (py > maxY) maxY = py;
+    }
+    minX = Math.max(0, Math.min(nw - 1, minX));
+    minY = Math.max(0, Math.min(nh - 1, minY));
+    maxX = Math.max(minX + 1, Math.min(nw, maxX));
+    maxY = Math.max(minY + 1, Math.min(nh, maxY));
+    return {
+      x: minX / nw,
+      y: minY / nh,
+      w: (maxX - minX) / nw,
+      h: (maxY - minY) / nh
+    };
+  }
+
+  function cropComputeMinScale() {
+    var s = crop;
+    if (!s.image) return;
+    var cw = s.cropW || s.targetW;
+    var ch = s.cropH || s.targetH;
+    if (!cw || !ch) { cropComputeTarget(); cw = s.targetW; ch = s.targetH; }
+    var box = cropBoxAt(1);
+    s.minScale = Math.max(cw / box.w, ch / box.h);
+    s.scale = s.minScale * (1 + s.zoomExtra / 100);
+  }
+
+  function cropClampOffset() {
+    var s = crop;
+    if (!s.image) return;
+    var box = cropBoxAt(s.scale);
+    var bl = s.vw / 2 - box.w / 2 + s.offsetX;
+    var bt = s.vh / 2 - box.h / 2 + s.offsetY;
+    if (bl > s.cropX) s.offsetX -= bl - s.cropX;
+    if (bt > s.cropY) s.offsetY -= bt - s.cropY;
+    if (bl + box.w < s.cropX + s.cropW) s.offsetX += s.cropX + s.cropW - (bl + box.w);
+    if (bt + box.h < s.cropY + s.cropH) s.offsetY += s.cropY + s.cropH - (bt + box.h);
+  }
+
+  // 把当前视口里的图片按 crop 变换画到 ctx（供预览与导出复用）
+  function cropDrawImage(ctx) {
+    var s = crop;
+    var img = s.image;
+    var dw = img.naturalWidth * s.scale;
+    var dh = img.naturalHeight * s.scale;
+    ctx.translate(s.vw / 2 + s.offsetX, s.vh / 2 + s.offsetY);
+    ctx.rotate(s.rotation);
+    ctx.scale(s.flipX, 1);
+    ctx.drawImage(img, -dw / 2, -dh / 2, dw, dh);
+  }
+
+  function drawCrop() {
+    var s = crop;
+    if (!s.image) return;
+    var ctx = cropCtx();
+    var w = s.vw;
+    var h = s.vh;
+    ctx.setTransform(crop.dpr, 0, 0, crop.dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = '#f2f2f7';
+    ctx.fillRect(0, 0, w, h);
+
+    // 原图
+    ctx.save();
+    cropDrawImage(ctx);
+    ctx.restore();
+
+    // 选区外压暗
+    ctx.fillStyle = 'rgba(242, 242, 247, 0.72)';
+    ctx.fillRect(0, 0, w, h);
+
+    // 选区内重绘原图（等效“打洞”）
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(s.cropX, s.cropY, s.cropW, s.cropH);
+    ctx.clip();
+    cropDrawImage(ctx);
+    ctx.restore();
+
+    // 选边框 + 三分参考线
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(s.cropX + 0.75, s.cropY + 0.75, s.cropW - 1.5, s.cropH - 1.5);
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(s.cropX + s.cropW / 3, s.cropY);
+    ctx.lineTo(s.cropX + s.cropW / 3, s.cropY + s.cropH);
+    ctx.moveTo(s.cropX + s.cropW * 2 / 3, s.cropY);
+    ctx.lineTo(s.cropX + s.cropW * 2 / 3, s.cropY + s.cropH);
+    ctx.moveTo(s.cropX, s.cropY + s.cropH / 3);
+    ctx.lineTo(s.cropX + s.cropW, s.cropY + s.cropH / 3);
+    ctx.moveTo(s.cropX, s.cropY + s.cropH * 2 / 3);
+    ctx.lineTo(s.cropX + s.cropW, s.cropY + s.cropH * 2 / 3);
+    ctx.stroke();
+
+    // 自由比例：四角把手
+    if (s.ratioId === 'free') {
+      var hs = 14;
+      ctx.fillStyle = '#ffffff';
+      ctx.strokeStyle = 'rgba(0, 122, 255, 0.9)';
+      ctx.lineWidth = 2;
+      var corners = [
+        [s.cropX, s.cropY],
+        [s.cropX + s.cropW, s.cropY],
+        [s.cropX, s.cropY + s.cropH],
+        [s.cropX + s.cropW, s.cropY + s.cropH]
+      ];
+      for (var i = 0; i < corners.length; i++) {
+        ctx.beginPath();
+        ctx.arc(corners[i][0], corners[i][1], hs / 2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      }
+    }
+  }
+
+  function cropSyncCanvasSize() {
+    var rect = els.cropViewport.getBoundingClientRect();
+    if (!rect.width || !rect.height) return false;
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    var w = Math.floor(rect.width);
+    var h = Math.floor(rect.height);
+    crop.vw = w;
+    crop.vh = h;
+    crop.dpr = dpr;
+    var cv = els.cropCanvas;
+    var bw = Math.floor(w * dpr);
+    var bh = Math.floor(h * dpr);
+    if (cv.width !== bw || cv.height !== bh) {
+      cv.width = bw;
+      cv.height = bh;
+    }
+    return true;
+  }
+
+  function cropLayout() {
+    if (!els.cropScreen.classList.contains('is-open')) return;
+    if (!cropSyncCanvasSize()) return;
+    if (!crop.image) return;
+    // 视口尺寸变了：按当前比例重算框，保留缩放倍率与偏移
+    var f;
+    if (crop.ratioId === 'free' && crop.cropW > CROP_MIN_SIDE && crop.cropH > CROP_MIN_SIDE) {
+      f = cropFrameForRatio(crop.cropW / crop.cropH, true);
+    } else {
+      cropComputeTarget();
+      f = { w: crop.targetW, h: crop.targetH };
+    }
+    cropSetRect(crop.cropX, crop.cropY, f.w, f.h);
+    cropComputeMinScale();
+    cropClampOffset();
+    drawCrop();
+    syncCropRatioChips();
+  }
+
+  function syncCropRatioChips() {
+    var box = els.cropRatioChips;
+    if (!box || !crop.image) return;
+    box.innerHTML = '';
+    CROP_RATIOS.forEach(function (r) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'crop-chip' + (r.id === crop.ratioId ? ' on' : '');
+      btn.textContent = r.label;
+      btn.setAttribute('data-ratio', r.id);
+      box.appendChild(btn);
+    });
+  }
+
+  function setCropRatio(id) {
+    if (crop.ratioId === id) return;
+    crop.ratioId = id;
+    syncCropRatioChips();
+    stopCropInertia();
+    var to;
+    if (id === 'free') {
+      // 自由：沿用当前框比例，只缩到视口内
+      var w = Math.max(CROP_MIN_SIDE, Math.min(crop.cropW || crop.vw * 0.86, crop.vw * 0.86));
+      var h = Math.max(CROP_MIN_SIDE, Math.min(crop.cropH || crop.vh * 0.86, crop.vh * 0.86));
+      to = {
+        cropW: w,
+        cropH: h,
+        cropX: (crop.vw - w) / 2,
+        cropY: (crop.vh - h) / 2
+      };
+    } else {
+      cropComputeTarget();
+      to = {
+        cropW: crop.targetW,
+        cropH: crop.targetH,
+        cropX: (crop.vw - crop.targetW) / 2,
+        cropY: (crop.vh - crop.targetH) / 2
+      };
+    }
+    cropTween(to, 260);
+  }
+
+  function cropToLocal(clientX, clientY) {
+    var rect = els.cropViewport.getBoundingClientRect();
+    return { x: clientX - rect.left, y: clientY - rect.top };
+  }
+
+  function cropHitHandle(x, y) {
+    if (crop.ratioId !== 'free') return null;
+    var c = { left: crop.cropX, top: crop.cropY, width: crop.cropW, height: crop.cropH };
+    var t = 22;
+    var nearL = Math.abs(x - c.left) <= t;
+    var nearR = Math.abs(x - (c.left + c.width)) <= t;
+    var nearT = Math.abs(y - c.top) <= t;
+    var nearB = Math.abs(y - (c.top + c.height)) <= t;
+    if (nearT && nearL) return 'nw';
+    if (nearT && nearR) return 'ne';
+    if (nearB && nearL) return 'sw';
+    if (nearB && nearR) return 'se';
+    if (nearT && x >= c.left && x <= c.left + c.width) return 'n';
+    if (nearB && x >= c.left && x <= c.left + c.width) return 's';
+    if (nearL && y >= c.top && y <= c.top + c.height) return 'w';
+    if (nearR && y >= c.top && y <= c.top + c.height) return 'e';
+    return null;
+  }
+
+  function cropResizeByHandle(handle, x, y) {
+    var left = crop.cropX;
+    var top = crop.cropY;
+    var right = left + crop.cropW;
+    var bottom = top + crop.cropH;
+    if (handle.indexOf('n') >= 0) top = y;
+    if (handle.indexOf('s') >= 0) bottom = y;
+    if (handle.indexOf('w') >= 0) left = x;
+    if (handle.indexOf('e') >= 0) right = x;
+    if (right < left) { var tx = left; left = right; right = tx; }
+    if (bottom < top) { var ty = top; top = bottom; bottom = ty; }
+    cropSetRect(left, top, right - left, bottom - top);
+    cropComputeMinScale();
+    if (crop.scale < crop.minScale) {
+      crop.scale = crop.minScale;
+      crop.zoomExtra = 0;
+      syncCropZoomSlider(0);
+    }
+    cropClampOffset();
+  }
+
+  function stopCropInertia() {
+    if (crop.inertiaRaf) cancelAnimationFrame(crop.inertiaRaf);
+    crop.inertiaRaf = 0;
+    crop.velX = 0;
+    crop.velY = 0;
+  }
+
+  function startCropInertia() {
+    stopCropInertia();
+    var speed = Math.sqrt(crop.velX * crop.velX + crop.velY * crop.velY);
+    if (speed < 0.35 || crop.dragMode === 'resize') return;
+    var maxV = 42;
+    if (speed > maxV) {
+      var k = maxV / speed;
+      crop.velX *= k;
+      crop.velY *= k;
+    }
+    function tick() {
+      crop.offsetX += crop.velX;
+      crop.offsetY += crop.velY;
+      cropClampOffset();
+      drawCrop();
+      crop.velX *= 0.95;
+      crop.velY *= 0.95;
+      if (Math.sqrt(crop.velX * crop.velX + crop.velY * crop.velY) < 0.18) {
+        crop.inertiaRaf = 0;
+        return;
+      }
+      crop.inertiaRaf = requestAnimationFrame(tick);
+    }
+    crop.inertiaRaf = requestAnimationFrame(tick);
+  }
+
+  function onCropDown(clientX, clientY) {
+    stopCropInertia();
+    finishCropAnim();
+    var local = cropToLocal(clientX, clientY);
+    crop.lastX = clientX;
+    crop.lastY = clientY;
+    crop.lastMoveT = performance.now();
+    crop.velX = 0;
+    crop.velY = 0;
+    crop.resizeHandle = cropHitHandle(local.x, local.y);
+    crop.dragMode = crop.resizeHandle ? 'resize' : 'pan';
+    crop.dragging = true;
+  }
+
+  function onCropMove(clientX, clientY) {
+    if (!crop.dragging) return;
+    if (crop.dragMode === 'resize' && crop.resizeHandle) {
+      var local = cropToLocal(clientX, clientY);
+      cropResizeByHandle(crop.resizeHandle, local.x, local.y);
+      crop.lastX = clientX;
+      crop.lastY = clientY;
+      crop.lastMoveT = performance.now();
+      drawCrop();
+      return;
+    }
+    var now = performance.now();
+    var dt = Math.max(8, now - (crop.lastMoveT || now));
+    var dx = clientX - crop.lastX;
+    var dy = clientY - crop.lastY;
+    crop.offsetX += dx;
+    crop.offsetY += dy;
+    var vx = dx / dt * 16;
+    var vy = dy / dt * 16;
+    crop.velX = crop.velX * 0.6 + vx * 0.4;
+    crop.velY = crop.velY * 0.6 + vy * 0.4;
+    crop.lastX = clientX;
+    crop.lastY = clientY;
+    crop.lastMoveT = now;
+    cropClampOffset();
+    drawCrop();
+  }
+
+  // ---- 动画：比例切换 / 重置 / 旋转 / 镜像 都走同一条 tween ----
+  var cropAnim = { raf: 0, target: null, done: null };
+
+  function cancelCropAnim() {
+    if (cropAnim.raf) cancelAnimationFrame(cropAnim.raf);
+    cropAnim.raf = 0;
+    cropAnim.target = null;
+    cropAnim.done = null;
+  }
+
+  // 让进行中的动画立刻落到终态（用户中途点了应用/拖动时需要）
+  function finishCropAnim() {
+    if (!cropAnim.raf) return;
+    cancelAnimationFrame(cropAnim.raf);
+    cropAnim.raf = 0;
+    var to = cropAnim.target;
+    var cb = cropAnim.done;
+    cropAnim.target = null;
+    cropAnim.done = null;
+    if (!to) return;
+    Object.keys(to).forEach(function (k) { crop[k] = to[k]; });
+    cropAfterChange(cb);
+  }
+
+  function cropEaseOut(t) {
+    return 1 - Math.pow(1 - t, 3);
+  }
+
+  // 每帧重算最小缩放 + 钳制偏移 + 重绘
+  function cropAfterChange(done) {
+    cropComputeMinScale();
+    cropClampOffset();
+    drawCrop();
+    if (done) done();
+  }
+
+  // 把 crop 上的若干数值属性补间到目标值；每帧后重算 minScale / 钳制 / 重绘
+  function cropTween(to, dur, done) {
+    finishCropAnim();
+    var keys = Object.keys(to);
+    var from = {};
+    keys.forEach(function (k) { from[k] = crop[k]; });
+    if (!dur) {
+      keys.forEach(function (k) { crop[k] = to[k]; });
+      cropAfterChange(done);
+      return;
+    }
+    cropAnim.target = to;
+    cropAnim.done = done;
+    var start = performance.now();
+    function frame(now) {
+      var t = Math.min(1, (now - start) / dur);
+      var e = cropEaseOut(t);
+      keys.forEach(function (k) {
+        crop[k] = from[k] + (to[k] - from[k]) * e;
+      });
+      if (t < 1) {
+        cropAfterChange(null);
+        cropAnim.raf = requestAnimationFrame(frame);
+      } else {
+        cropAnim.raf = 0;
+        cropAnim.target = null;
+        cropAnim.done = null;
+        cropAfterChange(done);
+      }
+    }
+    cropAnim.raf = requestAnimationFrame(frame);
+  }
+
+  function onCropUp() {
+    var wasPan = crop.dragging && crop.dragMode === 'pan';
+    crop.dragging = false;
+    crop.dragMode = 'pan';
+    crop.resizeHandle = null;
+    if (wasPan) startCropInertia();
+  }
+
+  function cropSetZoom(zoomExtra) {
+    finishCropAnim();
+    crop.zoomExtra = Math.max(0, Math.min(CROP_ZOOM_MAX, zoomExtra));
+    crop.scale = crop.minScale * (1 + crop.zoomExtra / 100);
+    cropClampOffset();
+    drawCrop();
+  }
+
+  function pulseCropBtn(btn, cls) {
+    if (!btn) return;
+    btn.classList.remove(cls);
+    void btn.offsetWidth;
+    btn.classList.add(cls);
+    setTimeout(function () { btn.classList.remove(cls); }, 400);
+  }
+
+  function rotateCrop() {
+    pulseCropBtn(els.cropRotate, 'is-spin');
+    cropTween({ rotation: crop.rotation + Math.PI / 2 }, 320, function () {
+      // 归一到 [0, 2π)，避免多次旋转后数值无限增大
+      crop.rotation = ((crop.rotation % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+    });
+  }
+
+  function flipCrop() {
+    pulseCropBtn(els.cropFlip, 'is-flip');
+    cropTween({ flipX: crop.flipX === 1 ? -1 : 1 }, 320);
+  }
+
+  function syncCropZoomSlider(zoom) {
+    if (els.cropZoom) els.cropZoom.value = String(Math.round(Math.min(CROP_ZOOM_MAX, zoom)));
+  }
+
+  function openCrop() {
+    // 基准永远是未裁切的源图；已裁切效果由 state.cropRect 累积表达
+    var base = state.sourceImage;
+    if (!base) return;
+    crop.image = base;
+    var nw = base.naturalWidth;
+    var nh = base.naturalHeight;
+    var cr = state.cropRect;
+    crop.initRect = cr
+      ? { x: cr.x * nw, y: cr.y * nh, w: cr.w * nw, h: cr.h * nh }
+      : { x: 0, y: 0, w: nw, h: nh };
+    crop.ratioId = cr ? cropMatchRatio(crop.initRect.w / crop.initRect.h) : 'orig';
+    crop.initRatioId = crop.ratioId;
+    crop.rotation = 0;
+    crop.flipX = 1;
+    crop.zoomExtra = 0;
+    crop.offsetX = 0;
+    crop.offsetY = 0;
+    stopCropInertia();
+    finishCropAnim();
+    els.cropScreen.classList.add('is-open');
+    els.cropScreen.setAttribute('aria-hidden', 'false');
+    // 等布局稳定后再算尺寸
+    requestAnimationFrame(function () {
+      if (!cropSyncCanvasSize()) return;
+      var to = cropInitViewTarget();
+      // 开场：整图铺满裁切框，再动画收到初始区域
+      cropSetRect(to.cropX, to.cropY, to.cropW, to.cropH);
+      crop.zoomExtra = 0;
+      crop.offsetX = 0;
+      crop.offsetY = 0;
+      cropComputeMinScale();
+      cropClampOffset();
+      drawCrop();
+      syncCropRatioChips();
+      syncCropZoomSlider(0);
+      crop.initSnapshot = cropSnapshotOf(to);
+      cropTween(to, 320, function () {
+        syncCropZoomSlider(crop.zoomExtra);
+      });
+    });
+  }
+
+  function closeCrop() {
+    stopCropInertia();
+    cancelCropAnim();
+    els.cropScreen.classList.remove('is-open');
+    els.cropScreen.setAttribute('aria-hidden', 'true');
+  }
+
+  function resetCrop() {
+    if (!crop.image) return;
+    stopCropInertia();
+    finishCropAnim();
+    crop.ratioId = crop.initRatioId;
+    syncCropRatioChips();
+    var to = cropInitViewTarget();
+    // 旋转走最短路径回正
+    var twoPi = Math.PI * 2;
+    var d = to.rotation - crop.rotation;
+    to.rotation = crop.rotation + d - twoPi * Math.round(d / twoPi);
+    syncCropZoomSlider(to.zoomExtra);
+    cropTween(to, 320, function () {
+      crop.rotation = 0;
+    });
+  }
+
+  function applyCrop() {
+    var s = crop;
+    if (!s.image) return;
+    stopCropInertia();
+    // 动画中途点应用：先落到终态再取结果
+    finishCropAnim();
+    if (cropSameAsInit()) { closeCrop(); return; }
+
+    var rect = cropToSourceRect({ x: s.cropX, y: s.cropY, w: s.cropW, h: s.cropH });
+    // 恰好覆盖全图 → 等价于还原原图，直接回填源图，避免重新编码
+    if (rect.x <= 0.002 && rect.y <= 0.002 && rect.w >= 0.996 && rect.h >= 0.996) {
+      closeCrop();
+      state.cropRect = null;
+      if (state.image !== s.image) adoptImage(s.image, { keepSource: true });
+      toast('已还原原图');
+      return;
+    }
+
+    var k = 1 / s.scale; // 屏幕上 1px 对应的源图像素
+    var outW = Math.round(s.cropW * k);
+    var outH = Math.round(s.cropH * k);
+    var cap = CROP_MAX_OUT / Math.max(outW, outH);
+    if (cap < 1) { outW = Math.round(outW * cap); outH = Math.round(outH * cap); k *= cap; }
+    outW = Math.max(1, outW);
+    outH = Math.max(1, outH);
+
+    var c = document.createElement('canvas');
+    c.width = outW;
+    c.height = outH;
+    var ctx = c.getContext('2d');
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.setTransform(k, 0, 0, k, -s.cropX * k, -s.cropY * k);
+    cropDrawImage(ctx);
+
+    var finish = function (blob) {
+      if (!blob) { toast('裁切失败'); return; }
+      var file = new File([blob], 'crop.png', { type: 'image/png' });
+      closeCrop();
+      // 累积记录本次裁切区域，下次打开裁切页就基于它
+      state.cropRect = rect;
+      loadFile(file, { keepSource: true });
+      toast('已应用裁切');
+    };
+    if (c.toBlob) {
+      c.toBlob(finish, 'image/png');
+    } else {
+      try {
+        var dataUrl = c.toDataURL('image/png');
+        var bin = atob(dataUrl.split(',')[1]);
+        var arr = new Uint8Array(bin.length);
+        for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+        finish(new Blob([arr], { type: 'image/png' }));
+      } catch (err) {
+        toast('裁切失败');
+      }
+    }
+  }
   function roundRectPath(ctx, x, y, w, h, r) {
     var rr = Math.min(r, w / 2, h / 2);
     ctx.beginPath();
@@ -2314,6 +3076,17 @@
     return !!(window.xhs && window.xhs.miniTool && window.xhs.miniTool.postNote);
   }
 
+  // 本地预览（localhost / file）下也显示按钮，方便调样式；正式环境仅在有桥时显示
+  function isPreviewHost() {
+    var h = location.hostname;
+    return h === 'localhost' || h === '127.0.0.1' || h === '' || location.protocol === 'file:';
+  }
+
+  // 发布笔记按钮仅在小红书等支持 postNote 的环境显示
+  function syncShareBtn() {
+    if (els.exportShare) els.exportShare.hidden = !(hasPostNote() || isPreviewHost());
+  }
+
   function countBeads() {
     var n = 0;
     var i;
@@ -2349,7 +3122,7 @@
   function shareToNote() {
     if (!state.gridData || state.busy) return;
     if (!hasPostNote()) {
-      toast('请在小红书内发笔记');
+      toast('请在小红书内发布笔记');
       return;
     }
     state.busy = true;
@@ -3160,7 +3933,6 @@
         els.exportScope.textContent = '将导出整幅拼图（含分板线）';
       }
     }
-    if (els.exportShareWrap) els.exportShareWrap.hidden = !hasPostNote();
     openSheet(els.exportSheet);
   }
 
@@ -3174,7 +3946,6 @@
   }
 
   function doShare() {
-    closeExportSheet();
     shareToNote();
   }
 
@@ -3512,6 +4283,81 @@
     els.fileInput.click();
   });
 
+  // 裁切（搬自 crop-grid 的交互：图片在固定比例框下平移/缩放）
+  if (els.btnCrop) els.btnCrop.addEventListener('click', openCrop);
+  if (els.cropCancel) els.cropCancel.addEventListener('click', closeCrop);
+  if (els.cropReset) els.cropReset.addEventListener('click', resetCrop);
+  if (els.cropConfirm) els.cropConfirm.addEventListener('click', applyCrop);
+  if (els.cropRotate) els.cropRotate.addEventListener('click', rotateCrop);
+  if (els.cropFlip) els.cropFlip.addEventListener('click', flipCrop);
+  if (els.cropZoom) els.cropZoom.addEventListener('input', function () {
+    cropSetZoom(Number(els.cropZoom.value));
+  });
+  if (els.cropRatioChips) {
+    els.cropRatioChips.addEventListener('click', function (e) {
+      var btn = findEl(e.target, '[data-ratio]', els.cropRatioChips);
+      if (!btn) return;
+      setCropRatio(btn.getAttribute('data-ratio'));
+    });
+  }
+  if (els.cropViewport) {
+    els.cropViewport.addEventListener('mousedown', function (e) {
+      e.preventDefault();
+      onCropDown(e.clientX, e.clientY);
+    });
+    window.addEventListener('mousemove', function (e) { onCropMove(e.clientX, e.clientY); });
+    window.addEventListener('mouseup', function () { onCropUp(); });
+
+    els.cropViewport.addEventListener('touchstart', function (e) {
+      if (e.touches.length === 1) {
+        onCropDown(e.touches[0].clientX, e.touches[0].clientY);
+      } else if (e.touches.length === 2) {
+        stopCropInertia();
+        crop.dragging = false;
+        crop.dragMode = 'pan';
+        crop.resizeHandle = null;
+        var dx = e.touches[0].clientX - e.touches[1].clientX;
+        var dy = e.touches[0].clientY - e.touches[1].clientY;
+        crop.pinchStartDist = Math.sqrt(dx * dx + dy * dy);
+        crop.pinchStartScale = crop.scale;
+      }
+    }, { passive: true });
+
+    els.cropViewport.addEventListener('touchmove', function (e) {
+      if (e.touches.length === 1 && crop.dragging) {
+        e.preventDefault();
+        onCropMove(e.touches[0].clientX, e.touches[0].clientY);
+      } else if (e.touches.length === 2) {
+        e.preventDefault();
+        stopCropInertia();
+        var dx = e.touches[0].clientX - e.touches[1].clientX;
+        var dy = e.touches[0].clientY - e.touches[1].clientY;
+        var dist = Math.sqrt(dx * dx + dy * dy);
+        if (crop.pinchStartDist > 0) {
+          var ratio = dist / crop.pinchStartDist;
+          var maxScale = crop.minScale * (1 + CROP_ZOOM_MAX / 100);
+          var next = Math.max(crop.minScale, Math.min(maxScale, crop.pinchStartScale * ratio));
+          var z = (next / crop.minScale - 1) * 100;
+          cropSetZoom(z);
+          syncCropZoomSlider(z);
+        }
+      }
+    }, { passive: false });
+
+    els.cropViewport.addEventListener('touchend', onCropUp);
+  }
+  if (els.cropViewport) {
+    els.cropViewport.addEventListener('wheel', function (e) {
+      if (!els.cropScreen.classList.contains('is-open')) return;
+      e.preventDefault();
+      cropSetZoom(crop.zoomExtra + (e.deltaY < 0 ? 12 : -12));
+      syncCropZoomSlider(crop.zoomExtra);
+    }, { passive: false });
+  }
+  window.addEventListener('resize', function () {
+    if (els.cropScreen && els.cropScreen.classList.contains('is-open')) cropLayout();
+  });
+
   els.btnSave.addEventListener('click', openExportSheet);
 
   els.widthSlider.addEventListener('input', function () {
@@ -3609,6 +4455,16 @@
   setChip(els.btnDither, state.dither);
   setChip(els.btnMerge, state.merge);
   setChip(els.btnAvg, state.mode === 'average');
+  syncShareBtn();
+  // 小程序桥可能注入较晚：前几秒内轮询几次，找到 postNote 即停
+  (function watchShareBridge() {
+    var tries = 0;
+    var timer = setInterval(function () {
+      tries += 1;
+      syncShareBtn();
+      if (hasPostNote() || tries >= 20) clearInterval(timer);
+    }, 300);
+  })();
 
   // 预览手势 + 视图工具栏（优先绑定，避免后续可选控件异常阻断）
   els.viewport.addEventListener('pointerdown', onVpDown);
