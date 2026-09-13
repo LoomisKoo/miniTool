@@ -21,6 +21,16 @@
 
 坐标仅需「大概」：点阵图上同一格内误差不可见，地点增补直接给经纬度即可（省会/大都市经纬度可参考通用城市表）。
 
+## 数据来源与声明
+
+| 来源 | 用途 | 授权 |
+| --- | --- | --- |
+| [china-food-map](https://github.com/againster1992-debug/china-food-map) | 美食文案（`data.js`，经改写与截断） | 上游仓库**未附开源协议**，默认保留所有权利；本项目为非盈利个人作品，已在名录页底部注明来源，如权利人提出异议即撤下 |
+| [Natural Earth](https://www.naturalearthdata.com/) `land-110m` | 世界陆地点阵（`land.js`） | **Public Domain**，可自由使用，无需署名 |
+| [阿里云 DataV.GeoAtlas](https://datav.aliyun.com/portal/school/atlas/area_selector)（源：高德开放平台） | 中国省界与九段线（`prov-land.js`） | 官方说明该数据**仅供学习交流**，商用需另行取得授权 |
+
+免责：本工具仅供学习交流，相关权利归各来源作者所有。上架版本已在界面内展示来源与联系方式说明。
+
 ## 打包
 
 ```bash
