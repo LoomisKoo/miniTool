@@ -262,33 +262,49 @@
   const LAND_COLOR0 = '#3a3a42';
   const MAP_PALETTE = ['#8fb069', '#e8b454', '#e87858', '#6ba8cc'];
   const provColors = [LAND_COLOR0];
-  // 省界栅格（DataV 省级边界），境外为 0
-  const provGrid = new Uint8Array(COLS * ROWS);
+  // 省界栅格（DataV 省级边界，0.125°，只覆盖中国范围）：稀疏码流 varint(索引增量)+id
+  const PCELL = window.PROV_LAND_CELL || 0.125;
+  const PLEFT = window.PROV_LAND_LEFT, PTOP = window.PROV_LAND_TOP;
+  const PCOLS = window.PROV_LAND_COLS, PROWS = window.PROV_LAND_ROWS;
+  const provGrid = new Uint8Array(PCOLS * PROWS);
   (function decodeProv() {
     const raw = window.PROV_LAND_DATA;
-    if (!raw) return;
+    if (!raw || !PCOLS) return;
     const bin = atob(raw);
-    const n = Math.min(bin.length, provGrid.length);
-    for (let i = 0; i < n; i++) provGrid[i] = bin.charCodeAt(i);
+    let i = 0, idx = 0;
+    while (i < bin.length) {
+      let shift = 0, d = 0;
+      for (;;) {
+        const b = bin.charCodeAt(i++);
+        d += (b & 0x7f) * Math.pow(2, shift);
+        if (!(b & 0x80)) break;
+        shift += 7;
+      }
+      idx += d;
+      if (idx >= provGrid.length) break;
+      provGrid[idx] = bin.charCodeAt(i++);
+    }
 
-    // 只在中国范围做扩边/净化（全球扫一遍太重）
-    const pr0 = Math.max(1, Math.floor((90 - 54.5) / CELL));
-    const pr1 = Math.min(ROWS - 2, Math.floor((90 - 15.5) / CELL));
-    const pc0 = Math.max(1, Math.floor((72.5 + 180) / CELL));
-    const pc1 = Math.min(COLS - 2, Math.floor((135.5 + 180) / CELL));
-
+    // 扩边：DataV 省界比 Natural Earth 海岸线简化，留下「底图是陆地、省级无归属」的灰点。
+    // 只向 land 格子扩，且要求邻域无归属冲突，避免把国界外染成中国省份色。
+    const landAtCell = (lat, lon) => {
+      const r = Math.floor((90 - lat) / CELL), c = Math.floor((lon + 180) / CELL);
+      return landAt(r, c);
+    };
     for (let pass = 0; pass < 2; pass++) {
       const next = new Uint8Array(provGrid);
-      for (let r = pr0; r <= pr1; r++) {
-        const base = r * COLS;
-        for (let c = pc0; c <= pc1; c++) {
+      for (let r = 1; r < PROWS - 1; r++) {
+        const base = r * PCOLS;
+        const lat = PTOP - (r + 0.5) * PCELL;
+        for (let c = 1; c < PCOLS - 1; c++) {
           const i = base + c;
-          if (provGrid[i] || !land[i]) continue;
+          if (provGrid[i]) continue;
+          if (!landAtCell(lat, PLEFT + (c + 0.5) * PCELL)) continue;
           let id = 0, conflict = false;
           for (let dr = -1; dr <= 1; dr++) {
             for (let dc = -1; dc <= 1; dc++) {
               if (!dr && !dc) continue;
-              const p = provGrid[(r + dr) * COLS + c + dc];
+              const p = provGrid[(r + dr) * PCOLS + c + dc];
               if (!p) continue;
               if (!id) id = p;
               else if (p !== id) { conflict = true; break; }
@@ -301,11 +317,12 @@
       provGrid.set(next);
     }
 
+    // 净化：把明显被别的省包住的孤立格改判给多数邻省（消除边界毛刺）
     for (let pass = 0; pass < 2; pass++) {
       const next = new Uint8Array(provGrid);
-      for (let r = pr0; r <= pr1; r++) {
-        const base = r * COLS;
-        for (let c = pc0; c <= pc1; c++) {
+      for (let r = 1; r < PROWS - 1; r++) {
+        const base = r * PCOLS;
+        for (let c = 1; c < PCOLS - 1; c++) {
           const i = base + c;
           const cur = provGrid[i];
           if (!cur) continue;
@@ -314,7 +331,7 @@
           for (let dr = -1; dr <= 1; dr++) {
             for (let dc = -1; dc <= 1; dc++) {
               if (!dr && !dc) continue;
-              const p = provGrid[(r + dr) * COLS + c + dc];
+              const p = provGrid[(r + dr) * PCOLS + c + dc];
               if (!p) continue;
               counts[p]++;
               nn++;
@@ -332,15 +349,17 @@
     // 邻接图 + 贪心四色
     const nProv = PROV_ORDER.length;
     const adj = Array.from({ length: nProv + 1 }, () => new Set());
-    for (let r = pr0; r <= pr1; r++) {
-      const base = r * COLS;
-      for (let c = pc0; c <= pc1; c++) {
+    for (let r = 0; r < PROWS; r++) {
+      const base = r * PCOLS;
+      for (let c = 0; c < PCOLS - 1; c++) {
         const a = provGrid[base + c];
         if (!a) continue;
+        if (r + 1 < PROWS) {
+          const down = provGrid[base + PCOLS + c];
+          if (down && down !== a) { adj[a].add(down); adj[down].add(a); }
+        }
         const right = provGrid[base + c + 1];
-        const down = provGrid[base + COLS + c];
         if (right && right !== a) { adj[a].add(right); adj[right].add(a); }
-        if (down && down !== a) { adj[a].add(down); adj[down].add(a); }
       }
     }
     const colorIdx = new Uint8Array(nProv + 1);
@@ -357,22 +376,55 @@
     const dashId = PROV_ORDER.indexOf('南海诸岛') + 1;
     if (dashId > 0) provColors[dashId] = '#9aa3b4';
   })();
+  // 地理坐标 → 省 id（栅格外返回 0）
+  function provIdAt(lat, lon) {
+    if (!PCOLS) return 0;
+    const r = Math.floor((PTOP - lat) / PCELL), c = Math.floor((lon - PLEFT) / PCELL);
+    if (r < 0 || r >= PROWS || c < 0 || c >= PCOLS) return 0;
+    return provGrid[r * PCOLS + c] || 0;
+  }
 
-  // 小岛补点表：省级栅格里有、底图 land 里没有的格子（南海诸岛/西沙/南沙等）。
-  // Natural Earth 110m 不含这些微小岛屿，而主采样网格（0.25° 以上步进）会大概率漏采，
-  // 所以这里预先取出格心，逐帧直接补点 —— 稀疏但保证出现在正确位置。
-  const islandDots = [];   // [lat, lon, provId, ...]
-  (function buildIslandDots() {
-    for (let r = 0; r < ROWS; r++) {
-      const base = r * COLS;
-      for (let c = 0; c < COLS; c++) {
-        const i = base + c;
-        const id = provGrid[i];
-        if (!id || land[i]) continue;
-        islandDots.push(90 - (r + 0.5) * CELL, (c + 0.5) * CELL - 180, id);
+  // 九段线：DataV 的 JD 是细长多边形，栅格化必糊。这里用生成器提好的中线，
+  // 按 0.06° 采样成点，和陆地点阵同一套绘制路径（远看是虚线，放大是点串）
+  const DASH_ID = PROV_ORDER.indexOf('南海诸岛') + 1;
+  const dashDots = [];   // [lat, lon, ...]
+  (function buildDashDots() {
+    const lines = window.DASH_LINE;
+    if (!lines || !DASH_ID) return;
+    const STEP = 0.06;
+    for (const line of lines) {
+      for (let k = 0; k + 3 < line.length; k += 2) {
+        const lon0 = line[k], lat0 = line[k + 1], lon1 = line[k + 2], lat1 = line[k + 3];
+        const segs = Math.max(1, Math.round(Math.hypot(lon1 - lon0, lat1 - lat0) / STEP));
+        for (let s = 0; s <= segs; s++) {
+          if (k && !s) continue;                 // 段间衔接点不重复
+          const t = s / segs;
+          dashDots.push(lat0 + (lat1 - lat0) * t, lon0 + (lon1 - lon0) * t);
+        }
       }
     }
   })();
+
+  // 小岛补点表：省级栅格里有、底图 land 里没有的格子（西沙/南沙/东沙/舟山等）。
+  // Natural Earth 110m 不含这些微小岛屿，主采样网格也会漏采，
+  // 所以预先取出格心，逐帧直接补点 —— 稀疏但保证出现在正确位置。
+  const islandDots = [];   // [lat, lon, provId, ...]
+  (function buildIslandDots() {
+    if (!PCOLS) return;
+    for (let r = 0; r < PROWS; r++) {
+      const base = r * PCOLS;
+      const lat = PTOP - (r + 0.5) * PCELL;
+      for (let c = 0; c < PCOLS; c++) {
+        const id = provGrid[base + c];
+        if (!id) continue;
+        const lon = PLEFT + (c + 0.5) * PCELL;
+        const lr = Math.floor((90 - lat) / CELL), lc = Math.floor((lon + 180) / CELL);
+        if (landAt(lr, lc)) continue;
+        islandDots.push(lat, lon, id);
+      }
+    }
+  })();
+
 
   // 省名简称（一字）；显示名用 PROV_ORDER（广西/广东，非全称）
   const PROV_ABBR = {
@@ -388,21 +440,18 @@
   // 省重心（格点均值），供标签定位
   const provLabel = Array.from({ length: PROV_ORDER.length + 1 }, () => null);
   (function buildProvLabels() {
+    if (!PCOLS) return;
     const sumLat = new Float64Array(PROV_ORDER.length + 1);
     const sumLon = new Float64Array(PROV_ORDER.length + 1);
     const cnt = new Uint32Array(PROV_ORDER.length + 1);
-    const pr0 = Math.max(0, Math.floor((90 - 54.5) / CELL));
-    const pr1 = Math.min(ROWS - 1, Math.floor((90 - 15.5) / CELL));
-    const pc0 = Math.max(0, Math.floor((72.5 + 180) / CELL));
-    const pc1 = Math.min(COLS - 1, Math.floor((135.5 + 180) / CELL));
-    for (let r = pr0; r <= pr1; r++) {
-      const base = r * COLS;
-      const lat = latOf(r);
-      for (let c = pc0; c <= pc1; c++) {
+    for (let r = 0; r < PROWS; r++) {
+      const base = r * PCOLS;
+      const lat = PTOP - (r + 0.5) * PCELL;
+      for (let c = 0; c < PCOLS; c++) {
         const id = provGrid[base + c];
         if (!id) continue;
         sumLat[id] += lat;
-        sumLon[id] += lonOf(c);
+        sumLon[id] += PLEFT + (c + 0.5) * PCELL;
         cnt[id]++;
       }
     }
@@ -483,9 +532,7 @@
       for (let ix = 0; ix < n; ix++) {
         const g = geoAtScreen(CW * (ix + 0.5) / n, CH * (iy + 0.5) / n);
         if (!g) continue;
-        const r = Math.floor((90 - g.lat) / CELL);
-        const c = Math.floor((g.lon + 180) / CELL);
-        const id = provAt(r, c);
+        const id = provIdAt(g.lat, g.lon);
         if (!id) continue;
         land++;
         counts.set(id, (counts.get(id) || 0) + 1);
@@ -576,13 +623,6 @@
     const c = Math.floor((lon + 180) / CELL);
     return landAt(r, c) ? [r, ((c % COLS) + COLS) % COLS] : null;
   }
-  function provAt(r, c) {
-    if (r < 0 || r >= ROWS) return 0;
-    return provGrid[r * COLS + ((c % COLS) + COLS) % COLS] || 0;
-  }
-  function paintProvId(r, c) {
-    return provAt(r, c) || 0;
-  }
   // 分批绘制陆地点（统一圆形）
   function fillProvBuckets(buckets) {
     const BATCH = 400;
@@ -609,6 +649,17 @@
       const p = projector(islandDots[k], islandDots[k + 1]);
       if (!p) continue;
       buckets[islandDots[k + 2]].push(p[0], p[1], p[2]);
+    }
+  }
+
+  // 九段线点阵：中线采样点，半径略小，读起来像虚线而不是省面
+  function pushDashDots(buckets, gap, projector) {
+    if (!DASH_ID) return;
+    const rDot = landDotR(gap) * 0.85;
+    for (let k = 0; k < dashDots.length; k += 2) {
+      const p = projector(dashDots[k], dashDots[k + 1]);
+      if (!p) continue;
+      buckets[DASH_ID].push(p[0], p[1], rDot);
     }
   }
 
@@ -663,11 +714,18 @@
         const x = (wrapLon(lon - cam.lon)) * zoom + CW / 2;
         const y = (cam.lat - lat) * zoom + CH / 2;
         if (x < -gap || x > CW + gap || y < -gap || y > CH + gap) continue;
-        buckets[paintProvId(cell[0], cell[1])].push(x, y, rr);
+        buckets[provIdAt(lat, lon)].push(x, y, rr);
       }
     }
     // 南海诸岛等微小岛屿：主采样网格漏采，按格心单独补点
     pushIslandDots(buckets, (lat, lon) => {
+      const x = wrapLon(lon - cam.lon) * zoom + CW / 2;
+      const y = (cam.lat - lat) * zoom + CH / 2;
+      if (x < -gap || x > CW + gap || y < -gap || y > CH + gap) return null;
+      return [x, y, rr];
+    });
+    // 九段线：中线采样点
+    pushDashDots(buckets, gap, (lat, lon) => {
       const x = wrapLon(lon - cam.lon) * zoom + CW / 2;
       const y = (cam.lat - lat) * zoom + CH / 2;
       if (x < -gap || x > CW + gap || y < -gap || y > CH + gap) return null;
@@ -721,11 +779,23 @@
         const y = cy - (c0 * sLat - s0 * cLat * Math.cos(dl)) * R;
         if (x < cx - R - gap || x > cx + R + gap || y < cy - R - gap || y > cy + R + gap) continue;
         const t = Math.sqrt((x - cx) * (x - cx) + (y - cy) * (y - cy)) / R;
-        buckets[paintProvId(cell[0], cell[1])].push(x, y, rDot * (1 - t * 0.18));
+        buckets[provIdAt(lat, lon)].push(x, y, rDot * (1 - t * 0.18));
       }
     }
     // 南海诸岛等微小岛屿：主采样网格漏采，按格心单独补点
     pushIslandDots(buckets, (lat, lon) => {
+      const sLat = Math.sin(rad(lat)), cLat = Math.cos(rad(lat));
+      const dl = rad(wrapLon(lon - cam.lon));
+      const zz = s0 * sLat + c0 * cLat * Math.cos(dl);
+      if (zz < 0.03) return null;
+      const x = cx + cLat * Math.sin(dl) * R;
+      const y = cy - (c0 * sLat - s0 * cLat * Math.cos(dl)) * R;
+      if (x < cx - R - gap || x > cx + R + gap || y < cy - R - gap || y > cy + R + gap) return null;
+      const t = Math.sqrt((x - cx) * (x - cx) + (y - cy) * (y - cy)) / R;
+      return [x, y, rDot * (1 - t * 0.18)];
+    });
+    // 九段线：中线采样点
+    pushDashDots(buckets, gap, (lat, lon) => {
       const sLat = Math.sin(rad(lat)), cLat = Math.cos(rad(lat));
       const dl = rad(wrapLon(lon - cam.lon));
       const zz = s0 * sLat + c0 * cLat * Math.cos(dl);
@@ -766,8 +836,8 @@
       const g = screenPos(p.lat, p.lon);
       if (!g) continue;
       if (g.x < 8 || g.x > CW - 8 || g.y < 8 || g.y > CH - 8) continue;
-      // 省面在屏幕上的大致半径：√格数 × 格宽 × zoom
-      const rPx = Math.sqrt(p.n) * CELL * cam.zoom * 0.45;
+      // 省面在屏幕上的大致半径：√格数 × 省格宽 × zoom
+      const rPx = Math.sqrt(p.n) * PCELL * cam.zoom * 0.45;
       if (rPx < 11) continue;
       const useAbbr = rPx < 26 || (p.name.length >= 3 && rPx < 34);
       const text = useAbbr ? p.abbr : p.name;
