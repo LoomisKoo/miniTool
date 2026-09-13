@@ -27,7 +27,8 @@ const PROV_ORDER = [
   '广东', '广西', '海南',
   '重庆', '四川', '贵州', '云南', '西藏',
   '陕西', '甘肃', '青海', '宁夏', '新疆',
-  '香港', '澳门', '台湾'
+  '香港', '澳门', '台湾',
+  '南海诸岛'   // DataV 的 JD 要素（九段线），非行政区
 ];
 const idOf = new Map(PROV_ORDER.map((n, i) => [n, i + 1]));
 
@@ -77,7 +78,9 @@ const fillLonRange = (rowTmp, lon0, lon1, id) => {
 
 let painted = 0;
 for (const f of geo.features || []) {
-  const name = shortName(f.properties && f.properties.name);
+  // 九段线（DataV 的 JD 要素，名字为空）单独归到「南海诸岛」
+  const isDash = f.properties && f.properties.adchar === 'JD';
+  const name = isDash ? '南海诸岛' : shortName(f.properties && f.properties.name);
   const id = idOf.get(name);
   if (!id || !f.geometry) {
     console.warn('skip', f.properties && f.properties.name, '->', name);

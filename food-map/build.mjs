@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 打包 寻味 — 各平台扁平多文件 + zip
+ * 打包 美食图鉴 — 各平台扁平多文件 + zip
  * 用法:
  *   node build.mjs
  *   node build.mjs kuaishou xiaohongshu
@@ -13,7 +13,7 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ALL = ['douyin', 'kuaishou', 'xiaohongshu'];
 const MAX_BYTES = 8 * 1024 * 1024;
-const SLUG = 'xunwei';
+const SLUG = 'meishitujian';
 const FILES = ['index.html', 'style.css', 'app.js', 'data.js', 'land.js', 'prov-land.js'];
 
 const targets = process.argv.slice(2).length ? process.argv.slice(2) : ALL;
@@ -30,6 +30,19 @@ function assertOffline(dir) {
   if (/fetch\s*\(|XMLHttpRequest|axios|WebSocket/i.test(text)) {
     console.warn('  ⚠ 检测到网络 API 关键字，请确认未实际发起请求');
   }
+}
+
+// 各平台安全区差异：源码默认按小红书容器
+// 小红书：一级页页内标题与容器顶栏文字相同，允许重叠，不再为容器顶栏下移
+// 快手：无容器顶栏、无刘海安全区占位
+const PLATFORM_CSS = {
+  xiaohongshu: ':root { --nav-h: 0px; }',
+  kuaishou: ':root { --safe-t: 0px; --nav-h: 0px; }'
+};
+
+function assertXhs(html) {
+  if (/<script(?![^>]*\ssrc=)[^>]*>/i.test(html)) throw new Error('小红书产物含内联 script');
+  if (/\son\w+\s*=/i.test(html)) throw new Error('小红书产物含 HTML 内联事件');
 }
 
 function zipFiles(zipPath, files) {
@@ -54,7 +67,18 @@ function buildOne(platformId) {
     fs.copyFileSync(src, dest);
     copied.push(dest);
   }
+
+  // 按平台覆盖安全区变量
+  const extraCss = PLATFORM_CSS[platformId];
+  if (extraCss) {
+    const stylePath = path.join(outDir, 'style.css');
+    fs.writeFileSync(stylePath, fs.readFileSync(stylePath, 'utf8') + `\n\n/* platform:${platformId} */\n${extraCss}\n`);
+  }
+
   assertOffline(outDir);
+  if (platformId === 'xiaohongshu') {
+    assertXhs(fs.readFileSync(path.join(outDir, 'index.html'), 'utf8'));
+  }
 
   const zipPath = path.join(__dirname, 'dist', `${platformId}-${SLUG}.zip`);
   zipFiles(zipPath, copied);

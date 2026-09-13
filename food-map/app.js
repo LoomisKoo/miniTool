@@ -255,7 +255,8 @@
     '广东', '广西', '海南',
     '重庆', '四川', '贵州', '云南', '西藏',
     '陕西', '甘肃', '青海', '宁夏', '新疆',
-    '香港', '澳门', '台湾'
+    '香港', '澳门', '台湾',
+    '南海诸岛'   // 九段线（DataV JD 要素），非行政区，只画线不参与名录
   ];
   // 境外深灰；国内四色（深底食图：亮橄榄/金黄/橘红/亮蓝）
   const LAND_COLOR0 = '#3a3a42';
@@ -352,6 +353,25 @@
       colorIdx[id] = ci;
       provColors[id] = MAP_PALETTE[ci - 1];
     }
+    // 九段线：不属于任何省，用中性灰蓝，读起来像边界线而不是省面
+    const dashId = PROV_ORDER.indexOf('南海诸岛') + 1;
+    if (dashId > 0) provColors[dashId] = '#9aa3b4';
+  })();
+
+  // 小岛补点表：省级栅格里有、底图 land 里没有的格子（南海诸岛/西沙/南沙等）。
+  // Natural Earth 110m 不含这些微小岛屿，而主采样网格（0.25° 以上步进）会大概率漏采，
+  // 所以这里预先取出格心，逐帧直接补点 —— 稀疏但保证出现在正确位置。
+  const islandDots = [];   // [lat, lon, provId, ...]
+  (function buildIslandDots() {
+    for (let r = 0; r < ROWS; r++) {
+      const base = r * COLS;
+      for (let c = 0; c < COLS; c++) {
+        const i = base + c;
+        const id = provGrid[i];
+        if (!id || land[i]) continue;
+        islandDots.push(90 - (r + 0.5) * CELL, (c + 0.5) * CELL - 180, id);
+      }
+    }
   })();
 
   // 省名简称（一字）；显示名用 PROV_ORDER（广西/广东，非全称）
@@ -363,7 +383,7 @@
     '广东': '粤', '广西': '桂', '海南': '琼',
     '重庆': '渝', '四川': '川', '贵州': '贵', '云南': '云', '西藏': '藏',
     '陕西': '陕', '甘肃': '甘', '青海': '青', '宁夏': '宁', '新疆': '新',
-    '香港': '港', '澳门': '澳', '台湾': '台'
+    '香港': '港', '澳门': '澳', '台湾': '台', '南海诸岛': '南海'
   };
   // 省重心（格点均值），供标签定位
   const provLabel = Array.from({ length: PROV_ORDER.length + 1 }, () => null);
@@ -389,6 +409,7 @@
     for (let id = 1; id <= PROV_ORDER.length; id++) {
       if (!cnt[id]) continue;
       const name = PROV_ORDER[id - 1];
+      if (name === '南海诸岛') continue; // 九段线是散落的线段，单个重心标签没有意义
       provLabel[id] = {
         name,
         abbr: PROV_ABBR[name] || name.charAt(0),
@@ -415,7 +436,8 @@
     '北京': '北京市', '天津': '天津市', '上海': '上海市', '重庆': '重庆市',
     '内蒙古': '内蒙古自治区', '广西': '广西壮族自治区', '西藏': '西藏自治区',
     '宁夏': '宁夏回族自治区', '新疆': '新疆维吾尔自治区',
-    '香港': '香港特别行政区', '澳门': '澳门特别行政区', '台湾': '台湾省'
+    '香港': '香港特别行政区', '澳门': '澳门特别行政区', '台湾': '台湾省',
+    '南海诸岛': '南海诸岛'
   };
   function formatProvName(name) {
     if (!name) return '';
@@ -581,6 +603,15 @@
     }
   }
 
+  // 小岛点阵：逐格补点，projector(lat,lon) 返回 [x, y, r] 或 null（球面/平面各自投影）
+  function pushIslandDots(buckets, projector) {
+    for (let k = 0; k < islandDots.length; k += 3) {
+      const p = projector(islandDots[k], islandDots[k + 1]);
+      if (!p) continue;
+      buckets[islandDots[k + 2]].push(p[0], p[1], p[2]);
+    }
+  }
+
   // 陆地点阵：按屏幕目标间距换算成经纬度步进（可小于 CELL，高倍时一格内多点）
   // 步进锚定全球网格，拖动不闪烁；手势中用冻结 densStep
   function landStepDeg(gapPx, zoomLike) {
@@ -635,6 +666,13 @@
         buckets[paintProvId(cell[0], cell[1])].push(x, y, rr);
       }
     }
+    // 南海诸岛等微小岛屿：主采样网格漏采，按格心单独补点
+    pushIslandDots(buckets, (lat, lon) => {
+      const x = wrapLon(lon - cam.lon) * zoom + CW / 2;
+      const y = (cam.lat - lat) * zoom + CH / 2;
+      if (x < -gap || x > CW + gap || y < -gap || y > CH + gap) return null;
+      return [x, y, rr];
+    });
     fillProvBuckets(buckets);
     if (densZoom == null) paintProvLabels(false);
     ctx.globalAlpha = 1;
@@ -686,6 +724,18 @@
         buckets[paintProvId(cell[0], cell[1])].push(x, y, rDot * (1 - t * 0.18));
       }
     }
+    // 南海诸岛等微小岛屿：主采样网格漏采，按格心单独补点
+    pushIslandDots(buckets, (lat, lon) => {
+      const sLat = Math.sin(rad(lat)), cLat = Math.cos(rad(lat));
+      const dl = rad(wrapLon(lon - cam.lon));
+      const zz = s0 * sLat + c0 * cLat * Math.cos(dl);
+      if (zz < 0.03) return null;
+      const x = cx + cLat * Math.sin(dl) * R;
+      const y = cy - (c0 * sLat - s0 * cLat * Math.cos(dl)) * R;
+      if (x < cx - R - gap || x > cx + R + gap || y < cy - R - gap || y > cy + R + gap) return null;
+      const t = Math.sqrt((x - cx) * (x - cx) + (y - cy) * (y - cy)) / R;
+      return [x, y, rDot * (1 - t * 0.18)];
+    });
     fillProvBuckets(buckets);
 
     const sh = ctx.createRadialGradient(cx - R * 0.25, cy - R * 0.3, R * 0.1, cx, cy, R);
@@ -1044,7 +1094,7 @@
   const local = e => { const r = wrap.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
   function cancelAnim() { cancelAnimationFrame(animId); }
   function isUiTarget(t) {
-    return !!(t && t.closest && t.closest('#clusterDlg, .zoomctl, #sheet, #filterDlg'));
+    return !!(t && t.closest && t.closest('#clusterDlg, .zoomctl, #sheet, #filterDlg, #clusterMask, #sheetMask'));
   }
 
   wrap.addEventListener('pointerdown', e => {
@@ -1199,6 +1249,10 @@
   }, { passive: false });
 
   function pop(el) { el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop'); }
+  // pop 动画结束后移除 class：否则切页时 display:none → flex 会让残留动画重播（按钮莫名缩放）
+  document.querySelector('.zoomctl').addEventListener('animationend', e => {
+    if (e.animationName === 'btnpop') e.target.classList.remove('pop');
+  });
   function chinaZ() {
     // 平面国视：中国大致入画，明显大于地球仪层级
     const byW = CW / 58;
@@ -1246,9 +1300,9 @@
       else if (zoomChanging) endZoomGesture();
     })(performance.now());
   }
-  function setSel(i) {
+  function setSel(i, keepClusterKey) {
     sel = i;
-    if (i >= 0) selClusterKey = null;
+    if (i >= 0 && !keepClusterKey) selClusterKey = null;
     scheduleDraw();
   }
 
@@ -1307,31 +1361,37 @@
     if (opts.fly) {
       switchTab('map', { keepPlace: true });
       openSheet();
-      setSel(i);
+      setSel(i, opts.keepCluster);
       flyTo(p.lon, p.lat, cam.zoom, false, 520);
     } else {
       openSheet();
-      setSel(i);
+      setSel(i, opts.keepCluster);
     }
   }
   function openSheet() {
     sheet.classList.add('open');
     sheet.setAttribute('aria-hidden', 'false');
+    sheetMask.classList.add('open');
   }
   function hideSheet() {
     sheet.classList.remove('open');
     sheet.setAttribute('aria-hidden', 'true');
+    sheetMask.classList.remove('open');
     openIdx = -1;
   }
-  $('#sheetClose').addEventListener('click', () => {
+  const sheetMask = $('#sheetMask');
+  function closeSheet() {
     hideSheet();
     setSel(-1);
     clusterList.querySelectorAll('.cluster-item.on').forEach((el) => el.classList.remove('on'));
-  });
+  }
+  $('#sheetClose').addEventListener('click', closeSheet);
+  sheetMask.addEventListener('click', closeSheet);
 
   /* ================= 聚合 dialog ================= */
   const clusterDlg = $('#clusterDlg');
   const clusterList = $('#clusterList');
+  const clusterMask = $('#clusterMask');
   const cTitle = $('#cTitle');
   const cSub = $('#cSub');
 
@@ -1365,11 +1425,13 @@
       btn.addEventListener('click', () => {
         clusterList.querySelectorAll('.cluster-item.on').forEach((el) => el.classList.remove('on'));
         btn.classList.add('on');
+        // 保留附近美食 dialog，详情叠在其上，关闭详情后回到列表
         openPlace(idx, { keepCluster: true });
       });
       frag.appendChild(btn);
     });
     clusterList.appendChild(frag);
+    clusterMask.classList.add('open');
     clusterDlg.setAttribute('aria-hidden', 'false');
     // 双 rAF：先让浏览器渲染 dialog 的初始隐藏态（translateY 100%），
     // 下一帧再加 .open 触发过渡，避免 DOM 构建阻塞导致跳过过渡起始帧
@@ -1380,6 +1442,7 @@
   }
   function hideCluster() {
     clusterDlg.classList.remove('open');
+    clusterMask.classList.remove('open');
     clusterDlg.setAttribute('aria-hidden', 'true');
     if (selClusterKey) {
       selClusterKey = null;
@@ -1392,6 +1455,7 @@
     }
   }
   $('#clusterClose').addEventListener('click', hideCluster);
+  clusterMask.addEventListener('click', hideCluster);
   sHeart.addEventListener('click', () => {
     const i = openIdx;
     if (i < 0) return;
@@ -1447,6 +1511,7 @@
   const filterBody = $('#filterBody');
   const filterActive = $('#filterActive');
   const filterBtn = $('#filterBtn');
+  const mapFilterBtn = $('#mapFilter');
   let ingQuery = '';
 
   function toggleSet(set, val) {
@@ -1507,6 +1572,7 @@
   function syncFilterChrome() {
     const on = hasAttrFilter();
     filterBtn.classList.toggle('on', on);
+    mapFilterBtn.classList.toggle('on', on);
     filterActive.innerHTML = '';
     if (!on) {
       filterActive.hidden = true;
@@ -1529,20 +1595,27 @@
   function applyFilters() {
     foodClusterCache.key = '';
     syncFilterChrome();
-    renderList();
+    if (state.tab === 'list') {
+      renderList();
+    } else {
+      // 地图页筛选：给出生效反馈（名录页切回时会重新渲染）
+      const n = PLACES.filter(passAttrFilter).length;
+      toast(hasAttrFilter() ? `已筛选 ${n} 道美食` : '已展示全部美食');
+    }
     scheduleDraw();
     hideFilter();
   }
   function openFilter() {
     renderFilterBody();
-    filterDlg.hidden = false;
+    filterDlg.classList.add('open');
     filterDlg.setAttribute('aria-hidden', 'false');
   }
   function hideFilter() {
-    filterDlg.hidden = true;
+    filterDlg.classList.remove('open');
     filterDlg.setAttribute('aria-hidden', 'true');
   }
   filterBtn.addEventListener('click', openFilter);
+  mapFilterBtn.addEventListener('click', openFilter);
   $('#filterClose').addEventListener('click', hideFilter);
   $('#filterMask').addEventListener('click', hideFilter);
   $('#filterApply').addEventListener('click', applyFilters);
@@ -1640,11 +1713,10 @@
     order.forEach(prov => {
       const list = byProv.get(prov);
       if (!list || !list.length) return;
-      const solo = list.length === 1;
-      const open = solo || expandedProv.has(prov);
+      const open = expandedProv.has(prov);
 
       const block = document.createElement('div');
-      block.className = 'prov-block' + (open ? ' open' : '') + (solo ? ' solo' : '');
+      block.className = 'prov-block' + (open ? ' open' : '');
 
       const head = document.createElement('button');
       head.className = 'prov-head';
@@ -1653,8 +1725,8 @@
         `<span class="prov-name">${prov}</span>` +
         `<span class="prov-count">${list.length}</span>` +
         `<svg class="prov-chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 15l6-6 6 6"/></svg>`;
-      if (!solo) {
-        head.addEventListener('click', () => {
+      // 单条也保留展开/折叠箭头，默认折叠
+      head.addEventListener('click', () => {
           const wasOpen = expandedProv.has(prov);
           if (wasOpen) {
             expandedProv.delete(prov);
@@ -1679,7 +1751,6 @@
             requestAnimationFrame(() => requestAnimationFrame(() => wrap.classList.add('open')));
           }
         });
-      }
       block.appendChild(head);
 
       if (open) {

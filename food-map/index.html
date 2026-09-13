@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>美食图鉴</title>
-<link rel="stylesheet" href="style.css?v=20260913f">
+<link rel="stylesheet" href="style.css?v=20260913g">
 </head>
 <body>
 <div id="app">
@@ -20,22 +20,15 @@
       <canvas id="map"></canvas>
       <div class="map-loc" id="mapLoc" aria-live="polite">中国</div>
       <div class="map-hint" id="mapHint">拖动旋转地球 · 双指缩放 · 放大进入平面 · 点亮点看美食</div>
-      <!-- 缩放控件 -->
+      <!-- 缩放与筛选控件 -->
       <div class="zoomctl">
         <button id="zin" aria-label="放大">＋</button>
         <button id="zout" aria-label="缩小">－</button>
         <button id="zreset" aria-label="回到世界">⌂</button>
+        <button id="mapFilter" class="zoom-filter" aria-label="筛选" title="筛选">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3Z"/></svg>
+        </button>
       </div>
-      <!-- 聚合列表：挂在地图区域内，不贴根容器底 -->
-      <section class="cluster-dlg" id="clusterDlg" aria-hidden="true">
-        <div class="grabber"></div>
-        <div class="cluster-head">
-          <h2 id="cTitle">附近美食</h2>
-          <p id="cSub"></p>
-          <button class="cluster-close" id="clusterClose" aria-label="关闭">×</button>
-        </div>
-        <div class="cluster-scroll"><div class="cluster-list" id="clusterList"></div></div>
-      </section>
     </div>
   </section>
 
@@ -46,7 +39,9 @@
         <svg viewBox="0 0 24 24" class="sicon"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
         <input id="searchInput" type="search" placeholder="搜索菜名 / 省市 / 食材" autocomplete="off">
       </div>
-      <button class="filter-toggle" id="filterBtn" title="筛选">筛</button>
+      <button class="filter-toggle" id="filterBtn" aria-label="筛选" title="筛选">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3Z"/></svg>
+      </button>
       <button class="fav-toggle" id="favFilter" title="只看收藏">♥</button>
     </div>
     <div class="filter-chips" id="filterActive" hidden></div>
@@ -54,7 +49,7 @@
   </section>
 
   <!-- 筛选面板 -->
-  <section class="filter-dlg" id="filterDlg" aria-hidden="true" hidden>
+  <section class="filter-dlg" id="filterDlg" aria-hidden="true">
     <div class="filter-mask" id="filterMask"></div>
     <div class="filter-panel">
       <div class="grabber"></div>
@@ -77,12 +72,27 @@
       <span>地图</span>
     </button>
     <button class="tab" data-tab="list">
-      <svg viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg>
+      <svg viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r=".85" fill="currentColor" stroke="none"/><circle cx="4" cy="12" r=".85" fill="currentColor" stroke="none"/><circle cx="4" cy="18" r=".85" fill="currentColor" stroke="none"/></svg>
       <span>名录</span>
     </button>
   </nav>
 
-  <!-- 单点美食详情（固定高度，内容可滚） -->
+  <!-- 附近美食模态背景 -->
+  <div class="cluster-mask" id="clusterMask"></div>
+
+  <!-- 附近美食列表：固定贴屏幕底部，覆盖 tabbar -->
+  <section class="cluster-dlg" id="clusterDlg" aria-hidden="true">
+    <div class="grabber"></div>
+    <div class="cluster-head">
+      <h2 id="cTitle">附近美食</h2>
+      <p id="cSub"></p>
+      <button class="cluster-close" id="clusterClose" aria-label="关闭">×</button>
+    </div>
+    <div class="cluster-scroll"><div class="cluster-list" id="clusterList"></div></div>
+  </section>
+
+  <!-- 单点美食详情（整宽底部弹层，底部直角） -->
+  <div class="sheet-mask" id="sheetMask"></div>
   <section class="sheet" id="sheet" aria-hidden="true">
     <div class="grabber"></div>
     <div class="sheet-head">
@@ -116,8 +126,8 @@
 <div class="toast" id="toast"></div>
 
 <script src="land.js?v=20260908g"></script>
-<script src="prov-land.js?v=20260908g"></script>
+<script src="prov-land.js?v=20260913a"></script>
 <script src="data.js?v=20260908k"></script>
-<script src="app.js?v=20260913e"></script>
+<script src="app.js?v=20260913g"></script>
 </body>
 </html>
