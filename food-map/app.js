@@ -405,25 +405,8 @@
     }
   })();
 
-  // 小岛补点表：省级栅格里有、底图 land 里没有的格子（西沙/南沙/东沙/舟山等）。
-  // Natural Earth 110m 不含这些微小岛屿，主采样网格也会漏采，
-  // 所以预先取出格心，逐帧直接补点 —— 稀疏但保证出现在正确位置。
-  const islandDots = [];   // [lat, lon, provId, ...]
-  (function buildIslandDots() {
-    if (!PCOLS) return;
-    for (let r = 0; r < PROWS; r++) {
-      const base = r * PCOLS;
-      const lat = PTOP - (r + 0.5) * PCELL;
-      for (let c = 0; c < PCOLS; c++) {
-        const id = provGrid[base + c];
-        if (!id) continue;
-        const lon = PLEFT + (c + 0.5) * PCELL;
-        const lr = Math.floor((90 - lat) / CELL), lc = Math.floor((lon + 180) / CELL);
-        if (landAt(lr, lc)) continue;
-        islandDots.push(lat, lon, id);
-      }
-    }
-  })();
+  // 小岛补点表已不再需要：省级栅格直接参与主采样（见 paintFlat/paintGlobe），
+  // 岸线与岛礁自动落在同一套网格上，不再出现第二套更密的点阵。
 
 
   // 省名简称（一字）；显示名用 PROV_ORDER（广西/广东，非全称）
@@ -444,27 +427,40 @@
     const sumLat = new Float64Array(PROV_ORDER.length + 1);
     const sumLon = new Float64Array(PROV_ORDER.length + 1);
     const cnt = new Uint32Array(PROV_ORDER.length + 1);
+    // 岛礁格会拖偏沿海省的重心（海南被南海诸岛的格子拉到 15.4°N，落进海里），
+    // 所以重心只按「底图认定的陆地格」算；若某省全是岛（底图没有），再退回全部格。
+    const landLat = new Float64Array(PROV_ORDER.length + 1);
+    const landLon = new Float64Array(PROV_ORDER.length + 1);
+    const landCnt = new Uint32Array(PROV_ORDER.length + 1);
     for (let r = 0; r < PROWS; r++) {
       const base = r * PCOLS;
       const lat = PTOP - (r + 0.5) * PCELL;
       for (let c = 0; c < PCOLS; c++) {
         const id = provGrid[base + c];
         if (!id) continue;
+        const lon = PLEFT + (c + 0.5) * PCELL;
         sumLat[id] += lat;
-        sumLon[id] += PLEFT + (c + 0.5) * PCELL;
+        sumLon[id] += lon;
         cnt[id]++;
+        if (landAtLatLon(lat, lon)) {
+          landLat[id] += lat;
+          landLon[id] += lon;
+          landCnt[id]++;
+        }
       }
     }
     for (let id = 1; id <= PROV_ORDER.length; id++) {
       if (!cnt[id]) continue;
       const name = PROV_ORDER[id - 1];
       if (name === '南海诸岛') continue; // 九段线是散落的线段，单个重心标签没有意义
+      const useLand = landCnt[id] > 0;
+      const n = useLand ? landCnt[id] : cnt[id];
       provLabel[id] = {
         name,
         abbr: PROV_ABBR[name] || name.charAt(0),
-        lat: sumLat[id] / cnt[id],
-        lon: sumLon[id] / cnt[id],
-        n: cnt[id]
+        lat: (useLand ? landLat[id] : sumLat[id]) / n,
+        lon: (useLand ? landLon[id] : sumLon[id]) / n,
+        n
       };
     }
     // 港澳格点极少，栅格重心偏北，用更贴近视觉中心的坐标
@@ -643,15 +639,6 @@
     }
   }
 
-  // 小岛点阵：逐格补点，projector(lat,lon) 返回 [x, y, r] 或 null（球面/平面各自投影）
-  function pushIslandDots(buckets, projector) {
-    for (let k = 0; k < islandDots.length; k += 3) {
-      const p = projector(islandDots[k], islandDots[k + 1]);
-      if (!p) continue;
-      buckets[islandDots[k + 2]].push(p[0], p[1], p[2]);
-    }
-  }
-
   // 九段线点阵：中线采样点，半径略小，读起来像虚线而不是省面
   function pushDashDots(buckets, gap, projector) {
     if (!DASH_ID) return;
@@ -709,21 +696,17 @@
       if (lat > 89.9 || lat < -89.9) continue;
       for (let j = j0; j <= j1; j++) {
         const lon = wrapLon(-180 + (j + 0.5) * stepDeg);
-        const cell = landAtLatLon(lat, lon);
-        if (!cell) continue;
+        // 陆地的判定取「底图 ∪ 省级栅格」的并集：DataV 岸线比 110m 底图细，
+        // 且含底图完全没有的小岛（西沙/东沙/舟山…）。两者都在同一套采样网格上，
+        // 所以岸线与岛屿不会比内陆更密，也不会错位成另一套点阵。
+        const pid = provIdAt(lat, lon);
+        if (!pid && !landAtLatLon(lat, lon)) continue;
         const x = (wrapLon(lon - cam.lon)) * zoom + CW / 2;
         const y = (cam.lat - lat) * zoom + CH / 2;
         if (x < -gap || x > CW + gap || y < -gap || y > CH + gap) continue;
-        buckets[provIdAt(lat, lon)].push(x, y, rr);
+        buckets[pid].push(x, y, rr);
       }
     }
-    // 南海诸岛等微小岛屿：主采样网格漏采，按格心单独补点
-    pushIslandDots(buckets, (lat, lon) => {
-      const x = wrapLon(lon - cam.lon) * zoom + CW / 2;
-      const y = (cam.lat - lat) * zoom + CH / 2;
-      if (x < -gap || x > CW + gap || y < -gap || y > CH + gap) return null;
-      return [x, y, rr];
-    });
     // 九段线：中线采样点
     pushDashDots(buckets, gap, (lat, lon) => {
       const x = wrapLon(lon - cam.lon) * zoom + CW / 2;
@@ -770,8 +753,8 @@
       const sLat = Math.sin(rad(lat)), cLat = Math.cos(rad(lat));
       for (let j = 0; j < jMax; j++) {
         const lon = -180 + (j + 0.5) * stepDeg;
-        const cell = landAtLatLon(lat, lon);
-        if (!cell) continue;
+        const pid = provIdAt(lat, lon);
+        if (!pid && !landAtLatLon(lat, lon)) continue;
         const dl = rad(wrapLon(lon - cam.lon));
         const zz = s0 * sLat + c0 * cLat * Math.cos(dl);
         if (zz < 0.03) continue;
@@ -779,21 +762,9 @@
         const y = cy - (c0 * sLat - s0 * cLat * Math.cos(dl)) * R;
         if (x < cx - R - gap || x > cx + R + gap || y < cy - R - gap || y > cy + R + gap) continue;
         const t = Math.sqrt((x - cx) * (x - cx) + (y - cy) * (y - cy)) / R;
-        buckets[provIdAt(lat, lon)].push(x, y, rDot * (1 - t * 0.18));
+        buckets[pid].push(x, y, rDot * (1 - t * 0.18));
       }
     }
-    // 南海诸岛等微小岛屿：主采样网格漏采，按格心单独补点
-    pushIslandDots(buckets, (lat, lon) => {
-      const sLat = Math.sin(rad(lat)), cLat = Math.cos(rad(lat));
-      const dl = rad(wrapLon(lon - cam.lon));
-      const zz = s0 * sLat + c0 * cLat * Math.cos(dl);
-      if (zz < 0.03) return null;
-      const x = cx + cLat * Math.sin(dl) * R;
-      const y = cy - (c0 * sLat - s0 * cLat * Math.cos(dl)) * R;
-      if (x < cx - R - gap || x > cx + R + gap || y < cy - R - gap || y > cy + R + gap) return null;
-      const t = Math.sqrt((x - cx) * (x - cx) + (y - cy) * (y - cy)) / R;
-      return [x, y, rDot * (1 - t * 0.18)];
-    });
     // 九段线：中线采样点
     pushDashDots(buckets, gap, (lat, lon) => {
       const sLat = Math.sin(rad(lat)), cLat = Math.cos(rad(lat));
