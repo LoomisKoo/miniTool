@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>美食图鉴</title>
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=20260913f">
 </head>
 <body>
 <div id="app">
@@ -18,6 +18,7 @@
   <section class="screen active" id="mapScreen">
     <div class="mapwrap">
       <canvas id="map"></canvas>
+      <div class="map-loc" id="mapLoc" aria-live="polite">中国</div>
       <div class="map-hint" id="mapHint">拖动旋转地球 · 双指缩放 · 放大进入平面 · 点亮点看美食</div>
       <!-- 缩放控件 -->
       <div class="zoomctl">
@@ -43,11 +44,30 @@
     <div class="searchbar">
       <div class="search">
         <svg viewBox="0 0 24 24" class="sicon"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
-        <input id="searchInput" type="search" placeholder="搜索菜名 / 省市" autocomplete="off">
+        <input id="searchInput" type="search" placeholder="搜索菜名 / 省市 / 食材" autocomplete="off">
       </div>
+      <button class="filter-toggle" id="filterBtn" title="筛选">筛</button>
       <button class="fav-toggle" id="favFilter" title="只看收藏">♥</button>
     </div>
+    <div class="filter-chips" id="filterActive" hidden></div>
     <div class="list-scroll"><div class="sections" id="list"></div></div>
+  </section>
+
+  <!-- 筛选面板 -->
+  <section class="filter-dlg" id="filterDlg" aria-hidden="true" hidden>
+    <div class="filter-mask" id="filterMask"></div>
+    <div class="filter-panel">
+      <div class="grabber"></div>
+      <div class="filter-head">
+        <h2>筛选</h2>
+        <button type="button" class="filter-reset" id="filterReset">清空</button>
+        <button type="button" class="sheet-close" id="filterClose" aria-label="关闭">×</button>
+      </div>
+      <div class="filter-scroll" id="filterBody"></div>
+      <div class="filter-foot">
+        <button type="button" class="filter-apply" id="filterApply">查看结果</button>
+      </div>
+    </div>
   </section>
 
   <!-- 底部 Tab -->
@@ -57,7 +77,7 @@
       <span>地图</span>
     </button>
     <button class="tab" data-tab="list">
-      <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+      <svg viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg>
       <span>名录</span>
     </button>
   </nav>
@@ -74,6 +94,19 @@
       <button class="sheet-close" id="sheetClose" aria-label="关闭">×</button>
     </div>
     <div class="sheet-scroll">
+      <div class="meta-row" id="sMeta"></div>
+      <div class="detail-block" id="sTagsBlock" hidden>
+        <div class="detail-label">特色标签</div>
+        <div class="chip-row" id="sTags"></div>
+      </div>
+      <div class="detail-block" id="sIngBlock" hidden>
+        <div class="detail-label">主要食材</div>
+        <div class="chip-row" id="sIng"></div>
+      </div>
+      <div class="detail-block" id="sCookBlock" hidden>
+        <div class="detail-label">烹饪方式</div>
+        <div class="chip-row" id="sCook"></div>
+      </div>
       <p class="place-desc" id="placeDesc"></p>
     </div>
   </section>
@@ -84,7 +117,7 @@
 
 <script src="land.js?v=20260908g"></script>
 <script src="prov-land.js?v=20260908g"></script>
-<script src="data.js?v=20260908g"></script>
-<script src="app.js?v=20260908h"></script>
+<script src="data.js?v=20260908k"></script>
+<script src="app.js?v=20260913e"></script>
 </body>
 </html>

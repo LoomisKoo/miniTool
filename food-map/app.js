@@ -1,4 +1,4 @@
-/* 寻味 · 逻辑层 v2
+/* 美食图鉴 · 逻辑层 v2
  * 点阵渲染(陆地/海洋均以点阵呈现) / 地球仪-平面双模式 / 手势缩放动画 / 详情展开 / 名录收藏
  */
 (function () {
@@ -19,12 +19,72 @@
 
   /* ================= 数据 ================= */
   const PLACES = window.DATA;
-  const FAV_KEY = 'xunwei-favs';
+  const FAV_KEY = 'meishitujian-favs';
   const groups = [];
   PLACES.forEach(p => { if (!groups.includes(p.sec)) groups.push(p.sec); });
   let favSet = new Set(JSON.parse(localStorage.getItem(FAV_KEY) || '[]'));
   const saveFavs = () => localStorage.setItem(FAV_KEY, JSON.stringify([...favSet]));
   const isFav = i => favSet.has(i);
+
+  /* ================= 筛选（分类 / 口味 / 食材 / 做法） ================= */
+  const filters = { cats: new Set(), tastes: new Set(), ings: new Set(), cooks: new Set() };
+  const ING_PRIORITY = [
+    '猪肉', '牛肉', '羊肉', '鸡肉', '鸭肉', '鱼肉', '虾', '蟹', '鸡蛋',
+    '豆腐', '白菜', '萝卜', '土豆', '番茄', '茄子', '青椒',
+    '葱', '姜', '蒜', '辣椒', '花椒', '大米', '面粉', '面条', '糯米'
+  ];
+  const COOK_PRIORITY = ['炒', '炖', '蒸', '炸', '烤', '煮', '卤', '焖', '煎', '涮', '煲', '烧', '凉拌', '生食', '腌'];
+  function foodOfPlace(p) { return (p && p.foods && p.foods[0]) || {}; }
+  function filterSig() {
+    return [
+      [...filters.cats].sort().join(','),
+      [...filters.tastes].sort().join(','),
+      [...filters.ings].sort().join(','),
+      [...filters.cooks].sort().join(',')
+    ].join('|');
+  }
+  function hasAttrFilter() {
+    return filters.cats.size || filters.tastes.size || filters.ings.size || filters.cooks.size;
+  }
+  function passAttrFilter(p) {
+    if (!hasAttrFilter()) return true;
+    const f = foodOfPlace(p);
+    if (filters.cats.size && !filters.cats.has(f.cat)) return false;
+    if (filters.tastes.size && !filters.tastes.has(f.taste)) return false;
+    if (filters.ings.size) {
+      const ing = f.ing || [];
+      if (![...filters.ings].some((x) => ing.includes(x))) return false;
+    }
+    if (filters.cooks.size) {
+      const cook = f.cook || [];
+      if (![...filters.cooks].some((x) => cook.includes(x))) return false;
+    }
+    return true;
+  }
+  function collectFilterOptions() {
+    const cats = new Set(), tastes = new Set(), ings = new Set(), cooks = new Set();
+    PLACES.forEach((p) => {
+      const f = foodOfPlace(p);
+      if (f.cat) cats.add(f.cat);
+      if (f.taste) tastes.add(f.taste);
+      (f.ing || []).forEach((x) => ings.add(x));
+      (f.cook || []).forEach((x) => cooks.add(x));
+    });
+    const sortZh = (a, b) => a.localeCompare(b, 'zh');
+    const prio = (list, priority) => {
+      const set = new Set(list);
+      const head = priority.filter((x) => set.has(x));
+      const rest = [...set].filter((x) => !priority.includes(x)).sort(sortZh);
+      return [...head, ...rest];
+    };
+    return {
+      cats: [...cats].sort(sortZh),
+      tastes: [...tastes].sort(sortZh),
+      ings: prio([...ings], ING_PRIORITY),
+      cooks: prio([...cooks], COOK_PRIORITY)
+    };
+  }
+  const FILTER_OPTS = collectFilterOptions();
 
   /* ================= 点阵位图解码 ================= */
   const CELL = 0.25, COLS = 1440, ROWS = 720;   // 0.25° 一格（加强岸线采样）
@@ -114,6 +174,58 @@
 
   /* ================= 点阵绘制 ================= */
   let raf = false, dragging = false;
+  // 手势/动画期间锁死点阵密度与投影模式，松手后再按最终 zoom 刷新一次
+  let densZoom = null;
+  let densGap = null;
+  let densStep = null;
+  let densFlat = null;
+  let foodFade = 1, foodFadeAnim = 0;
+  function densityZoom() {
+    return densZoom != null ? densZoom : cam.zoom;
+  }
+  function clusterDensityZoom() {
+    return densZoom != null ? densZoom : cam.zoom;
+  }
+  function viewIsFlat() {
+    return densFlat != null ? densFlat : isFlat();
+  }
+  function computeLandGap(globe, z) {
+    if (globe) return 7.5;
+    const gz = globeMaxZ();
+    const t = clamp((z - gz) / Math.max(28, gz * 5), 0, 1);
+    let gap = 10.5 - t * 2.5;
+    const zTop3 = MAXZ / (1.75 * 1.75);
+    if (z >= zTop3) {
+      const u = clamp((z - zTop3) / Math.max(1e-6, MAXZ - zTop3), 0, 1);
+      gap = 5.6 - u * 1.8;
+    }
+    return gap;
+  }
+  function beginZoomGesture(heldZ) {
+    if (densZoom != null) return;
+    const z = heldZ != null ? heldZ : cam.zoom;
+    densZoom = z;
+    densFlat = z >= globeMaxZ();
+    densGap = computeLandGap(!densFlat, z);
+    densStep = Math.max(0.08, densGap / Math.max(z, 0.01));
+    cancelAnimationFrame(foodFadeAnim);
+    foodFade = 1;
+  }
+  function endZoomGesture() {
+    if (densZoom == null) return;
+    densZoom = null;
+    densGap = null;
+    densStep = null;
+    densFlat = null;
+    foodFade = 0;
+    cancelAnimationFrame(foodFadeAnim);
+    const t0 = performance.now();
+    (function step(t) {
+      foodFade = Math.min(1, (t - t0) / 220);
+      scheduleDraw();
+      if (foodFade < 1) foodFadeAnim = requestAnimationFrame(step);
+    })(performance.now());
+  }
   function scheduleDraw() {
     if (raf) return;
     raf = true;
@@ -126,14 +238,12 @@
   function draw() {
     if (!CW) return;
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-    ctx.fillStyle = '#f5f7f9';
+    ctx.fillStyle = '#0a0a0c';
     ctx.fillRect(0, 0, CW, CH);
-    const gz = globeMaxZ();
-    const d = gz - cam.zoom;
-    // 过渡区只画与美食点同一套投影，避免陆地点与美食锚点错位
-    if (d > 0) paintGlobe(1);
+    if (!viewIsFlat()) paintGlobe(1);
     else paintFlat(1);
     paintFoods();
+    updateMapLoc();
   }
 
   // 陆地点阵：规则方格；中国陆地按省着色
@@ -147,9 +257,9 @@
     '陕西', '甘肃', '青海', '宁夏', '新疆',
     '香港', '澳门', '台湾'
   ];
-  // 境外灰；国内四色（饱和度拉开，相邻易辨）
-  const LAND_COLOR0 = '#c5ced4';
-  const MAP_PALETTE = ['#5f9e68', '#e0b83d', '#d4725a', '#4f8fc4'];
+  // 境外深灰；国内四色（深底食图：亮橄榄/金黄/橘红/亮蓝）
+  const LAND_COLOR0 = '#3a3a42';
+  const MAP_PALETTE = ['#8fb069', '#e8b454', '#e87858', '#6ba8cc'];
   const provColors = [LAND_COLOR0];
   // 省界栅格（DataV 省级边界），境外为 0
   const provGrid = new Uint8Array(COLS * ROWS);
@@ -297,18 +407,140 @@
     }
   })();
 
-  function landGapPx(globe) {
-    if (globe) return 7.5;
-    const gz = globeMaxZ();
-    const t = clamp((cam.zoom - gz) / Math.max(28, gz * 5), 0, 1);
-    let gap = 10.5 - t * 2.5; // 10.5 → 8
-    // 最大约 3 个缩放档（按钮 ×1.75）内再加密
-    const zTop3 = MAXZ / (1.75 * 1.75);
-    if (cam.zoom >= zTop3) {
-      const u = clamp((cam.zoom - zTop3) / Math.max(1e-6, MAXZ - zTop3), 0, 1);
-      gap = 5.6 - u * 1.8; // 5.6 → 3.8
+  /* ================= 顶部位置标题（随视野范围自适应） ================= */
+  const mapLocEl = $('#mapLoc');
+  let lastMapLoc = '';
+  const MUNICIPAL = new Set(['北京', '天津', '上海', '重庆']);
+  const PROV_FULL = {
+    '北京': '北京市', '天津': '天津市', '上海': '上海市', '重庆': '重庆市',
+    '内蒙古': '内蒙古自治区', '广西': '广西壮族自治区', '西藏': '西藏自治区',
+    '宁夏': '宁夏回族自治区', '新疆': '新疆维吾尔自治区',
+    '香港': '香港特别行政区', '澳门': '澳门特别行政区', '台湾': '台湾省'
+  };
+  function formatProvName(name) {
+    if (!name) return '';
+    return PROV_FULL[name] || (name + '省');
+  }
+  function formatCityName(name) {
+    if (!name) return '';
+    if (/[省市县区州盟旗]$/.test(name) || /地区$|自治/.test(name)) return name;
+    return name + '市';
+  }
+  // 由美食点汇总市重心，作粗粒度反查
+  const cityIndex = [];
+  (function buildCityIndex() {
+    const map = new Map();
+    for (let i = 0; i < PLACES.length; i++) {
+      const p = PLACES[i];
+      if (!p.prov || !p.city) continue;
+      const key = p.prov + '|' + p.city;
+      let c = map.get(key);
+      if (!c) {
+        c = { prov: p.prov, city: p.city, lat: 0, lon: 0, n: 0 };
+        map.set(key, c);
+      }
+      c.lat += p.lat;
+      c.lon += p.lon;
+      c.n += 1;
     }
-    return gap;
+    map.forEach(c => {
+      c.lat /= c.n;
+      c.lon /= c.n;
+      cityIndex.push(c);
+    });
+  })();
+
+  function viewSpanDeg() {
+    return Math.min(CW, CH) / Math.max(cam.zoom, 0.01);
+  }
+  function sampleViewProvs() {
+    const counts = new Map();
+    let land = 0;
+    const n = 5;
+    for (let iy = 0; iy < n; iy++) {
+      for (let ix = 0; ix < n; ix++) {
+        const g = geoAtScreen(CW * (ix + 0.5) / n, CH * (iy + 0.5) / n);
+        if (!g) continue;
+        const r = Math.floor((90 - g.lat) / CELL);
+        const c = Math.floor((g.lon + 180) / CELL);
+        const id = provAt(r, c);
+        if (!id) continue;
+        land++;
+        counts.set(id, (counts.get(id) || 0) + 1);
+      }
+    }
+    let bestId = 0, bestN = 0;
+    counts.forEach((v, id) => { if (v > bestN) { bestN = v; bestId = id; } });
+    return { counts, land, bestId, bestN, nProv: counts.size };
+  }
+  function pickCityNear(g, span, provName) {
+    const halfLon = (CW / cam.zoom) * 0.55;
+    const halfLat = (CH / cam.zoom) * 0.55;
+    let best = null, bestScore = -1;
+    for (let i = 0; i < cityIndex.length; i++) {
+      const c = cityIndex[i];
+      if (provName && c.prov !== provName) continue;
+      const dLon = Math.abs(wrapLon(c.lon - g.lon));
+      const dLat = Math.abs(c.lat - g.lat);
+      if (dLon > halfLon || dLat > halfLat) continue;
+      const dist = Math.hypot(dLat, dLon * Math.cos(rad((c.lat + g.lat) * 0.5)));
+      if (dist > Math.max(span * 0.65, 0.35)) continue;
+      const score = c.n / (1 + dist * 10);
+      if (score > bestScore) { bestScore = score; best = c; }
+    }
+    return best;
+  }
+  function resolveMapLoc() {
+    if (!CW || CW < 2) return '中国';
+    const span = viewSpanDeg();
+    const g = geoAtScreen(CW / 2, CH / 2) || { lon: cam.lon, lat: cam.lat };
+    const inChinaBox = g.lon > 70 && g.lon < 140 && g.lat > 15 && g.lat < 55;
+
+    // 地球仪远景
+    if (!isFlat() && cam.zoom < globeMaxZ() * 0.92) {
+      if (span > 45 || cam.zoom < worldZ() * 1.35) return '地球';
+    }
+    if (span > 42) return inChinaBox ? '中国' : '地球';
+
+    const samp = sampleViewProvs();
+    if (samp.land < 2) return inChinaBox ? '中国' : '地球';
+    if (span > 26 || samp.nProv >= 7) return '中国';
+
+    const provName = samp.bestId ? PROV_ORDER[samp.bestId - 1] : null;
+    if (!provName) return inChinaBox ? '中国' : '地球';
+    const provText = formatProvName(provName);
+
+    // 省域：跨度仍大或单省占比不够时只显示省
+    if (span > 7.5 || (samp.bestN / Math.max(1, samp.land) < 0.45 && span > 4)) {
+      return provText;
+    }
+
+    const city = pickCityNear(g, span, provName);
+    if (!city) return provText;
+
+    // 直辖市：不再叠市名
+    if (MUNICIPAL.has(provName) || city.city === provName) {
+      if (span > 2.2) return provText;
+      // 直辖市近景：若有更细地名（city 与省同名则仍省）
+      return provText;
+    }
+
+    const cityText = formatCityName(city.city);
+    if (span > 2.0) return provText + ' · ' + cityText;
+
+    // 更近：仍无区县边界，保持省市（避免用菜名冒充区县）
+    return provText + ' · ' + cityText;
+  }
+  function updateMapLoc() {
+    if (!mapLocEl) return;
+    const t = resolveMapLoc();
+    if (t === lastMapLoc) return;
+    lastMapLoc = t;
+    mapLocEl.textContent = t;
+  }
+
+  function landGapPx(globe) {
+    return computeLandGap(globe, densityZoom());
   }
   function landDotR(spacingPx) {
     return Math.min(2.4, Math.max(1.05, spacingPx * 0.3));
@@ -329,7 +561,7 @@
   function paintProvId(r, c) {
     return provAt(r, c) || 0;
   }
-  // 分批 + 小点用 rect：避免超大 path / arc 在部分 WebView 静默失败
+  // 分批绘制陆地点（统一圆形）
   function fillProvBuckets(buckets) {
     const BATCH = 400;
     for (let pid = 0; pid < buckets.length; pid++) {
@@ -341,13 +573,8 @@
         const end = Math.min(pts.length, i + BATCH * 3);
         for (; i < end; i += 3) {
           const x = pts[i], y = pts[i + 1], rr = pts[i + 2];
-          if (rr <= 1.6) {
-            const s = rr * 1.7;
-            ctx.rect(x - s * 0.5, y - s * 0.5, s, s);
-          } else {
-            ctx.moveTo(x + rr, y);
-            ctx.arc(x, y, rr, 0, TAU);
-          }
+          ctx.moveTo(x + rr, y);
+          ctx.arc(x, y, rr, 0, TAU);
         }
         ctx.fill();
       }
@@ -355,21 +582,34 @@
   }
 
   // 陆地点阵：按屏幕目标间距换算成经纬度步进（可小于 CELL，高倍时一格内多点）
-  // 步进锚定全球网格，拖动不闪烁
+  // 步进锚定全球网格，拖动不闪烁；手势中用冻结 densStep
   function landStepDeg(gapPx, zoomLike) {
-    return Math.max(0.04, gapPx / Math.max(zoomLike, 0.01));
+    return Math.max(0.08, gapPx / Math.max(zoomLike, 0.01));
+  }
+  // 缩出视野变大时只允许 densStep 变粗（不加密），避免每帧换网格闪烁
+  function landStepForView(gap, zoom) {
+    let step = densStep != null ? densStep : landStepDeg(gap, densityZoom());
+    if (densStep == null) return step;
+    const spanLon = (CW + gap * 4) / Math.max(zoom, 0.01);
+    const spanLat = (CH + gap * 4) / Math.max(zoom, 0.01);
+    const cells = (spanLon / step) * (spanLat / step);
+    if (cells > 14000) {
+      densStep = Math.ceil((step * Math.sqrt(cells / 14000)) / 0.05) * 0.05;
+      step = densStep;
+    }
+    return step;
   }
 
   // 平面：按陆地格点步进，高低纬密度一致
   function paintFlat(a) {
     if (a <= 0.01) return;
     const zoom = cam.zoom;
-    const gap = landGapPx(false);
+    const gap = densGap != null ? densGap : landGapPx(false);
     const rr = landDotR(gap);
-    const stepDeg = landStepDeg(gap, zoom);
+    const stepDeg = landStepForView(gap, zoom);
     const buckets = Array.from({ length: PROV_ORDER.length + 1 }, () => []);
     ctx.globalAlpha = a;
-    ctx.fillStyle = '#f5f7f9';
+    ctx.fillStyle = '#0a0a0c';
     ctx.fillRect(0, 0, CW, CH);
 
     const pad = gap * 2;
@@ -396,7 +636,7 @@
       }
     }
     fillProvBuckets(buckets);
-    paintProvLabels(false);
+    if (densZoom == null) paintProvLabels(false);
     ctx.globalAlpha = 1;
   }
 
@@ -411,18 +651,18 @@
     ctx.globalAlpha = a;
     ctx.beginPath(); ctx.arc(cx, cy, R, 0, TAU); ctx.clip();
 
-    ctx.fillStyle = '#f5f7f9';
+    ctx.fillStyle = '#0a0a0c';
     ctx.fillRect(cx - R, cy - R, 2 * R, 2 * R);
     const hi = ctx.createRadialGradient(cx - R * 0.42, cy - R * 0.5, R * 0.1, cx, cy, R);
-    hi.addColorStop(0, 'rgba(255,255,255,.75)');
-    hi.addColorStop(0.45, 'rgba(245,247,249,.2)');
-    hi.addColorStop(1, 'rgba(210,218,226,0)');
+    hi.addColorStop(0, 'rgba(255,200,140,.18)');
+    hi.addColorStop(0.45, 'rgba(40,40,48,.10)');
+    hi.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = hi;
     ctx.fillRect(cx - R, cy - R, 2 * R, 2 * R);
 
-    const gap = landGapPx(true);
+    const gap = densGap != null ? densGap : landGapPx(true);
     const rDot = landDotR(gap);
-    const stepDeg = landStepDeg(gap, zoom);
+    const stepDeg = landStepForView(gap, zoom);
     const buckets = Array.from({ length: PROV_ORDER.length + 1 }, () => []);
     const s0 = Math.sin(rad(cam.lat)), c0 = Math.cos(rad(cam.lat));
     const iMax = Math.ceil(180 / stepDeg);
@@ -449,17 +689,17 @@
     fillProvBuckets(buckets);
 
     const sh = ctx.createRadialGradient(cx - R * 0.25, cy - R * 0.3, R * 0.1, cx, cy, R);
-    sh.addColorStop(0, 'rgba(40,40,50,0)');
-    sh.addColorStop(0.8, 'rgba(40,40,50,.04)');
-    sh.addColorStop(0.95, 'rgba(40,40,50,.12)');
-    sh.addColorStop(1, 'rgba(40,40,50,.28)');
+    sh.addColorStop(0, 'rgba(0,0,0,0)');
+    sh.addColorStop(0.8, 'rgba(0,0,0,.18)');
+    sh.addColorStop(0.95, 'rgba(0,0,0,.30)');
+    sh.addColorStop(1, 'rgba(0,0,0,.50)');
     ctx.fillStyle = sh;
     ctx.fillRect(cx - R, cy - R, 2 * R, 2 * R);
-    paintProvLabels(true);
+    if (densZoom == null) paintProvLabels(true);
     ctx.restore();
 
     ctx.globalAlpha = a;
-    ctx.strokeStyle = 'rgba(150,162,176,.45)';
+    ctx.strokeStyle = 'rgba(255,255,255,.10)';
     ctx.lineWidth = 1.2;
     ctx.beginPath(); ctx.arc(cx, cy, R, 0, TAU); ctx.stroke();
     ctx.globalAlpha = 1;
@@ -483,9 +723,9 @@
       const text = useAbbr ? p.abbr : p.name;
       const fs = Math.round(clamp(useAbbr ? rPx * 0.42 : rPx * 0.28, 9, 15));
       ctx.font = `650 ${fs}px "PingFang SC",-apple-system,sans-serif`;
-      ctx.fillStyle = 'rgba(255,255,255,.72)';
+      ctx.fillStyle = 'rgba(0,0,0,.55)';
       ctx.fillText(text, g.x + 0.6, g.y + 0.8);
-      ctx.fillStyle = 'rgba(32,38,48,.78)';
+      ctx.fillStyle = 'rgba(255,255,255,.88)';
       ctx.fillText(text, g.x, g.y);
     }
   }
@@ -534,7 +774,8 @@
   }
   function foodAggDeg() {
     const minSepPx = foodMinSepPx();
-    const raw = minSepPx / Math.max(cam.zoom, 0.01);
+    const z = clusterDensityZoom();
+    const raw = minSepPx / Math.max(z, 0.01);
     const steps = [12, 8, 5, 3, 2, 1, 0.5, 0.35];
     let desired = steps[0];
     for (let i = 0; i < steps.length; i++) {
@@ -599,7 +840,10 @@
 
   let foodClusterCache = { key: '', items: [] };
   function foodClusterKey() {
-    return foodAggDeg() + '@' + Math.round(cam.zoom * 40);
+    const agg = foodAggDeg();
+    const fk = filterSig();
+    if (densZoom != null) return 'hold:' + agg + '|' + fk;
+    return agg + '@' + Math.round(cam.zoom * 40) + '|' + fk;
   }
   function ensureFoodClusters() {
     const key = foodClusterKey();
@@ -607,6 +851,7 @@
     const agg = foodAggDeg();
     const buckets = new Map();
     for (let i = 0; i < PLACES.length; i++) {
+      if (!passAttrFilter(PLACES[i])) continue;
       const p = PLACES[i];
       const gi = Math.floor((p.lat + 90) / agg);
       const gj = Math.floor((p.lon + 180) / agg);
@@ -633,13 +878,13 @@
         key: b.key
       });
     }
-    const minDeg = foodMinSepPx() / Math.max(cam.zoom, 0.01);
+    const minDeg = foodMinSepPx() / Math.max(clusterDensityZoom(), 0.01);
     foodClusterCache = { key, items: mergeByGeo(items, minDeg) };
     return foodClusterCache.items;
   }
 
   function foodDotRadius(count) {
-    const zoom = cam.zoom, flat = isFlat(), gz = globeMaxZ();
+    const zoom = cam.zoom, flat = viewIsFlat(), gz = globeMaxZ();
     const cluster = count > 1;
     if (!flat) {
       const t = clamp((zoom - minZoom) / Math.max(0.01, gz - minZoom), 0, 1);
@@ -650,7 +895,7 @@
   }
 
   function screenPos(lat, lon) {
-    if (isFlat()) {
+    if (viewIsFlat()) {
       const [x, y] = flatXY(lon, lat);
       return { x, y, z: 1 };
     }
@@ -673,7 +918,7 @@
     ctx.fillStyle = fill;
     ctx.fill();
     ctx.lineWidth = highlighted ? 3.2 : 1.6;
-    ctx.strokeStyle = highlighted ? '#e8c86a' : 'rgba(255,248,240,.95)';
+    ctx.strokeStyle = highlighted ? '#e8c86a' : 'rgba(255,240,220,.85)';
     ctx.stroke();
     if (label != null && label !== '') {
       ctx.fillStyle = '#fffaf5';
@@ -687,27 +932,76 @@
 
   function paintFoods() {
     if (!CW) return;
-    const flat = isFlat();
+    const flat = viewIsFlat();
     const agg = foodAggDeg();
     const m = 36;
     const clusters = ensureFoodClusters();
     hitList = [];
+    const prevA = ctx.globalAlpha;
+    ctx.globalAlpha = prevA * (0.35 + 0.65 * foodFade);
 
     let selDrawn = false;
+
+    function drawOne(lat, lon, count, ids, key, useI, highlighted) {
+      const g = screenPos(lat, lon);
+      if (!g) return null;
+      if (g.x < -m || g.x > CW + m || g.y < -m || g.y > CH + m) return null;
+      const baseR = foodDotRadius(count) * (flat ? 1 : (0.72 + 0.28 * (g.z || 1)));
+      const fill = count > 1 ? '#ff7a1a' : '#ff9d4d';
+      const label = count > 1
+        ? Math.min(99, count)
+        : (PLACES[useI].n || '?').charAt(0);
+      const rr = drawFoodMarker(g.x, g.y, baseR, fill, label, highlighted);
+      hitList.push({
+        kind: count > 1 ? 'cluster' : 'place',
+        i: useI,
+        ids: ids.slice(),
+        key,
+        n: count,
+        x: g.x, y: g.y,
+        r: rr + (flat ? 14 : 10),
+        lon, lat
+      });
+      return { g, rr };
+    }
+
     for (const b of clusters) {
       const count = b.n;
       const hasSel = sel >= 0 && b.ids.indexOf(sel) >= 0;
+
+      // 选中点若在聚合内：拆出单独高亮，其余仍聚合
+      if (hasSel && count > 1) {
+        const others = b.ids.filter(id => id !== sel);
+        if (others.length === 1) {
+          const oi = others[0];
+          const op = PLACES[oi];
+          drawOne(op.lat, op.lon, 1, [oi], b.key + ':o', oi, false);
+        } else if (others.length > 1) {
+          let lat = 0, lon = 0;
+          others.forEach(id => { lat += PLACES[id].lat; lon += PLACES[id].lon; });
+          lat /= others.length; lon /= others.length;
+          drawOne(lat, lon, others.length, others, b.key + ':r', others[0], false);
+        }
+        const sp = PLACES[sel];
+        const drawn = drawOne(sp.lat, sp.lon, 1, [sel], b.key + ':s', sel, true);
+        if (drawn) {
+          selDrawn = true;
+          selDot.hidden = false;
+          selDot.style.opacity = String(0.35 + 0.65 * foodFade);
+          selDot.style.setProperty('--x', (Math.round(drawn.g.x * 10) / 10) + 'px');
+          selDot.style.setProperty('--y', (Math.round((drawn.g.y - drawn.rr - 10) * 10) / 10) + 'px');
+          selDot.style.setProperty('--sc', '1');
+          selLab.textContent = PLACES[sel].n;
+        }
+        continue;
+      }
+
       let useLat = b.lat, useLon = b.lon, useI = b.i;
       if (hasSel && count === 1) {
         useLat = PLACES[sel].lat;
         useLon = PLACES[sel].lon;
         useI = sel;
-      } else if (hasSel) {
-        useI = sel;
       }
-      const g = screenPos(useLat, useLon);
-      if (!g) continue;
-      if (g.x < -m || g.x > CW + m || g.y < -m || g.y > CH + m) continue;
 
       let hi = hasSel && count === 1;
       if (selClusterKey) {
@@ -719,36 +1013,19 @@
         });
       }
 
-      const baseR = foodDotRadius(count) * (flat ? 1 : (0.72 + 0.28 * (g.z || 1)));
-      const fill = count > 1 ? '#c44532' : '#d85a42';
-      const label = count > 1
-        ? Math.min(99, count)
-        : (PLACES[useI].n || '?').charAt(0);
-
-      const rr = drawFoodMarker(g.x, g.y, baseR, fill, label, hi);
-
-      hitList.push({
-        kind: count > 1 ? 'cluster' : 'place',
-        i: useI,
-        ids: b.ids.slice(),
-        key: b.key,
-        n: count,
-        x: g.x, y: g.y,
-        r: rr + (flat ? 14 : 10),
-        lon: useLon, lat: useLat
-      });
-
-      if (hi && count === 1) {
+      const drawn = drawOne(useLat, useLon, count, b.ids, b.key, useI, hi);
+      if (drawn && hi && count === 1) {
         selDrawn = true;
         selDot.hidden = false;
-        selDot.style.opacity = '1';
-        selDot.style.setProperty('--x', (Math.round(g.x * 10) / 10) + 'px');
-        selDot.style.setProperty('--y', (Math.round((g.y - rr - 10) * 10) / 10) + 'px');
+        selDot.style.opacity = String(0.35 + 0.65 * foodFade);
+        selDot.style.setProperty('--x', (Math.round(drawn.g.x * 10) / 10) + 'px');
+        selDot.style.setProperty('--y', (Math.round((drawn.g.y - drawn.rr - 10) * 10) / 10) + 'px');
         selDot.style.setProperty('--sc', '1');
         selLab.textContent = PLACES[sel].n;
       }
     }
 
+    ctx.globalAlpha = prevA;
     if (!selDrawn) selDot.hidden = true;
   }
 
@@ -766,8 +1043,12 @@
   let pinchD = 0, pinchZ = 1, moved = false, movedPx = 0, animId = 0;
   const local = e => { const r = wrap.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
   function cancelAnim() { cancelAnimationFrame(animId); }
+  function isUiTarget(t) {
+    return !!(t && t.closest && t.closest('#clusterDlg, .zoomctl, #sheet, #filterDlg'));
+  }
 
   wrap.addEventListener('pointerdown', e => {
+    if (isUiTarget(e.target)) return;
     try { (e.target || canvas).setPointerCapture(e.pointerId); } catch (err) {}
     ptrs.set(e.pointerId, local(e));
     pinchD = 0; moved = false; movedPx = 0;
@@ -777,6 +1058,7 @@
       const [a, b] = [...ptrs.values()];
       pinchD = Math.hypot(a[0] - b[0], a[1] - b[1]);
       pinchZ = cam.zoom;
+      beginZoomGesture();
     }
   });
   wrap.addEventListener('pointermove', e => {
@@ -789,6 +1071,7 @@
       const [a, b] = [...ptrs.values()];
       const d = Math.hypot(a[0] - b[0], a[1] - b[1]);
       if (pinchD > 0 && d > 0) {
+        beginZoomGesture();
         const mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2;
         zoomTo(clampZoom(pinchZ * (d / pinchD)), mx, my);
       }
@@ -809,6 +1092,7 @@
     if (ptrs.size === 0) {
       moved = false;
       dragging = false;
+      endZoomGesture();
       scheduleDraw(); // 松手精绘
     }
   }
@@ -896,11 +1180,12 @@
       wheelAcc += dy;
       wheelAx = px; wheelAy = py;
       dragging = true;
+      beginZoomGesture();
       if (!wheelRaf) wheelRaf = requestAnimationFrame(flushWheelZoom);
       clearTimeout(wheelIdleTimer);
       wheelIdleTimer = setTimeout(() => {
-        if (!ptrs.size) { dragging = false; scheduleDraw(); }
-      }, 120);
+        if (!ptrs.size) { dragging = false; endZoomGesture(); scheduleDraw(); }
+      }, 140);
     } else {
       cam.lon = wrapLon(cam.lon + dx / cam.zoom);
       cam.lat -= dy / cam.zoom;
@@ -908,12 +1193,24 @@
       scheduleDraw();
     }
   }, { passive: false });
-  wrap.addEventListener('wheel', e => e.preventDefault(), { passive: false });
+  wrap.addEventListener('wheel', e => {
+    if (isUiTarget(e.target)) return;
+    e.preventDefault();
+  }, { passive: false });
 
   function pop(el) { el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop'); }
+  function chinaZ() {
+    // 平面国视：中国大致入画，明显大于地球仪层级
+    const byW = CW / 58;
+    const byH = CH / 42;
+    return clampZoom(Math.max(globeMaxZ() * 1.2, Math.min(byW, byH), 12));
+  }
   $('#zin').addEventListener('click', () => { pop($('#zin')); animZoomBy(1.75); });
   $('#zout').addEventListener('click', () => { pop($('#zout')); animZoomBy(1 / 1.75); });
-  $('#zreset').addEventListener('click', () => { pop($('#zreset')); flyTo(95, 14, worldZ(), false, 520); });
+  $('#zreset').addEventListener('click', () => {
+    pop($('#zreset'));
+    flyTo(105, 35, chinaZ(), false, 560);
+  });
 
   // 缩放按钮带动画的平滑缩放
   function animZoomBy(f) {
@@ -921,14 +1218,22 @@
     flyTo(g.lon, g.lat, clampZoom(cam.zoom * f), false, 380);
   }
 
-  // 平滑飞行（缓动 + 就近绕转）
+  // 平滑飞行（缓动 + 就近绕转）；缩放变化时冻结点阵/聚合，结束再刷新
   function flyTo(lon, lat, zoom, instant, dur) {
     zoom = clampZoom(zoom);
     lon = cam.lon + wrapLon(lon - cam.lon);
     const s0 = { lon: cam.lon, lat: cam.lat, zoom: cam.zoom };
+    const zoomChanging = Math.abs(zoom - s0.zoom) > 1e-4;
     const t0 = performance.now();
     const total = instant ? 1 : (dur || 700);
     cancelAnim();
+    if (zoomChanging) {
+      densZoom = null;
+      densGap = null;
+      densStep = null;
+      densFlat = null;
+      beginZoomGesture(zoom < s0.zoom ? zoom : s0.zoom);
+    }
     (function step(t) {
       const k = Math.min(1, (t - t0) / total);
       const e = 1 - Math.pow(1 - k, 3);
@@ -938,6 +1243,7 @@
       clampCam();
       scheduleDraw();
       if (k < 1) animId = requestAnimationFrame(step);
+      else if (zoomChanging) endZoomGesture();
     })(performance.now());
   }
   function setSel(i) {
@@ -948,25 +1254,63 @@
 
   /* ================= 单点详情 ================= */
   const sName = $('#sName'), sSub = $('#sSub'), placeDesc = $('#placeDesc'), sHeart = $('#sHeart');
+  const sMeta = $('#sMeta'), sTags = $('#sTags'), sIng = $('#sIng'), sCook = $('#sCook');
+  const sTagsBlock = $('#sTagsBlock'), sIngBlock = $('#sIngBlock'), sCookBlock = $('#sCookBlock');
   let openIdx = -1;
 
+  function foodOf(p) { return foodOfPlace(p); }
+  function fillChips(el, list) {
+    el.innerHTML = '';
+    (list || []).forEach((t) => {
+      const span = document.createElement('span');
+      span.className = 'chip';
+      span.textContent = t;
+      el.appendChild(span);
+    });
+  }
+  function fillMeta(f) {
+    sMeta.innerHTML = '';
+    const items = [];
+    if (f.cat) items.push(['cat', f.cat]);
+    if (f.taste) items.push(['taste', f.taste]);
+    if (f.cui) items.push(['cui', f.cui]);
+    items.forEach(([cls, text]) => {
+      const span = document.createElement('span');
+      span.className = 'meta-pill ' + cls;
+      span.textContent = text;
+      sMeta.appendChild(span);
+    });
+  }
+  function specialtyTags(f) {
+    const skip = new Set([f.cat, f.taste, f.cui].filter(Boolean));
+    return (f.tags || []).filter((t) => !skip.has(t));
+  }
+
   function openPlace(i, opts = {}) {
-    hideCluster();
+    if (!opts.keepCluster) hideCluster();
     const p = PLACES[i];
     openIdx = i;
     sName.textContent = p.n;
     const where = [p.prov, p.city].filter(Boolean).filter((v, idx, a) => a.indexOf(v) === idx).join(' · ');
     sSub.textContent = where || p.sec || '';
-    const f = (p.foods && p.foods[0]) || {};
+    const f = foodOf(p);
     placeDesc.textContent = f.d || '暂无简介';
+    fillMeta(f);
+    const tags = specialtyTags(f);
+    fillChips(sTags, tags);
+    sTagsBlock.hidden = !tags.length;
+    fillChips(sIng, f.ing);
+    sIngBlock.hidden = !(f.ing && f.ing.length);
+    fillChips(sCook, f.cook);
+    sCookBlock.hidden = !(f.cook && f.cook.length);
     sHeart.classList.toggle('on', isFav(i));
-    openSheet();
-    const focusZ = () => Math.max(globeMaxZ() * 1.5, 15);
     if (opts.fly) {
-      switchTab('map');
-      flyTo(p.lon, p.lat, opts.zoom || focusZ(), false, 760);
-      setTimeout(() => setSel(i), 400);
+      switchTab('map', { keepPlace: true });
+      openSheet();
+      setSel(i);
+      flyTo(p.lon, p.lat, cam.zoom, false, 520);
     } else {
+      openSheet();
       setSel(i);
     }
   }
@@ -982,6 +1326,7 @@
   $('#sheetClose').addEventListener('click', () => {
     hideSheet();
     setSel(-1);
+    clusterList.querySelectorAll('.cluster-item.on').forEach((el) => el.classList.remove('on'));
   });
 
   /* ================= 聚合 dialog ================= */
@@ -997,8 +1342,10 @@
     scheduleDraw();
     const list = (ids || []).slice();
     cTitle.textContent = '附近美食';
-    cSub.textContent = `共 ${list.length} 道 · 点击展开简介`;
+    cSub.textContent = `共 ${list.length} 道 · 点击查看详情`;
     clusterList.innerHTML = '';
+    // 用 DocumentFragment 批量构建，避免逐个 appendChild 触发多次重排
+    const frag = document.createDocumentFragment();
     list.forEach((idx) => {
       const p = PLACES[idx];
       if (!p) return;
@@ -1014,15 +1361,19 @@
           `<div class="csub">${desc}</div>` +
         `</span>` +
         `<span class="chev">›</span>`;
+      btn.dataset.idx = String(idx);
       btn.addEventListener('click', () => {
-        const on = btn.classList.contains('open');
-        clusterList.querySelectorAll('.cluster-item.open').forEach(el => el.classList.remove('open'));
-        if (!on) btn.classList.add('open');
+        clusterList.querySelectorAll('.cluster-item.on').forEach((el) => el.classList.remove('on'));
+        btn.classList.add('on');
+        openPlace(idx, { keepCluster: true });
       });
-      clusterList.appendChild(btn);
+      frag.appendChild(btn);
     });
-    clusterDlg.classList.add('open');
+    clusterList.appendChild(frag);
     clusterDlg.setAttribute('aria-hidden', 'false');
+    // 双 rAF：先让浏览器渲染 dialog 的初始隐藏态（translateY 100%），
+    // 下一帧再加 .open 触发过渡，避免 DOM 构建阻塞导致跳过过渡起始帧
+    requestAnimationFrame(() => requestAnimationFrame(() => clusterDlg.classList.add('open')));
     if (Number.isFinite(lon) && Number.isFinite(lat)) {
       flyTo(lon, lat, cam.zoom, false, 320);
     }
@@ -1033,6 +1384,11 @@
     if (selClusterKey) {
       selClusterKey = null;
       scheduleDraw();
+    }
+    // 关附近美食时同步关掉详情
+    if (sheet.classList.contains('open')) {
+      hideSheet();
+      setSel(-1);
     }
   }
   $('#clusterClose').addEventListener('click', hideCluster);
@@ -1059,33 +1415,163 @@
   let q = '', onlyFav = false;
   const expandedProv = new Set(); // 展开的省
 
-  function switchTab(t) {
+  function switchTab(t, opts = {}) {
     state.tab = t;
-    hideSheet();
-    hideCluster();
-    setSel(-1);
+    hideFilter(); // 切页时关闭筛选面板，避免从名录「在地图查看」后面板仍悬在地图后
+    if (!opts.keepPlace) {
+      hideSheet();
+      hideCluster();
+      setSel(-1);
+    }
     $('#mapScreen').classList.toggle('active', t === 'map');
     $('#listScreen').classList.toggle('active', t === 'list');
     document.querySelectorAll('.tab').forEach(b => b.classList.toggle('active', b.dataset.tab === t));
     if (t === 'list') renderList();
     else {
-      requestAnimationFrame(resize);
-      scheduleDraw();
+      // 切回地图页时，屏幕刚从 display:none 变为 flex，需要等布局稳定后再取尺寸重绘
+      requestAnimationFrame(() => {
+        resize();
+        requestAnimationFrame(() => {
+          resize();
+          scheduleDraw();
+        });
+      });
     }
   }
   document.querySelectorAll('.tab').forEach(b => b.addEventListener('click', () => switchTab(b.dataset.tab)));
   $('#searchInput').addEventListener('input', e => { q = e.target.value.trim().toLowerCase(); renderList(); });
   $('#favFilter').addEventListener('click', () => { onlyFav = !onlyFav; $('#favFilter').classList.toggle('on', onlyFav); renderList(); });
 
+  /* ---- 筛选面板 ---- */
+  const filterDlg = $('#filterDlg');
+  const filterBody = $('#filterBody');
+  const filterActive = $('#filterActive');
+  const filterBtn = $('#filterBtn');
+  let ingQuery = '';
+
+  function toggleSet(set, val) {
+    if (set.has(val)) set.delete(val);
+    else set.add(val);
+  }
+  function renderFilterBody() {
+    const sections = [
+      { key: 'cats', title: '分类', list: FILTER_OPTS.cats, set: filters.cats },
+      { key: 'tastes', title: '口味', list: FILTER_OPTS.tastes, set: filters.tastes },
+      { key: 'cooks', title: '做法', list: FILTER_OPTS.cooks, set: filters.cooks },
+      { key: 'ings', title: '食材', list: FILTER_OPTS.ings, set: filters.ings, search: true }
+    ];
+    filterBody.innerHTML = '';
+    sections.forEach((sec) => {
+      const wrap = document.createElement('div');
+      wrap.className = 'filter-sec';
+      wrap.innerHTML = `<h3>${sec.title}</h3>`;
+      if (sec.search) {
+        const input = document.createElement('input');
+        input.className = 'filter-search';
+        input.type = 'search';
+        input.placeholder = '搜索食材…';
+        input.value = ingQuery;
+        input.addEventListener('input', (e) => {
+          ingQuery = e.target.value.trim();
+          renderFilterBody();
+          const el = filterBody.querySelector('.filter-search');
+          if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
+        });
+        wrap.appendChild(input);
+      }
+      const row = document.createElement('div');
+      row.className = 'chip-row';
+      let list = sec.list;
+      if (sec.search && ingQuery) {
+        const k = ingQuery.toLowerCase();
+        list = list.filter((x) => x.toLowerCase().includes(k));
+      } else if (sec.search) {
+        list = list.slice(0, 48);
+      }
+      list.forEach((val) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'chip' + (sec.set.has(val) ? ' on' : '');
+        btn.textContent = val;
+        btn.addEventListener('click', () => {
+          toggleSet(sec.set, val);
+          btn.classList.toggle('on', sec.set.has(val));
+          syncFilterChrome();
+        });
+        row.appendChild(btn);
+      });
+      wrap.appendChild(row);
+      filterBody.appendChild(wrap);
+    });
+  }
+  function syncFilterChrome() {
+    const on = hasAttrFilter();
+    filterBtn.classList.toggle('on', on);
+    filterActive.innerHTML = '';
+    if (!on) {
+      filterActive.hidden = true;
+      return;
+    }
+    filterActive.hidden = false;
+    const add = (label, set) => {
+      [...set].forEach((v) => {
+        const span = document.createElement('span');
+        span.className = 'fchip';
+        span.textContent = label + v;
+        filterActive.appendChild(span);
+      });
+    };
+    add('', filters.cats);
+    add('', filters.tastes);
+    add('', filters.cooks);
+    add('', filters.ings);
+  }
+  function applyFilters() {
+    foodClusterCache.key = '';
+    syncFilterChrome();
+    renderList();
+    scheduleDraw();
+    hideFilter();
+  }
+  function openFilter() {
+    renderFilterBody();
+    filterDlg.hidden = false;
+    filterDlg.setAttribute('aria-hidden', 'false');
+  }
+  function hideFilter() {
+    filterDlg.hidden = true;
+    filterDlg.setAttribute('aria-hidden', 'true');
+  }
+  filterBtn.addEventListener('click', openFilter);
+  $('#filterClose').addEventListener('click', hideFilter);
+  $('#filterMask').addEventListener('click', hideFilter);
+  $('#filterApply').addEventListener('click', applyFilters);
+  $('#filterReset').addEventListener('click', () => {
+    filters.cats.clear();
+    filters.tastes.clear();
+    filters.ings.clear();
+    filters.cooks.clear();
+    ingQuery = '';
+    renderFilterBody();
+    applyFilters();
+  });
+
   function passFilter(p, i) {
     if (onlyFav && !isFav(i)) return false;
+    if (!passAttrFilter(p)) return false;
     if (!q) return true;
-    // 只匹配地点相关：菜名 / 省 / 市 / 大区（不匹配简介）
     if (p.n.toLowerCase().includes(q)) return true;
     if (p.prov && p.prov.toLowerCase().includes(q)) return true;
     if (p.city && p.city.toLowerCase().includes(q)) return true;
     if (p.sec && p.sec.toLowerCase().includes(q)) return true;
-    return p.foods.some(f => f.n.toLowerCase().includes(q));
+    const f = foodOfPlace(p);
+    if (f.n && f.n.toLowerCase().includes(q)) return true;
+    if ((f.ing || []).some((x) => x.toLowerCase().includes(q))) return true;
+    if ((f.tags || []).some((x) => x.toLowerCase().includes(q))) return true;
+    if (f.cat && f.cat.toLowerCase().includes(q)) return true;
+    if (f.taste && f.taste.toLowerCase().includes(q)) return true;
+    if (f.cui && f.cui.toLowerCase().includes(q)) return true;
+    return p.foods.some(ff => ff.n.toLowerCase().includes(q));
   }
 
   function appendPlaceRow(card, idx) {
@@ -1124,7 +1610,7 @@
     if (!matched.length) {
       const tip = document.createElement('div');
       tip.className = 'sheet-emptytip';
-      tip.textContent = onlyFav ? '还没有收藏，点卡片 ♡ 收藏' : '没有匹配的结果';
+      tip.textContent = onlyFav ? '还没有收藏，点卡片 ♡ 收藏' : (hasAttrFilter() ? '没有符合筛选的结果' : '没有匹配的结果');
       listEl.appendChild(tip);
       return;
     }
@@ -1154,10 +1640,11 @@
     order.forEach(prov => {
       const list = byProv.get(prov);
       if (!list || !list.length) return;
-      const open = expandedProv.has(prov);
+      const solo = list.length === 1;
+      const open = solo || expandedProv.has(prov);
 
       const block = document.createElement('div');
-      block.className = 'prov-block' + (open ? ' open' : '');
+      block.className = 'prov-block' + (open ? ' open' : '') + (solo ? ' solo' : '');
 
       const head = document.createElement('button');
       head.className = 'prov-head';
@@ -1165,35 +1652,66 @@
       head.innerHTML =
         `<span class="prov-name">${prov}</span>` +
         `<span class="prov-count">${list.length}</span>` +
-        `<span class="prov-chev">${open ? '∨' : '›'}</span>`;
-      head.addEventListener('click', () => {
-        if (expandedProv.has(prov)) expandedProv.delete(prov);
-        else expandedProv.add(prov);
-        renderList();
-      });
+        `<svg class="prov-chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 15l6-6 6 6"/></svg>`;
+      if (!solo) {
+        head.addEventListener('click', () => {
+          const wasOpen = expandedProv.has(prov);
+          if (wasOpen) {
+            expandedProv.delete(prov);
+            block.classList.remove('open');
+            const wrap = block.querySelector('.card-wrap');
+            if (wrap) {
+              wrap.classList.remove('open');
+              const done = () => { if (wrap.parentNode) wrap.remove(); };
+              wrap.addEventListener('transitionend', done, { once: true });
+              setTimeout(done, 360);
+            }
+          } else {
+            expandedProv.add(prov);
+            block.classList.add('open');
+            const wrap = document.createElement('div');
+            wrap.className = 'card-wrap';
+            const card = document.createElement('div');
+            card.className = 'card';
+            list.forEach(idx => appendPlaceRow(card, idx));
+            wrap.appendChild(card);
+            block.appendChild(wrap);
+            requestAnimationFrame(() => requestAnimationFrame(() => wrap.classList.add('open')));
+          }
+        });
+      }
       block.appendChild(head);
 
       if (open) {
+        const wrap = document.createElement('div');
+        wrap.className = 'card-wrap open';
         const card = document.createElement('div');
         card.className = 'card';
         list.forEach(idx => appendPlaceRow(card, idx));
-        block.appendChild(card);
+        wrap.appendChild(card);
+        block.appendChild(wrap);
       }
       listEl.appendChild(block);
     });
   }
 
   /* ================= 启动 ================= */
-  resize();
-  cam.lon = 105; cam.lat = 35; // 开局对准中国
-  // 直接进入平面国视，避免球面上中国省色异常时“看不见”
-  cam.zoom = clampZoom(Math.max(globeMaxZ() * 1.15, 12));
-  scheduleDraw();
-  requestAnimationFrame(() => { scheduleDraw(); });
-  setTimeout(() => {
+  function bootResize() {
     resize();
+    if (!CW) return false;
+    cam.lon = 105; cam.lat = 35; // 开局对准中国
+    cam.zoom = chinaZ();
     scheduleDraw();
-  }, 120);
+    return true;
+  }
+  // 首次立即尝试；若布局尚未完成则轮询到拿到尺寸为止
+  if (!bootResize()) {
+    const t = setInterval(() => { if (bootResize()) clearInterval(t); }, 80);
+    // 保险：window load 后再试一次并清理轮询
+    window.addEventListener('load', () => { clearInterval(t); bootResize(); }, { once: true });
+  }
+  // 初始占位缩放，避免 chinaZ 计算前 cam.zoom 为 0
+  cam.zoom = clampZoom(Math.max(globeMaxZ() * 1.15, 12));
   setTimeout(() => {
     const h = $('#mapHint');
     h.classList.add('show');
