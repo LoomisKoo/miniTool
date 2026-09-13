@@ -340,6 +340,37 @@ html, body {
   flex-shrink: 0;
 }
 
+.sheet-dock {
+  max-width: none;
+  width: 100%;
+  margin: 0;
+  overflow: hidden;
+  border-radius: 14px 14px 0 0;
+  padding: 8px 12px calc(28px + var(--safe-bottom));
+}
+
+.sheet-dock .exp-scope {
+  flex-shrink: 0;
+}
+
+.sheet-dock .exp-scroll {
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.sheet-dock .exp-actions {
+  margin-top: 10px;
+  padding-top: 8px;
+  flex-shrink: 0;
+}
+
+#export-share-wrap {
+  margin-top: 0;
+  padding-top: 0;
+}
+
 .exp-actions .btn { flex: 1; }
 
 .panel {
@@ -629,6 +660,11 @@ html, body {
   transform: translateY(0);
 }
 
+.sheet.sheet-dock {
+  max-height: 90vh;
+  height: auto;
+}
+
 .sheet-tall .colors-list,
 .sheet-tall .sheet-scroll {
   flex: 1;
@@ -833,4 +869,47 @@ html, body {
 .toast.show {
   opacity: 1;
   transform: translateX(-50%) translateY(0);
+}
+
+.export-busy {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.46);
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s ease, visibility 0s linear 0.18s;
+}
+
+.export-busy.is-on {
+  visibility: visible;
+  opacity: 1;
+  pointer-events: auto;
+  transition: opacity 0.18s ease, visibility 0s linear 0s;
+}
+
+.export-busy-card {
+  width: min(78vw, 280px);
+  padding: 22px 20px 20px;
+  border-radius: 16px;
+  background: #fff;
+  text-align: center;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.22);
+}
+
+.export-busy-title {
+  font-size: 17px;
+  font-weight: 650;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+
+.export-busy-text {
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--muted);
 }

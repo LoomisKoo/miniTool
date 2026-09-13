@@ -6,9 +6,19 @@
   var BEAD_MM = 5;
   var PRINT_DPI = 300;
   var EXPORT_CELL = Math.round(BEAD_MM / 25.4 * PRINT_DPI); // ≈59
+  // iOS WKWebView 画布约 4096 边长 / 16M 像素；超出会 toDataURL 失败或 native 英文报错
+  var MAX_EXPORT_SIDE = 4096;
+  var MAX_EXPORT_AREA = 16777216;
 
   var GRID_COLOR = '#c7c7cc';
   var SEAM_COLOR = '#ff3b30';
+  var EMPTY_CELL = { empty: true, code: '', hex: '', r: 0, g: 0, b: 0 };
+  var ALPHA_CUTOFF = 128;
+  var OPAQUE_RATIO = 0.4;
+
+  function isEmptyCell(c) {
+    return !c || c.empty;
+  }
 
   // 2D 预览视图：内容像素里每格 = PRE_CS；格线叠画在格子上，不占空间
   var PRE_CS = 16;
@@ -21,11 +31,11 @@
     paletteId: 'mard',
     width: 29,
     boardSize: 29,
-    maxColors: 48,
+    maxColors: 60,
     mode: 'dominant',
     dither: false,
     merge: false,
-    mergeThreshold: 40,
+    mergeThreshold: 0.10,
     showGrid: true,
     showSeam: true,
     gridData: null,
@@ -92,7 +102,11 @@
     exportSheetBackdrop: document.getElementById('export-sheet-backdrop'),
     exportSheetCancel: document.getElementById('export-sheet-cancel'),
     exportGo: document.getElementById('export-go'),
+    exportShare: document.getElementById('export-share'),
+    exportShareWrap: document.getElementById('export-share-wrap'),
     exportScope: document.getElementById('export-scope'),
+    exportBusy: document.getElementById('export-busy'),
+    exportBusyText: document.getElementById('export-busy-text'),
     expAxes: document.getElementById('exp-axes'),
     expCodes: document.getElementById('exp-codes'),
     expLegend: document.getElementById('exp-legend'),
@@ -225,6 +239,17 @@
     return dr * dr + dg * dg + db * db;
   }
 
+  // 色相分桶：8 个色相段 + 1 个灰阶段，用于限色时保证色相覆盖
+  function colorHueBucket(r, g, b) {
+    var ok = rgbToOklab(r, g, b);
+    var chroma = Math.sqrt(ok.A * ok.A + ok.B * ok.B);
+    if (chroma < 0.02) return 8; // 低彩度归灰阶桶
+    var hue = Math.atan2(ok.B, ok.A); // -PI..PI
+    var bucket = Math.floor((hue + Math.PI) / (Math.PI / 4)); // 0..7
+    if (bucket > 7) bucket = 7;
+    return bucket;
+  }
+
   function clampByte(v) {
     if (v < 0) return 0;
     if (v > 255) return 255;
@@ -246,14 +271,28 @@
     // 不平滑缩放，避免边界糊成灰边（对齐 perler-beads）
     workCtx.imageSmoothingEnabled = false;
     workCtx.drawImage(img, 0, 0, tw, th);
+    var data;
     try {
-      return workCtx.getImageData(0, 0, tw, th, { colorSpace: 'srgb' });
+      data = workCtx.getImageData(0, 0, tw, th, { colorSpace: 'srgb' });
     } catch (e) {
-      return workCtx.getImageData(0, 0, tw, th);
+      data = workCtx.getImageData(0, 0, tw, th);
     }
+    // 顺便统计 5bit 桶颜色数，用于自动判断图片类型（卡通/照片）
+    // 卡通图颜色数少（描边+大色块），照片颜色数多（渐变+噪声）
+    var px = data.data;
+    var seen = new Uint8Array(32768);
+    var count = 0;
+    for (var i = 0; i < px.length; i += 4) {
+      if (px[i + 3] < ALPHA_CUTOFF) continue;
+      var key = ((px[i] >> 3) << 10) | ((px[i + 1] >> 3) << 5) | (px[i + 2] >> 3);
+      if (!seen[key]) { seen[key] = 1; count++; }
+    }
+    data._colorCount = count;
+    return data;
   }
 
-  // 格内主导色：出现次数最多的像素 RGB（非均值）——对齐 Zippland/perler-beads
+  // 格内采样：average 用线性光均值；dominant 用众数，但边缘格（众数占比低）
+  // 自动回退均值——既保描边锐利（纯色区众数），又让边缘平滑去杂色（边缘格均值）。
   function regionStats(data, x0, y0, x1, y1, mode) {
     var pixels = data.data;
     var sw = data.width;
@@ -269,17 +308,16 @@
     for (y = y0; y < y1; y++) {
       for (x = x0; x < x1; x++) {
         var o = (y * sw + x) * 4;
-        if (pixels[o + 3] < 128) continue;
+        if (pixels[o + 3] < ALPHA_CUTOFF) continue;
         var r = pixels[o];
         var g = pixels[o + 1];
         var b = pixels[o + 2];
         n += 1;
-        if (mode === 'average') {
-          rSum += srgbToLinear(r);
-          gSum += srgbToLinear(g);
-          bSum += srgbToLinear(b);
-          continue;
-        }
+        // 始终累加线性均值，供边缘格回退
+        rSum += srgbToLinear(r);
+        gSum += srgbToLinear(g);
+        bSum += srgbToLinear(b);
+        if (mode === 'average') continue;
         var key = (r << 16) | (g << 8) | b;
         var bucket = freq[key];
         if (!bucket) {
@@ -293,15 +331,18 @@
         }
       }
     }
-    if (n === 0) return { r: 255, g: 255, b: 255 };
-    if (mode === 'average') {
-      return {
-        r: linearToSrgb(rSum / n),
-        g: linearToSrgb(gSum / n),
-        b: linearToSrgb(bSum / n)
-      };
-    }
-    // 精确色过于分散（JPEG）→ 5bit 主导色
+    var area = Math.max(1, (x1 - x0) * (y1 - y0));
+    if (n === 0 || n < area * OPAQUE_RATIO) return EMPTY_CELL;
+    var avg = {
+      r: linearToSrgb(rSum / n),
+      g: linearToSrgb(gSum / n),
+      b: linearToSrgb(bSum / n)
+    };
+    if (mode === 'average') return avg;
+    // 自适应 dominant：众数占比 ≥ DOMINANT_RATIO（纯色区）用众数，描边锐利；
+    // 占比低（边缘格/JPEG 过渡）用均值，边缘平滑去杂色。
+    var DOMINANT_RATIO = 0.55;
+    // 精确色过于分散（JPEG）→ 5bit 桶主导色
     if (bestN < 2 || (n > 40 && bestN * 12 < n)) {
       freq = {};
       bestKey = null;
@@ -309,7 +350,7 @@
       for (y = y0; y < y1; y++) {
         for (x = x0; x < x1; x++) {
           var o2 = (y * sw + x) * 4;
-          if (pixels[o2 + 3] < 128) continue;
+          if (pixels[o2 + 3] < ALPHA_CUTOFF) continue;
           var r2 = pixels[o2];
           var g2 = pixels[o2 + 1];
           var b2 = pixels[o2 + 2];
@@ -331,6 +372,7 @@
       }
       if (bestKey != null) {
         var win = freq[bestKey];
+        if (win.n / n < DOMINANT_RATIO) return avg;
         return {
           r: Math.round(win.r / win.n),
           g: Math.round(win.g / win.n),
@@ -338,12 +380,13 @@
         };
       }
     }
+    if (bestN / n < DOMINANT_RATIO) return avg;
     var top = freq[bestKey];
     return { r: top.r, g: top.g, b: top.b };
   }
 
-  function sampleCells(img, w, h, mode) {
-    var src = readSourcePixels(img);
+  function sampleCells(img, w, h, mode, preSrc) {
+    var src = preSrc || readSourcePixels(img);
     var samples = new Array(w * h);
     var sx = src.width / w;
     var sy = src.height / h;
@@ -363,12 +406,15 @@
     return samples;
   }
 
+  // 限色：先按颗数取基础集，再保证每个色相桶至少留 1 颗，避免小面积关键色
+  // （嘴唇红、高光、眼白等）被砍后跨色相重映射
   function limitColors(mapped, samples, maxColors) {
     var counts = {};
     var byCode = {};
     var i;
     for (i = 0; i < mapped.length; i++) {
       var c = mapped[i];
+      if (isEmptyCell(c)) continue;
       counts[c.code] = (counts[c.code] || 0) + 1;
       byCode[c.code] = c;
     }
@@ -376,13 +422,51 @@
     if (codes.length <= maxColors) return mapped;
 
     codes.sort(function (a, b) { return counts[b] - counts[a]; });
+
+    var HUE_BUCKETS = 9; // 8 色相 + 1 灰阶
+    var reserve = HUE_BUCKETS;
+    var baseKeep = Math.max(1, maxColors - reserve);
+
     var keep = {};
     var keepList = [];
-    for (i = 0; i < maxColors; i++) {
+    // 1) 按颗数取前 baseKeep 作为基础保留集
+    for (i = 0; i < baseKeep && i < codes.length; i++) {
       keep[codes[i]] = true;
       keepList.push(byCode[codes[i]]);
     }
+
+    // 2) 色相覆盖：每个未覆盖桶强制纳入该桶内颗数最多的 code
+    var keptBuckets = {};
+    for (i = 0; i < keepList.length; i++) {
+      var kc = keepList[i];
+      keptBuckets[colorHueBucket(kc.r, kc.g, kc.b)] = true;
+    }
+    for (var b = 0; b < HUE_BUCKETS && keepList.length < maxColors; b++) {
+      if (keptBuckets[b]) continue;
+      var bestCode = null;
+      for (i = 0; i < codes.length; i++) {
+        if (keep[codes[i]]) continue;
+        var cc = byCode[codes[i]];
+        if (colorHueBucket(cc.r, cc.g, cc.b) !== b) continue;
+        if (!bestCode || counts[codes[i]] > counts[bestCode]) bestCode = codes[i];
+      }
+      if (bestCode) {
+        keep[bestCode] = true;
+        keepList.push(byCode[bestCode]);
+        keptBuckets[b] = true;
+      }
+    }
+
+    // 3) 剩余名额按颗数从高到低补
+    for (i = 0; i < codes.length && keepList.length < maxColors; i++) {
+      if (keep[codes[i]]) continue;
+      keep[codes[i]] = true;
+      keepList.push(byCode[codes[i]]);
+    }
+
+    // 4) 被砍掉的色号用原始采样色重新匹配到保留集
     for (i = 0; i < mapped.length; i++) {
+      if (isEmptyCell(mapped[i])) continue;
       if (!keep[mapped[i].code]) {
         var s = samples[i];
         mapped[i] = nearestColor(keepList, s.r, s.g, s.b);
@@ -391,16 +475,26 @@
     return mapped;
   }
 
-  // BFS 相似色连通域合并（对齐 perler-beads：RGB 欧氏距离 < 阈值）
+  // BFS 相似色连通域合并：用 Oklab 感知距离（与 nearestColor 一致），阈值 ~0.10
   function mergeSimilarRegions(mapped, w, h, threshold) {
     var total = w * h;
     var visited = new Uint8Array(total);
     var thr2 = threshold * threshold;
     var out = mapped.slice();
     var dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+    // 预算每格 Oklab，BFS 内只查表，避免重复转换
+    var okCache = new Array(total);
     var i;
     for (i = 0; i < total; i++) {
+      var cc = mapped[i];
+      okCache[i] = isEmptyCell(cc) ? null : rgbToOklab(cc.r, cc.g, cc.b);
+    }
+    for (i = 0; i < total; i++) {
       if (visited[i]) continue;
+      if (isEmptyCell(mapped[i])) {
+        visited[i] = 1;
+        continue;
+      }
       var queue = [i];
       var region = [];
       var codeCount = {};
@@ -420,7 +514,8 @@
           var ni = ny * w + nx;
           if (visited[ni]) continue;
           var c1 = mapped[ni];
-          if (rgbDist2(c0.r, c0.g, c0.b, c1.r, c1.g, c1.b) > thr2) continue;
+          if (isEmptyCell(c1)) continue;
+          if (oklabDist2(okCache[cur], okCache[ni]) > thr2) continue;
           visited[ni] = 1;
           queue.push(ni);
         }
@@ -461,6 +556,10 @@
     for (y = 0; y < h; y++) {
       for (x = 0; x < w; x++) {
         var idx = y * w + x;
+        if (samples[idx] && samples[idx].empty) {
+          mapped[idx] = EMPTY_CELL;
+          continue;
+        }
         var r = clampByte(buf[idx * 3]);
         var g = clampByte(buf[idx * 3 + 1]);
         var b = clampByte(buf[idx * 3 + 2]);
@@ -486,14 +585,15 @@
     buf[idx + 2] += eb * factor;
   }
 
-  // 抗锯齿灰边：很暗→黑、很亮且灰→白，避免描边变毛
+  // 抗锯齿灰边：仅钳位接近纯黑/纯白的低彩度像素，避免描边变毛
+  // 阈值放宽（luma<20、>248），保留深棕/米白等暗部/亮部豆色
   function cleanSampleRgb(r, g, b) {
     var max = r > g ? (r > b ? r : b) : (g > b ? g : b);
     var min = r < g ? (r < b ? r : b) : (g < b ? g : b);
     var chroma = max - min;
     var luma = 0.299 * r + 0.587 * g + 0.114 * b;
-    if (luma < 42 && chroma < 55) return { r: 0, g: 0, b: 0 };
-    if (luma > 242 && chroma < 28) return { r: 255, g: 255, b: 255 };
+    if (luma < 20 && chroma < 25) return { r: 0, g: 0, b: 0 };
+    if (luma > 248 && chroma < 18) return { r: 255, g: 255, b: 255 };
     return { r: r, g: g, b: b };
   }
 
@@ -515,9 +615,24 @@
     var mapped;
     var i;
 
+    // 预读源像素，顺便拿到颜色数；新图载入时按颜色数自动选采样模式：
+    // 卡通/插画（颜色数少，描边+大色块）→ dominant，保留锐利描边与纯色；
+    // 照片（颜色数多，渐变+噪声）→ average，渐变区色差更小。
+    // 用户手动切换后保持，直到下次载入新图再自动选。
+    var src = readSourcePixels(img);
+    state.imgColorCount = src._colorCount || 0;
+    if (freshImage) {
+      var autoMode = state.imgColorCount < 3000 ? 'dominant' : 'average';
+      if (state.mode !== autoMode) {
+        state.mode = autoMode;
+        setChip(els.btnAvg, state.mode === 'average');
+      }
+    }
+
     // 主色/均值：格内采样（对齐 zippland）；抖动同路径
-    samples = sampleCells(img, w, h, state.mode === 'average' ? 'average' : 'dominant');
+    samples = sampleCells(img, w, h, state.mode === 'average' ? 'average' : 'dominant', src);
     for (i = 0; i < samples.length; i++) {
+      if (isEmptyCell(samples[i])) continue;
       samples[i] = cleanSampleRgb(samples[i].r, samples[i].g, samples[i].b);
     }
     if (state.dither) {
@@ -525,7 +640,9 @@
     } else {
       mapped = new Array(w * h);
       for (i = 0; i < w * h; i++) {
-        mapped[i] = nearestColor(cache, samples[i].r, samples[i].g, samples[i].b);
+        mapped[i] = isEmptyCell(samples[i])
+          ? EMPTY_CELL
+          : nearestColor(cache, samples[i].r, samples[i].g, samples[i].b);
       }
     }
 
@@ -650,6 +767,7 @@
     for (y = y0; y < y1; y++) {
       for (x = x0; x < x1; x++) {
         var c = mapped[y * w + x];
+        if (isEmptyCell(c)) continue;
         // 选中色号定位：仅淡化其它格子，选中色号保持原色
         var dim = state.highlightCode && state.highlightCode !== c.code;
         targetCtx.fillStyle = dim ? mixHex(c.hex, '#FFFFFF', 0.72) : c.hex;
@@ -700,6 +818,7 @@
       for (y = y0; y < y1; y++) {
         for (x = x0; x < x1; x++) {
           var bead = mapped[y * w + x];
+          if (isEmptyCell(bead)) continue;
           var lum = bead.r * 0.299 + bead.g * 0.587 + bead.b * 0.114;
           targetCtx.fillStyle = lum > 160 ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.75)';
           targetCtx.fillText(
@@ -801,7 +920,7 @@
   // 格子实际显示色（未选中高亮时淡化其它格子），与导出逻辑一致
   function baseCellAt(colGlobal, rowGlobal) {
     var c = state.gridData[rowGlobal * state.width + colGlobal];
-    if (!c) return { code: '', hex: '#ffffff' };
+    if (isEmptyCell(c)) return EMPTY_CELL;
     var hex = c.hex;
     if (state.highlightCode && state.highlightCode !== c.code) {
       hex = mixHex(hex, '#FFFFFF', 0.72);
@@ -859,6 +978,7 @@
       for (i = i0; i < i1; i++) {
         var gcol = rect.x0 + i;
         var c = mapped[gr * wAll + gcol];
+        if (isEmptyCell(c)) continue;
         var col = c.hex;
         if (state.highlightCode && state.highlightCode !== c.code) {
           col = mixHex(col, '#FFFFFF', 0.72);
@@ -916,6 +1036,7 @@
         for (i = i0; i < i1; i++) {
           var g2 = rect.x0 + i;
           var bead = mapped[gr2 * wAll + g2];
+          if (isEmptyCell(bead)) continue;
           var hex = bead.hex;
           if (state.highlightCode && state.highlightCode !== bead.code) {
             hex = mixHex(hex, '#FFFFFF', 0.72);
@@ -1421,6 +1542,7 @@
       ii = oc[0];
       jj = oc[1];
       var bead = baseCellAt(rect.x0 + ii, rect.y0 + jj);
+      if (isEmptyCell(bead)) continue;
       drawBead(ii - halfX, jj - halfZ, bead.hex);
     }
 
@@ -1439,6 +1561,7 @@
         ii = oc[0];
         jj = oc[1];
         var bead2 = baseCellAt(rect.x0 + ii, rect.y0 + jj);
+        if (isEmptyCell(bead2)) continue;
         var hex2 = bead2.hex;
         if (state.highlightCode && state.highlightCode !== bead2.code) {
           hex2 = mixHex(hex2, '#FFFFFF', 0.72);
@@ -1566,7 +1689,14 @@
   }
 
   function updateMeta() {
-    var total = state.width * state.height;
+    var total = 0;
+    var i;
+    var grid = state.gridData;
+    if (grid) {
+      for (i = 0; i < grid.length; i++) {
+        if (!isEmptyCell(grid[i])) total += 1;
+      }
+    }
     var colors = Object.keys(state.counts || {}).length;
     var cmW = (state.width * 0.5).toFixed(1);
     var cmH = (state.height * 0.5).toFixed(1);
@@ -1835,6 +1965,101 @@
     }
   }
 
+  function exportLegendList(useIdx, rect) {
+    var counts = state.counts || {};
+    var list = Object.keys(counts).map(function (k) { return counts[k]; });
+    list.sort(function (a, b) { return b.n - a.n; });
+    if (useIdx < 0) return list;
+    var local = {};
+    var yy;
+    var xx;
+    for (yy = rect.y0; yy < rect.y1; yy++) {
+      for (xx = rect.x0; xx < rect.x1; xx++) {
+        var cc = state.gridData[yy * state.width + xx];
+        if (isEmptyCell(cc) || !cc.code) continue;
+        local[cc.code] = (local[cc.code] || 0) + 1;
+      }
+    }
+    return list.filter(function (it) { return local[it.code]; }).map(function (it) {
+      return { code: it.code, hex: it.hex, n: local[it.code] };
+    });
+  }
+
+  function measureExport(cell, pw, ph, legendCount, axes, showLegend, showMeta) {
+    var pad = Math.max(36, Math.round(cell * 0.7));
+    var padBottom = Math.max(pad + 24, Math.round(cell * 1.4));
+    var axisTop = axes ? Math.max(28, Math.round(cell * 0.85)) : 0;
+    var axisLeft = axes ? Math.max(40, Math.round(cell * 1.0)) : 0;
+    var titleSize = Math.max(28, Math.round(cell * 0.58));
+    var subSize = Math.max(18, Math.round(cell * 0.4));
+    var tipSize = Math.max(14, Math.round(cell * 0.3));
+    var metaH = showMeta
+      ? Math.round(titleSize * 1.05 + subSize * 1.25 + tipSize * 2.1 + 20)
+      : 0;
+    // 色块边长 = 2×2 格（四个像素格）
+    var sw = Math.max(48, cell * 2);
+    var itemGapX = Math.max(16, Math.round(sw * 0.22));
+    var itemGapY = Math.max(18, Math.round(sw * 0.28));
+    var countGap = Math.max(8, Math.round(sw * 0.12));
+    var countH = Math.max(22, Math.round(sw * 0.36));
+    var itemH = sw + countGap + countH;
+    var itemW = sw;
+    var patternW = pw * cell;
+    var patternH = ph * cell;
+    var outW = pad + axisLeft + patternW + pad;
+    var innerW = outW - pad * 2;
+    var maxCols = showLegend && legendCount
+      ? Math.max(1, Math.floor((innerW + itemGapX) / (itemW + itemGapX)))
+      : 1;
+    var legendCols = showLegend && legendCount ? Math.min(maxCols, legendCount) : 1;
+    var legendRows = showLegend && legendCount ? Math.ceil(legendCount / legendCols) : 0;
+    var legendTop = pad + metaH + axisTop + patternH + (legendRows ? Math.round(cell * 0.55) : 0);
+    var legendH = legendRows ? legendRows * (itemH + itemGapY) - itemGapY : 0;
+    var outH = (showLegend && legendCount)
+      ? legendTop + legendH + padBottom
+      : pad + metaH + axisTop + patternH + padBottom;
+    return {
+      pad: pad,
+      padBottom: padBottom,
+      axisTop: axisTop,
+      axisLeft: axisLeft,
+      metaH: metaH,
+      titleSize: titleSize,
+      subSize: subSize,
+      tipSize: tipSize,
+      sw: sw,
+      swR: Math.max(8, Math.round(sw * 0.18)),
+      itemGapX: itemGapX,
+      itemGapY: itemGapY,
+      countGap: countGap,
+      itemH: itemH,
+      legendCols: legendCols,
+      legendRows: legendRows,
+      legendTop: legendTop,
+      outW: outW,
+      outH: outH
+    };
+  }
+
+  function pickExportCell(pw, ph, legendCount, axes, showLegend, showMeta) {
+    var cell = EXPORT_CELL;
+    var n;
+    for (n = 0; n < 8; n++) {
+      var sz = measureExport(cell, pw, ph, legendCount, axes, showLegend, showMeta);
+      var area = sz.outW * sz.outH;
+      if (sz.outW <= MAX_EXPORT_SIDE && sz.outH <= MAX_EXPORT_SIDE && area <= MAX_EXPORT_AREA) {
+        return cell;
+      }
+      var s = Math.min(
+        MAX_EXPORT_SIDE / sz.outW,
+        MAX_EXPORT_SIDE / sz.outH,
+        Math.sqrt(MAX_EXPORT_AREA / Math.max(1, area))
+      );
+      cell = Math.max(8, Math.floor(cell * Math.min(0.98, s)));
+    }
+    return cell;
+  }
+
   function exportDataUrl(boardIdx) {
     var exp = state.exp;
     var axes = !!exp.axes;
@@ -1845,71 +2070,35 @@
     var rect = boardRect(useIdx);
     var pw = rect.x1 - rect.x0;
     var ph = rect.y1 - rect.y0;
+    var list = exportLegendList(useIdx, rect);
+    var cell = pickExportCell(pw, ph, list.length, axes, showLegend, showMeta);
+    var m = measureExport(cell, pw, ph, list.length, axes, showLegend, showMeta);
 
-    // 固定格宽：300DPI 下 1 格 = 5mm，打印「实际大小」即实物豆距
-    var cell = EXPORT_CELL;
-
-    // 图案画布（含格线/分板线/格内色号开关）
     var pattern = document.createElement('canvas');
     var pctx = pattern.getContext('2d');
     drawPattern(pctx, cell, state.showGrid, rect, true);
 
-    // 本板色号用量列表（按用量降序）
-    var counts = state.counts || {};
-    var list = Object.keys(counts).map(function (k) { return counts[k]; });
-    list.sort(function (a, b) { return b.n - a.n; });
-    if (useIdx >= 0) {
-      var local = {};
-      var yy;
-      var xx;
-      for (yy = rect.y0; yy < rect.y1; yy++) {
-        for (xx = rect.x0; xx < rect.x1; xx++) {
-          var cc = state.gridData[yy * state.width + xx];
-          local[cc.code] = (local[cc.code] || 0) + 1;
-        }
-      }
-      list = list.filter(function (it) { return local[it.code]; }).map(function (it) {
-        return { code: it.code, hex: it.hex, n: local[it.code] };
-      });
-    }
-
-    var pad = Math.max(28, Math.round(cell * 0.5));
-    var axisTop = axes ? Math.round(cell * 0.75) : 0;
-    var axisLeft = axes ? Math.max(32, Math.round(cell * 0.9)) : 0;
-    var metaH = showMeta ? Math.round(cell * 2.2) : 0;
-    var x0 = pad + axisLeft;
-    var y0 = pad + metaH + axisTop;
-
-    // 图例：圆角正方形 = 图纸格面边长
-    var sw = cell;
-    var swR = Math.max(8, Math.round(sw * 0.2));
-    var itemGapX = Math.max(6, Math.round(sw * 0.12));
-    var itemGapY = Math.max(8, Math.round(sw * 0.14));
-    var countGap = Math.max(4, Math.round(sw * 0.08));
-    var countH = Math.max(16, Math.round(sw * 0.32));
-    var itemH = sw + countGap + countH;
-    var outW = x0 + pattern.width + pad;
-    var legendCols = showLegend && list.length
-      ? Math.max(1, Math.floor((outW - pad * 2 + itemGapX) / (sw + itemGapX)))
-      : 1;
-    var legendRows = showLegend && list.length ? Math.ceil(list.length / legendCols) : 0;
-    var legendTop = y0 + pattern.height + (legendRows ? Math.round(cell * 0.35) : 0);
-    var legendH = legendRows ? legendRows * (itemH + itemGapY) - itemGapY : 0;
-    var outH = (showLegend && list.length)
-      ? legendTop + legendH + pad
-      : y0 + pattern.height + pad;
-
+    var outW = m.outW;
+    var outH = m.outH;
     var out = document.createElement('canvas');
     out.width = outW;
     out.height = outH;
+    if (out.width !== outW || out.height !== outH) {
+      throw new Error('export-too-large');
+    }
     var octx = out.getContext('2d');
+    if (!octx) throw new Error('export-too-large');
     octx.fillStyle = '#ffffff';
     octx.fillRect(0, 0, outW, outH);
 
+    var pad = m.pad;
+    var x0 = pad + m.axisLeft;
+    var y0 = pad + m.metaH + m.axisTop;
+
     if (showMeta) {
-      var titleSize = Math.max(34, Math.round(cell * 0.58));
-      var subSize = Math.max(22, Math.round(cell * 0.4));
-      var tipSize = Math.max(16, Math.round(cell * 0.3));
+      var titleSize = m.titleSize;
+      var subSize = m.subSize;
+      var tipSize = m.tipSize;
       octx.fillStyle = '#1a1a1a';
       octx.font = 'bold ' + titleSize + 'px sans-serif';
       octx.fillText('兔格拼豆 · ' + getPalette().name, pad, pad + Math.round(titleSize * 0.95));
@@ -1919,6 +2108,7 @@
         (useIdx < 0 ? '全图' : '第' + (useIdx + 1) + '板') +
         ' · 每格' + BEAD_MM + 'mm';
       if (axes) title += ' · 坐标版';
+      if (cell < EXPORT_CELL) title += ' · 已缩小导出';
       octx.fillText(title, pad, pad + titleSize + Math.round(subSize * 1.15));
       octx.fillStyle = '#777';
       octx.font = tipSize + 'px sans-serif';
@@ -1927,7 +2117,6 @@
 
     octx.drawImage(pattern, x0, y0);
 
-    // 行列坐标
     if (axes && pw > 0 && ph > 0) {
       var axFont = Math.max(16, Math.round(cell * 0.42));
       octx.font = axFont + 'px sans-serif';
@@ -1938,7 +2127,7 @@
       var j;
       for (i = 0; i < pw; i++) {
         var colCx = x0 + i * cell + cell / 2;
-        octx.fillText(String(rect.x0 + i + 1), colCx, y0 - axisTop / 2 - 1);
+        octx.fillText(String(rect.x0 + i + 1), colCx, y0 - m.axisTop / 2 - 1);
         octx.fillStyle = 'rgba(0,0,0,0.08)';
         octx.fillRect(colCx - 0.5, y0 - 2, 1, 4);
         octx.fillStyle = '#333';
@@ -1955,16 +2144,17 @@
       octx.textBaseline = 'alphabetic';
     }
 
-    // 用量图例（紧凑左起排布，色块边长 = 格面 × 2）
     if (showLegend && list.length) {
-      var codeFont = Math.max(18, Math.round(sw * 0.38));
-      var countFont = Math.max(15, Math.round(sw * 0.28));
+      var sw = m.sw;
+      var swR = m.swR;
+      var codeFont = Math.max(20, Math.round(sw * 0.42));
+      var countFont = Math.max(16, Math.round(sw * 0.32));
       for (var k = 0; k < list.length; k++) {
         var item = list[k];
-        var col = k % legendCols;
-        var row = (k / legendCols) | 0;
-        var lx = pad + col * (sw + itemGapX);
-        var ly = legendTop + row * (itemH + itemGapY);
+        var col = k % m.legendCols;
+        var row = (k / m.legendCols) | 0;
+        var lx = pad + col * (sw + m.itemGapX);
+        var ly = m.legendTop + row * (m.itemH + m.itemGapY);
         octx.fillStyle = item.hex;
         roundRectPath(octx, lx, ly, sw, sw, swR);
         octx.fill();
@@ -1980,20 +2170,57 @@
         octx.fillStyle = '#444';
         octx.font = '600 ' + countFont + 'px sans-serif';
         octx.textBaseline = 'top';
-        octx.fillText(String(item.n), lx + sw / 2, ly + sw + countGap);
+        octx.fillText(String(item.n), lx + sw / 2, ly + sw + m.countGap);
       }
       octx.textAlign = 'start';
       octx.textBaseline = 'alphabetic';
     }
 
-    return jpegDataUrlWithDpi(out.toDataURL('image/jpeg', 0.92), PRINT_DPI);
+    var area = outW * outH;
+    var quality = area > 8000000 ? 0.72 : area > 3500000 ? 0.82 : 0.92;
+    var dataUrl = out.toDataURL('image/jpeg', quality);
+    if (!dataUrl || dataUrl.length < 64 || dataUrl.indexOf('base64') < 0) {
+      throw new Error('export-too-large');
+    }
+    // 超大图跳过 DPI 改写，避免 atob/btoa 再翻倍内存
+    if (dataUrl.length < 1800000) dataUrl = jpegDataUrlWithDpi(dataUrl, PRINT_DPI);
+    return dataUrl;
+  }
+
+  function friendlySaveError(err, fallback) {
+    var raw = '';
+    if (err) {
+      if (typeof err === 'string') raw = err;
+      else raw = err.errMsg || err.message || '';
+    }
+    var s = String(raw).toLowerCase();
+    if (s.indexOf('export-too-large') >= 0 || s.indexOf('too large') >= 0 ||
+        s.indexOf('filesize') >= 0 || s.indexOf('file size') >= 0 ||
+        s.indexOf('maximum') >= 0 || s.indexOf('memory') >= 0 ||
+        s.indexOf('canvas') >= 0 || s.indexOf('length') >= 0 ||
+        s.indexOf('oom') >= 0 || s.indexOf('limit') >= 0) {
+      return '图纸太大，请改用「分板逐个导出」';
+    }
+    if (s.indexOf('auth') >= 0 || s.indexOf('permission') >= 0 ||
+        s.indexOf('denied') >= 0 || s.indexOf('权限') >= 0) {
+      return '需要相册权限才能保存';
+    }
+    if (s.indexOf('cancel') >= 0) return '已取消';
+    return fallback || '保存失败';
   }
 
   function saveOneDataUrl(dataUrl, filename) {
-    if (window.xhs && window.xhs.miniTool && window.xhs.miniTool.writeTempFile) {
-      return window.xhs.miniTool.writeTempFile({ data: dataUrl }).then(function (res) {
-        return window.xhs.miniTool.saveImageToPhotosAlbum({ filePath: res.filePath });
-      });
+    var xhs = window.xhs && window.xhs.miniTool;
+    if (xhs && xhs.saveImageToPhotosAlbum) {
+      var save = function (filePath) {
+        return xhs.saveImageToPhotosAlbum({ filePath: filePath });
+      };
+      if (xhs.writeTempFile) {
+        return xhs.writeTempFile({ data: dataUrl }).then(function (res) {
+          return save(res.filePath);
+        });
+      }
+      return save(dataUrl);
     }
     var a = document.createElement('a');
     a.href = dataUrl;
@@ -2002,52 +2229,192 @@
     return Promise.resolve();
   }
 
+  function setExportBusy(on, text) {
+    if (!els.exportBusy) return;
+    if (on) {
+      if (els.exportBusyText) els.exportBusyText.textContent = text || '正在导出图纸，请勿退出';
+      els.exportBusy.classList.add('is-on');
+      els.exportBusy.setAttribute('aria-hidden', 'false');
+    } else {
+      els.exportBusy.classList.remove('is-on');
+      els.exportBusy.setAttribute('aria-hidden', 'true');
+    }
+  }
+
   function saveToAlbum() {
     if (!state.gridData || state.busy) return;
     state.busy = true;
     els.btnSave.disabled = true;
     els.exportGo.disabled = true;
+    if (els.exportShare) els.exportShare.disabled = true;
 
     var total = state.boardsX * state.boardsY;
     var boardMode = state.exp.boardMode || 'full';
     var useEach = boardMode === 'each' && total > 1;
+    setExportBusy(true, useEach
+      ? ('正在导出 1/' + total + '，请勿退出')
+      : '正在导出图纸，请勿退出');
 
     function done(ok, msg) {
+      setExportBusy(false);
       state.busy = false;
       els.btnSave.disabled = false;
       els.exportGo.disabled = false;
+      if (els.exportShare) els.exportShare.disabled = false;
       toast(ok ? (msg || '已保存到相册') : (msg || '保存失败'));
     }
 
-    if (!useEach) {
-      var dataUrl = exportDataUrl(-1);
-      saveOneDataUrl(dataUrl, 'bead-pattern-full.jpg').then(function () {
-        done(true);
-      }).catch(function (err) {
-        done(false, (err && err.errMsg) || '保存失败');
-      });
-      return;
-    }
-
-    // 分板逐个导出
-    var idx = 0;
-    function next() {
-      if (idx >= total) {
-        done(true, '已导出 ' + total + ' 张分板图纸');
+    function run() {
+      if (!useEach) {
+        try {
+          var dataUrl = exportDataUrl(-1);
+          setExportBusy(true, '正在保存到相册，请勿退出');
+          saveOneDataUrl(dataUrl, 'bead-pattern-full.jpg').then(function () {
+            done(true);
+          }).catch(function (err) {
+            done(false, friendlySaveError(err, '保存失败'));
+          });
+        } catch (err) {
+          done(false, friendlySaveError(err, '图纸太大，请改用「分板逐个导出」'));
+        }
         return;
       }
-      var boardNo = idx + 1;
-      var url = exportDataUrl(idx);
-      var name = 'bead-pattern-board-' + boardNo + '.jpg';
-      saveOneDataUrl(url, name).then(function () {
-        idx += 1;
-        // 浏览器连下多张时稍作间隔，避免被拦
-        setTimeout(next, 180);
+
+      var idx = 0;
+      function next() {
+        if (idx >= total) {
+          done(true, '已导出 ' + total + ' 张分板图纸');
+          return;
+        }
+        var boardNo = idx + 1;
+        setExportBusy(true, '正在导出 ' + boardNo + '/' + total + '，请勿退出');
+        var url;
+        try {
+          url = exportDataUrl(idx);
+        } catch (err) {
+          done(false, friendlySaveError(err, '第' + boardNo + '板过大，导出失败'));
+          return;
+        }
+        var name = 'bead-pattern-board-' + boardNo + '.jpg';
+        saveOneDataUrl(url, name).then(function () {
+          idx += 1;
+          setTimeout(next, 180);
+        }).catch(function (err) {
+          done(false, friendlySaveError(err, '第' + boardNo + '板保存失败'));
+        });
+      }
+      next();
+    }
+
+    // 先画出遮罩再跑重计算，避免卡死在空白屏
+    setTimeout(run, 60);
+  }
+
+  function hasPostNote() {
+    return !!(window.xhs && window.xhs.miniTool && window.xhs.miniTool.postNote);
+  }
+
+  function countBeads() {
+    var n = 0;
+    var i;
+    var grid = state.gridData;
+    if (!grid) return 0;
+    for (i = 0; i < grid.length; i++) {
+      if (!isEmptyCell(grid[i])) n += 1;
+    }
+    return n;
+  }
+
+  function previewShareDataUrl() {
+    var rect = { x0: 0, y0: 0, x1: state.width, y1: state.height };
+    var side = Math.max(state.width, state.height);
+    var cell = Math.max(8, Math.min(32, Math.floor(1600 / Math.max(1, side))));
+    var pattern = document.createElement('canvas');
+    var pctx = pattern.getContext('2d');
+    drawPattern(pctx, cell, !!state.showGrid, rect, false);
+    var pad = 20;
+    var out = document.createElement('canvas');
+    out.width = pattern.width + pad * 2;
+    out.height = pattern.height + pad * 2;
+    if (!out.width || !out.height) throw new Error('export-too-large');
+    var octx = out.getContext('2d');
+    octx.fillStyle = '#ffffff';
+    octx.fillRect(0, 0, out.width, out.height);
+    octx.drawImage(pattern, pad, pad);
+    var dataUrl = out.toDataURL('image/jpeg', 0.86);
+    if (!dataUrl || dataUrl.indexOf('base64') < 0) throw new Error('export-too-large');
+    return dataUrl;
+  }
+
+  function shareToNote() {
+    if (!state.gridData || state.busy) return;
+    if (!hasPostNote()) {
+      toast('请在小红书内发笔记');
+      return;
+    }
+    state.busy = true;
+    els.btnSave.disabled = true;
+    els.exportGo.disabled = true;
+    if (els.exportShare) els.exportShare.disabled = true;
+
+    var total = state.boardsX * state.boardsY;
+    var boardMode = state.exp.boardMode || 'full';
+    var useEach = boardMode === 'each' && total > 1;
+    var maxCharts = 17;
+    setExportBusy(true, '正在准备笔记图片，请勿退出');
+
+    function done(ok, msg) {
+      setExportBusy(false);
+      state.busy = false;
+      els.btnSave.disabled = false;
+      els.exportGo.disabled = false;
+      if (els.exportShare) els.exportShare.disabled = false;
+      toast(ok ? (msg || '已打开发笔记') : (msg || '发笔记失败'));
+    }
+
+    function run() {
+      var images;
+      try {
+        setExportBusy(true, '正在生成预览图，请勿退出');
+        images = [{ url: previewShareDataUrl() }];
+        if (useEach) {
+          var n = Math.min(total, maxCharts);
+          var i;
+          for (i = 0; i < n; i++) {
+            setExportBusy(true, '正在生成图纸 ' + (i + 1) + '/' + n + '，请勿退出');
+            images.push({ url: exportDataUrl(i) });
+          }
+        } else {
+          setExportBusy(true, '正在生成图纸，请勿退出');
+          images.push({ url: exportDataUrl(-1) });
+        }
+      } catch (err) {
+        done(false, friendlySaveError(err, '图片过大，请改分板后再发'));
+        return;
+      }
+
+      var colors = Object.keys(state.counts || {}).length;
+      var title = ('兔格拼豆 ' + state.width + '×' + state.height).slice(0, 20);
+      var content = getPalette().name + ' · ' + state.width + '×' + state.height +
+        ' · ' + colors + '色 · ' + countBeads() + '颗。第1张为效果预览，其后为色号图纸。';
+      if (useEach && total > maxCharts) {
+        content += '图纸已截取前' + maxCharts + '板（笔记最多18张图）。';
+      }
+
+      setExportBusy(true, '正在打开发笔记，请勿退出');
+      window.xhs.miniTool.postNote({
+        title: title,
+        content: content,
+        pageType: 'photo_publish',
+        mediaInfo: { image_resources: images }
+      }).then(function () {
+        done(true, '已打开发笔记');
       }).catch(function (err) {
-        done(false, (err && err.errMsg) || ('第' + boardNo + '板保存失败'));
+        done(false, friendlySaveError(err, '发笔记失败，可先保存图纸'));
       });
     }
-    next();
+
+    setTimeout(run, 60);
   }
 
   function setChip(btn, on) {
@@ -2748,7 +3115,7 @@
         state.editOn && state.view.mode === '2d' && state.tool === 'dropper' &&
         gd.travX + gd.travY < 14) {
         var idx = cellAtScreen(gd.downX, gd.downY);
-        if (idx >= 0 && state.gridData[idx]) {
+        if (idx >= 0 && state.gridData[idx] && !isEmptyCell(state.gridData[idx])) {
           var got = state.gridData[idx];
           state.brush = { code: got.code, hex: got.hex, r: got.r, g: got.g, b: got.b };
           state.tool = 'brush';
@@ -2793,6 +3160,7 @@
         els.exportScope.textContent = '将导出整幅拼图（含分板线）';
       }
     }
+    if (els.exportShareWrap) els.exportShareWrap.hidden = !hasPostNote();
     openSheet(els.exportSheet);
   }
 
@@ -2803,6 +3171,11 @@
   function doExport() {
     closeExportSheet();
     saveToAlbum();
+  }
+
+  function doShare() {
+    closeExportSheet();
+    shareToNote();
   }
 
   // ================= 手绘编辑 =================
@@ -2819,6 +3192,7 @@
     var code;
     for (i = 0; i < grid.length; i++) {
       e = grid[i];
+      if (isEmptyCell(e) || !e.code) continue;
       code = e.code;
       if (!counts[code]) {
         counts[code] = { code: code, hex: e.hex, r: e.r, g: e.g, b: e.b, n: 0 };
@@ -3314,6 +3688,7 @@
   els.exportSheetBackdrop.addEventListener('click', closeExportSheet);
   els.exportSheetCancel.addEventListener('click', closeExportSheet);
   els.exportGo.addEventListener('click', doExport);
+  if (els.exportShare) els.exportShare.addEventListener('click', doShare);
   els.expAxes.addEventListener('change', function () {
     state.exp.axes = els.expAxes.checked;
   });

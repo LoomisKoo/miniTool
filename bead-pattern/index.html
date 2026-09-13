@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <title>兔格拼豆</title>
   <link rel="icon" href="icon.png" type="image/png" />
-  <link rel="stylesheet" href="./style.css?v=20260907b" />
+  <link rel="stylesheet" href="./style.css?v=20260909g" />
 </head>
 <body>
   <div class="app">
@@ -27,7 +27,7 @@
             </svg>
           </span>
           <span>选择图片</span>
-          <small>生成可拼的豆格图纸</small>
+          <small>生成可拼的豆格图纸 · PNG 透明处不铺豆</small>
         </label>
       </div>
     </section>
@@ -90,8 +90,8 @@
           </div>
           <div class="row">
             <span class="label">限色</span>
-            <input type="range" id="color-slider" min="8" max="80" value="48" />
-            <span class="val" id="color-val">48</span>
+            <input type="range" id="color-slider" min="8" max="80" value="60" />
+            <span class="val" id="color-val">60</span>
           </div>
         </div>
 
@@ -164,6 +164,22 @@
           <span class="sheet-option-main">52×52</span>
           <span class="sheet-option-sub">超大方板</span>
         </button>
+        <button type="button" class="sheet-option" data-board-size="64">
+          <span class="sheet-option-main">64×64</span>
+          <span class="sheet-option-sub">巨幅方板</span>
+        </button>
+        <button type="button" class="sheet-option" data-board-size="80">
+          <span class="sheet-option-main">80×80</span>
+          <span class="sheet-option-sub">巨幅方板</span>
+        </button>
+        <button type="button" class="sheet-option" data-board-size="100">
+          <span class="sheet-option-main">100×100</span>
+          <span class="sheet-option-sub">拼接大板</span>
+        </button>
+        <button type="button" class="sheet-option" data-board-size="116">
+          <span class="sheet-option-main">116×116</span>
+          <span class="sheet-option-sub">最大拼接板</span>
+        </button>
       </div>
       <button type="button" class="sheet-cancel" id="board-size-sheet-cancel">取消</button>
     </div>
@@ -191,17 +207,18 @@
 
   <div class="sheet-mask" id="export-sheet" aria-hidden="true">
     <button type="button" class="sheet-backdrop" id="export-sheet-backdrop" aria-label="关闭"></button>
-    <div class="sheet" role="dialog" aria-label="图纸选项">
+    <div class="sheet sheet-dock" role="dialog" aria-label="图纸选项">
       <div class="sheet-handle"></div>
       <p class="sheet-title">图纸选项</p>
       <p class="exp-scope" id="export-scope"></p>
+      <div class="exp-scroll">
       <div class="exp-list" id="exp-board-mode" hidden>
         <label class="exp-opt">
           <input type="radio" name="exp-board-mode" id="exp-mode-full" value="full" checked />
           <span class="exp-box" aria-hidden="true">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg>
           </span>
-          <span class="exp-main">导出全图<small>整幅拼图一张（含分板线）</small></span>
+          <span class="exp-main">导出全图<small>整幅一张；过大将自动缩小，失败请改分板导出</small></span>
         </label>
         <label class="exp-opt">
           <input type="radio" name="exp-board-mode" id="exp-mode-each" value="each" />
@@ -241,17 +258,27 @@
           <span class="exp-main">标题信息<small>品牌 + 尺寸 + 第几板</small></span>
         </label>
       </div>
+      </div>
       <div class="exp-actions">
         <button type="button" class="btn btn-ghost" id="export-sheet-cancel">取消</button>
         <button type="button" class="btn btn-primary" id="export-go">保存图纸</button>
+      </div>
+      <div class="exp-actions" id="export-share-wrap" hidden>
+        <button type="button" class="btn btn-ghost" id="export-share">发笔记（预览+图纸）</button>
       </div>
     </div>
   </div>
 
   <input type="file" id="file-input" accept="image/jpeg,image/png,image/webp,image/*" />
+  <div class="export-busy" id="export-busy" aria-hidden="true">
+    <div class="export-busy-card" role="alertdialog" aria-live="assertive" aria-busy="true">
+      <p class="export-busy-title">正在导出</p>
+      <p class="export-busy-text" id="export-busy-text">正在导出图纸，请勿退出</p>
+    </div>
+  </div>
   <div class="toast" id="toast"></div>
 
   <script src="./palettes.js"></script>
-  <script src="./app.js?v=20260907aa"></script>
+  <script src="./app.js?v=20260913a"></script>
 </body>
 </html>
