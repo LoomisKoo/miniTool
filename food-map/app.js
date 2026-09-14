@@ -179,7 +179,11 @@
   let densGap = null;
   let densStep = null;
   let densFlat = null;
+  // 松手后旧/新两套点阵交叉淡入；手势中仍冻结密度避免每帧换网格
+  let densXfade = null;   // { gap, step, flat, t0, dur, u }
+  let densXfadeAnim = 0;
   let foodFade = 1, foodFadeAnim = 0;
+  const DENS_XFADE_MS = 320;
   function densityZoom() {
     return densZoom != null ? densZoom : cam.zoom;
   }
@@ -201,8 +205,29 @@
     }
     return gap;
   }
+  function liveDens() {
+    const flat = isFlat();
+    const gap = computeLandGap(!flat, cam.zoom);
+    return { gap, step: Math.max(0.08, gap / Math.max(cam.zoom, 0.01)), flat };
+  }
+  function cancelDensXfade() {
+    densXfade = null;
+    cancelAnimationFrame(densXfadeAnim);
+    densXfadeAnim = 0;
+  }
+  function startFoodFade() {
+    foodFade = 0;
+    cancelAnimationFrame(foodFadeAnim);
+    const t0 = performance.now();
+    (function step(t) {
+      foodFade = Math.min(1, (t - t0) / DENS_XFADE_MS);
+      scheduleDraw();
+      if (foodFade < 1) foodFadeAnim = requestAnimationFrame(step);
+    })(performance.now());
+  }
   function beginZoomGesture(heldZ) {
     if (densZoom != null) return;
+    cancelDensXfade();
     const z = heldZ != null ? heldZ : cam.zoom;
     densZoom = z;
     densFlat = z >= globeMaxZ();
@@ -213,17 +238,27 @@
   }
   function endZoomGesture() {
     if (densZoom == null) return;
+    const from = { gap: densGap, step: densStep, flat: densFlat };
     densZoom = null;
     densGap = null;
     densStep = null;
     densFlat = null;
-    foodFade = 0;
-    cancelAnimationFrame(foodFadeAnim);
-    const t0 = performance.now();
-    (function step(t) {
-      foodFade = Math.min(1, (t - t0) / 220);
+    const to = liveDens();
+    // 密度几乎没变就直接切，省一次双绘
+    if (from.flat === to.flat && Math.abs(from.step - to.step) < 0.025) {
+      startFoodFade();
+      return;
+    }
+    densXfade = { gap: from.gap, step: from.step, flat: from.flat, t0: performance.now(), dur: DENS_XFADE_MS, u: 0 };
+    startFoodFade();
+    cancelAnimationFrame(densXfadeAnim);
+    (function tick(t) {
+      if (!densXfade) return;
+      const k = Math.min(1, (t - densXfade.t0) / densXfade.dur);
+      densXfade.u = 1 - Math.pow(1 - k, 3);   // ease-out
       scheduleDraw();
-      if (foodFade < 1) foodFadeAnim = requestAnimationFrame(step);
+      if (k < 1) densXfadeAnim = requestAnimationFrame(tick);
+      else densXfade = null;
     })(performance.now());
   }
   function scheduleDraw() {
@@ -240,8 +275,22 @@
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
     ctx.fillStyle = '#0a0a0c';
     ctx.fillRect(0, 0, CW, CH);
-    if (!viewIsFlat()) paintGlobe(1);
-    else paintFlat(1);
+    const xf = densXfade;
+    if (xf && xf.flat === viewIsFlat()) {
+      const u = xf.u || 0;
+      if (viewIsFlat()) {
+        paintFlat(1 - u, { gap: xf.gap, step: xf.step, clear: true, labels: false });
+        paintFlat(u, { clear: false, labels: u > 0.9 });
+      } else {
+        // 旧层只铺底+点；描边/暗角留给新层，避免交叉淡入时描边闪两下
+        paintGlobe(1 - u, { gap: xf.gap, step: xf.step, clear: true, chrome: false, labels: false });
+        paintGlobe(u, { clear: false, chrome: true, labels: u > 0.9 });
+      }
+    } else if (!viewIsFlat()) {
+      paintGlobe(1);
+    } else {
+      paintFlat(1);
+    }
     paintFoods();
     updateMapLoc();
   }
@@ -743,16 +792,23 @@
   }
 
   // 平面：按陆地格点步进，高低纬密度一致
-  function paintFlat(a) {
+  // opts: { gap, step, clear=true, labels } —— 交叉淡入时旧层 clear、新层不清屏叠画
+  function paintFlat(a, opts) {
     if (a <= 0.01) return;
+    opts = opts || {};
     const zoom = cam.zoom;
-    const gap = densGap != null ? densGap : landGapPx(false);
+    const gap = opts.gap != null ? opts.gap : (densGap != null ? densGap : landGapPx(false));
     const rr = landDotR(gap);
-    const stepDeg = landStepForView(gap, zoom);
+    const stepDeg = opts.step != null ? opts.step : landStepForView(gap, zoom);
     const buckets = Array.from({ length: PROV_ORDER.length + 1 }, () => []);
+    const doClear = opts.clear !== false;
+    const doLabels = opts.labels != null ? opts.labels : (densZoom == null && !densXfade);
+    ctx.globalAlpha = doClear ? 1 : a;
+    if (doClear) {
+      ctx.fillStyle = '#0a0a0c';
+      ctx.fillRect(0, 0, CW, CH);
+    }
     ctx.globalAlpha = a;
-    ctx.fillStyle = '#0a0a0c';
-    ctx.fillRect(0, 0, CW, CH);
 
     const pad = gap * 2;
     const lonL = cam.lon - (CW / 2 + pad) / zoom;
@@ -788,33 +844,41 @@
       return [x, y, rr];
     });
     fillProvBuckets(buckets);
-    if (densZoom == null) paintProvLabels(false);
+    if (doLabels) paintProvLabels(false);
     ctx.globalAlpha = 1;
   }
 
   // 球面：同样按目标间距的地理网格采样再投影
-  function paintGlobe(a) {
+  // opts: { gap, step, clear=true, chrome=true, labels } —— 交叉淡入时旧层铺底、新层叠点
+  function paintGlobe(a, opts) {
     if (a <= 0.01) return;
+    opts = opts || {};
     const zoom = cam.zoom, R = zoom * K;
     const cx = CW / 2, cy = CH / 2;
     if (R < 2) return;
+    const doClear = opts.clear !== false;
+    const doChrome = opts.chrome !== false;
+    const doLabels = opts.labels != null ? opts.labels : (densZoom == null && !densXfade);
+    const gap = opts.gap != null ? opts.gap : (densGap != null ? densGap : landGapPx(true));
+    const rDot = landDotR(gap);
+    const stepDeg = opts.step != null ? opts.step : landStepForView(gap, zoom);
 
     ctx.save();
-    ctx.globalAlpha = a;
     ctx.beginPath(); ctx.arc(cx, cy, R, 0, TAU); ctx.clip();
 
-    ctx.fillStyle = '#0a0a0c';
-    ctx.fillRect(cx - R, cy - R, 2 * R, 2 * R);
-    const hi = ctx.createRadialGradient(cx - R * 0.42, cy - R * 0.5, R * 0.1, cx, cy, R);
-    hi.addColorStop(0, 'rgba(255,200,140,.18)');
-    hi.addColorStop(0.45, 'rgba(40,40,48,.10)');
-    hi.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = hi;
-    ctx.fillRect(cx - R, cy - R, 2 * R, 2 * R);
+    if (doClear) {
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = '#0a0a0c';
+      ctx.fillRect(cx - R, cy - R, 2 * R, 2 * R);
+      const hi = ctx.createRadialGradient(cx - R * 0.42, cy - R * 0.5, R * 0.1, cx, cy, R);
+      hi.addColorStop(0, 'rgba(255,200,140,.18)');
+      hi.addColorStop(0.45, 'rgba(40,40,48,.10)');
+      hi.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = hi;
+      ctx.fillRect(cx - R, cy - R, 2 * R, 2 * R);
+    }
 
-    const gap = densGap != null ? densGap : landGapPx(true);
-    const rDot = landDotR(gap);
-    const stepDeg = landStepForView(gap, zoom);
+    ctx.globalAlpha = a;
     const buckets = Array.from({ length: PROV_ORDER.length + 1 }, () => []);
     const s0 = Math.sin(rad(cam.lat)), c0 = Math.cos(rad(cam.lat));
     const iMax = Math.ceil(180 / stepDeg);
@@ -852,20 +916,25 @@
     });
     fillProvBuckets(buckets);
 
-    const sh = ctx.createRadialGradient(cx - R * 0.25, cy - R * 0.3, R * 0.1, cx, cy, R);
-    sh.addColorStop(0, 'rgba(0,0,0,0)');
-    sh.addColorStop(0.8, 'rgba(0,0,0,.18)');
-    sh.addColorStop(0.95, 'rgba(0,0,0,.30)');
-    sh.addColorStop(1, 'rgba(0,0,0,.50)');
-    ctx.fillStyle = sh;
-    ctx.fillRect(cx - R, cy - R, 2 * R, 2 * R);
-    if (densZoom == null) paintProvLabels(true);
+    if (doChrome) {
+      ctx.globalAlpha = 1;
+      const sh = ctx.createRadialGradient(cx - R * 0.25, cy - R * 0.3, R * 0.1, cx, cy, R);
+      sh.addColorStop(0, 'rgba(0,0,0,0)');
+      sh.addColorStop(0.8, 'rgba(0,0,0,.18)');
+      sh.addColorStop(0.95, 'rgba(0,0,0,.30)');
+      sh.addColorStop(1, 'rgba(0,0,0,.50)');
+      ctx.fillStyle = sh;
+      ctx.fillRect(cx - R, cy - R, 2 * R, 2 * R);
+    }
+    if (doLabels) paintProvLabels(true);
     ctx.restore();
 
-    ctx.globalAlpha = a;
-    ctx.strokeStyle = 'rgba(255,255,255,.10)';
-    ctx.lineWidth = 1.2;
-    ctx.beginPath(); ctx.arc(cx, cy, R, 0, TAU); ctx.stroke();
+    if (doChrome) {
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = 'rgba(255,255,255,.10)';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.arc(cx, cy, R, 0, TAU); ctx.stroke();
+    }
     ctx.globalAlpha = 1;
   }
 
@@ -1400,7 +1469,8 @@
       densGap = null;
       densStep = null;
       densFlat = null;
-      beginZoomGesture(zoom < s0.zoom ? zoom : s0.zoom);
+      // 冻结在起点密度：放大时稀疏→加密淡入，缩小时密→疏淡出
+      beginZoomGesture(s0.zoom);
     }
     (function step(t) {
       const k = Math.min(1, (t - t0) / total);
