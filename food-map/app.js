@@ -40,11 +40,27 @@
       [...filters.cats].sort().join(','),
       [...filters.tastes].sort().join(','),
       [...filters.ings].sort().join(','),
-      [...filters.cooks].sort().join(',')
+      [...filters.cooks].sort().join(','),
+      q // 将搜索关键字也加入签名
     ].join('|');
   }
   function hasAttrFilter() {
     return filters.cats.size || filters.tastes.size || filters.ings.size || filters.cooks.size;
+  }
+  function passSearchFilter(p) {
+    if (!q) return true;
+    if (p.n.toLowerCase().includes(q)) return true;
+    if (p.prov && p.prov.toLowerCase().includes(q)) return true;
+    if (p.city && p.city.toLowerCase().includes(q)) return true;
+    if (p.sec && p.sec.toLowerCase().includes(q)) return true;
+    const f = foodOfPlace(p);
+    if (f.n && f.n.toLowerCase().includes(q)) return true;
+    if ((f.ing || []).some((x) => x.toLowerCase().includes(q))) return true;
+    if ((f.tags || []).some((x) => x.toLowerCase().includes(q))) return true;
+    if (f.cat && f.cat.toLowerCase().includes(q)) return true;
+    if (f.taste && f.taste.toLowerCase().includes(q)) return true;
+    if (f.cui && f.cui.toLowerCase().includes(q)) return true;
+    return p.foods.some(ff => ff.n.toLowerCase().includes(q));
   }
   function passAttrFilter(p) {
     if (!hasAttrFilter()) return true;
@@ -1084,8 +1100,10 @@
     const agg = foodAggDeg();
     const buckets = new Map();
     for (let i = 0; i < PLACES.length; i++) {
-      if (!passAttrFilter(PLACES[i])) continue;
       const p = PLACES[i];
+      // 同时应用属性筛选和搜索关键字筛选
+      if (!passAttrFilter(p)) continue;
+      if (!passSearchFilter(p)) continue;
       const gi = Math.floor((p.lat + 90) / agg);
       const gj = Math.floor((p.lon + 180) / agg);
       const k = gi + ':' + gj;
@@ -1687,7 +1705,36 @@
     }
   }
   document.querySelectorAll('.tab').forEach(b => b.addEventListener('click', () => switchTab(b.dataset.tab)));
-  $('#searchInput').addEventListener('input', e => { q = e.target.value.trim().toLowerCase(); renderList(); });
+  
+  // 搜索功能
+  const searchInput = $('#searchInput');
+  const mapSearchBtn = $('#mapSearch');
+  
+  function updateSearchUI() {
+    const hasQuery = q.length > 0;
+    // 高亮地图搜索按钮
+    mapSearchBtn.classList.toggle('on', hasQuery);
+    // 地图页也需要重绘以显示搜索结果
+    if (state.tab === 'map') {
+      scheduleDraw();
+    }
+  }
+  
+  searchInput.addEventListener('input', e => { 
+    q = e.target.value.trim().toLowerCase(); 
+    updateSearchUI();
+    renderList(); 
+  });
+  
+  // 监听原生搜索清除按钮（点击 X 或按 ESC）
+  searchInput.addEventListener('search', e => {
+    if (e.target.value === '') {
+      q = '';
+      updateSearchUI();
+      renderList();
+    }
+  });
+  
   $('#favFilter').addEventListener('click', () => { onlyFav = !onlyFav; $('#favFilter').classList.toggle('on', onlyFav); renderList(); });
 
   /* ---- 筛选面板 ---- */
@@ -1715,6 +1762,9 @@
       wrap.className = 'filter-sec';
       wrap.innerHTML = `<h3>${sec.title}</h3>`;
       if (sec.search) {
+        const searchWrap = document.createElement('div');
+        searchWrap.className = 'filter-search-wrap';
+        
         const input = document.createElement('input');
         input.className = 'filter-search';
         input.type = 'search';
@@ -1726,7 +1776,23 @@
           const el = filterBody.querySelector('.filter-search');
           if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
         });
-        wrap.appendChild(input);
+        
+        const clearBtn = document.createElement('button');
+        clearBtn.type = 'button';
+        clearBtn.className = 'filter-search-clear';
+        clearBtn.innerHTML = '×';
+        clearBtn.setAttribute('aria-label', '清除');
+        clearBtn.style.display = ingQuery ? 'block' : 'none';
+        clearBtn.addEventListener('click', () => {
+          ingQuery = '';
+          renderFilterBody();
+          const el = filterBody.querySelector('.filter-search');
+          if (el) el.focus();
+        });
+        
+        searchWrap.appendChild(input);
+        searchWrap.appendChild(clearBtn);
+        wrap.appendChild(searchWrap);
       }
       const row = document.createElement('div');
       row.className = 'chip-row';
@@ -1783,8 +1849,9 @@
       renderList();
     } else {
       // 地图页筛选：给出生效反馈（名录页切回时会重新渲染）
-      const n = PLACES.filter(passAttrFilter).length;
-      toast(hasAttrFilter() ? `已筛选 ${n} 道美食` : '已展示全部美食');
+      const n = PLACES.filter((p, i) => passFilter(p, i)).length;
+      const hasFilter = hasAttrFilter() || q;
+      toast(hasFilter ? `已筛选 ${n} 道美食` : '已展示全部美食');
     }
     scheduleDraw();
     hideFilter();
@@ -1800,6 +1867,16 @@
   }
   filterBtn.addEventListener('click', openFilter);
   mapFilterBtn.addEventListener('click', openFilter);
+  
+  // 地图搜索按钮：切换到名录页并聚焦搜索框
+  $('#mapSearch').addEventListener('click', () => {
+    switchTab('list');
+    setTimeout(() => {
+      const input = $('#searchInput');
+      if (input) input.focus();
+    }, 300);
+  });
+  
   $('#filterClose').addEventListener('click', hideFilter);
   $('#filterMask').addEventListener('click', hideFilter);
   $('#filterApply').addEventListener('click', applyFilters);
@@ -1816,19 +1893,8 @@
   function passFilter(p, i) {
     if (onlyFav && !isFav(i)) return false;
     if (!passAttrFilter(p)) return false;
-    if (!q) return true;
-    if (p.n.toLowerCase().includes(q)) return true;
-    if (p.prov && p.prov.toLowerCase().includes(q)) return true;
-    if (p.city && p.city.toLowerCase().includes(q)) return true;
-    if (p.sec && p.sec.toLowerCase().includes(q)) return true;
-    const f = foodOfPlace(p);
-    if (f.n && f.n.toLowerCase().includes(q)) return true;
-    if ((f.ing || []).some((x) => x.toLowerCase().includes(q))) return true;
-    if ((f.tags || []).some((x) => x.toLowerCase().includes(q))) return true;
-    if (f.cat && f.cat.toLowerCase().includes(q)) return true;
-    if (f.taste && f.taste.toLowerCase().includes(q)) return true;
-    if (f.cui && f.cui.toLowerCase().includes(q)) return true;
-    return p.foods.some(ff => ff.n.toLowerCase().includes(q));
+    if (!passSearchFilter(p)) return false;
+    return true;
   }
 
   function appendPlaceRow(card, idx) {
