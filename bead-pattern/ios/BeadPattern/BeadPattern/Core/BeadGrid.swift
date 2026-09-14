@@ -28,7 +28,9 @@ struct GridRect: Hashable, Sendable {
 }
 
 /// 量化结果：二维拼豆格子。
-struct BeadGrid: Sendable {
+/// `Equatable` 是给画布用的：视图比较它就能知道「画面是否需要重画」，
+/// 不必每帧重绘整块画布。
+struct BeadGrid: Sendable, Equatable {
     let width: Int
     let height: Int
     let boardSize: Int
@@ -80,23 +82,60 @@ struct BeadGrid: Sendable {
         usage(palette: palette, in: fullRect)
     }
 
-    /// 指定区域内的用量清单（分板图纸用）。
-    func usage(palette: BeadPalette, in rect: GridRect) -> [(color: PaletteColor, count: Int)] {
-        var counts: [String: Int] = [:]
+    /// 图纸图例清单。与 H5 端 `exportLegendList` 一致：
+    /// **先按整幅颗数降序**排出全部色号，再筛掉本板没有的，颗数取本板的。
+    /// 所以分板导出时各板图例顺序一致，不会因为某板用量不同而重排。
+    func legendList(palette: BeadPalette, in rect: GridRect) -> [(color: PaletteColor, count: Int)] {
+        let global = usage(palette: palette)
+
+        var local: [String: Int] = [:]
         for y in rect.y0..<rect.y1 {
             for x in rect.x0..<rect.x1 {
                 let cell = self[x, y]
                 guard !cell.isEmpty else { continue }
+                local[cell.code, default: 0] += 1
+            }
+        }
+
+        return global.compactMap { item in
+            guard let count = local[item.color.code] else { return nil }
+            return (color: item.color, count: count)
+        }
+    }
+
+    /// 指定区域内的用量清单（分板图纸用）。
+    ///
+    /// 排序必须是**确定性**的：H5 端 `Object.keys(counts)` 按首次出现序，
+    /// `Array.prototype.sort` 稳定，所以同颗数的色号保持图上先出现的在前。
+    /// 之前直接对 `Dictionary` 排序（Swift 的 sort 不稳定、Dictionary 遍历序
+    /// 每进程还会变），同一张图两次运行会得到不同的清单顺序。
+    func usage(palette: BeadPalette, in rect: GridRect) -> [(color: PaletteColor, count: Int)] {
+        var counts: [String: Int] = [:]
+        var order: [String] = []
+        for y in rect.y0..<rect.y1 {
+            for x in rect.x0..<rect.x1 {
+                let cell = self[x, y]
+                guard !cell.isEmpty else { continue }
+                if counts[cell.code] == nil { order.append(cell.code) }
                 counts[cell.code, default: 0] += 1
             }
         }
-        return counts
-            .compactMap { code, count -> (PaletteColor, Int)? in
-                guard let color = palette.color(for: code) else { return nil }
+        return Self.rankedCodes(order: order, counts: counts)
+            .compactMap { code -> (PaletteColor, Int)? in
+                guard let color = palette.color(for: code), let count = counts[code] else { return nil }
                 return (color, count)
             }
-            .sorted { $0.1 > $1.1 }
-            .map { (color: $0.0, count: $0.1) }
+    }
+
+    /// 按颗数降序排色号；颗数相同时保持 `order`（图上首次出现序），与 H5 一致。
+    static func rankedCodes(order: [String], counts: [String: Int]) -> [String] {
+        order.enumerated()
+            .sorted { a, b in
+                let ca = counts[a.element] ?? 0
+                let cb = counts[b.element] ?? 0
+                return ca == cb ? a.offset < b.offset : ca > cb
+            }
+            .map(\.element)
     }
 
     /// 区域内的豆数。

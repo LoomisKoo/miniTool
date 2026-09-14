@@ -14,6 +14,7 @@ struct BeadEditorView: View {
     @State private var showColors = false
     @State private var showBrush = false
     @State private var showExport = false
+    @State private var showLibrary = false
     @State private var isExporting = false
     /// 复位请求：+1 让预览区重新适配
     @State private var resetToken = 0
@@ -71,6 +72,28 @@ struct BeadEditorView: View {
             }
         }
         .overlay { exportBusyOverlay }
+        .fullScreenCover(isPresented: $model.showingCrop) {
+            if let original = model.originalSourceImage {
+                BeadCropView(
+                    sourceImage: UIImage(cgImage: original),
+                    existingCrop: model.cropRect
+                ) { output in
+                    model.applyCrop(output)
+                }
+            }
+        }
+        .sheet(isPresented: $showLibrary) {
+            BeadLibraryView(
+                currentId: model.project?.id,
+                canSaveCurrent: model.hasGrid,
+                currentName: model.projectName,
+                onSaveCurrent: { name in model.saveProject(name: name) },
+                onOpen: { project in
+                    model.load(project: project)
+                    showLibrary = false
+                }
+            )
+        }
         .alert("提示", isPresented: messageBinding) {
             Button("好") { model.message = nil }
         } message: {
@@ -80,6 +103,7 @@ struct BeadEditorView: View {
             guard let item else { return }
             Task { await load(item) }
         }
+        .task { ProjectStore.shared.loadIfNeeded() }
         .onDisappear { model.flushPendingSave() }
     }
 
@@ -97,6 +121,27 @@ struct BeadEditorView: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, 10)
         .padding(.horizontal, 16)
+        .overlay(alignment: .trailing) { libraryButton }
+    }
+
+    /// 右上角作品库入口。空状态也要能进来，所以放在标题栏而不是底部操作栏。
+    private var libraryButton: some View {
+        Button {
+            showLibrary = true
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "square.grid.2x2")
+                    .font(.system(size: 12, weight: .semibold))
+                Text("作品")
+                    .font(.system(size: 13, weight: .semibold))
+            }
+            .foregroundStyle(BeadTheme.accent)
+            .padding(.horizontal, 10)
+            .frame(height: 28)
+            .background(BeadTheme.accentSoft, in: RoundedRectangle(cornerRadius: 8))
+        }
+        .buttonStyle(.plain)
+        .padding(.trailing, 16)
     }
 
     // MARK: - 空状态（选择图片）
@@ -114,7 +159,7 @@ struct BeadEditorView: View {
                     Text("选择图片")
                         .font(.system(size: 15, weight: .medium))
                         .foregroundStyle(BeadTheme.ink)
-                    Text("生成可拼的豆格图纸 · PNG 透明处不铺豆")
+                    Text("生成可拼的豆格图纸 · 透明处理不铺豆")
                         .font(.system(size: 12))
                         .foregroundStyle(BeadTheme.muted)
                         .multilineTextAlignment(.center)
@@ -130,6 +175,22 @@ struct BeadEditorView: View {
                 }
             }
             .buttonStyle(.plain)
+
+            if !ProjectStore.shared.projects.isEmpty {
+                Button {
+                    showLibrary = true
+                } label: {
+                    Text("打开已保存的作品（\(ProjectStore.shared.count)）")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(BeadTheme.accent)
+                        .padding(.horizontal, 14)
+                        .frame(height: 34)
+                        .background(BeadTheme.accentSoft, in: RoundedRectangle(cornerRadius: 10))
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 16)
+            }
+
             Spacer()
         }
         .padding(24)
@@ -395,6 +456,18 @@ struct BeadEditorView: View {
         HStack(spacing: 10) {
             PhotosPicker(selection: $photoItem, matching: .images, photoLibrary: .shared()) {
                 Text("重选")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(BeadTheme.accent)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 48)
+                    .background(BeadTheme.surface, in: RoundedRectangle(cornerRadius: 12))
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                model.openCrop()
+            } label: {
+                Text("裁切")
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(BeadTheme.accent)
                     .frame(maxWidth: .infinity)

@@ -73,6 +73,10 @@ struct BoardSizeOption: Identifiable, Hashable {
         BoardSizeOption(size: 32, detail: "大号方板"),
         BoardSizeOption(size: 40, detail: "加大方板"),
         BoardSizeOption(size: 52, detail: "超大方板"),
+        BoardSizeOption(size: 64, detail: "巨幅方板"),
+        BoardSizeOption(size: 80, detail: "巨幅方板"),
+        BoardSizeOption(size: 100, detail: "拼接大板"),
+        BoardSizeOption(size: 116, detail: "最大拼接板"),
     ]
 }
 
@@ -84,13 +88,13 @@ struct BeadSettings: Codable, Hashable {
     /// 单板规格，用于分板与板数统计。
     var boardSize = 29
     /// 限色上限（8–80）。
-    var maxColors = 48
+    var maxColors = 60
     var sampleMode: SampleMode = .dominant
     var dither = false
     /// 邻近相似色连通域合并。
     var mergeSimilar = false
-    /// 合并阈值（RGB 欧氏距离）。H5 端固定在 40，无 UI。
-    var mergeThreshold = 40
+    /// 合并阈值（Oklab 感知距离的平方根）。与 H5 端固定在 0.10，无 UI。
+    var mergeThreshold = 0.10
     /// 网格线（H5 的 `showGrid`）。
     var showGrid = true
     /// 分板线：预览与整幅导出时画板间分割线。
@@ -103,7 +107,7 @@ struct BeadSettings: Codable, Hashable {
 
     static let widthRange = 16...116
     static let colorRange = 8...80
-    static let mergeThresholdRange = 10...90
+    static let mergeThresholdRange = 0.02...0.3
 
     /// 与 H5 端 `state` 一致的默认参数。
     static let standard = BeadSettings()
@@ -117,7 +121,7 @@ struct BeadSettings: Codable, Hashable {
         let sampleMode: SampleMode
         let dither: Bool
         let mergeSimilar: Bool
-        let mergeThreshold: Int
+        let mergeThreshold: Double
     }
 
     var quantizationSignature: QuantizationSignature {
@@ -135,12 +139,18 @@ struct BeadSettings: Codable, Hashable {
 
 /// 参数本地持久化。用 `UserDefaults`，对应 H5 端的 localStorage。
 enum SettingsStore {
-    private static let key = "beadpattern.settings.v2"
+    /// v3：限色默认 48→60、合并阈值改 Oklab 口径。H5 端默认值变了，
+    /// 这里直接换 key 丢掉旧存档，保证首启参数与 H5 一致。
+    private static let key = "beadpattern.settings.v3"
 
     static func load() -> BeadSettings {
         guard let data = UserDefaults.standard.data(forKey: key),
-              let settings = try? JSONDecoder().decode(BeadSettings.self, from: data) else {
+              var settings = try? JSONDecoder().decode(BeadSettings.self, from: data) else {
             return .standard
+        }
+        // 兜底：阈值若不在 Oklab 区间（0.02–0.3）就回默认
+        if !BeadSettings.mergeThresholdRange.contains(settings.mergeThreshold) {
+            settings.mergeThreshold = BeadSettings.standard.mergeThreshold
         }
         return settings
     }

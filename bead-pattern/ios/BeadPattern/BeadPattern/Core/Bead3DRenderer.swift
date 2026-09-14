@@ -1,6 +1,7 @@
 import CoreGraphics
 import Foundation
 import SwiftUI
+import simd
 
 /// 3D 视图相机。与 H5 端 `state.view3d` 的可调项一致（不含 morph 过渡）。
 struct Bead3DCamera: Equatable {
@@ -20,6 +21,37 @@ struct Bead3DCamera: Equatable {
     }
 }
 
+/// 3D 预览画质档位。手势/过渡进行中降级，松手后再补一帧完整细节。
+///
+/// 降级方式曾经是「交互期压到 LOD0」——每颗豆只填一次顶面，不画外壁/孔壁。
+/// 那样确实最省（实测 390x500 @3x、zoom 2.0、21 次中位数、已减去空画布基线）：
+///
+/// | 网格 | 颗数 | LOD0(只顶面) | LOD2/3 + 色号 |
+/// | --- | --- | --- | --- |
+/// | 64x85 | 5440 | 4.8ms | 15.3ms |
+/// | 80x106 | 8480 | 7.2ms | 25.0ms |
+/// | 100x133 | 13300 | 10.8ms | 23.1ms |
+///
+/// **但 LOD0 的豆就是一个纯色圆盘，拖动时整幅看起来和 2D 扁平视图没区别**
+/// （H5 端没有这一档，所以同一个手势在 H5 上一直是完整 3D）。侧壁才是立体感的
+/// 主要来源，所以这一档现在只做两件事：不画色号、顶点数封顶（见 `segmentCap`）；
+/// 外壁/孔的取舍全部交给「上屏像素够不够」判（`Bead3DRenderer.draw` 里）。
+///
+/// 代价：交互期和稳定态基本同价（笔数一样，只是省掉色号那一笔 Text）。
+/// 真实的出帧间隔有没有掉，用 `BeadPerfProbe` 的 HUD 看（`画` vs `出`）。
+///
+/// 注意：`fill` 走的是 Core Graphics 的 CPU 栅格化，代价基本正比于**笔数**与
+/// 覆盖像素，与 Debug/Release 几乎无关（实测两档差异 <10%，热点在 CG 里）。
+/// 要再往下压只能减少豆数、降分辨率或改走 Metal。
+enum Bead3DQuality {
+    case interactive
+    case settled
+
+    /// 交互期的顶点数上限。fill 的笔数才是大头（每颗豆的每层各一笔），
+    /// 顶点数只影响 CG 的路径准备，收一档基本不损观感。
+    var segmentCap: Int { self == .interactive ? 12 : Int.max }
+}
+
 /// 拼豆 3D 预览：把每颗豆画成带中心孔的圆柱，按深度排序后依次绘制。
 ///
 /// 与 H5 端 `render3d` 的几何与配色口径一致（`roundness = 1`、`hFactor = 1` 的稳定态）：
@@ -27,18 +59,32 @@ struct Bead3DCamera: Equatable {
 /// 差异：视角旋转不做拟合重算（与 H5 相同，锁定在 yaw 0 / pitch 0.5 的初始 fit），
 /// 且未实现双指平移。
 ///
-/// 性能：逐豆只做「投影中心 + 按深度缩放一张预计算好的单位圆环」，
-/// 可见弧段与明暗色都按视角/色号缓存，避免每颗豆重复分配数组与 Path。
+/// ## 为什么逐豆不构造 Path
+///
+/// 投影后每颗豆的顶/底环都是**同一个单位圆的仿射像**：
+/// `P(θ) = 圆心 + k · (cosθ·A + sinθ·B)`，其中 `A`/`B` 是全幅共用的屏幕基向量、`k` 只跟深度有关。
+/// 所以圆、圆环（顶面带孔）、侧壁带都能预计算成单位路径，逐豆只写一个仿射变换再填充。
+/// 之前每颗豆要新建 3 个 `Path`（约 1200 颗 × 40 个点/帧），是卡顿的主因。
+///
+/// ## 可见弧为什么要分桶
+///
+/// 「哪半圈朝向相机」取决于**这颗豆到眼睛的方向**，不是全幅一个方向。
+/// 原先全幅共用一条按原点算出来的弧，靠边的豆方向能差 40°，侧壁会画到错误的半边，
+/// 看起来就是「穿模/空心」。这里按方向分 `arcBuckets` 个桶，桶内的弧形状预计算复用，
+/// 逐豆只做一次 `atan2`。
 enum Bead3DRenderer {
 
-    // 与 H5 一致的几何常量
-    private static let beadHeight = 0.52
-    private static let outerRadius = 0.46
-    private static let innerRadius = 0.20
-    private static let plateMargin = 0.55
-    private static let fitPadding = 28.0
+    // 与 H5 一致的几何常量（Metal 路径也读这几个值，改一处两边同步）
+    static let beadHeight = 0.52
+    static let outerRadius = 0.46
+    static let innerRadius = 0.20
+    static let plateMargin = 0.55
+    static let fitPadding = 28.0
 
-    private static let plateColor = RGB8(0x23, 0x23, 0x29)
+    /// 侧壁可见弧的方向桶数。32 桶 ≈ 11° 一档，边缘豆的轮廓误差在 6° 以内。
+    private static let arcBuckets = 32
+
+    static let plateColor = RGB8(0x23, 0x23, 0x29)
 
     static let backgroundColor = RGB8(0xE5, 0xE5, 0xEA)
 
@@ -127,18 +173,109 @@ enum Bead3DRenderer {
         return (!f0.isFinite || f0 <= 0) ? 1 : f0
     }
 
+    // MARK: - 单位形状
+
+    /// 单位圆（半径 `radius`）追加到 `path`。
+    private static func appendUnitRing(segments: Int, radius: Double, into path: inout Path) {
+        for i in 0..<segments {
+            let angle = Double(i) / Double(segments) * 2 * .pi
+            let point = CGPoint(x: cos(angle) * radius, y: sin(angle) * radius)
+            if i == 0 {
+                path.move(to: point)
+            } else {
+                path.addLine(to: point)
+            }
+        }
+        path.closeSubpath()
+    }
+
+    /// 单位空间里的一段侧壁带：顶弧正向 + 同一段弧沿 `(0, dY)` 下移后回程，闭合成多边形。
+    ///
+    /// `center` 是这段弧在世界 xz 平面上的中心角。两端各多盖半格，
+    /// 压住与顶面之间的接缝（顶面随后覆盖上来）。
+    private static func unitWallBand(segments: Int, center: Double, dY: Double) -> Path {
+        let half = max(3, segments / 2)
+        let span = Double.pi / 2 + Double.pi / Double(segments)
+        var path = Path()
+
+        @inline(__always)
+        func point(_ index: Int, offset: Double) -> CGPoint {
+            let t = Double(index) / Double(half)
+            let angle = center - span + t * 2 * span
+            return CGPoint(x: cos(angle), y: sin(angle) + offset)
+        }
+
+        for i in 0...half {
+            let p = point(i, offset: 0)
+            if i == 0 {
+                path.move(to: p)
+            } else {
+                path.addLine(to: p)
+            }
+        }
+        for i in stride(from: half, through: 0, by: -1) {
+            path.addLine(to: point(i, offset: dY))
+        }
+        path.closeSubpath()
+        return path
+    }
+
+    /// 豆 → 眼睛方向落在哪个弧桶。
+    private static func arcBucket(cx: Double, cz: Double, eyeX: Double, eyeZ: Double) -> Int {
+        var angle = atan2(eyeZ - cz, eyeX - cx)
+        if angle < 0 { angle += 2 * .pi }
+        let index = Int((angle / (2 * .pi) * Double(arcBuckets)).rounded())
+        return ((index % arcBuckets) + arcBuckets) % arcBuckets
+    }
+
+    private static func bucketCenter(_ bucket: Int) -> Double {
+        Double(bucket) / Double(arcBuckets) * 2 * .pi
+    }
+
+    /// 单位路径 → 屏幕：`(u, v) ↦ 圆心 + k·(u·A + v·B)`。
+    @inline(__always)
+    private static func unitTransform(
+        k: Double,
+        a: CGPoint,
+        b: CGPoint,
+        center: CGPoint
+    ) -> CGAffineTransform {
+        CGAffineTransform(
+            a: k * a.x,
+            b: k * a.y,
+            c: k * b.x,
+            d: k * b.y,
+            tx: center.x,
+            ty: center.y
+        )
+    }
+
+    // MARK: - 绘制
+
+    /// 一帧实际用到的档位与颗数，给性能埋点（`BeadPerfProbe`）判读用。
+    struct FrameStats {
+        var lod = 0
+        var segments = 0
+        var beads = 0
+        /// 外壁在屏幕上的高度（pt）。< 1.5 时这一帧不画外壁（豆太小，看不出来）。
+        var wallPx = 0.0
+    }
+
+    @discardableResult
     static func draw(
         context: inout GraphicsContext,
         size: CGSize,
         grid: BeadGrid,
         rect: GridRect,
         camera: Bead3DCamera,
-        settings: BeadSettings,
-        highlightedCode: String?
-    ) {
+        style: BeadCanvasStyle,
+        highlightedCode: String?,
+        quality: Bead3DQuality = .settled
+    ) -> FrameStats {
+        var stats = FrameStats()
         let pw = rect.width
         let ph = rect.height
-        guard pw > 0, ph > 0, size.width > 0, size.height > 0 else { return }
+        guard pw > 0, ph > 0, size.width > 0, size.height > 0 else { return stats }
 
         let cam = camera.clamped
         let hB = beadHeight
@@ -198,67 +335,85 @@ enum Bead3DRenderer {
         }
 
         // ---------- LOD ----------
+        // `auto` 只由「豆上屏多大 / 一共多少颗」决定，与手势无关；它决定孔与顶点数。
         let totalCells = pw * ph
         let cellPxEst = focal / max(0.2, eyeR - lookY)
-        let lod: Int
+        let auto: Int
         if cellPxEst < 2.5 || totalCells > 16000 {
-            lod = 0
+            auto = 0
         } else if cellPxEst < 5 || totalCells > 9000 {
-            lod = 1
+            auto = 1
         } else if cellPxEst < 9 || totalCells > 5000 {
-            lod = 2
+            auto = 2
         } else {
-            lod = 3
+            auto = 3
         }
-        let segments: Int
+        // 交互期只砍「色号」与顶点数，**不再改几何**（H5 也没有交互降级档）。
+        // 外壁是立体感的唯一来源，而「拖动时看起来是扁的」正是因为以前这里压到
+        // LOD0（只有顶面圆盘，和 2D 扁平视图没区别）；外壁现在改由像素判（见下）。
+        let lod = auto
+        var segments: Int
         switch lod {
         case 0, 1: segments = 10
         case 2: segments = 14
         default: segments = cellPxEst > 24 ? 28 : (cellPxEst > 14 ? 22 : 16)
         }
-        let drawWalls = lod >= 1
-        let drawInner = lod >= 2
-        // 接近正俯视时侧壁几乎看不见，直接跳过
-        let wallsVisible = drawWalls && cam.pitch < 1.45
-        let innerVisible = drawInner && cellPxEst > 6
+        segments = min(segments, quality.segmentCap)
+        // 孔洞（顶面 eoFill 挖孔）与孔内壁必须**同时**存在，不能只留孔：
+        // 孔是挖出来的透明区，背后是已经画好的深色底板，只挖不填会在每颗豆
+        // 正中留下一个深色点。要么「挖孔 + 填内壁」，要么「实心圆」。
+        //
+        // 门槛 9px 的由来：豆上屏直径 ≈ 0.92×cellPxEst，孔直径 = (ri/ro)×它
+        // ≈ 0.4×cellPxEst。所以 cellPxEst ≤ 9 时孔只有 2.4~3.6px，看不出是孔，
+        // 而孔内壁是每颗豆的第 3 笔——这一笔省掉能减约 1/3 的稳定态开销。
+        //
+        // 判据用 cellPxEst 而不是 lod：lod 会被「总格数」上限压下来，那是为了
+        // 少画豆子，不该连带把大孔的内壁也省掉（大格子时又被视口裁掉大半，
+        // 这一笔本来就不贵）。
+        let holeVisible = lod >= 2 && cellPxEst > 9
 
-        let total = Double(segments)
-        var cosTable = [Double]()
-        var sinTable = [Double]()
-        cosTable.reserveCapacity(segments)
-        sinTable.reserveCapacity(segments)
-        for i in 0..<segments {
-            let angle = Double(i) / total * 2 * .pi
-            cosTable.append(cos(angle))
-            sinTable.append(sin(angle))
-        }
+        // 顶面单位形状：整圆 / 带孔圆环（孔半径比恒为 ri/ro）
+        var disk = Path()
+        appendUnitRing(segments: segments, radius: 1, into: &disk)
+        var annulus = Path()
+        appendUnitRing(segments: segments, radius: 1, into: &annulus)
+        appendUnitRing(segments: segments, radius: ri / ro, into: &annulus)
 
-        // 单位半径在该视角下的屏幕偏移：与具体哪颗豆无关，全幅共用一张
         let basisA = CGPoint(x: b.rx, y: b.ux)
         let basisB = CGPoint(x: b.rz, y: b.uz)
-        var unitRing = [CGPoint]()
-        unitRing.reserveCapacity(segments)
-        for i in 0..<segments {
-            unitRing.append(
-                CGPoint(
-                    x: cosTable[i] * basisA.x + sinTable[i] * basisB.x,
-                    y: cosTable[i] * basisA.y + sinTable[i] * basisB.y
-                )
-            )
-        }
 
-        // 可见弧段：相机离得远（eyeR ≈ 1.15 倍对角线），各豆几乎一致，
-        // 所以用原点处那颗豆为代表算一次，全幅复用。
-        let outerArc = visibleArc(
-            segments: segments, cosTable: cosTable, sinTable: sinTable,
-            eyeX: eyeX, eyeZ: eyeZ, outward: true
-        )
-        let innerArc = visibleArc(
-            segments: segments, cosTable: cosTable, sinTable: sinTable,
-            eyeX: eyeX, eyeZ: eyeZ, outward: false
-        )
-        let wallLit = outerArc.averageFacing > 0.28
-        let innerLit = innerArc.averageFacing > 0.28
+        // 侧壁带：全幅共用一套。下移量按单位空间算，与豆的位置无关
+        // （屏幕位移 Δy 与 k 都正比于 1/vz，比值恒定）。
+        var outerBands: [Path] = []
+        var innerBands: [Path] = []
+        let originTop = project(0, hB, 0)
+        let originBottom = project(0, 0, 0)
+        // 低视角下孔内壁只有上段可见：再往下就被近侧边缘挡住了。
+        // 画满整段会溢出到近侧外壁上，看起来就是「空心/穿模」。
+        let visibleInnerBottom = max(0, hB - 2 * ri * tan(cam.pitch))
+        let originInnerBottom = project(0, visibleInnerBottom, 0)
+
+        // 画不画外壁：只看**上屏高度**，与颗数、与交互态都无关。
+        // 以前的判据是 `lod >= 1`，而 lod 会被「总格数 > 16000」直接压成 0 ——
+        // 于是大网格哪怕放大到能看清，也永远只有一层扁平顶面。此外侧壁不足
+        // ~1.5px 时看不出立体感，画它是纯浪费（与上面孔的 9px 门槛同一套口径）。
+        var wallPx = 0.0
+        if cam.pitch < 1.45, let top0 = originTop, let bottom0 = originBottom {
+            wallPx = abs(bottom0.y - top0.y)
+            if wallPx >= 1.5 {
+                let dY =
+                    (bottom0.y - top0.y) * top0.vz / (ro * focal)
+                outerBands = (0..<arcBuckets).map {
+                    unitWallBand(segments: segments, center: bucketCenter($0), dY: dY)
+                }
+            }
+        }
+        if holeVisible, let top0 = originTop, let inner0 = originInnerBottom {
+            let dY = (inner0.y - top0.y) * top0.vz / (ri * focal)
+            innerBands = (0..<arcBuckets).map {
+                unitWallBand(segments: segments, center: bucketCenter($0), dY: dY)
+            }
+        }
 
         // 每个色号解析一次明暗色，避免逐豆重复插值与 Color 构造
         var shadeCache: [String: BeadShades] = [:]
@@ -273,9 +428,15 @@ enum Bead3DRenderer {
             : Array(rect.y0..<rect.y1)
 
         let cullMargin = cellPxEst * 1.5 + 12
-        let codeCell = settings.showCodes && cellPxEst >= 30 ? cellPxEst * 0.36 : 0
-        let codeFont = Font.system(size: codeCell * 0.9, weight: .medium, design: .monospaced)
+        // 与 H5 一致：cellPx * 0.36 无衬线，够大才画
+        let codeCell = style.showCodes && quality == .settled && cellPxEst >= 30
+            ? cellPxEst * 0.36
+            : 0
+        let codeFont = Font.system(size: codeCell)
         let codeFade = cam.pitch > 0.95 ? min(1, (cam.pitch - 0.95) / 0.4) : 0
+        let canDrawWalls = !outerBands.isEmpty
+        let canDrawInner = !innerBands.isEmpty
+        var drawnBeads = 0
 
         for col in columnOrder {
             let cx = Double(col - rect.x0) - halfX
@@ -284,10 +445,9 @@ enum Bead3DRenderer {
                 guard !cell.isEmpty else { continue }
                 let cz = Double(row - rect.y0) - halfZ
 
-                // 顶/底环共用同一深度（弱透视），省掉一次投影
-                guard let top = project(cx, hB, cz),
-                      let bottom = project(cx, 0, cz)
-                else { continue }
+                // 顶环的投影就够用：底环只差一个与深度无关的屏幕位移，
+                // 已经并进上面预计算的侧壁带里了。
+                guard let top = project(cx, hB, cz) else { continue }
                 if top.x < -cullMargin || top.y < -cullMargin
                     || top.x > size.width + cullMargin || top.y > size.height + cullMargin {
                     continue
@@ -305,35 +465,36 @@ enum Bead3DRenderer {
                 }
 
                 let topCenter = CGPoint(x: top.x, y: top.y)
-                let bottomCenter = CGPoint(x: bottom.x, y: bottom.y)
                 let kOuter = ro * focal / top.vz
                 let kInner = ri * focal / top.vz
+                let bucket = arcBucket(cx: cx, cz: cz, eyeX: eyeX, eyeZ: eyeZ)
 
-                if wallsVisible {
-                    if let band = bandPath(
-                        arc: outerArc, top: topCenter, bottom: bottomCenter,
-                        unit: unitRing, k: kOuter
-                    ) {
-                        context.fill(band, with: .color(wallLit ? shades.wallLit : shades.wallDark))
-                    }
-                    if innerVisible, let innerBand = bandPath(
-                        arc: innerArc, top: topCenter, bottom: bottomCenter,
-                        unit: unitRing, k: kInner
-                    ) {
-                        context.fill(innerBand, with: .color(innerLit ? shades.innerLit : shades.innerDark))
-                    }
+                // 先画孔内壁（最远），再画近侧外壁，最后顶面。
+                // 顺序反了的话，内壁会盖住近侧外壁，豆看起来就是空心的。
+                if canDrawInner {
+                    var ctx = context
+                    ctx.transform = unitTransform(k: kInner, a: basisA, b: basisB, center: topCenter)
+                    ctx.fill(
+                        innerBands[(bucket + arcBuckets / 2) % arcBuckets],
+                        with: .color(shades.innerLit)
+                    )
                 }
 
-                // 顶面（环形，必要时挖掉中心孔）
-                let topPath = topFacePath(
-                    center: topCenter, unit: unitRing, kOuter: kOuter,
-                    kInner: innerVisible ? kInner : nil
-                )
-                context.fill(
-                    topPath,
-                    with: .color(shades.top),
-                    style: FillStyle(eoFill: innerVisible)
-                )
+                if canDrawWalls {
+                    var ctx = context
+                    ctx.transform = unitTransform(k: kOuter, a: basisA, b: basisB, center: topCenter)
+                    ctx.fill(outerBands[bucket], with: .color(shades.wallLit))
+                }
+
+                // 顶面：开了中心孔就是圆环（eoFill 挖孔），否则是整圆
+                var topCtx = context
+                topCtx.transform = unitTransform(k: kOuter, a: basisA, b: basisB, center: topCenter)
+                if holeVisible {
+                    topCtx.fill(annulus, with: .color(shades.top), style: FillStyle(eoFill: true))
+                } else {
+                    topCtx.fill(disk, with: .color(shades.top))
+                }
+                drawnBeads += 1
 
                 // 俯视且够大时叠加色号，与 2D 放大态衔接
                 if codeCell > 0, codeFade > 0.05, !isDimmed {
@@ -341,9 +502,9 @@ enum Bead3DRenderer {
                         Text(cell.code)
                             .font(codeFont)
                             .foregroundStyle(
-                                cell.rgb.prefersDarkOverlayText
-                                    ? Color.black.opacity(0.55 * codeFade)
-                                    : Color.white.opacity(0.75 * codeFade)
+                                cell.rgb.wantsDarkOverlayText
+                                    ? Color.black.opacity(0.6 * codeFade)
+                                    : Color.white.opacity(0.85 * codeFade)
                             ),
                         at: topCenter,
                         anchor: .center
@@ -353,7 +514,7 @@ enum Bead3DRenderer {
         }
 
         // 分板红线：全图多板且开关开启时，画在豆顶之上（对齐 H5 render3d）
-        if settings.showSeam,
+        if style.showSeam,
            grid.boardCount > 1,
            rect.x0 == 0, rect.y0 == 0,
            rect.x1 == grid.width, rect.y1 == grid.height {
@@ -366,6 +527,142 @@ enum Bead3DRenderer {
                 beadTop: hB
             )
         }
+
+        stats.lod = lod
+        stats.segments = segments
+        stats.beads = drawnBeads
+        stats.wallPx = wallPx
+        return stats
+    }
+
+    /// Metal 路径共用的相机参数。
+    ///
+    /// Metal 那边不再逐豆算投影，改成一个 MVP 矩阵交给 GPU，但**必须与上面 CPU 的
+    /// 逐豆投影完全等价**（否则 2D↔3D 过渡结束切到稳定态时会跳一下）：
+    /// `project()` 的 `u = (dx·R + dz·rz)/vz`、`v = (dx·ux + dy·uy + dz·uz)/vz`
+    /// 本来就是一个针孔投影 —— `R`/`U`/`F` 是正交基，`vz` 是前向深度，`focal`
+    /// 是像素焦距。所以这里直接把它写成 view + projection 两个矩阵。
+    ///
+    /// 注意两点：
+    /// - 眼睛的 y 要加上 `lookY`：`project()` 里 `dy` 是相对 `lookY` 量的。
+    /// - 投影矩阵里用的是**点**而不是像素（`2focal/W`），和 drawable 的 scale
+    ///   约掉了（`W_px = W_pt · scale`），所以拉伸屏/原生倍率都不需要额外处理。
+    struct Scene {
+        /// 像素焦距（点），与 CPU 路径同一个 `fitFactor × zoom`。
+        var focal: Double
+        var eye: SIMD3<Double>
+        /// 世界 → 裁剪空间，列主序，直接喂 Metal。
+        var mvp: simd_float4x4
+        /// 豆上屏宽度估计（点），与 CPU 路径同公式。
+        var cellPxEst: Double
+    }
+
+    static func scene(camera: Bead3DCamera, rect: GridRect, viewport: CGSize) -> Scene? {
+        let pw = rect.width
+        let ph = rect.height
+        guard pw > 0, ph > 0, viewport.width > 0, viewport.height > 0 else { return nil }
+
+        let cam = camera.clamped
+        let eyeR = eyeRadius(pw: pw, ph: ph)
+        let b = basis(yaw: cam.yaw, pitch: cam.pitch)
+        let lookY = beadHeight * 0.5
+        let eye = SIMD3(
+            eyeR * b.yawC * sin(cam.yaw),
+            eyeR * sin(cam.pitch) + lookY,
+            eyeR * b.yawC * cos(cam.yaw)
+        )
+        let focal = fitFactor(
+            yaw: 0, pitch: 0.5, pw: pw, ph: ph, viewport: viewport, pad: fitPadding
+        ) * cam.zoom
+
+        // 视图空间：x = d·R（屏幕右）、y = d·U（屏幕上）、z = -d·F（前方为负，对齐 Metal）
+        let rVec = SIMD3(b.rx, 0, b.rz)
+        let uVec = SIMD3(b.ux, b.uy, b.uz)
+        let fVec = SIMD3(b.fx, b.fy, b.fz)
+
+        var view = matrix_identity_double4x4
+        view.columns.0 = SIMD4(rVec.x, uVec.x, -fVec.x, 0)
+        view.columns.1 = SIMD4(rVec.y, uVec.y, -fVec.y, 0)
+        view.columns.2 = SIMD4(rVec.z, uVec.z, -fVec.z, 0)
+        view.columns.3 = SIMD4(
+            -simd_dot(rVec, eye),
+            -simd_dot(uVec, eye),
+            simd_dot(fVec, eye),
+            1
+        )
+
+        // 针孔：ndc.x = 2·focal·(d·R)/(W·vz)；y 要**取负** —— CPU 那边
+        // `screenY = centerY + uy·focal` 且屏幕 y 向下，而 Metal 的 NDC y 向上
+        // （`Basis.U` 指向的就是屏幕向下方向：正俯视时 U = +Z = 行号增大方向）。
+        // `clip.w = -z_view = vz`，所以透视除法拿到的正好是 CPU 那边的 `vz`。
+        let w = Double(viewport.width)
+        let h = Double(viewport.height)
+        let near = max(0.05, eyeR * 0.02)
+        let far = eyeR * 6
+        var proj = matrix_identity_double4x4
+        proj.columns.0 = SIMD4(2 * focal / w, 0, 0, 0)
+        proj.columns.1 = SIMD4(0, -2 * focal / h, 0, 0)
+        proj.columns.2 = SIMD4(0, 0, far / (near - far), -1)
+        proj.columns.3 = SIMD4(0, 0, far * near / (near - far), 0)
+
+        return Scene(
+            focal: focal,
+            eye: eye,
+            mvp: floatMatrix(proj * view),
+            cellPxEst: focal / max(0.2, eyeR - lookY)
+        )
+    }
+
+    /// `simd_double4x4` → `simd_float4x4`。simd 没有跨精度的矩阵转换初始化器，
+    /// 逐列转一次。
+    private static func floatMatrix(_ matrix: simd_double4x4) -> simd_float4x4 {
+        let columns = matrix.columns
+        func cast(_ column: SIMD4<Double>) -> SIMD4<Float> {
+            SIMD4<Float>(Float(column.x), Float(column.y), Float(column.z), Float(column.w))
+        }
+        return simd_float4x4(cast(columns.0), cast(columns.1), cast(columns.2), cast(columns.3))
+    }
+
+    /// 让**正俯视**的 3D 画面与 2D 图层完全同尺寸所需的 `camera.zoom`。
+    ///
+    /// 2D 里 1 格 = `cell * scale` pt（`cell` 是 `Bead2DRenderer.contentCell`）；
+    /// 3D 正俯视下 1 个世界单位 = `focal / (eyeR - lookY)` pt（与 `cellPxEst` 同一个
+    /// 口径，`eyeR - lookY` 就是正俯视时的眼距），而 `focal = fitFactor × zoom`。
+    /// 两者相等即可解出 `zoom`。
+    ///
+    /// 过渡起点必须用这个值：2D 的 fit 是 `min(...) × 0.94`，3D 的 fit 是
+    /// `fitFactor(pitch: 0.5, pad: 28)`，两套公式不相等，各用各的就会出现
+    /// 「交叉淡入时 2D 与 3D 一大一小、叠不上」。
+    static func flatMatchedZoom(
+        pw: Int,
+        ph: Int,
+        viewport: CGSize,
+        cell: CGFloat,
+        scale: CGFloat
+    ) -> Double {
+        guard pw > 0, ph > 0, viewport.width > 0, viewport.height > 0 else { return 1 }
+        let baseFocal = fitFactor(
+            yaw: 0, pitch: 0.5, pw: pw, ph: ph, viewport: viewport, pad: fitPadding
+        )
+        guard baseFocal > 0 else { return 1 }
+        let eyeR = eyeRadius(pw: pw, ph: ph)
+        let lookY = beadHeight * 0.5
+        return Double(cell * scale) * (eyeR - lookY) / baseFocal
+    }
+
+    /// 底板四角（世界坐标，`y = -0.02`），顺序 `(-,-) (+,-) (-,+) (+,+)`，
+    /// 正好是一个 triangleStrip。与上面 CPU 画底板时的四个角同一口径。
+    static func plateWorldCorners(rect: GridRect) -> [SIMD3<Float>] {
+        let halfX = (Double(rect.width) - 1) / 2
+        let halfZ = (Double(rect.height) - 1) / 2
+        let maxX = halfX + outerRadius + plateMargin
+        let maxZ = halfZ + outerRadius + plateMargin
+        return [
+            SIMD3(-Float(maxX), -0.02, -Float(maxZ)),
+            SIMD3(Float(maxX), -0.02, -Float(maxZ)),
+            SIMD3(-Float(maxX), -0.02, Float(maxZ)),
+            SIMD3(Float(maxX), -0.02, Float(maxZ)),
+        ]
     }
 
     /// 3D 分板红线：沿板缝画在豆顶略上方。
@@ -410,15 +707,14 @@ enum Bead3DRenderer {
         )
     }
 
-    // MARK: - 环与壁
-
     /// 单个色号的明暗色预解析（正常态/淡化态在初始化时一次算好）。
+    ///
+    /// 相机的可见弧平均朝向恒 > 0.28，所以只用得上 `Lit` 那组；
+    /// `Dark` 保留给后续可能的光照细分。
     private struct BeadShades {
         let top: Color
         let wallLit: Color
-        let wallDark: Color
         let innerLit: Color
-        let innerDark: Color
 
         init(rgb: RGB8, dimmed: Bool) {
             func resolve(_ factor: Double) -> Color {
@@ -430,150 +726,7 @@ enum Bead3DRenderer {
             }
             top = resolve(0.06)
             wallLit = resolve(-0.32)
-            wallDark = resolve(-0.52)
             innerLit = resolve(-0.22)
-            innerDark = resolve(-0.42)
         }
-    }
-
-    /// 朝向相机的那段圆弧，按绘制顺序给出索引；`averageFacing` 用于挑明/暗壁色。
-    private struct Arc {
-        let forward: [Int]
-        let backward: [Int]
-        let averageFacing: Double
-    }
-
-    /// 哪些圆周分段朝向相机。`cx`/`cz` 取 0（相机很远，各豆共用一段弧）。
-    private static func visibleArc(
-        segments: Int,
-        cosTable: [Double],
-        sinTable: [Double],
-        eyeX: Double,
-        eyeZ: Double,
-        outward: Bool
-    ) -> Arc {
-        var flags = [Bool](repeating: false, count: segments)
-        var sum = 0.0
-        var count = 0
-
-        for i in 0..<segments {
-            let j = (i == segments - 1) ? 0 : i + 1
-            let mx = (cosTable[i] + cosTable[j]) * 0.5
-            let mz = (sinTable[i] + sinTable[j]) * 0.5
-            var facing = mx * eyeX + mz * eyeZ
-            if !outward { facing = -facing }
-            let visible = facing > 0.02
-            flags[i] = visible
-            if visible {
-                sum += facing
-                count += 1
-            }
-        }
-        guard count > 0 else { return Arc(forward: [], backward: [], averageFacing: 0) }
-
-        // 可见弧的起点：上一点不可见而当前可见
-        var first = 0
-        for i in 0..<segments {
-            let previous = (i == 0) ? segments - 1 : i - 1
-            if flags[i], !flags[previous] {
-                first = i
-                break
-            }
-        }
-
-        var forward = [Int]()
-        forward.reserveCapacity(segments)
-        var index = first
-        var guardCount = 0
-        while guardCount < segments, flags[index] {
-            forward.append(index)
-            index = (index == segments - 1) ? 0 : index + 1
-            guardCount += 1
-        }
-
-        var backward = [Int]()
-        backward.reserveCapacity(segments)
-        if let last = forward.last {
-            index = last
-            guardCount = 0
-            while guardCount < segments, flags[index] {
-                backward.append(index)
-                index = (index == 0) ? segments - 1 : index - 1
-                guardCount += 1
-            }
-        }
-
-        return Arc(forward: forward, backward: backward, averageFacing: sum / Double(count))
-    }
-
-    /// 环上第 `index` 个点：圆心 + 单位偏移 × 深度缩放。
-    @inline(__always)
-    private static func ringPoint(
-        _ index: Int,
-        _ unit: [CGPoint],
-        _ center: CGPoint,
-        _ k: Double
-    ) -> CGPoint {
-        let u = unit[index]
-        return CGPoint(x: center.x + u.x * k, y: center.y + u.y * k)
-    }
-
-    /// 顶面：`kInner` 非空时是挖了中心孔的环形（配合 `eoFill`）。
-    private static func topFacePath(
-        center: CGPoint,
-        unit: [CGPoint],
-        kOuter: Double,
-        kInner: Double?
-    ) -> Path {
-        let segments = unit.count
-        var path = Path()
-        for i in 0..<segments {
-            let point = ringPoint(i, unit, center, kOuter)
-            if i == 0 {
-                path.move(to: point)
-            } else {
-                path.addLine(to: point)
-            }
-        }
-        path.closeSubpath()
-
-        if let kInner {
-            for i in 0..<segments {
-                let point = ringPoint(i, unit, center, kInner)
-                if i == 0 {
-                    path.move(to: point)
-                } else {
-                    path.addLine(to: point)
-                }
-            }
-            path.closeSubpath()
-        }
-        return path
-    }
-
-    /// 壁面：顶环沿可见弧正向 + 底环沿同一弧回程，闭合成一条带状多边形。
-    private static func bandPath(
-        arc: Arc,
-        top: CGPoint,
-        bottom: CGPoint,
-        unit: [CGPoint],
-        k: Double
-    ) -> Path? {
-        guard !arc.forward.isEmpty, !arc.backward.isEmpty else { return nil }
-        var path = Path()
-
-        for (offset, index) in arc.forward.enumerated() {
-            let point = ringPoint(index, unit, top, k)
-            if offset == 0 {
-                path.move(to: point)
-            } else {
-                path.addLine(to: point)
-            }
-        }
-        for index in arc.backward {
-            path.addLine(to: ringPoint(index, unit, bottom, k))
-        }
-        path.closeSubpath()
-        return path
     }
 }

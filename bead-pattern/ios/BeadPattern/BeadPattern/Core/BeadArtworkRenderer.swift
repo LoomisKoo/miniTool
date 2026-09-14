@@ -1,7 +1,8 @@
 import Foundation
 import UIKit
 
-/// 导出图纸 PNG。用 UIKit 绘制（`UIGraphicsImageRenderer`），单豆按实物 5mm @ 300DPI 换算。
+/// 导出图纸：单豆按实物 5mm @ 300DPI 换算，用 UIKit 绘制（`UIGraphicsImageRenderer`），
+/// 最终由 `JpegEncoder` 编成带 300DPI 密度的 JPEG。
 ///
 /// 版式对齐 H5 `measureExport` / `exportDataUrl`：标题字号随单豆像素、图例色块 = 2×2 格，
 /// 块内色号 + 下方颗数，列数按可用宽度自适应。
@@ -13,13 +14,17 @@ enum BeadArtworkRenderer {
     private static let maxSide = 4096
     private static let maxArea = 16_777_216
 
+    /// 打印 DPI。写入导出的 JPEG 密度段，打印选「实际大小」时每格正好 5mm。
+    static let printDPI = 300
+
     /// 图纸底部广告条高度（始终绘制，不随导出选项开关）。
     private static let promoHeight = 52
 
     private static let gridColor = UIColor(white: 0.78, alpha: 1)
     private static let seamColor = UIColor(red: 1, green: 0.23, blue: 0.19, alpha: 1)
     private static let inkColor = UIColor(white: 0.13, alpha: 1)
-    private static let promoText = "在 App Store 搜索「兔格拼豆」下载 App · 支持 3D 预览与高清图纸"
+    /// 图纸底部条文案。iOS 端这里是署名，不是 H5 那种引流（用户已经在 App 里了）。
+    private static let promoText = "兔格拼豆 · 照片转拼豆色号图纸"
 
     /// 与 H5 `measureExport` 对齐的版式量。
     private struct Metrics {
@@ -58,7 +63,7 @@ enum BeadArtworkRenderer {
         guard rect.width > 0, rect.height > 0 else { return nil }
 
         let options = settings.export
-        let usage = options.legend ? grid.usage(palette: palette, in: rect) : []
+        let usage = options.legend ? grid.legendList(palette: palette, in: rect) : []
         let metrics = pickMetrics(
             pw: rect.width,
             ph: rect.height,
@@ -334,23 +339,15 @@ enum BeadArtworkRenderer {
 
     // MARK: - 格子
 
-    private static func codeAttributes(
-        for rgb: RGB8,
-        font: UIFont
-    ) -> [NSAttributedString.Key: Any] {
-        if rgb.prefersDarkOverlayText {
-            return [
-                .font: font,
-                .foregroundColor: UIColor(white: 0.10, alpha: 1),
-                .strokeColor: UIColor(white: 1, alpha: 0.85),
-                .strokeWidth: -2.0,
-            ]
-        }
+    /// 格内色号的样式，与 H5 `drawPattern` 一致：
+    /// `max(8, round(cell*0.32))px` 无衬线、不加描边；亮度 > 160 压深字，否则浅字。
+    private static func codeAttributes(for rgb: RGB8, cell: Int) -> [NSAttributedString.Key: Any] {
+        let size = CGFloat(max(8, (Double(cell) * 0.32).rounded(.down)))
         return [
-            .font: font,
-            .foregroundColor: UIColor(white: 1, alpha: 1),
-            .strokeColor: UIColor(white: 0, alpha: 0.75),
-            .strokeWidth: -2.0,
+            .font: UIFont.systemFont(ofSize: size),
+            .foregroundColor: rgb.wantsDarkOverlayText
+                ? UIColor(white: 0, alpha: 0.55)
+                : UIColor(white: 1, alpha: 0.75),
         ]
     }
 
@@ -364,25 +361,20 @@ enum BeadArtworkRenderer {
         showGrid: Bool
     ) {
         let cellSize = CGFloat(cell)
-        let codeFont = UIFont.monospacedSystemFont(ofSize: cellSize * 0.34, weight: .medium)
         var codeAttributesByColor: [RGB8: [NSAttributedString.Key: Any]] = [:]
         var fillColorByBead: [BeadCell: CGColor] = [:]
-        let emptyColor = UIColor(white: 0.97, alpha: 1)
 
+        // 空格不铺色，留白底（与 H5 `drawPattern` 的 `continue` 一致）
         for y in rect.y0..<rect.y1 {
             for x in rect.x0..<rect.x1 {
                 let bead = grid[x, y]
+                guard !bead.isEmpty else { continue }
                 let box = CGRect(
                     x: origin.x + CGFloat(x - rect.x0) * cellSize,
                     y: origin.y + CGFloat(y - rect.y0) * cellSize,
                     width: cellSize,
                     height: cellSize
                 )
-                if bead.isEmpty {
-                    ctx.setFillColor(emptyColor.cgColor)
-                    ctx.fill(box)
-                    continue
-                }
 
                 let cgColor: CGColor
                 if let cached = fillColorByBead[bead] {
@@ -399,7 +391,7 @@ enum BeadArtworkRenderer {
                     if let cached = codeAttributesByColor[bead.rgb] {
                         attributes = cached
                     } else {
-                        attributes = codeAttributes(for: bead.rgb, font: codeFont)
+                        attributes = codeAttributes(for: bead.rgb, cell: cell)
                         codeAttributesByColor[bead.rgb] = attributes
                     }
                     let text = bead.code as NSString
@@ -477,6 +469,8 @@ enum BeadArtworkRenderer {
             .font: font,
             .foregroundColor: UIColor(white: 0.2, alpha: 1),
         ]
+        // 刻度短线，与 H5 一致：列号下方 1×4、行号右侧 4×1，极浅灰
+        ctx.setFillColor(UIColor(white: 0, alpha: 0.08).cgColor)
 
         for i in 0..<rect.width {
             let text = "\(rect.x0 + i + 1)" as NSString
@@ -486,6 +480,7 @@ enum BeadArtworkRenderer {
                 at: CGPoint(x: cx - size.width / 2, y: origin.y - axisTop / 2 - size.height / 2 - 1),
                 withAttributes: attributes
             )
+            ctx.fill(CGRect(x: cx - 0.5, y: origin.y - 2, width: 1, height: 4))
         }
         for j in 0..<rect.height {
             let text = "\(rect.y0 + j + 1)" as NSString
@@ -495,6 +490,7 @@ enum BeadArtworkRenderer {
                 at: CGPoint(x: origin.x - 8 - size.width, y: cy - size.height / 2),
                 withAttributes: attributes
             )
+            ctx.fill(CGRect(x: origin.x - 2, y: cy - 0.5, width: 4, height: 1))
         }
     }
 
@@ -534,13 +530,11 @@ enum BeadArtworkRenderer {
             )
             ctx.strokePath()
 
-            let ink: UIColor = item.color.rgb.prefersDarkOverlayText
-                ? UIColor(white: 0.12, alpha: 0.9)
-                : UIColor(white: 1, alpha: 0.92)
+            let ink = item.color.rgb.legendInk
             let code = item.color.code as NSString
             let codeAttrs: [NSAttributedString.Key: Any] = [
                 .font: codeFont,
-                .foregroundColor: ink,
+                .foregroundColor: ink.uiColor,
             ]
             let codeSize = code.size(withAttributes: codeAttrs)
             code.draw(

@@ -46,6 +46,16 @@ private struct EditOp {
     let cellCount: Int
 }
 
+/// 载入作品后待贴回的手绘。
+///
+/// 尺寸与色卡用来判断参数是否已被改过：对不上就说明这份手绘已经失效，宁愿丢掉也不贴歪。
+private struct PendingHandEdits {
+    let width: Int
+    let height: Int
+    let paletteId: String
+    let edits: [BeadHandEdit]
+}
+
 /// 编辑页状态机：源图 → 量化 → 手绘 → 预览 → 导出。
 @MainActor
 @Observable
@@ -64,7 +74,18 @@ final class BeadEditorModel {
         }
     }
 
+    /// 未裁切的源图，裁切始终基于它。
+    private(set) var originalSourceImage: CGImage?
+    
+    /// 当前工作图（可能是裁切后的）。
     private(set) var sourceImage: CGImage?
+    
+    /// 累积裁切区域（相对源图归一化，nil 表示未裁切）。
+    private(set) var cropRect: CropRect?
+    
+    /// 是否显示裁切页面。
+    var showingCrop = false
+    
     /// 含手绘改动的显示用格子。
     ///
     /// `didSet` 只刷「摘要」那几个缓存标量（是否已有图 / 板数 / 信息行文案）。
@@ -89,6 +110,15 @@ final class BeadEditorModel {
 
     var highlightedCode: String?
     var message: String?
+
+    // MARK: - 作品库
+
+    /// 当前作品；nil 表示这张图还没存过。
+    private(set) var project: BeadProject?
+    /// 作品名。未保存时是默认名。
+    var projectName = "未命名作品"
+    /// 载入作品后待贴回的手绘，量化完成时消费掉。
+    private var pendingHandEdits: PendingHandEdits?
 
     // 编辑
     var isEditing = false
@@ -219,19 +249,179 @@ final class BeadEditorModel {
     // MARK: - 载入图片
 
     func load(image: CGImage) {
+        originalSourceImage = image
         sourceImage = image
+        cropRect = nil
+        // 新图自成一份作品，不复用上一份的名字与手绘
+        project = nil
+        projectName = "未命名作品"
+        pendingHandEdits = nil
         grid = nil
         autoGrid = nil
         highlightedCode = nil
         resetHistory()
         recount()
         boardIndex = -1
+        applyAutoSampleMode(for: image)
+        showHint("单指拖动平移 · 双指缩放 · 双击放大/复位")
         regenerate()
+    }
+
+    /// 打开已保存的作品：源图 + 参数重跑量化，再把手绘贴回去。
+    func load(project: BeadProject) {
+        guard let image = ProjectStore.shared.image(for: project) else {
+            message = "作品源图丢失，无法打开。"
+            return
+        }
+        // 先清干净，避免上一份作品的手绘串进来
+        pendingHandEdits = nil
+        originalSourceImage = image
+        sourceImage = image
+        cropRect = nil
+        grid = nil
+        autoGrid = nil
+        highlightedCode = nil
+        resetHistory()
+        recount()
+        boardIndex = -1
+
+        self.project = project
+        projectName = project.name
+        pendingHandEdits = PendingHandEdits(
+            width: project.gridWidth,
+            height: project.gridHeight,
+            paletteId: project.settings.paletteId,
+            edits: project.handEdits
+        )
+        // 赋值可能触发 debounce 重算；紧接着的 regenerate 会把它取消掉
+        settings = project.settings
+        regenerate()
+    }
+    
+    // MARK: - 裁切
+    
+    /// 打开裁切页面。
+    func openCrop() {
+        guard originalSourceImage != nil else { return }
+        showingCrop = true
+    }
+    
+    /// 应用裁切结果（`nil` 表示未修改）。
+    func applyCrop(_ output: CropOutput?) {
+        guard let output else { return }
+
+        if output.isOriginal {
+            guard let original = originalSourceImage, cropRect != nil else { return }
+            sourceImage = original
+            cropRect = nil
+            resetHistory()
+            applyAutoSampleMode(for: original)
+            regenerate()
+            showHint("已还原原图")
+            return
+        }
+
+        guard originalSourceImage != nil else { return }
+        sourceImage = output.image
+        cropRect = output.rect
+        // 清空手绘历史，因为图片已变化
+        resetHistory()
+        applyAutoSampleMode(for: output.image)
+        regenerate()
+        showHint("已应用裁切")
+    }
+
+    /// 新图（含裁切后的图）按颜色数自动选采样模式：卡通/插画保描边、照片降色差。
+    /// 与 H5 端 `mapImage` 里 `freshImage` 的行为一致。
+    private func applyAutoSampleMode(for image: CGImage) {
+        let mode = BeadQuantizer.suggestedSampleMode(for: image)
+        if settings.sampleMode != mode {
+            settings.sampleMode = mode
+        }
+    }
+
+    /// 保存当前作品（没有就新建，有就覆盖）。
+    @discardableResult
+    func saveProject(name: String? = nil) -> BeadProject? {
+        guard let grid, let sourceImage else { return nil }
+
+        if let name {
+            let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty { projectName = trimmed }
+        }
+
+        let isNew = project == nil
+        let id = project?.id ?? UUID()
+        let value = BeadProject(
+            id: id,
+            name: projectName,
+            createdAt: project?.createdAt ?? Date(),
+            updatedAt: Date(),
+            imageFile: project?.imageFile ?? "\(id.uuidString).jpg",
+            settings: settings,
+            handEdits: collectHandEdits(),
+            gridWidth: grid.width,
+            gridHeight: grid.height
+        )
+
+        let saved = ProjectStore.shared.save(
+            value,
+            sourceImage: sourceImage,
+            thumbnail: ImageImport.thumbnail(from: sourceImage)
+        )
+        project = saved
+        projectName = saved.name
+        showHint(isNew ? "已保存到作品库" : "已更新作品")
+        return saved
+    }
+
+    /// 收集手绘改动：与自动结果不同的格位。橡皮擦回自动色的格子不算改动。
+    private func collectHandEdits() -> [BeadHandEdit] {
+        guard let grid, let autoGrid, grid.cells.count == autoGrid.cells.count else { return [] }
+        var edits: [BeadHandEdit] = []
+        for index in grid.cells.indices {
+            let current = grid.cells[index]
+            guard !current.isEmpty, current != autoGrid.cells[index] else { continue }
+            edits.append(BeadHandEdit(index: index, code: current.code))
+        }
+        return edits
+    }
+
+    /// 把手绘贴回量化结果。形状或色卡对不上就丢弃（参数已被改过）。
+    private func applyPendingHandEdits() {
+        guard let pending = pendingHandEdits else { return }
+        pendingHandEdits = nil
+
+        guard var value = grid else { return }
+        guard pending.width == value.width,
+              pending.height == value.height,
+              pending.paletteId == settings.paletteId else {
+            if !pending.edits.isEmpty { showHint("参数已变，原有手绘未恢复") }
+            return
+        }
+
+        let palette = self.palette
+        var applied = 0
+        for edit in pending.edits {
+            guard edit.index >= 0, edit.index < value.cells.count,
+                  let color = palette.color(for: edit.code) else { continue }
+            value.cells[edit.index] = BeadCell(code: color.code, rgb: color.rgb)
+            applied += 1
+        }
+        guard applied > 0 else { return }
+
+        grid = value
+        // 载入即是一个还原点，撤销不该撤到"没打开过这张图"的状态
+        resetHistory()
+        recount()
     }
 
     func clearImage() {
         regenTask?.cancel()
         sourceImage = nil
+        project = nil
+        projectName = "未命名作品"
+        pendingHandEdits = nil
         grid = nil
         autoGrid = nil
         highlightedCode = nil
@@ -302,6 +492,9 @@ final class BeadEditorModel {
             self.previousPaletteId = settings.paletteId
             self.boardIndex = min(self.boardIndex, newGrid.boardCount - 1)
             self.recount()
+
+            // 打开作品时要贴回手绘；必须在 recount 之后，画笔色才能看到最终用量
+            self.applyPendingHandEdits()
 
             // 画笔色跟随当前色卡；色号不存在时回落到图上最常用色
             if self.brushCode == nil || palette.color(for: self.brushCode!) == nil {
@@ -656,7 +849,19 @@ final class BeadEditorModel {
         camera = Bead3DCamera()
     }
 
+    /// 直接落一个相机值（会夹到 `pitchRange` / `zoomRange`）。
+    ///
+    /// 3D 手势与相机动画都走这里，避免各处各自 `next.clamped` 漏掉夹取；
+    /// 与 `@Published` 的 `camera` 赋值在同一处，也便于以后加节流。
+    func setCamera(_ camera: Bead3DCamera) {
+        self.camera = camera.clamped
+    }
+
     /// 单指拖动旋转相机。方向与 H5 保持一致：右拖 yaw 减小、下拖 pitch 增大（更俯视）。
+    ///
+    /// 注意手势那边**不用**这个逐帧增量接口，而是用手势起点记下的基准相机 +
+    /// 累计位移算绝对位置（见 `BeadPreviewPane.rotated(_:by:)`）：增量一旦被
+    /// 打断就会残留偏差。这里保留给需要按帧步进的场景。
     func rotateCamera(deltaX: Double, deltaY: Double) {
         var next = camera
         next.yaw -= deltaX * 0.012

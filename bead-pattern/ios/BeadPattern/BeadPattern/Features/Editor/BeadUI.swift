@@ -136,3 +136,20 @@ struct BeadRowDivider: View {
             .padding(.leading, 14)
     }
 }
+
+/// 画布真正用到的那部分设置。
+///
+/// `BeadSettings` 里大部分字段（豆宽、限色、阈值、抖动…）只影响量化，
+/// 量化结果没变之前画面不该重画。画布只吃这个结构 + `.equatable()`：
+/// 拖滑块时画布直接跳过，只重算参数行，省掉每帧一次全画布重绘。
+struct BeadCanvasStyle: Equatable {
+    var showGrid: Bool
+    var showSeam: Bool
+    var showCodes: Bool
+
+    init(_ settings: BeadSettings) {
+        showGrid = settings.showGrid
+        showSeam = settings.showSeam
+        showCodes = settings.showCodes
+    }
+}

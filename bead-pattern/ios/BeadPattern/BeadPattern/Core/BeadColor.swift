@@ -46,23 +46,26 @@ struct RGB8: Hashable, Sendable {
         return mixed(with: RGB8(255, 255, 255), t: min(1, factor))
     }
 
-    private func linear(_ value: UInt8) -> Double {
-        let c = Double(value) / 255
-        return c > 0.04045 ? pow((c + 0.055) / 1.055, 2.4) : c / 12.92
+    /// 加权亮度（0…255），与 H5 端 `luma(hex)` 同公式。
+    var luma: Double {
+        0.299 * Double(r) + 0.587 * Double(g) + 0.114 * Double(b)
     }
 
-    /// WCAG 相对亮度（0…1）。
-    var relativeLuminance: Double {
-        0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b)
-    }
-
-    /// 叠在本色上的文字该用深色还是浅色。
+    /// 叠在本色上的色号该用深色还是浅色。
     ///
-    /// 按 WCAG 对比度取更清楚的一侧，黑白对比度相等时 `L ≈ 0.179`。
-    /// 图纸上的色号、预览里的格内编号都按这个选色，
-    /// 否则深色豆上的黑字（或浅色豆上的白字）会看不出来。
-    var prefersDarkOverlayText: Bool {
-        relativeLuminance > 0.179
+    /// 沿用 H5 端口径（`luma > 160` 用深字），这样 App 与小工具的
+    /// 预览格内编号、导出图纸色号选色完全一致。
+    var wantsDarkOverlayText: Bool {
+        luma > 160
+    }
+
+    /// 图纸图例色块内的色号颜色。与 H5 端 `contrastInk` 的三档阈值一致。
+    var legendInk: RGB8 {
+        // H5 用整数除法：y = (r*299 + g*587 + b*114) / 1000
+        let y = (299 * Int(r) + 587 * Int(g) + 114 * Int(b)) / 1000
+        if y >= 170 { return RGB8(0x1A, 0x1A, 0x1A) }
+        if y <= 90 { return RGB8(255, 255, 255) }
+        return y >= 140 ? RGB8(0x11, 0x11, 0x11) : RGB8(255, 255, 255)
     }
 }
 
@@ -105,6 +108,16 @@ struct Oklab: Hashable, Sendable {
         let da = a - other.a
         let db = b - other.b
         return dl * dl + da * da + db * db
+    }
+
+    /// 色相分桶：8 个色相段 + 1 个灰阶段（索引 8），用于限色时保证色相覆盖。
+    /// 与 H5 端 `colorHueBucket` 一致。
+    var hueBucket: Int {
+        let chroma = (a * a + b * b).squareRoot()
+        if chroma < 0.02 { return 8 }
+        let hue = atan2(b, a) // -π…π
+        let bucket = Int(floor((hue + Double.pi) / (Double.pi / 4)))
+        return min(bucket, 7)
     }
 
     /// sRGB 线性空间的均值还原，用于「均值」采样模式。
