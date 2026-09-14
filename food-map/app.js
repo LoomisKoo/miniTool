@@ -258,15 +258,28 @@
     '香港', '澳门', '台湾',
     '南海诸岛'   // 九段线（DataV JD 要素），非行政区，只画线不参与名录
   ];
-  // 境外深灰；国内四色（深底食图：亮橄榄/金黄/橘红/亮蓝）
+  // 境外深灰；国内七色（深底上色相+明度都拉开，相邻省之外还避开"隔一个省"的同色）
   const LAND_COLOR0 = '#3a3a42';
-  const MAP_PALETTE = ['#8fb069', '#e8b454', '#e87858', '#6ba8cc'];
+  const MAP_PALETTE = ['#7fb45f', '#ecb44e', '#e86f5a', '#5fa8d8', '#a884e0', '#3fc9b8', '#e58bb0'];
   const provColors = [LAND_COLOR0];
   // 省界栅格（DataV 省级边界，0.125°，只覆盖中国范围）：稀疏码流 varint(索引增量)+id
   const PCELL = window.PROV_LAND_CELL || 0.125;
   const PLEFT = window.PROV_LAND_LEFT, PTOP = window.PROV_LAND_TOP;
   const PCOLS = window.PROV_LAND_COLS, PROWS = window.PROV_LAND_ROWS;
   const provGrid = new Uint8Array(PCOLS * PROWS);
+  // 省重心（lat,lon 交替）与格数，配色权重和省名标签共用
+  const provCent = new Float64Array((PROV_ORDER.length + 1) * 2);
+  const provCnt = new Uint32Array(PROV_ORDER.length + 1);
+  const provAllCent = new Float64Array((PROV_ORDER.length + 1) * 2);
+  const provAllCnt = new Uint32Array(PROV_ORDER.length + 1);
+  // 配色软约束的权重：两省重心越近，同色的代价越高（1/d²，近到 120km 就饱和）
+  function hopWeight(a, b) {
+    const dLat = provCent[a * 2] - provCent[b * 2];
+    const dLon = (provCent[a * 2 + 1] - provCent[b * 2 + 1]) *
+      Math.cos((provCent[a * 2] + provCent[b * 2]) * 0.5 * Math.PI / 180);
+    const d = Math.max(Math.hypot(dLat, dLon) * 111, 120);
+    return 1 / (d * d);
+  }
   (function decodeProv() {
     const raw = window.PROV_LAND_DATA;
     if (!raw || !PCOLS) return;
@@ -346,31 +359,119 @@
       provGrid.set(next);
     }
 
-    // 邻接图 + 贪心四色
+    // 省重心。只用底图认定的陆地格：岛礁格会把海南重心拉到 15.4°N（落进南海），
+    // 沿海省也会被拖偏；底图没有陆地的省（港澳由省级栅格独有）退回全部格。
+    for (let r = 0; r < PROWS; r++) {
+      const base = r * PCOLS;
+      const lat = PTOP - (r + 0.5) * PCELL;
+      for (let c = 0; c < PCOLS; c++) {
+        const id = provGrid[base + c];
+        if (!id) continue;
+        const lon = PLEFT + (c + 0.5) * PCELL;
+        provAllCnt[id]++;
+        provAllCent[id * 2] += lat;
+        provAllCent[id * 2 + 1] += lon;
+        if (!landAtLatLon(lat, lon)) continue;
+        provCnt[id]++;
+        provCent[id * 2] += lat;
+        provCent[id * 2 + 1] += lon;
+      }
+    }
+    for (let id = 1; id <= PROV_ORDER.length; id++) {
+      const n = provCnt[id] || provAllCnt[id];
+      if (!n) continue;
+      const src = provCnt[id] ? provCent : provAllCent;
+      provCent[id * 2] = src[id * 2] / n;
+      provCent[id * 2 + 1] = src[id * 2 + 1] / n;
+      provCnt[id] = n;
+    }
+
+    // 邻接图：取 8 邻域（含斜角）。只看上下左右的话，同色省会在角上贴在一起，
+    // 缩放到远视野时两个省看着就像连成一片。
     const nProv = PROV_ORDER.length;
     const adj = Array.from({ length: nProv + 1 }, () => new Set());
     for (let r = 0; r < PROWS; r++) {
       const base = r * PCOLS;
-      for (let c = 0; c < PCOLS - 1; c++) {
+      for (let c = 0; c < PCOLS; c++) {
         const a = provGrid[base + c];
         if (!a) continue;
-        if (r + 1 < PROWS) {
-          const down = provGrid[base + PCOLS + c];
-          if (down && down !== a) { adj[a].add(down); adj[down].add(a); }
+        for (let dr = -1; dr <= 1; dr++) {
+          const r2 = r + dr;
+          if (r2 < 0 || r2 >= PROWS) continue;
+          for (let dc = -1; dc <= 1; dc++) {
+            if (!dr && !dc) continue;
+            const c2 = c + dc;
+            if (c2 < 0 || c2 >= PCOLS) continue;
+            const b = provGrid[r2 * PCOLS + c2];
+            if (b && b !== a) { adj[a].add(b); adj[b].add(a); }
+          }
         }
-        const right = provGrid[base + c + 1];
-        if (right && right !== a) { adj[a].add(right); adj[right].add(a); }
       }
     }
+
+    // 配色：1 跳是硬约束（相邻必须异色），2 跳是软约束（隔着一个省也尽量异色，
+    // 且两省重心越近权重越高）—— 南方省份挤在一起，正是这里最容易糊成一片。
     const colorIdx = new Uint8Array(nProv + 1);
+    const twoHop = Array.from({ length: nProv + 1 }, () => new Map());   // 邻省 → 权重
     for (let id = 1; id <= nProv; id++) {
-      const used = [false, false, false, false, false];
-      adj[id].forEach(nb => { if (colorIdx[nb]) used[colorIdx[nb]] = true; });
-      let ci = 1;
-      while (ci <= MAP_PALETTE.length && used[ci]) ci++;
-      if (ci > MAP_PALETTE.length) ci = 1 + ((id - 1) % MAP_PALETTE.length);
-      colorIdx[id] = ci;
-      provColors[id] = MAP_PALETTE[ci - 1];
+      if (!adj[id].size) continue;
+      adj[id].forEach(nb => {
+        adj[nb].forEach(k => {
+          if (k === id) return;
+          if (twoHop[id].has(k)) return;
+          twoHop[id].set(k, hopWeight(id, k));
+        });
+      });
+    }
+    const hopCost = idx => {
+      let c = 0;
+      for (let a = 1; a <= nProv; a++) {
+        const ca = idx[a];
+        if (!ca) continue;
+        for (const [b, w] of twoHop[a]) {
+          if (b < a && idx[b] === ca) c += w;
+        }
+      }
+      return c;
+    };
+    const L = MAP_PALETTE.length;
+    for (let id = 1; id <= nProv; id++) {
+      const banned = new Set();
+      adj[id].forEach(nb => { if (colorIdx[nb]) banned.add(colorIdx[nb]); });
+      let best = 0, bestCost = Infinity;
+      for (let ci = 1; ci <= L; ci++) {
+        if (banned.has(ci)) continue;
+        colorIdx[id] = ci;
+        let used = 0;
+        for (let a = 1; a < id; a++) if (colorIdx[a] === ci) used++;
+        const c = hopCost(colorIdx) + used * 1e-4;      // 同分时选用得少的，色相更匀
+        colorIdx[id] = 0;
+        if (c < bestCost) { bestCost = c; best = ci; }
+      }
+      colorIdx[id] = best || (1 + ((id - 1) % L));
+    }
+    // 局部搜索：把个别省换到更"远离邻居"的颜色上，直到没人愿意换
+    for (let iter = 0; iter < 40; iter++) {
+      let moved = false;
+      for (let id = 1; id <= nProv; id++) {
+        if (!adj[id].size) continue;
+        const banned = new Set();
+        adj[id].forEach(nb => { if (colorIdx[nb]) banned.add(colorIdx[nb]); });
+        let cur = colorIdx[id], best = cur, bestCost = hopCost(colorIdx);
+        for (let ci = 1; ci <= L; ci++) {
+          if (ci === cur || banned.has(ci)) continue;
+          colorIdx[id] = ci;
+          const c = hopCost(colorIdx);
+          if (c < bestCost - 1e-9) { bestCost = c; best = ci; }
+        }
+        colorIdx[id] = best;
+        if (best !== cur) moved = true;
+      }
+      if (!moved) break;
+    }
+    for (let id = 1; id <= nProv; id++) {
+      if (!colorIdx[id]) continue;
+      provColors[id] = MAP_PALETTE[colorIdx[id] - 1];
     }
     // 九段线：不属于任何省，用中性灰蓝，读起来像边界线而不是省面
     const dashId = PROV_ORDER.indexOf('南海诸岛') + 1;
@@ -420,47 +521,19 @@
     '陕西': '陕', '甘肃': '甘', '青海': '青', '宁夏': '宁', '新疆': '新',
     '香港': '港', '澳门': '澳', '台湾': '台', '南海诸岛': '南海'
   };
-  // 省重心（格点均值），供标签定位
+  // 省重心（格点均值），供标签定位 —— 由 decodeProv 统一算好（见 provCent）
   const provLabel = Array.from({ length: PROV_ORDER.length + 1 }, () => null);
   (function buildProvLabels() {
-    if (!PCOLS) return;
-    const sumLat = new Float64Array(PROV_ORDER.length + 1);
-    const sumLon = new Float64Array(PROV_ORDER.length + 1);
-    const cnt = new Uint32Array(PROV_ORDER.length + 1);
-    // 岛礁格会拖偏沿海省的重心（海南被南海诸岛的格子拉到 15.4°N，落进海里），
-    // 所以重心只按「底图认定的陆地格」算；若某省全是岛（底图没有），再退回全部格。
-    const landLat = new Float64Array(PROV_ORDER.length + 1);
-    const landLon = new Float64Array(PROV_ORDER.length + 1);
-    const landCnt = new Uint32Array(PROV_ORDER.length + 1);
-    for (let r = 0; r < PROWS; r++) {
-      const base = r * PCOLS;
-      const lat = PTOP - (r + 0.5) * PCELL;
-      for (let c = 0; c < PCOLS; c++) {
-        const id = provGrid[base + c];
-        if (!id) continue;
-        const lon = PLEFT + (c + 0.5) * PCELL;
-        sumLat[id] += lat;
-        sumLon[id] += lon;
-        cnt[id]++;
-        if (landAtLatLon(lat, lon)) {
-          landLat[id] += lat;
-          landLon[id] += lon;
-          landCnt[id]++;
-        }
-      }
-    }
     for (let id = 1; id <= PROV_ORDER.length; id++) {
-      if (!cnt[id]) continue;
+      if (!provCnt[id]) continue;
       const name = PROV_ORDER[id - 1];
       if (name === '南海诸岛') continue; // 九段线是散落的线段，单个重心标签没有意义
-      const useLand = landCnt[id] > 0;
-      const n = useLand ? landCnt[id] : cnt[id];
       provLabel[id] = {
         name,
         abbr: PROV_ABBR[name] || name.charAt(0),
-        lat: (useLand ? landLat[id] : sumLat[id]) / n,
-        lon: (useLand ? landLon[id] : sumLon[id]) / n,
-        n
+        lat: provCent[id * 2],
+        lon: provCent[id * 2 + 1],
+        n: provCnt[id]
       };
     }
     // 港澳格点极少，栅格重心偏北，用更贴近视觉中心的坐标
