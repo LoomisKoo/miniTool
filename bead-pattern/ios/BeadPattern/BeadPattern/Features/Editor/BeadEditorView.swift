@@ -1,12 +1,19 @@
 import PhotosUI
 import SwiftUI
 
-/// 编辑页。布局与交互对齐 H5：顶部标题栏 → 预览框 + 预览工具条 → 参数面板 → 底部操作栏。
+/// 编辑页。顶部标题 → 预览 + 工具条 → 参数面板 → 内容末尾操作行。
 ///
 /// 预览区单独放在 `BeadPreviewPane` 里：拖动/缩放只重绘画布，
 /// 本视图的 body 不会被牵连重算。
+/// `embedded == true` 时用于作品库 push，隐藏自绘标题，交给导航栏。
 struct BeadEditorView: View {
-    @State private var model = BeadEditorModel()
+    /// 模型由 `BeadRootView` 持有：两个 tab 共用同一份，切 tab 不丢正在编辑的图纸。
+    @Bindable var model: BeadEditorModel
+    /// 空状态「去我的」入口。
+    var onOpenMine: () -> Void = {}
+    /// 嵌在导航栈里时隐藏自绘标题（用系统返回 + navigationTitle）。
+    var embedded = false
+
     @State private var photoItem: PhotosPickerItem?
 
     @State private var showPalette = false
@@ -14,24 +21,33 @@ struct BeadEditorView: View {
     @State private var showColors = false
     @State private var showBrush = false
     @State private var showExport = false
-    @State private var showLibrary = false
     @State private var isExporting = false
     /// 复位请求：+1 让预览区重新适配
     @State private var resetToken = 0
 
+    private var store: ProjectStore { ProjectStore.shared }
+    private var canSave: Bool { store.canCreate || model.project != nil }
+
     var body: some View {
         VStack(spacing: 0) {
-            header
+            if !embedded {
+                header
+            }
 
-            if !model.hasGrid {
-                uploadArea
-            } else {
+            if model.hasGrid {
                 previewShell
                     .padding(.horizontal, 16)
                 panel
                     .padding(.horizontal, 16)
-                actions
+                    .padding(.top, 4)
+                actionsRow
                     .padding(.horizontal, 16)
+                    .padding(.top, 10)
+                    .padding(.bottom, 16)
+            } else if model.isOpeningContent {
+                openingPlaceholder
+            } else {
+                uploadArea
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -82,18 +98,6 @@ struct BeadEditorView: View {
                 }
             }
         }
-        .sheet(isPresented: $showLibrary) {
-            BeadLibraryView(
-                currentId: model.project?.id,
-                canSaveCurrent: model.hasGrid,
-                currentName: model.projectName,
-                onSaveCurrent: { name in model.saveProject(name: name) },
-                onOpen: { project in
-                    model.load(project: project)
-                    showLibrary = false
-                }
-            )
-        }
         .alert("提示", isPresented: messageBinding) {
             Button("好") { model.message = nil }
         } message: {
@@ -110,41 +114,28 @@ struct BeadEditorView: View {
     // MARK: - 标题栏
 
     private var header: some View {
-        VStack(spacing: 1) {
-            Text("兔格拼豆")
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(BeadTheme.ink)
-            Text(model.headerSubtitle)
-                .font(.system(size: 12))
-                .foregroundStyle(BeadTheme.muted)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 10)
-        .padding(.horizontal, 16)
-        .overlay(alignment: .trailing) { libraryButton }
-    }
-
-    /// 右上角作品库入口。空状态也要能进来，所以放在标题栏而不是底部操作栏。
-    private var libraryButton: some View {
-        Button {
-            showLibrary = true
-        } label: {
-            HStack(spacing: 4) {
-                Image(systemName: "square.grid.2x2")
-                    .font(.system(size: 12, weight: .semibold))
-                Text("作品")
-                    .font(.system(size: 13, weight: .semibold))
-            }
-            .foregroundStyle(BeadTheme.accent)
-            .padding(.horizontal, 10)
-            .frame(height: 28)
-            .background(BeadTheme.accentSoft, in: RoundedRectangle(cornerRadius: 8))
-        }
-        .buttonStyle(.plain)
-        .padding(.trailing, 16)
+        Text("兔格拼豆")
+            .font(.system(size: 17, weight: .semibold))
+            .foregroundStyle(BeadTheme.ink)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 10)
+            .padding(.horizontal, 16)
     }
 
     // MARK: - 空状态（选择图片）
+
+    /// 打开作品 / 重新生成时：不要闪「选择图片」。
+    private var openingPlaceholder: some View {
+        VStack(spacing: 12) {
+            Spacer()
+            ProgressView()
+            Text(embedded ? "正在打开作品" : "正在生成图纸")
+                .font(.system(size: 14))
+                .foregroundStyle(BeadTheme.muted)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity)
+    }
 
     private var uploadArea: some View {
         VStack {
@@ -178,9 +169,9 @@ struct BeadEditorView: View {
 
             if !ProjectStore.shared.projects.isEmpty {
                 Button {
-                    showLibrary = true
+                    onOpenMine()
                 } label: {
-                    Text("打开已保存的作品（\(ProjectStore.shared.count)）")
+                    Text("去「我的」看已保存的作品（\(ProjectStore.shared.count)）")
                         .font(.system(size: 14, weight: .medium))
                         .foregroundStyle(BeadTheme.accent)
                         .padding(.horizontal, 14)
@@ -282,6 +273,45 @@ struct BeadEditorView: View {
         }
         .scrollBounceBehavior(.basedOnSize)
         .frame(maxHeight: 280)
+    }
+
+    /// 重选 / 裁切 / 导出 / 保存：放在参数面板下方（内容末尾），不是贴屏幕底。
+    private var actionsRow: some View {
+        HStack(spacing: 6) {
+            PhotosPicker(selection: $photoItem, matching: .images, photoLibrary: .shared()) {
+                actionLabel("重选")
+            }
+            .buttonStyle(.plain)
+
+            Button { model.openCrop() } label: { actionLabel("裁切") }
+                .buttonStyle(.plain)
+
+            Button { showExport = true } label: {
+                actionLabel("导出", prominent: true)
+            }
+            .buttonStyle(.plain)
+            .disabled(!model.canExport)
+            .opacity(model.canExport ? 1 : 0.45)
+
+            Button { model.saveProject() } label: {
+                actionLabel(model.project == nil ? "保存" : "更新", prominent: true)
+            }
+            .buttonStyle(.plain)
+            .disabled(!canSave)
+            .opacity(canSave ? 1 : 0.45)
+        }
+    }
+
+    private func actionLabel(_ title: String, prominent: Bool = false) -> some View {
+        Text(title)
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(prominent ? Color.white : BeadTheme.accent)
+            .frame(maxWidth: .infinity)
+            .frame(height: 32)
+            .background(
+                prominent ? BeadTheme.accent : BeadTheme.accentSoft,
+                in: RoundedRectangle(cornerRadius: 10)
+            )
     }
 
     /// 手绘工具条（H5 `#et-group`）。
@@ -450,49 +480,7 @@ struct BeadEditorView: View {
         }
     }
 
-    // MARK: - 底部操作栏
-
-    private var actions: some View {
-        HStack(spacing: 10) {
-            PhotosPicker(selection: $photoItem, matching: .images, photoLibrary: .shared()) {
-                Text("重选")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(BeadTheme.accent)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 48)
-                    .background(BeadTheme.surface, in: RoundedRectangle(cornerRadius: 12))
-            }
-            .buttonStyle(.plain)
-
-            Button {
-                model.openCrop()
-            } label: {
-                Text("裁切")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(BeadTheme.accent)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 48)
-                    .background(BeadTheme.surface, in: RoundedRectangle(cornerRadius: 12))
-            }
-            .buttonStyle(.plain)
-
-            Button {
-                showExport = true
-            } label: {
-                Text("导出图纸")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 48)
-                    .background(BeadTheme.accent, in: RoundedRectangle(cornerRadius: 12))
-            }
-            .buttonStyle(.plain)
-            .disabled(!model.canExport)
-            .opacity(model.canExport ? 1 : 0.45)
-        }
-        .padding(.top, 8)
-        .padding(.bottom, 12)
-    }
+    // MARK: - 导出遮罩
 
     /// 导出遮罩，对齐 H5 `.export-busy`。
     @ViewBuilder
@@ -590,5 +578,5 @@ private struct BarButton: View {
 }
 
 #Preview {
-    BeadEditorView()
+    BeadEditorView(model: BeadEditorModel(), onOpenMine: {})
 }

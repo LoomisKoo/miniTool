@@ -161,6 +161,11 @@ final class BeadEditorModel {
 
     var canExport: Bool { hasGrid && !isProcessing }
 
+    /// 有源图或正在量化，但格子还没出来：应显示加载态，而不是「选择图片」。
+    var isOpeningContent: Bool {
+        isProcessing || (originalSourceImage != nil && !hasGrid)
+    }
+
     /// 当前预览区域：某块板，或整幅。
     var visibleRect: GridRect {
         guard let grid else { return GridRect(x0: 0, y0: 0, x1: 0, y1: 0) }

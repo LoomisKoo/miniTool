@@ -52,6 +52,8 @@ enum ProjectPaths {
     static var images: URL { root.appendingPathComponent("images", isDirectory: true) }
     static var thumbs: URL { root.appendingPathComponent("thumbs", isDirectory: true) }
     static var index: URL { root.appendingPathComponent("projects.json") }
+    /// 「我的豆子」库存（色卡/色号 → 已有颗数）。
+    static var inventory: URL { root.appendingPathComponent("inventory.json") }
 
     static func imageURL(_ file: String) -> URL { images.appendingPathComponent(file) }
     static func thumbURL(_ id: UUID) -> URL { thumbs.appendingPathComponent("\(id.uuidString).jpg") }
