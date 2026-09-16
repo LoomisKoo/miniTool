@@ -158,12 +158,12 @@
    *   1148       页脚
    * CONTENT_BOTTOM 不能直接取雷达圆的上沿：轴标签画在圆外 r+26 处
    * （middle 基线，22px 字），上沿在 850。 */
-  var CONTENT_TOP = 584;
-  var RADAR_CY = 966, RADAR_R = 90;
-  var RADAR_LABEL_TOP = RADAR_CY - (RADAR_R + 26) - 11;   /* 839 */
-  var CONTENT_BOTTOM = RADAR_LABEL_TOP - 10;              /* 829 */
-  var LEGEND_Y = 1100;
-  var FOOT_Y = 1148;
+  var CONTENT_TOP = 608;
+  var RADAR_CY = 1000, RADAR_R = 92;
+  var RADAR_LABEL_TOP = RADAR_CY - (RADAR_R + 26) - 11;   /* 871 */
+  var CONTENT_BOTTOM = RADAR_LABEL_TOP - 10;              /* 861 */
+  var LEGEND_Y = 1150;
+  var FOOT_Y = 1190;
   var SANS = '-apple-system, "PingFang SC", sans-serif';
   var SERIF = SANS;   /* 名字也用系统字，和界面同一套字面 */
 
@@ -234,82 +234,86 @@
   function renderZh(ctx, data) {
     /* 大字名字。四个字（奥利维亚这类音译名）要用小一号，否则超出画布 */
     var full = data.full || (data.surname.c + (data.given || ''));
-    var size = full.length >= 4 ? 112 : full.length === 3 ? 140 : 176;
+    var size = full.length >= 4 ? 124 : full.length === 3 ? 156 : 196;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'alphabetic';
     ctx.font = '600 ' + size + 'px ' + SERIF;
     ctx.fillStyle = '#4a3b36';
-    ctx.fillText(full, W / 2, 330);
+    ctx.fillText(full, W / 2, 300);
 
     /* 姓氏印记，压在名字右上 */
-    drawSeal(ctx, W - 150, 278, 96, data.surname.c);
+    drawSeal(ctx, W - 148, 248, 104, data.surname.c);
 
     /* 拼音 */
-    ctx.font = '400 30px ' + SANS;
+    ctx.font = '400 31px ' + SANS;
     ctx.fillStyle = '#a08a83';
-    ctx.fillText(NM.namePinyin(data.surname, data.chars), W / 2, 394);
+    ctx.fillText(NM.namePinyin(data.surname, data.chars), W / 2, 372);
 
     /* 分隔 */
     ctx.beginPath();
-    ctx.moveTo(W / 2 - 60, 432);
-    ctx.lineTo(W / 2 + 60, 432);
+    ctx.moveTo(W / 2 - 60, 406);
+    ctx.lineTo(W / 2 + 60, 406);
     ctx.strokeStyle = 'rgba(242,109,141,0.45)';
     ctx.lineWidth = 1.5;
     ctx.stroke();
 
-    /* 一句话人格 / 生辰摘要 */
-    ctx.font = '400 31px ' + SANS;
-    ctx.fillStyle = '#6b5852';
-    wrapText(ctx, data.desc || '', W / 2, 488, W - 200, 44, 2);
+    /* 一句话人格 / 生辰摘要（引文样式，居中舒展，上方一枚浅色装饰引号） */
+    ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+    ctx.font = '600 48px ' + SANS; ctx.fillStyle = 'rgba(242,109,141,0.20)';
+    ctx.fillText('“', W / 2, 438);
+    ctx.font = '400 32px ' + SANS; ctx.fillStyle = '#6b5852';
+    wrapText(ctx, data.desc || '', W / 2, 466, W - 180, 46, 2);
 
     /* 有生辰时在一句话下面补四柱 + 宜补，字义区略下移 */
     var contentTop = CONTENT_TOP;
     if (data.bazi) {
-      ctx.font = '500 26px ' + SANS;
+      ctx.font = '500 27px ' + SANS;
       ctx.fillStyle = '#e8557b';
-      ctx.fillText(data.bazi.pillarStr || '', W / 2, 536);
-      ctx.font = '400 22px ' + SANS;
+      ctx.fillText(data.bazi.pillarStr || '', W / 2, 578);
+      ctx.font = '400 23px ' + SANS;
       ctx.fillStyle = '#a08a83';
       var bzLine = data.baziNote || data.bazi.short || '';
-      if (bzLine) ctx.fillText(bzLine, W / 2, 568);
-      contentTop = 596;
+      if (bzLine) ctx.fillText(bzLine, W / 2, 612);
+      contentTop = 640;
     }
 
-    /* 字义拆解。行数会变（单名 1 行、音译名 4 行），所以不能给一个固定行距：
-     * 先按内容区高度算出每行能占多少，再把整块在内容区里垂直居中 ——
-     * 这样第一行不贴顶、最后一行也不会压到下面的雷达图轴标签。 */
+    /* 字义拆解：每个字做成一枚「字卡」——左边圆角浅粉底放大字、右边拼音 + 释义，
+     * 两列清楚分开，不再把字 / 拼音 / 释义水平挤在一行。整块在内容区里垂直居中。 */
+    if (!data.bazi) {
+      ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+      ctx.font = '600 26px ' + SANS; ctx.fillStyle = '#f26d8d';
+      ctx.fillText('字义拆解', 108, contentTop - 24);
+    }
     var chars = (data.chars || []).filter(function (c) { return NM.getChar(c); });
     var n = Math.max(1, chars.length);
     var range = CONTENT_BOTTOM - contentTop;
-    var step = Math.min(126, Math.floor(range / n));
-    var fs = Math.max(24, Math.min(64, Math.round(step * 0.50)));
-    var pyFs = Math.max(14, Math.round(fs * 0.34));
-    var mFs = Math.max(17, Math.round(fs * 0.40));
-    /* 4 个字以上时每行已经很挤，说明只留一行，避免折行顶出去 */
-    var noteLines = n >= 4 ? 1 : 2;
-    var noteLh = Math.round(mFs * 1.3);
-    /* 一行实际占的高度：字形上沿到说明最后一行的下沿 */
-    var rowH = fs * 1.05 + noteLh * (noteLines - 1);
-    var y = contentTop + Math.max(0, Math.round((range - (rowH + step * (n - 1))) / 2)) +
-            Math.round(fs * 0.78);
-    var tx = 108 + fs + 24;
-
+    var step = Math.min(160, Math.floor(range / n));
+    var fs = Math.max(22, Math.min(64, Math.round(step * 0.60)));
+    var size = Math.round(fs * 1.15);                 /* 字块边长 */
+    var pyFs = Math.max(12, Math.round(fs * 0.32));
+    var mFs = Math.max(15, Math.round(fs * 0.40));
+    var noteLines = n >= 3 ? 1 : 2;                   /* 三个字以上释义只留一行，避免撞行 */
+    var noteLh = Math.round(mFs * 1.35);
+    var colH = pyFs + noteLh * noteLines;             /* 右列（拼音 + 释义）占高 */
+    var rowH = Math.max(size, colH) + 12;             /* 一行实际占高 */
+    var y0 = contentTop + Math.max(0, Math.round((range - rowH * n) / 2)) + Math.round(rowH / 2);
+    var bx = 108, tx = bx + size + 30;                /* 字块左 / 拼音·释义左 */
     chars.forEach(function (c) {
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'alphabetic';
-      ctx.font = '600 ' + fs + 'px ' + SERIF;
-      ctx.fillStyle = '#4a3b36';
-      ctx.fillText(c, 108, y);
-
-      ctx.font = '400 ' + pyFs + 'px ' + SANS;
-      ctx.fillStyle = 'rgba(242,109,141,0.85)';
-      ctx.fillText(NM.namePinyin(null, [c]), tx, y - Math.round(fs * 0.48));
-
-      ctx.font = '400 ' + mFs + 'px ' + SANS;
-      ctx.fillStyle = '#6b5852';
-      wrapText(ctx, NM.charNote(c).text, tx, y + Math.round(fs * 0.1),
-        W - tx - 96, noteLh, noteLines);
-      y += step;
+      var cy = y0;                                    /* 本行基准（字块垂直居中） */
+      var bt = cy - size / 2;                         /* 字块顶边 */
+      ctx.fillStyle = 'rgba(242,109,141,0.10)';
+      rr(ctx, bx, bt, size, size, 18); ctx.fill();
+      ctx.strokeStyle = 'rgba(242,109,141,0.28)'; ctx.lineWidth = 2;
+      rr(ctx, bx, bt, size, size, 18); ctx.stroke();
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.font = '600 ' + fs + 'px ' + SERIF; ctx.fillStyle = '#4a3b36';
+      ctx.fillText(c, bx + size / 2, bt + size / 2);
+      ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+      ctx.font = '400 ' + pyFs + 'px ' + SANS; ctx.fillStyle = 'rgba(242,109,141,0.9)';
+      ctx.fillText(NM.namePinyin(null, [c]), tx, cy - fs * 0.20);
+      ctx.font = '400 ' + mFs + 'px ' + SANS; ctx.fillStyle = '#6b5852';
+      wrapText(ctx, NM.charNote(c).text, tx, cy + fs * 0.30, W - tx - 64, noteLh, noteLines);
+      y0 += rowH;
     });
 
     drawRadarBlock(ctx, data);
@@ -323,27 +327,36 @@
     var nameSize = it.n.length > 9 ? 92 : it.n.length > 7 ? 106 : 118;
     ctx.font = '600 ' + nameSize + 'px ' + SANS;
     ctx.fillStyle = '#4a3b36';
-    ctx.fillText(it.n, W / 2, 318);
+    ctx.fillText(it.n, W / 2, 296);
 
-    drawSeal(ctx, W - 146, 256, 92, '名');
+    drawSeal(ctx, W - 148, 246, 100, '名');
 
     ctx.font = '400 30px ' + SANS;
     ctx.fillStyle = '#a08a83';
-    ctx.fillText(it.ph + '  ·  ' + it.zh, W / 2, 390);
+    ctx.fillText(it.ph + '  ·  ' + it.zh, W / 2, 368);
 
     ctx.beginPath();
-    ctx.moveTo(W / 2 - 60, 430);
-    ctx.lineTo(W / 2 + 60, 430);
+    ctx.moveTo(W / 2 - 60, 402);
+    ctx.lineTo(W / 2 + 60, 402);
     ctx.strokeStyle = 'rgba(242,109,141,0.45)';
     ctx.lineWidth = 1.5;
     ctx.stroke();
 
     ctx.font = '400 30px ' + SANS;
     ctx.fillStyle = '#6b5852';
-    wrapText(ctx, it.m || '', W / 2, 486, W - 200, 43, 2);
+    /* 一句话（引文样式，与中文卡一致） */
+    ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+    ctx.font = '600 48px ' + SANS; ctx.fillStyle = 'rgba(242,109,141,0.20)';
+    ctx.fillText('“', W / 2, 438);
+    ctx.font = '400 32px ' + SANS; ctx.fillStyle = '#6b5852';
+    wrapText(ctx, it.m || '', W / 2, 466, W - 180, 46, 2);
 
     /* 信息行：4 行平分内容区，每行锁一行，
      * 否则「来源」这种偏长的说明折成两行就会撞上雷达图。 */
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    ctx.font = '600 26px ' + SANS; ctx.fillStyle = '#f26d8d';
+    ctx.fillText('名字档案', 108, CONTENT_TOP - 24);
+
     var rows = [
       ['来源', it.org],
       ['年代感', { ancient: '古典 / 神话', vintage: '老派（祖母辈）', mid: '战后主流', modern: '90 后', now: '当下正红' }[it.era]],
