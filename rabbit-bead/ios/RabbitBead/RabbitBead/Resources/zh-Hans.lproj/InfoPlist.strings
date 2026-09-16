@@ -1,0 +1,6 @@
+/* RabbitBead — Info.plist, 简体中文。 */
+
+"CFBundleDisplayName" = "兔格拼豆";
+"NSCameraUsageDescription" = "用于拍摄拼豆照片，或拍摄豆子包装上的色号以便登记库存。";
+"NSPhotoLibraryAddUsageDescription" = "用于把生成的拼豆图纸保存到相册。";
+"NSPhotoLibraryUsageDescription" = "用于选择拼豆照片，或选择色号标签照片以便登记库存。";

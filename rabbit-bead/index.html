@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>兔格拼豆</title>
+  <link rel="icon" href="icon.png" type="image/png" />
+  <link rel="stylesheet" href="./style.css?v=20260913k" />
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <div class="header-text">
+        <h1>兔格拼豆</h1>
+        <p id="header-sub">照片转拼豆色号图纸</p>
+      </div>
+    </header>
+
+    <section class="screen active" id="screen-home">
+      <div class="upload-area">
+        <label class="upload-box" id="upload-box" for="file-input">
+          <span class="upload-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <rect x="3" y="3" width="18" height="18" rx="3"></rect>
+              <circle cx="8.5" cy="8.5" r="1.5"></circle>
+              <path d="M21 15l-5-5L5 21"></path>
+            </svg>
+          </span>
+          <span>选择图片</span>
+          <small>生成可拼的豆格图纸<br />透明处不铺豆</small>
+        </label>
+      </div>
+    </section>
+
+    <section class="screen" id="screen-edit">
+      <div class="preview-shell" id="preview-shell">
+        <div class="viewport" id="viewport">
+          <canvas id="preview-canvas"></canvas>
+          <p class="view-hint" id="view-hint"></p>
+        </div>
+        <p class="meta" id="meta-line">—</p>
+        <div class="preview-bar" id="preview-bar">
+          <div class="board-nav" id="board-nav">
+            <button type="button" class="bar-btn bar-btn-icon" id="btn-board-prev" aria-label="上一板">‹</button>
+            <span id="board-label">全图</span>
+            <button type="button" class="bar-btn bar-btn-icon" id="btn-board-next" aria-label="下一板">›</button>
+            <button type="button" class="bar-btn" id="btn-board-all" hidden>全图</button>
+          </div>
+          <div class="view-tools" id="view-tools">
+            <button type="button" class="bar-btn" id="btn-fit">复位</button>
+            <button type="button" class="bar-btn vt-switch" id="btn-edit" aria-pressed="false">编辑</button>
+            <button type="button" class="bar-btn vt-switch" id="btn-3d" aria-pressed="false">3D</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="group et-group" id="et-group">
+        <div class="et-group-inner">
+          <div class="et-tools">
+            <button type="button" class="chip on" data-tool="brush">画笔</button>
+            <button type="button" class="chip" data-tool="eraser">橡皮</button>
+            <button type="button" class="chip" data-tool="dropper">取色</button>
+            <button type="button" class="chip chip-ghost et-paint" id="et-paint" aria-label="选择画笔豆色"></button>
+          </div>
+          <div class="et-acts">
+            <button type="button" class="chip" id="et-undo" disabled>撤销</button>
+            <button type="button" class="chip" id="et-redo" disabled>重做</button>
+            <button type="button" class="chip" id="et-clear">清空手绘</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel-collapse" id="panel-wrap">
+        <div class="panel" id="panel">
+          <div class="group">
+            <div class="row chips-row chips-info">
+              <button type="button" class="chip chip-info on" id="btn-palette">MARD</button>
+              <button type="button" class="chip chip-ghost chip-dot" id="btn-colors" aria-label="查看豆色">
+                <span class="colors-preview" id="colors-preview"></span>
+              </button>
+              <button type="button" class="chip chip-ghost chip-hug panel-collapse-btn" id="btn-panel-collapse" aria-label="收起更多">
+                <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                  <path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </button>
+            </div>
+            <div class="row chips-row">
+              <button type="button" class="chip on" id="btn-grid" aria-pressed="true">网格</button>
+              <button type="button" class="chip" id="btn-merge" aria-pressed="false">合并</button>
+              <button type="button" class="chip" id="btn-dither" aria-pressed="false">抖动</button>
+              <button type="button" class="chip" id="btn-avg" aria-pressed="false">均值</button>
+            </div>
+            <div class="row">
+              <span class="label">豆宽</span>
+              <input type="range" id="width-slider" min="16" max="116" value="29" />
+              <span class="val" id="width-val">29</span>
+            </div>
+            <div class="row row-board">
+              <span class="label">拼板</span>
+              <button type="button" class="chip chip-info on chip-hug" id="btn-board-size">29×29</button>
+              <button type="button" class="chip chip-info chip-hug" id="btn-seam" aria-pressed="false">分板线</button>
+            </div>
+            <div class="row">
+              <span class="label">限色</span>
+              <input type="range" id="color-slider" min="8" max="80" value="60" />
+              <span class="val" id="color-val">60</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="footer-bar" id="footer-bar">
+        <button type="button" class="bar-btn" id="btn-more" aria-pressed="false">更多</button>
+        <button type="button" class="bar-btn" id="btn-crop">裁切</button>
+        <button type="button" class="bar-btn" id="btn-reselect">重选</button>
+        <span class="footer-spacer"></span>
+        <button type="button" class="bar-btn bar-btn-primary" id="btn-save">导出</button>
+        <button type="button" class="bar-btn bar-btn-note" id="export-share" hidden>发布笔记</button>
+      </div>
+    </section>
+  </div>
+
+  <div class="sheet-mask" id="palette-sheet" aria-hidden="true">
+    <button type="button" class="sheet-backdrop" id="palette-sheet-backdrop" aria-label="关闭"></button>
+    <div class="sheet" role="dialog" aria-label="选择色卡">
+      <div class="sheet-handle"></div>
+      <p class="sheet-title">色卡</p>
+      <button type="button" class="sheet-option" data-palette="mard">
+        <span class="sheet-option-main">MARD</span>
+        <span class="sheet-option-sub">221 色 · 国内主流</span>
+      </button>
+      <button type="button" class="sheet-option" data-palette="coco">
+        <span class="sheet-option-main">COCO</span>
+        <span class="sheet-option-sub">291 色</span>
+      </button>
+      <button type="button" class="sheet-cancel" id="palette-sheet-cancel">取消</button>
+    </div>
+  </div>
+
+  <div class="sheet-mask" id="board-size-sheet" aria-hidden="true">
+    <button type="button" class="sheet-backdrop" id="board-size-sheet-backdrop" aria-label="关闭"></button>
+    <div class="sheet sheet-tall" role="dialog" aria-label="拼板规格">
+      <div class="sheet-handle"></div>
+      <p class="sheet-title">拼板规格</p>
+      <div class="sheet-scroll">
+        <button type="button" class="sheet-option" data-board-size="14">
+          <span class="sheet-option-main">14×14</span>
+          <span class="sheet-option-sub">小号方板</span>
+        </button>
+        <button type="button" class="sheet-option" data-board-size="15">
+          <span class="sheet-option-main">15×15</span>
+          <span class="sheet-option-sub">小号方板</span>
+        </button>
+        <button type="button" class="sheet-option" data-board-size="16">
+          <span class="sheet-option-main">16×16</span>
+          <span class="sheet-option-sub">练习小板</span>
+        </button>
+        <button type="button" class="sheet-option" data-board-size="22">
+          <span class="sheet-option-main">22×22</span>
+          <span class="sheet-option-sub">中号方板</span>
+        </button>
+        <button type="button" class="sheet-option" data-board-size="28">
+          <span class="sheet-option-main">28×28</span>
+          <span class="sheet-option-sub">近标准板</span>
+        </button>
+        <button type="button" class="sheet-option is-active" data-board-size="29">
+          <span class="sheet-option-main">29×29</span>
+          <span class="sheet-option-sub">标准大方板 · 默认</span>
+        </button>
+        <button type="button" class="sheet-option" data-board-size="32">
+          <span class="sheet-option-main">32×32</span>
+          <span class="sheet-option-sub">大号方板</span>
+        </button>
+        <button type="button" class="sheet-option" data-board-size="40">
+          <span class="sheet-option-main">40×40</span>
+          <span class="sheet-option-sub">加大方板</span>
+        </button>
+        <button type="button" class="sheet-option" data-board-size="52">
+          <span class="sheet-option-main">52×52</span>
+          <span class="sheet-option-sub">超大方板</span>
+        </button>
+        <button type="button" class="sheet-option" data-board-size="64">
+          <span class="sheet-option-main">64×64</span>
+          <span class="sheet-option-sub">巨幅方板</span>
+        </button>
+        <button type="button" class="sheet-option" data-board-size="80">
+          <span class="sheet-option-main">80×80</span>
+          <span class="sheet-option-sub">巨幅方板</span>
+        </button>
+        <button type="button" class="sheet-option" data-board-size="100">
+          <span class="sheet-option-main">100×100</span>
+          <span class="sheet-option-sub">拼接大板</span>
+        </button>
+        <button type="button" class="sheet-option" data-board-size="116">
+          <span class="sheet-option-main">116×116</span>
+          <span class="sheet-option-sub">最大拼接板</span>
+        </button>
+      </div>
+      <button type="button" class="sheet-cancel" id="board-size-sheet-cancel">取消</button>
+    </div>
+  </div>
+
+  <div class="sheet-mask" id="colors-sheet" aria-hidden="true">
+    <button type="button" class="sheet-backdrop" id="colors-sheet-backdrop" aria-label="关闭"></button>
+    <div class="sheet sheet-tall" role="dialog" aria-label="豆色用量">
+      <div class="sheet-handle"></div>
+      <p class="sheet-title">豆色 · 点选可高亮</p>
+      <div class="colors-list" id="colors-list"></div>
+      <button type="button" class="sheet-cancel" id="colors-sheet-cancel">完成</button>
+    </div>
+  </div>
+
+  <div class="sheet-mask" id="pick-sheet" aria-hidden="true">
+    <button type="button" class="sheet-backdrop" id="pick-sheet-backdrop" aria-label="关闭"></button>
+    <div class="sheet sheet-tall" role="dialog" aria-label="选择画笔豆色">
+      <div class="sheet-handle"></div>
+      <p class="sheet-title">画笔豆色 · 点选</p>
+      <div class="colors-list" id="pick-list"></div>
+      <button type="button" class="sheet-cancel" id="pick-sheet-cancel">完成</button>
+    </div>
+  </div>
+
+  <div class="sheet-mask" id="export-sheet" aria-hidden="true">
+    <button type="button" class="sheet-backdrop" id="export-sheet-backdrop" aria-label="关闭"></button>
+    <div class="sheet sheet-dock" role="dialog" aria-label="图纸选项">
+      <div class="sheet-handle"></div>
+      <p class="sheet-title">图纸选项</p>
+      <p class="exp-scope" id="export-scope"></p>
+      <div class="exp-scroll">
+      <div class="exp-list" id="exp-board-mode" hidden>
+        <label class="exp-opt">
+          <input type="radio" name="exp-board-mode" id="exp-mode-full" value="full" checked />
+          <span class="exp-box" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg>
+          </span>
+          <span class="exp-main">导出全图<small>整幅一张；过大将自动缩小，失败请改分板导出</small></span>
+        </label>
+        <label class="exp-opt">
+          <input type="radio" name="exp-board-mode" id="exp-mode-each" value="each" />
+          <span class="exp-box" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg>
+          </span>
+          <span class="exp-main">分板逐个导出<small>每板一张，含本板用量</small></span>
+        </label>
+      </div>
+      <div class="exp-list">
+        <label class="exp-opt">
+          <input type="checkbox" id="exp-axes" />
+          <span class="exp-box" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg>
+          </span>
+          <span class="exp-main">行列坐标<small>顶行列号 + 左侧行号</small></span>
+        </label>
+        <label class="exp-opt">
+          <input type="checkbox" id="exp-codes" />
+          <span class="exp-box" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg>
+          </span>
+          <span class="exp-main">格内色号<small>每格标注豆色编号</small></span>
+        </label>
+        <label class="exp-opt">
+          <input type="checkbox" id="exp-legend" />
+          <span class="exp-box" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg>
+          </span>
+          <span class="exp-main">用量图例<small>色块 + 编号 + 颗数</small></span>
+        </label>
+        <label class="exp-opt">
+          <input type="checkbox" id="exp-meta" />
+          <span class="exp-box" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"></path></svg>
+          </span>
+          <span class="exp-main">标题信息<small>品牌 + 尺寸 + 第几板</small></span>
+        </label>
+      </div>
+      </div>
+      <div class="exp-actions">
+        <button type="button" class="btn btn-ghost" id="export-sheet-cancel">取消</button>
+        <button type="button" class="btn btn-primary" id="export-go">保存图纸</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="crop-screen" id="crop-screen" aria-hidden="true">
+    <div class="crop-nav">
+      <span class="crop-nav-title">裁切图片</span>
+    </div>
+    <div class="crop-viewport" id="crop-viewport">
+      <canvas id="crop-canvas"></canvas>
+    </div>
+    <div class="crop-panel">
+      <div class="crop-bar">
+        <span class="crop-label">比例</span>
+        <div class="crop-chips" id="crop-ratio-chips"></div>
+      </div>
+      <div class="crop-bar">
+        <span class="crop-label">缩放</span>
+        <input class="crop-slider" type="range" id="crop-zoom" min="0" max="500" value="0" />
+        <div class="crop-icon-row">
+          <button type="button" class="crop-icon-btn" id="crop-rotate" title="旋转" aria-label="旋转">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3.2-6.9"></path><path d="M21 4v6h-6"></path></svg>
+          </button>
+          <button type="button" class="crop-icon-btn" id="crop-flip" title="镜像" aria-label="镜像">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"></path><path d="M7 8 3 12l4 4"></path><path d="M17 8l4 4-4 4"></path></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+    <div class="crop-actions">
+      <button type="button" class="btn btn-ghost" id="crop-cancel">取消</button>
+      <button type="button" class="btn btn-ghost" id="crop-reset">重置</button>
+      <button type="button" class="btn btn-primary" id="crop-confirm">应用裁切</button>
+    </div>
+  </div>
+
+  <input type="file" id="file-input" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,image/*" />
+  <div class="export-busy" id="export-busy" aria-hidden="true">
+    <div class="export-busy-card" role="alertdialog" aria-live="assertive" aria-busy="true">
+      <p class="export-busy-title">正在导出</p>
+      <p class="export-busy-text" id="export-busy-text">正在导出图纸，请勿退出</p>
+    </div>
+  </div>
+
+  <!-- 没有「存相册」原生桥的容器（快手等）：图纸摆出来让用户长按保存，不再谎报已保存 -->
+  <div class="save-tip" id="save-tip" aria-hidden="true">
+    <div class="save-tip-panel" role="dialog" aria-label="保存到相册">
+      <p class="save-tip-title" id="save-tip-title">长按图片保存到相册</p>
+      <p class="save-tip-text" id="save-tip-text">长按下方图纸 → 选择「保存图片」</p>
+      <div class="save-tip-list" id="save-tip-list"></div>
+      <div class="save-tip-actions">
+        <button type="button" class="btn btn-ghost" id="save-tip-share" hidden>系统分享</button>
+        <button type="button" class="btn btn-primary" id="save-tip-close">完成</button>
+      </div>
+    </div>
+  </div>
+  <div class="toast" id="toast"></div>
+
+  <script src="./palettes.js"></script>
+  <script src="./app.js?v=20260913k"></script>
+</body>
+</html>

@@ -1,0 +1,6 @@
+/* RabbitBead — Info.plist, English. */
+
+"CFBundleDisplayName" = "RabbitBead";
+"NSCameraUsageDescription" = "Lets you photograph your beads, or the color codes on a package, so you can log your inventory.";
+"NSPhotoLibraryAddUsageDescription" = "Lets you save the generated bead patterns to your photo library.";
+"NSPhotoLibraryUsageDescription" = "Lets you pick a photo to turn into a bead pattern, or a color-code label photo to log your inventory.";
