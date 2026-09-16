@@ -81,9 +81,10 @@ function drawCard(mode, rec, label) {
   if (mode === 'zh' && rec) {
     NM.renderCard(mkEl('canvas'), {
       surname: rec.surname, chars: rec.chars, given: rec.given, full: rec.full,
-      desc: rec.desc || NM.describe(profile),
-      radar: rec.radar || NM.radar(profile, (rec.name && rec.name.vec) || rec.vec),
-      note: rec.note, mode: 'zh'
+      desc: rec.desc !== undefined ? rec.desc : NM.describe(profile),
+      /* radar: null 表示「没测性格」，用来验证卡片不留半屏空白 */
+      radar: rec.radar !== undefined ? rec.radar : NM.radar(profile, (rec.name && rec.name.vec) || rec.vec),
+      bazi: rec.bazi, baziNote: rec.baziNote, note: rec.note, mode: 'zh'
     });
   } else {
     NM.renderCard(mkEl('canvas'), rec);
@@ -104,10 +105,14 @@ function drawCard(mode, rec, label) {
     const xHit = px < cx + cw - 2 && cx < px + pw - 2;
     if (xHit && (c.y - p.y) < Math.min(fp, fc) * 0.85) overlap.push([p.s, p.y, c.s, c.y]);
   }
+  // 3) 贴死卡片底部：内边框画在 34 ~ H-34，文字要在其上方留出边距（≥30px）
+  const lowLimit = H - 34 - 30;
+  const tooLow = texts.filter(t => t.y > lowLimit);
   const tag = label || mode;
   if (out.length) { console.log('  ✗ ' + tag + ' 文字出画布:', out.map(t => t.s + '@' + t.y).join(' / ')); fail++; }
   if (overlap.length) { console.log('  ✗ ' + tag + ' 文字重合:', overlap.map(o => o[0] + '(' + o[1] + ') vs ' + o[2] + '(' + o[3] + ')').join(' | ')); fail++; }
-  if (!out.length && !overlap.length) console.log('  ✓ ' + tag + ' 布局正常（' + texts.length + ' 段文字）');
+  if (tooLow.length) { console.log('  ✗ ' + tag + ' 贴死卡片底边(应 ≤' + lowLimit + '):', tooLow.map(t => t.s + '@' + t.y).join(' / ')); fail++; }
+  if (!out.length && !overlap.length && !tooLow.length) console.log('  ✓ ' + tag + ' 布局正常（' + texts.length + ' 段文字）');
 }
 
 console.log('中文名片：');
@@ -125,6 +130,14 @@ for (const n of ['Olivia', 'Grace', 'Nathaniel', 'Penelope']) {
 /* 单名 */
 drawCard('zh', { surname: { c: '李', py: 'li', tone: 3 }, chars: ['璨'], given: '璨',
   full: '李璨', desc: '明亮耀眼', radar: NM.radar(profile, { trait: { warm: .5, out: .5, rat: .3, sta: .2 }, style: { cla: .5, sim: .5, exp: .5 } }), mode: 'zh' }, '单名 李璨');
+/* 有性格 + 有生辰（分享卡片最完整的一屏）：一句话 + 四柱 + 七轴雷达同屏，
+ * 底部图例 / 页脚要留够间距和卡片下边距，不能挤成一坨。 */
+drawCard('zh', {
+  surname: { c: '李', py: 'li', tone: 3 }, chars: ['涛', '宇'], given: '涛宇',
+  full: '李涛宇', desc: '温和、外向、理性与直觉各半、节奏自由',
+  radar: NM.radar(profile, { trait: { warm: .6, out: .3, rat: .4, sta: .5 }, style: { cla: .8, sim: .5, exp: .2 } }),
+  bazi: { ok: true, pillarStr: '戊寅 · 戊午 · 癸巳', short: '宜补金' }, baziNote: '宜补金'
+}, '有性格有生辰 · 李涛宇');
 
 /* 复姓：姓名共 3 字，但姓占两个字，拼音也长一截 */
 for (const c of (NM.COMPOUND_SURNAMES || []).slice(0, 6)) {
@@ -145,6 +158,37 @@ for (const nm of [['Grace'], ['Emma', 'Wilson'], ['Silas'], ['Olivia', 'Chen'], 
     desc: NM.describe(profile), radar: NM.radar(profile, t.vec), mode: 'zh'
   }, nm.join(' ') + ' → ' + t.full);
 }
+
+console.log('\n中文名片 · 没测性格（无雷达，卡片不该在下面空掉半屏）：');
+/* 复现用户反馈：没测性格的李涛宇，之前雷达那一整块是空的 */
+drawCard('zh', {
+  surname: { c: '李', py: 'li', tone: 3 }, chars: ['涛', '宇'], given: '涛宇',
+  full: '李涛宇', desc: '', radar: null
+}, '没测性格 · 李涛宇');
+drawCard('zh', {
+  surname: { c: '李', py: 'li', tone: 3 }, chars: ['璨'], given: '璨',
+  full: '李璨', desc: '', radar: null
+}, '没测性格 · 单名');
+drawCard('zh', {
+  surname: { c: '王', py: 'wang', tone: 2 }, chars: ['书', '言', '之'], given: '书言之',
+  full: '王书言之', desc: '', radar: null
+}, '没测性格 · 三字名');
+drawCard('zh', {
+  surname: { c: '欧阳', py: 'ou', tone: 1 }, chars: ['沐', '辰'], given: '沐辰',
+  full: '欧阳沐辰', desc: '', radar: null
+}, '没测性格 · 复姓四字');
+/* 有生辰、没测性格：一句话是生辰摘要，下面接四柱，再字义 */
+drawCard('zh', {
+  surname: { c: '林', py: 'lin', tone: 2 }, chars: ['知', '夏'], given: '知夏',
+  full: '林知夏', desc: '日主木旺，喜火土调候', radar: null,
+  bazi: { ok: true, pillarStr: '丙午 甲午 戊辰 己未', short: '喜火、土' },
+  baziNote: '名里带「火」意或「土」意的字，让木气泄得顺一点'
+}, '有生辰无性格 · 林知夏');
+/* 没测性格但有读感小结：有内容就该照常出引文 */
+drawCard('zh', {
+  surname: { c: '陈', py: 'chen', tone: 2 }, chars: ['云', '舟'], given: '云舟',
+  full: '陈云舟', desc: '念着顺口，两个字都是开阔的意象', radar: null
+}, '没测性格但有小结 · 陈云舟');
 
 console.log('\n英文名片：');
 const enList = NM.NAMES_EN;

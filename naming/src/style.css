@@ -1041,20 +1041,41 @@ html.sheet-open, body.sheet-open { overflow: hidden; }
   position: fixed; inset: 0; z-index: 80;
   background: rgba(0, 0, 0, 0.92);
   display: flex; flex-direction: column;
+  animation: modalFade 0.24s ease both;
 }
 .modal-top {
   display: flex; justify-content: space-between; align-items: center;
   padding: calc(var(--safe-top) + 10px) 16px 8px;
 }
 .modal-btn { border: none; background: none; color: #fff; font-size: 15px; font-family: inherit; padding: 6px; }
-.modal-hint { color: rgba(255, 255, 255, 0.55); font-size: 12px; letter-spacing: 0.02em; }
 .modal-body { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 0 18px; }
-.modal-body img { max-width: 100%; max-height: 100%; border-radius: var(--r-lg); box-shadow: var(--shadow-pop); }
+.modal-body img {
+  max-width: 100%; max-height: 100%; border-radius: var(--r-lg); box-shadow: var(--shadow-pop);
+  animation: modalCardIn 0.3s var(--ease) both;
+}
 .modal-foot { padding: 12px 16px calc(var(--safe-bottom) + 16px); text-align: center; }
 .modal-dl {
   display: inline-block; color: #fff; background: rgba(255, 255, 255, 0.14);
   border: 1px solid rgba(255, 255, 255, 0.3); padding: 10px 24px; border-radius: var(--r-pill);
   font-size: 14px; text-decoration: none; letter-spacing: 0.02em;
+}
+/* 退出动画：关闭时先放反向动画，播完再由 JS 加 .hidden 收掉（display:none） */
+.modal-closing { animation: modalFadeOut 0.22s ease both; }
+.modal-closing .modal-body img { animation: modalCardOut 0.2s var(--ease) both; }
+
+@keyframes modalFade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes modalFadeOut { from { opacity: 1; } to { opacity: 0; } }
+@keyframes modalCardIn {
+  from { opacity: 0; transform: scale(0.92) translateY(10px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+@keyframes modalCardOut {
+  from { opacity: 1; transform: scale(1) translateY(0); }
+  to { opacity: 0; transform: scale(0.94) translateY(10px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .modal, .modal-body img,
+  .modal-closing, .modal-closing .modal-body img { animation: none; }
 }
 
 .toast {

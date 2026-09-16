@@ -1,4 +1,4 @@
-/* 分享卡片：canvas 竖版 3:4（900×1200），直接长按保存发小红书 */
+/* 分享卡片：canvas 竖版 3:4（900×1200），弹层内提供「下载图片」按钮导出 */
 (function () {
   var NM = (window.NM = window.NM || {});
   var W = 900, H = 1200;
@@ -149,21 +149,21 @@
    * @param canvas 目标 canvas
    * @param data { surname, chars, given, full, desc, radar, note, mode, enName }
    */
-  /* 卡片底部纵向分区（900×1200）。上半段（名字 + 拼音 + 一句话）压紧一点，
-   * 省下来的高度全给内容区和雷达图 —— 之前 530~622、827~874 两段都是空白，
-   * 而字义说明和雷达反而挤着画。现在：
-   *   584 ─ 829  内容区（字义拆解 / 英文信息行）
-   *   850 ─ 1082 雷达图（含轴标签）
-   *   1100       图例说明
-   *   1148       页脚
-   * CONTENT_BOTTOM 不能直接取雷达圆的上沿：轴标签画在圆外 r+26 处
-   * （middle 基线，22px 字），上沿在 850。 */
-  var CONTENT_TOP = 608;
-  var RADAR_CY = 1000, RADAR_R = 92;
-  var RADAR_LABEL_TOP = RADAR_CY - (RADAR_R + 26) - 11;   /* 871 */
-  var CONTENT_BOTTOM = RADAR_LABEL_TOP - 10;              /* 861 */
-  var LEGEND_Y = 1150;
-  var FOOT_Y = 1190;
+  /* 卡片底部纵向分区（900×1200）。内边框画在 34~1166，文字要退到边框里侧、
+   * 更不能压到画布底边。自下而上定，保证底部有实打实的留白：
+   *   1112  页脚（离内边框 54px 留白）
+   *   1062  图例说明（与页脚隔 50px）
+   *    918  雷达圆心（R=76）
+   *    795  内容区底（字义拆解）
+   *    580  内容区顶（有雷达时）
+   * 轴标签画在圆外 r+26 处（middle 基线、22px 字），所以内容区底不能直接
+   * 取雷达圆上沿，要再退一点，不然字义最后一行会顶到最上面那个轴标签。 */
+  var CONTENT_TOP = 580;
+  var RADAR_CY = 918, RADAR_R = 76;
+  var RADAR_LABEL_TOP = RADAR_CY - (RADAR_R + 26) - 11;   /* 805 */
+  var CONTENT_BOTTOM = RADAR_LABEL_TOP - 10;              /* 795 */
+  var LEGEND_Y = 1062;
+  var FOOT_Y = 1112;
   var SANS = '-apple-system, "PingFang SC", sans-serif';
   var SERIF = SANS;   /* 名字也用系统字，和界面同一套字面 */
 
@@ -205,16 +205,19 @@
     rr(ctx, 34, 34, W - 68, H - 68, 24);
     ctx.stroke();
 
-    /* 顶部标识 */
+    /* 顶部标识。没有性格数据就别在标题里写「由性格取」——卡片上没有雷达、
+     * 也没有那句话，标题再这么说就对不上了。 */
     ctx.textAlign = 'center';
     ctx.textBaseline = 'alphabetic';
     ctx.font = '500 24px ' + SANS;
     ctx.fillStyle = '#b09a92';
+    var hasRadar = !!(data.radar && data.radar.length);
     var label;
-    if (data.mode === 'en') label = '由性格取的英文名';
-    else if (data.bazi && data.answered) label = '性格 · 生辰取名';
+    if (data.mode === 'en') label = hasRadar ? '由性格取的英文名' : '精选英文名';
+    else if (data.bazi && hasRadar) label = '性格 · 生辰取名';
     else if (data.bazi) label = '由生辰取的中文名';
-    else label = '由性格取的中文名';
+    else if (hasRadar) label = '由性格取的中文名';
+    else label = '精选中文名';
     ctx.fillText(label.split('').join(' '), W / 2, 118);
 
     if (data.mode === 'en') {
@@ -257,38 +260,50 @@
     ctx.lineWidth = 1.5;
     ctx.stroke();
 
-    /* 一句话人格 / 生辰摘要（引文样式，居中舒展，上方一枚浅色装饰引号） */
-    ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
-    ctx.font = '600 48px ' + SANS; ctx.fillStyle = 'rgba(242,109,141,0.20)';
-    ctx.fillText('“', W / 2, 438);
-    ctx.font = '400 32px ' + SANS; ctx.fillStyle = '#6b5852';
-    wrapText(ctx, data.desc || '', W / 2, 466, W - 180, 46, 2);
+    var hasRadar = !!(data.radar && data.radar.length);
+    var quote = (data.desc || '').trim();
+
+    /* 一句话人格 / 生辰摘要（引文样式，居中舒展，上方一枚浅色装饰引号）。
+     * 没测性格时这里没有内容，就不摆「还没测过性格」这类占位——空着比硬凑一句干净。 */
+    if (quote) {
+      ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+      ctx.font = '600 48px ' + SANS; ctx.fillStyle = 'rgba(242,109,141,0.20)';
+      ctx.fillText('“', W / 2, 438);
+      ctx.font = '400 32px ' + SANS; ctx.fillStyle = '#6b5852';
+      wrapText(ctx, quote, W / 2, 466, W - 180, 46, 2);
+    }
 
     /* 有生辰时在一句话下面补四柱 + 宜补，字义区略下移 */
     var contentTop = CONTENT_TOP;
     if (data.bazi) {
+      ctx.textAlign = 'center';
       ctx.font = '500 27px ' + SANS;
       ctx.fillStyle = '#e8557b';
-      ctx.fillText(data.bazi.pillarStr || '', W / 2, 578);
+      ctx.fillText(data.bazi.pillarStr || '', W / 2, 552);
       ctx.font = '400 23px ' + SANS;
       ctx.fillStyle = '#a08a83';
       var bzLine = data.baziNote || data.bazi.short || '';
-      if (bzLine) ctx.fillText(bzLine, W / 2, 612);
-      contentTop = 640;
+      if (bzLine) ctx.fillText(bzLine, W / 2, 586);
+      contentTop = 610;
+    } else if (!quote) {
+      /* 既没测性格也没给生辰：内容区提到拼音正下方，不在下面空着半张卡 */
+      contentTop = 470;
     }
 
+    /* 没有雷达图就把内容区一路铺到页脚上方——空出来的那半屏留给字卡，
+     * 而不是在下面留一片什么都没画的空白。 */
+    var contentBottom = hasRadar ? CONTENT_BOTTOM : (FOOT_Y - 64);
+
     /* 字义拆解：每个字做成一枚「字卡」——左边圆角浅粉底放大字、右边拼音 + 释义，
-     * 两列清楚分开，不再把字 / 拼音 / 释义水平挤在一行。整块在内容区里垂直居中。 */
-    if (!data.bazi) {
-      ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-      ctx.font = '600 26px ' + SANS; ctx.fillStyle = '#f26d8d';
-      ctx.fillText('字义拆解', 108, contentTop - 24);
-    }
+     * 两列清楚分开，不再把字 / 拼音 / 释义水平挤在一行。 */
     var chars = (data.chars || []).filter(function (c) { return NM.getChar(c); });
     var n = Math.max(1, chars.length);
-    var range = CONTENT_BOTTOM - contentTop;
-    var step = Math.min(160, Math.floor(range / n));
-    var fs = Math.max(22, Math.min(64, Math.round(step * 0.60)));
+    var range = contentBottom - contentTop;
+    var slot = range / n;
+    /* 没雷达时可用高度翻了近一倍，字卡跟着放大，再按槽位把内容区铺满 */
+    var step = Math.min(hasRadar ? 160 : 240, Math.floor(slot));
+    var fsCap = hasRadar ? 64 : 92;
+    var fs = Math.max(22, Math.min(fsCap, Math.round(step * 0.60)));
     var size = Math.round(fs * 1.15);                 /* 字块边长 */
     var pyFs = Math.max(12, Math.round(fs * 0.32));
     var mFs = Math.max(15, Math.round(fs * 0.40));
@@ -296,7 +311,16 @@
     var noteLh = Math.round(mFs * 1.35);
     var colH = pyFs + noteLh * noteLines;             /* 右列（拼音 + 释义）占高 */
     var rowH = Math.max(size, colH) + 12;             /* 一行实际占高 */
-    var y0 = contentTop + Math.max(0, Math.round((range - rowH * n) / 2)) + Math.round(rowH / 2);
+    var pitch = hasRadar ? rowH : Math.max(rowH, slot);   /* 没雷达时按槽位分散，铺满内容区 */
+    var y0 = contentTop + Math.max(0, Math.round((range - pitch * n) / 2)) + Math.round(pitch / 2);
+    /* 小标题贴着第一张字卡走：没雷达时字卡是居中铺开的，
+     * 标题要是还钉在 contentTop 上，就会跟第一张卡之间空出好大一段。 */
+    if (!data.bazi) {
+      var titleY = hasRadar ? contentTop - 24 : (y0 - size / 2 - 36);
+      ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+      ctx.font = '600 26px ' + SANS; ctx.fillStyle = '#f26d8d';
+      ctx.fillText('字义拆解', 108, titleY);
+    }
     var bx = 108, tx = bx + size + 30;                /* 字块左 / 拼音·释义左 */
     chars.forEach(function (c) {
       var cy = y0;                                    /* 本行基准（字块垂直居中） */
@@ -313,7 +337,7 @@
       ctx.fillText(NM.namePinyin(null, [c]), tx, cy - fs * 0.20);
       ctx.font = '400 ' + mFs + 'px ' + SANS; ctx.fillStyle = '#6b5852';
       wrapText(ctx, NM.charNote(c).text, tx, cy + fs * 0.30, W - tx - 64, noteLh, noteLines);
-      y0 += rowH;
+      y0 += pitch;
     });
 
     drawRadarBlock(ctx, data);

@@ -1644,10 +1644,23 @@
     var url = NM.cardToDataURL(canvas);
     var img = $('#modal-img');
     img.src = url;
-    $('#modal').classList.remove('hidden');
+    var m = $('#modal');
+    /* 清掉残留的关闭态，确保每次打开都重放进入动画 */
+    m.classList.remove('hidden', 'modal-closing');
     $('#modal-dl').href = url;
     $('#modal-dl').download = '仙鹿起名-' +
       (data.full || (data.enName && data.enName.n) || 'name') + '.jpg';
+  }
+
+  function closeModal() {
+    var m = $('#modal');
+    if (m.classList.contains('hidden')) return;
+    /* 先放反向动画，播完再收掉（加 .hidden → display:none） */
+    m.classList.add('modal-closing');
+    setTimeout(function () {
+      m.classList.add('hidden');
+      m.classList.remove('modal-closing');
+    }, 240);
   }
 
   function cardDataFor(c) {
@@ -1656,7 +1669,7 @@
     var answered = !!(p && p.answered);
     var desc = answered
       ? NM.describe(p)
-      : (bazi && bazi.ok ? bazi.summary : '还没测过性格');
+      : (bazi && bazi.ok ? bazi.summary : '');
     return {
       surname: c.surname, chars: c.chars, given: c.given, full: c.full,
       desc: desc,
@@ -2213,7 +2226,7 @@
     };
     goBack(back[state.screen] || 'home');
   });
-  $('#modal-close').addEventListener('click', function () { $('#modal').classList.add('hidden'); });
+  $('#modal-close').addEventListener('click', closeModal);
   $('#sheet-close').addEventListener('click', function () { closeSheet(); });
   $('#sheet-mask').addEventListener('click', function () { closeSheet(); });
   document.addEventListener('keydown', function (e) {
