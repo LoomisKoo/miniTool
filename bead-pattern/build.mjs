@@ -18,6 +18,11 @@ const FILES = ['index.html', 'style.css', 'app.js', 'palettes.js', 'icon.png'];
 
 const targets = process.argv.slice(2).length ? process.argv.slice(2) : ALL;
 
+// 快手：无容器顶栏，不展示页内「兔格拼豆」标题
+const PLATFORM_CSS = {
+  kuaishou: ':root { --safe-top: 0px; }\n.header { display: none !important; height: 0 !important; min-height: 0 !important; padding: 0 !important; margin: 0 !important; overflow: hidden !important; }'
+};
+
 function assertOffline(dir) {
   let text = '';
   for (const f of FILES) {
@@ -29,6 +34,11 @@ function assertOffline(dir) {
   if (/fetch\s*\(|XMLHttpRequest|axios|WebSocket/i.test(text)) {
     console.warn('  ⚠ 检测到网络 API 关键字，请确认未实际发起请求');
   }
+}
+
+function assertXhs(html) {
+  if (/<script(?![^>]*\ssrc=)[^>]*>/i.test(html)) throw new Error('小红书产物含内联 script');
+  if (/\son\w+\s*=/i.test(html)) throw new Error('小红书产物含 HTML 内联事件');
 }
 
 function zipFiles(zipPath, files) {
@@ -60,7 +70,20 @@ function buildOne(platformId) {
     }
     copied.push(dest);
   }
+
+  const extraCss = PLATFORM_CSS[platformId];
+  if (extraCss) {
+    const stylePath = path.join(outDir, 'style.css');
+    fs.writeFileSync(
+      stylePath,
+      fs.readFileSync(stylePath, 'utf8') + `\n\n/* platform:${platformId} */\n${extraCss}\n`
+    );
+  }
+
   assertOffline(outDir);
+  if (platformId === 'xiaohongshu') {
+    assertXhs(fs.readFileSync(path.join(outDir, 'index.html'), 'utf8'));
+  }
 
   const zipPath = path.join(__dirname, 'dist', `${platformId}-${SLUG}.zip`);
   zipFiles(zipPath, copied);

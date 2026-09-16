@@ -78,7 +78,9 @@ bead-pattern/
 - 「分板线」默认关闭（H5 默认开）：预览与整幅导出都不画板间分割线，需要拼板对位时点开
 - 图纸底部多一条署名条（H5 是引流文案，App 内不需要）
 
-参数与手势口径已按 H5 对齐：豆宽 29（16–116）、限色 60（8–80）、主色采样、抖动关、合并关、合并阈值 0.10（Oklab，无 UI）、拼板 29×29、最大放大 6.5 倍（`MAX_ZOOM`）、平移夹紧留半屏余量（`clampView2d`）、双击放大 2.3 倍 / 放大态复位阈值 1.35 倍。本地存档 key 升到 `beadpattern.settings.v3`，旧存档直接丢弃，保证首启参数与 H5 一致。
+参数与手势口径基本按 H5 对齐：豆宽 29（16–116）、限色 60（8–80）、主色采样、抖动关、合并关、合并阈值 0.10（Oklab，无 UI）、拼板 29×29、最大放大 6.5 倍（`MAX_ZOOM`）、双击放大 2.3 倍 / 放大态复位阈值 1.35 倍。本地存档 key 升到 `beadpattern.settings.v3`，旧存档直接丢弃，保证首启参数与 H5 一致。
+
+**唯一有意偏离 H5：平移夹紧。** H5 `clampView2d` 为了让「双击角落放大」不跳，留了半屏余量（`edge = max(44, 半屏)`），放大后能把图片拖到边界外、露出大片空白；App 改按图片查看器口径严格夹紧（内容的边不能缩进容器内，内容小于容器时居中），见 `BeadPreviewPane.clampedOffset`。预览区高度变化（「更多」面板、编辑条、切 3D）按布局动画跟随：未放大时重新适配（保持完整可见与居中），放大时保持缩放、按「内容中心在容器里的比例」延续视口。
 
 色卡数据由 `ios/scripts/gen-palettes.mjs` 从 `palettes.js` 生成 `Resources/Palettes.json`，**改色卡要两边同步**（当前两边均为 MARD 291 / COCO 291，已逐条核对一致）。
 
@@ -90,6 +92,33 @@ open ios/BeadPattern/BeadPattern.xcodeproj
 
 首次需要在 Xcode 里选一次 Team（`Signing & Capabilities`）才能上真机；模拟器可不填。
 AppIcon 目前是把 `icon.png` 放大到 1024 的占位图，上架前需替换为原生 1024 源图。
+
+### 设计系统
+
+iOS 端 UI 按 Apple 设计语言（`getdesign apple`）重构，令牌与组件都收在
+`Features/Editor/BeadUI.swift`（`BeadTheme` / `BeadAppearance` / `BeadRadius` / `BeadSpace`
++ `.beadXxx()` 字体修饰符）。改 UI 时只用这些令牌，不要写裸的十六进制色和字号：
+
+| 类别 | 规则 |
+| --- | --- |
+| 暗色 | 每个色都是浅 / 深两态（`Color.adaptive`），跟随系统。页面退纯黑、卡面抬 `#1C1C1E`、交互蓝换 `#0071E3`；**导出/缩略图仍走白底**（`BeadArtworkRenderer` 不读主题） |
+| 强调色 | 只有 `BeadTheme.primary`（Action Blue `#0066cc` / 深色 `#0071e3`）一个。破坏性动作用 `danger`，其余不再引入第二种彩色 |
+| 文字 | 正文固定 17pt（`beadBody`），标题 17pt 以上带负字距（`beadDisplayLg` 28/600/-0.28） |
+| 圆角 | `sm` 8 给紧凑工具、`md` 11 给小卡、`lg` 18 给卡片、`pill` 给一切「动作」 |
+| 层级 | 靠「面」切换（`parchment` / `canvas` / `tile1`），卡片不加投影 |
+| 投影 | 全项目只有 `beadProductShadow()` 一处，只给预览画布里的作品用 |
+| 按压 | 一律 `BeadPressStyle`（`scale 0.95`） |
+| 按钮 | 只有四种：`BeadButton` 的 `primary` / `ghost` / `utility` / `pearl`，并排时不超过一个实底蓝 |
+
+两个容易踩的坑：
+
+- **淡化（高亮色号）的目标色要走 `BeadAppearance`**。`Canvas` 里的 `Color` 会自己跟随外观，
+  但淡化是把 `RGB8` 往目标色插值，算不出当前是深色还是浅色，得显式传。
+  画布结构体（`BeadPreviewCanvas` / `Bead3DCanvas`）都带 `.equatable()`，
+  所以 `appearance` 必须参与 `==`，否则切外观时画布不会重画。
+- **浅色模式下的「深色块」不能用 `BeadTheme.ink` 当背景**。`ink` 在深色模式会翻成近白，
+  拿它当底色就会白底白字；要深底白字的浮层用 `BeadTheme.overlaySurface`。同理色块描边
+  用 `swatchStroke` / `swatchStrokeSoft`（浅色压暗、深色提亮）。
 
 ## 上架素材
 

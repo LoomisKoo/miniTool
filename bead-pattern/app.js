@@ -10,8 +10,38 @@
   var MAX_EXPORT_SIDE = 4096;
   var MAX_EXPORT_AREA = 16777216;
 
-  var GRID_COLOR = '#c7c7cc';
+  // 导出图纸恒为白底，格线用固定浅灰（不跟系统外观走，对齐 iOS BeadArtworkRenderer 不读主题）
+  var EXPORT_GRID_COLOR = '#c7c7cc';
   var SEAM_COLOR = '#ff3b30';
+
+  // 预览配色随系统外观两态（对齐 iOS BeadTheme.adaptive）
+  var darkQuery = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+
+  function isDark() {
+    return !!(darkQuery && darkQuery.matches);
+  }
+
+  // 预览框底：浅色 #e5e5ea / 深色 #1c1c1e
+  function viewBgColor() {
+    return isDark() ? '#1c1c1e' : '#e5e5ea';
+  }
+
+  // 3D 底板（豆插在上面的塑料板）。名字不能叫 plateColor —— render3d 里有个同名局部变量会把它遮住
+  function plateBaseColor() {
+    return isDark() ? '#3a3a3c' : '#232329';
+  }
+
+  // 格线：深色下压到中灰，压在浅色豆和深色底上都还看得见
+  function gridLineColor() {
+    return isDark() ? '#8e8e93' : '#c7c7cc';
+  }
+
+  // 高亮某个色号时其余豆「退到背景里」的目标色：浅色向白、深色向预览框底色。
+  // 导出图纸不这么做（它恒为白底），那边直接用 #FFFFFF。
+  function dimTargetHex() {
+    return isDark() ? '#1c1c1e' : '#FFFFFF';
+  }
+
   var EMPTY_CELL = { empty: true, code: '', hex: '', r: 0, g: 0, b: 0 };
   var ALPHA_CUTOFF = 128;
   var OPAQUE_RATIO = 0.4;
@@ -26,6 +56,9 @@
   var CODE_SHOW_FONT = 0.36;
   var MAX_ZOOM = 6.5; // 相对内容像素的最大放大倍数（格宽最大约 104px）
 
+  // 展开/收起动画时长，必须与 style.css 的 --dur-soft 保持一致
+  var SOFT_MS = 500;
+
   var state = {
     image: null,
     sourceImage: null, // 未裁切的源图，裁切始终基于它
@@ -39,7 +72,7 @@
     merge: false,
     mergeThreshold: 0.10,
     showGrid: true,
-    showSeam: true,
+    showSeam: false,
     gridData: null,
     counts: null,
     autoGrid: null,
@@ -77,6 +110,7 @@
     btnReselect: document.getElementById('btn-reselect'),
     btnSave: document.getElementById('btn-save'),
     toast: document.getElementById('toast'),
+    footerBar: document.getElementById('footer-bar'),
     btnPalette: document.getElementById('btn-palette'),
     btnGrid: document.getElementById('btn-grid'),
     btnSeam: document.getElementById('btn-seam'),
@@ -127,6 +161,9 @@
     expModeFull: document.getElementById('exp-mode-full'),
     expModeEach: document.getElementById('exp-mode-each'),
     btnEdit: document.getElementById('btn-edit'),
+    btnMore: document.getElementById('btn-more'),
+    panelWrap: document.getElementById('panel-wrap'),
+    panel: document.getElementById('panel'),
     etGroup: document.getElementById('et-group'),
     etPaint: document.getElementById('et-paint'),
     etUndo: document.getElementById('et-undo'),
@@ -149,8 +186,28 @@
   var undoStack = [];
   var redoStack = [];
 
+  // 提示条是固定定位的，写死的 bottom 一定会压住编辑页底部那一摞东西
+  // （手绘工具条 / 参数面板 / 操作栏），而且它们的高度还在变。
+  // 弹之前按「展开后的目标位置」让开：不能按当前高度算 —— 工具条刚点开时高度还是 0，
+  // 算出来的位置一两百毫秒后就又被盖住了。
+  function openTargetH(el) {
+    if (!el || !el.classList.contains('is-open')) return 0;
+    var v = parseFloat(el.style.maxHeight);
+    return isNaN(v) ? 0 : v;
+  }
+
+  function toastBottom() {
+    var f = els.footerBar ? els.footerBar.getBoundingClientRect() : null;
+    if (!f || f.height < 0.5) return 0; // 不在编辑页：用 CSS 里的默认值
+    var up = openTargetH(els.panelWrap) + openTargetH(els.etGroup);
+    if (els.etGroup && els.etGroup.classList.contains('is-open')) up += 2 * 8; // 卡片上下各 8 外边距
+    return Math.round(window.innerHeight - f.top + up + 8);
+  }
+
   function toast(msg) {
     els.toast.textContent = msg;
+    var b = toastBottom();
+    els.toast.style.bottom = b ? b + 'px' : '';
     els.toast.classList.add('show');
     if (toastTimer) clearTimeout(toastTimer);
     toastTimer = setTimeout(function () {
@@ -716,7 +773,7 @@
       var bc = entryByCode[state.brush.code];
       state.brush = { code: bc.code, hex: bc.hex, r: bc.r, g: bc.g, b: bc.b };
     }
-    refreshEditUI();
+    refreshEditUI(true);
     if (state.boardIndex >= state.boardsX * state.boardsY) state.boardIndex = -1;
     if (geomChanged) {
       fitView();
@@ -791,7 +848,7 @@
 
     // 格线叠画（细线，不挤占格面）
     if (showGrid) {
-      targetCtx.strokeStyle = GRID_COLOR;
+      targetCtx.strokeStyle = EXPORT_GRID_COLOR;
       targetCtx.lineWidth = 1;
       targetCtx.beginPath();
       for (x = 0; x <= pw; x++) {
@@ -889,31 +946,60 @@
     state.view.ty = (v.vh - m.ch * fitS) / 2;
   }
 
-  function clampView2d() {
+  // 纯函数版夹紧：给定缩放算平移的合法范围，不改 state。
+  // 图片查看器口径（对齐 iOS BeadPreviewPane.clampedOffset）：
+  // 内容的边不能缩进容器内 —— 放大后拖不出去，内容小于容器时居中。
+  function clampOffset2d(tx, ty, s) {
     var m = previewMetrics();
     var v = viewportSize();
+    var cw = m.cw * s;
+    var ch = m.ch * s;
+    return {
+      tx: cw <= v.vw ? (v.vw - cw) / 2 : Math.max(v.vw - cw, Math.min(0, tx)),
+      ty: ch <= v.vh ? (v.vh - ch) / 2 : Math.max(v.vh - ch, Math.min(0, ty))
+    };
+  }
+
+  function clampView2d() {
+    var m = previewMetrics();
     if (!m.pw || !m.ph) return;
     var s = state.view.s;
     if (!isFinite(s) || s <= 0) s = state.view.fitS || 1;
-    var fitS = state.view.fitS || 1;
     // 最远只能回落到「铺满视口」，最近放大到 MAX_ZOOM 倍
-    s = Math.max(fitS, Math.min(MAX_ZOOM, s));
+    s = Math.max(state.view.fitS || 1, Math.min(MAX_ZOOM, s));
     state.view.s = s;
-    var cw = m.cw * s;
-    var ch = m.ch * s;
-    // 允许任意格点落到视口中心，避免双击角落放大后被硬夹紧跳动
-    var edgeX = Math.max(44, v.vw * 0.5);
-    var edgeY = Math.max(44, v.vh * 0.5);
-    if (cw <= v.vw) {
-      state.view.tx = (v.vw - cw) / 2;
+    var o = clampOffset2d(state.view.tx, state.view.ty, s);
+    state.view.tx = o.tx;
+    state.view.ty = o.ty;
+  }
+
+  // 容器尺寸变了（「更多」面板展开/收起、编辑条出现、切 3D、转屏）就重新适配：
+  // - 未放大：重新铺满并居中（图片中心 = 容器中心）；
+  // - 已放大：保持缩放，按「内容中心在容器里的比例」延续视口，再严格夹紧。
+  // 这条路径是幂等的，重复调用结果一致。
+  function syncViewportResize() {
+    if (!state.gridData) return;
+    var m = previewMetrics();
+    var v = viewportSize();
+    if (!m.pw || !m.ph || !v.vw || !v.vh) return;
+    var prevFitS = state.view.fitS || 0;
+    var fitS = Math.min(v.vw / m.cw, v.vh / m.ch);
+    // 判「用户在放大态」要用变更前的拟合值，否则面板一动就误判成未放大
+    var wasFit = !prevFitS || state.view.s <= prevFitS * 1.001;
+    state.view.fitS = fitS;
+    if (wasFit) {
+      state.view.s = fitS;
+      state.view.tx = (v.vw - m.cw * fitS) / 2;
+      state.view.ty = (v.vh - m.ch * fitS) / 2;
     } else {
-      state.view.tx = Math.max(v.vw - cw - edgeX, Math.min(edgeX, state.view.tx));
+      var s = state.view.s;
+      var rx = (v.vw / 2 - state.view.tx) / (m.cw * s);
+      var ry = (v.vh / 2 - state.view.ty) / (m.ch * s);
+      state.view.tx = v.vw / 2 - rx * m.cw * s;
+      state.view.ty = v.vh / 2 - ry * m.ch * s;
+      clampView2d();
     }
-    if (ch <= v.vh) {
-      state.view.ty = (v.vh - ch) / 2;
-    } else {
-      state.view.ty = Math.max(v.vh - ch - edgeY, Math.min(edgeY, state.view.ty));
-    }
+    renderPreview();
   }
 
   function syncCanvasSize(vw, vh) {
@@ -935,7 +1021,7 @@
     if (isEmptyCell(c)) return EMPTY_CELL;
     var hex = c.hex;
     if (state.highlightCode && state.highlightCode !== c.code) {
-      hex = mixHex(hex, '#FFFFFF', 0.72);
+      hex = mixHex(hex, dimTargetHex(), 0.72);
     }
     return { code: c.code, hex: hex };
   }
@@ -993,7 +1079,7 @@
         if (isEmptyCell(c)) continue;
         var col = c.hex;
         if (state.highlightCode && state.highlightCode !== c.code) {
-          col = mixHex(col, '#FFFFFF', 0.72);
+          col = mixHex(col, dimTargetHex(), 0.72);
         }
         ctx.fillStyle = col;
         ctx.fillRect(i * PRE_CS, j * PRE_CS, cellDraw, cellDraw);
@@ -1002,7 +1088,7 @@
 
     // 格线叠画：线宽按屏幕约 1px，不挤占格面、开关不偏移
     if (state.showGrid) {
-      ctx.strokeStyle = GRID_COLOR;
+      ctx.strokeStyle = gridLineColor();
       ctx.lineWidth = 1 / Math.max(0.001, s);
       ctx.beginPath();
       var gi0 = Math.max(0, i0);
@@ -1051,7 +1137,7 @@
           if (isEmptyCell(bead)) continue;
           var hex = bead.hex;
           if (state.highlightCode && state.highlightCode !== bead.code) {
-            hex = mixHex(hex, '#FFFFFF', 0.72);
+            hex = mixHex(hex, dimTargetHex(), 0.72);
           }
           ctx.fillStyle = luma(hex) > 160 ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.85)';
           ctx.fillText(bead.code, i * PRE_CS + PRE_CS / 2, j * PRE_CS + PRE_CS / 2);
@@ -1282,9 +1368,9 @@
     }
 
     // 底板与格缝底色随 t3d 插值：2D 灰格线 ↔ 3D 黑底板，避免突变
-    var viewBg = '#e5e5ea';
-    var plateDark = '#232329';
-    var seam2d = state.showGrid ? GRID_COLOR : viewBg;
+    var viewBg = viewBgColor();
+    var plateDark = plateBaseColor();
+    var seam2d = state.showGrid ? gridLineColor() : viewBg;
     var seamColor = mixHex(seam2d, plateDark, t3d);
     var plateColor = mixHex(viewBg, plateDark, t3d);
     var platePts = [
@@ -1316,7 +1402,8 @@
       ? (cellPxEst > 24 ? 28 : cellPxEst > 14 ? 22 : 16)
       : lod === 2 ? 14 : 10;
     var drawWalls = lod >= 1 && hFactor > 0.05 && roundness > 0.35;
-    var drawInner = lod >= 2 && roundness > 0.55 && hFactor > 0.1;
+    // 低俯仰（偏侧面）不画孔内壁：Canvas 无深度缓冲，内壁很容易从外壁「透出来」
+    var drawInner = lod >= 2 && roundness > 0.55 && hFactor > 0.1 && pitch > 0.42;
     var flatSquare = roundness < 0.28;
     var useDotLod = lod === 0 && !flatSquare && roundness > 0.6;
     var cosT = new Array(segs);
@@ -1516,15 +1603,19 @@
 
       cxWall = cx;
       czWall = cz;
-      if (botO) fillWallBand(topO, botO, offO, true, wall, wallDark);
+      // 先孔内壁、再近侧外壁，最后顶面（与 iOS 一致）。
+      // 若先画外壁再画内壁，内壁会盖住侧面，孔圈从外壁「穿出来」。
       if (botI && topI) fillWallBand(topI, botI, offI, false, wallInLit, wallIn);
+      if (botO) fillWallBand(topO, botO, offO, true, wall, wallDark);
 
       if (topI && holeAmt > 0.45) {
         fillRing(topO, topI, rim);
+        // 孔心用豆色堵住（略暗，像孔底），不要掺黑，否则侧面/俯视都发脏
+        fillPolySolid(topI, wallIn);
       } else if (topI && holeAmt > 0.04) {
         fillRing(topO, null, rim);
         ctx.globalAlpha = holeAmt * baseA;
-        fillRing(topI, null, mixHex(hex, '#0a0a0e', 0.75));
+        fillPolySolid(topI, wallIn);
         ctx.globalAlpha = baseA;
       } else {
         fillRing(topO, null, rim);
@@ -1576,7 +1667,7 @@
         if (isEmptyCell(bead2)) continue;
         var hex2 = bead2.hex;
         if (state.highlightCode && state.highlightCode !== bead2.code) {
-          hex2 = mixHex(hex2, '#FFFFFF', 0.72);
+          hex2 = mixHex(hex2, dimTargetHex(), 0.72);
         }
         var cu2 = toU(ii - halfX, hB, jj - halfZ);
         if (!cu2) continue;
@@ -1596,7 +1687,7 @@
     if (gridFade > 0.02) {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.globalAlpha = gridFade * baseA;
-      ctx.strokeStyle = GRID_COLOR;
+      ctx.strokeStyle = gridLineColor();
       ctx.lineWidth = 1;
       ctx.beginPath();
       var yGrid = hB + 0.004;
@@ -1909,7 +2000,7 @@
     state.editOn = false;
     state.brush = null;
     els.screenEdit.classList.remove('edit-mode');
-    unlockPvRatio();
+    setEtGroupOpen(false, true);
     flushEdits();
     showScreen('edit');
     freshImage = true;
@@ -3315,6 +3406,7 @@
     els.btn3d.textContent = is3 ? '2D' : '3D';
     els.btn3d.classList.toggle('vt-on', is3);
     els.btn3d.setAttribute('aria-pressed', is3 ? 'true' : 'false');
+    // 手绘条与 3D↔2D 同开同合、走高度动画；不要 immediate，否则会把展开动画掐掉
     refreshEditUI();
   }
 
@@ -3367,20 +3459,32 @@
   function animateZoom2d(cx, cy, s1) {
     if (!state.gridData || state.view.mode !== '2d') return;
     var s0 = state.view.s || 1;
-    // 保持双击点下的内容坐标不变，只改缩放
-    var wx = (cx - state.view.tx) / s0;
-    var wy = (cy - state.view.ty) / s0;
+    var tx0 = state.view.tx;
+    var ty0 = state.view.ty;
     var v = viewportSize();
+    // 终点：双击点下的内容坐标尽量保持不动，再把这个终点夹进合法范围。
+    // 关键顺序是「先夹紧终点，再动画过去」—— 动画收尾就不会跳一格；
+    // 反之（动画停在未夹紧的位置、结束后再夹）在角落会明显弹一下。
+    var wx = (cx - tx0) / s0;
+    var wy = (cy - ty0) / s0;
+    var o = clampOffset2d(cx - wx * s1, cy - wy * s1, s1);
+    if (Math.abs(s0 - s1) < 0.002 && Math.abs(tx0 - o.tx) < 0.5 && Math.abs(ty0 - o.ty) < 0.5) {
+      state.view.s = s1;
+      state.view.tx = o.tx;
+      state.view.ty = o.ty;
+      renderPreview();
+      return;
+    }
     fit2dAnim = {
       t0: performance.now(),
       dur: 380,
       s0: s0,
       s1: s1,
-      anchor: true,
-      ax: cx,
-      ay: cy,
-      awx: wx,
-      awy: wy,
+      anchor: false,
+      tx0: tx0,
+      ty0: ty0,
+      tx1: o.tx,
+      ty1: o.ty,
       vw: v.vw,
       vh: v.vh
     };
@@ -3396,9 +3500,9 @@
     var e = easeInOut(t);
     var s = a.s0 + (a.s1 - a.s0) * e;
     state.view.s = s;
-    if (a.anchor) {
-      state.view.tx = a.ax - a.awx * s;
-      state.view.ty = a.ay - a.awy * s;
+    if (a.tx1 != null) {
+      state.view.tx = a.tx0 + (a.tx1 - a.tx0) * e;
+      state.view.ty = a.ty0 + (a.ty1 - a.ty0) * e;
     } else {
       var wx = a.wx0 + (a.wx1 - a.wx0) * e;
       var wy = a.wy0 + (a.wy1 - a.wy0) * e;
@@ -3411,12 +3515,11 @@
       return;
     }
     fit2dAnim = null;
-    if (a.anchor) {
+    if (a.tx1 != null) {
+      // 终点在 animateZoom2d 里已经夹紧过，这里直接落位，不再二次夹紧
       state.view.s = a.s1;
-      state.view.tx = a.ax - a.awx * a.s1;
-      state.view.ty = a.ay - a.awy * a.s1;
-      // 锚点缩放结束后用宽松夹紧，保留双击点位置，避免角落跳动
-      clampView2d();
+      state.view.tx = a.tx1;
+      state.view.ty = a.ty1;
     } else {
       fitView2d();
     }
@@ -3436,6 +3539,17 @@
       if ((on && morphAnim.dir === 'to3d') || (!on && morphAnim.dir === 'to2d')) return;
     } else if (on === (state.view.mode === '3d')) {
       return;
+    }
+
+    // 只能在 2D 编辑：进 3D 时自动退出手绘（高度瞬时收起，避免 morph 中途视口变高）
+    if (on && state.editOn) {
+      state.editOn = false;
+      els.screenEdit.classList.remove('edit-mode');
+      setEtGroupHeightNow(false);
+      if (els.btnEdit) {
+        els.btnEdit.classList.remove('vt-on');
+        els.btnEdit.setAttribute('aria-pressed', 'false');
+      }
     }
 
     var s3 = state.view3d;
@@ -4061,7 +4175,7 @@
 
   function syncToolChips() {
     if (!els.etGroup) return;
-    var btns = els.etGroup.querySelectorAll('.et-tool');
+    var btns = els.etGroup.querySelectorAll('[data-tool]');
     var i;
     for (i = 0; i < btns.length; i++) {
       btns[i].classList.toggle('on', btns[i].getAttribute('data-tool') === state.tool);
@@ -4077,37 +4191,124 @@
       : '<span class="cp"><span class="cp-code cp-muted">选色</span></span>';
   }
 
-  function refreshEditUI() {
-    var on = !!(state.editOn && state.gridData && state.view.mode === '2d');
-    if (els.etGroup) els.etGroup.hidden = !on;
+  function refreshEditUI(immediate) {
+    // 不要求 mode===2d：3D→2D 动画期间就要能展开工具条（与切视角同时）
+    var on = !!(state.editOn && state.gridData);
+    setEtGroupOpen(on, immediate);
     if (els.btnEdit) {
-      els.btnEdit.classList.toggle('vt-on', !!(state.editOn && state.gridData));
-      els.btnEdit.setAttribute('aria-pressed', state.editOn && state.gridData ? 'true' : 'false');
+      els.btnEdit.classList.toggle('vt-on', on);
+      els.btnEdit.setAttribute('aria-pressed', on ? 'true' : 'false');
     }
     syncToolChips();
     syncColorChip();
     syncUndoBtns();
   }
 
-  // 预览框高度锁定：进入编辑前先在普通布局量下当前预览高度，
-  // 切到编辑模式后把它改为 flex:none + 固定像素高度，工具条/参数区
-  // 只能把内容往下挤、由整屏滚动承接，预览框与画面均不改变大小
-  function applyPvLock() {
-    var sh = els.screenEdit.clientHeight;
-    if (sh > 0 && state._pvRatio) {
-      els.previewShell.style.height = Math.round(sh * state._pvRatio) + 'px';
+  // 手绘工具条的展开/收起 —— 和「更多」面板同一套动画，只是更柔。
+  // 关键在于：展开高度按「内容实际高度 + 卡片上下描边」给死，不能留大余量。
+  // max-height 给多了，内容在过渡前 1/4 就露完了，剩下的时间全在空转，
+  // 观感就是「啪一下弹出来」——这正是之前嫌太快的原因。
+  var etOpen = false;
+  var etAnimToken = 0;
+  function setEtGroupOpen(on, immediate) {
+    var el = els.etGroup;
+    var inner = el && el.firstElementChild;
+    if (!el || !inner) return;
+    var open = !!on;
+    var full = inner.scrollHeight + 2; // +2：卡片上下各 1px 描边
+    if (open === etOpen) {
+      // 状态没变就别重放动画；即时路径顺手把高度校正一下
+      if (immediate) el.style.maxHeight = open ? full + 'px' : '0px';
+      return;
+    }
+    etOpen = open;
+    etAnimToken += 1;
+    var token = etAnimToken;
+    if (immediate) {
+      el.classList.add('no-anim');
+      el.classList.toggle('is-open', open);
+      el.style.maxHeight = open ? full + 'px' : '0px';
+      void el.offsetHeight;
+      el.classList.remove('no-anim');
+      return;
+    }
+    // 先钉死起点并强制一帧布局，再在下一帧写终点——
+    // 同帧里若后面还有 renderPreview / toast 等重活，过渡经常被浏览器吞掉。
+    el.classList.add('no-anim');
+    el.classList.toggle('is-open', !open);
+    el.style.maxHeight = open ? '0px' : full + 'px';
+    void el.offsetHeight;
+    el.classList.remove('no-anim');
+    requestAnimationFrame(function () {
+      if (token !== etAnimToken) return;
+      el.classList.toggle('is-open', open);
+      el.style.maxHeight = open ? full + 'px' : '0px';
+    });
+  }
+
+  // 瞬时落定工具条占位高度（预览区尺寸立刻到终点），但不加 .no-anim，
+  // 好让内部 .et-tools / .et-acts 仍走淡入。用于「3D 点编辑」：先稳视口再开 morph。
+  function setEtGroupHeightNow(on) {
+    var el = els.etGroup;
+    var inner = el && el.firstElementChild;
+    if (!el || !inner) return;
+    var open = !!on;
+    var full = inner.scrollHeight + 2;
+    etAnimToken += 1;
+    etOpen = open;
+    var prev = el.style.transition;
+    el.style.transition = 'none';
+    el.classList.toggle('is-open', open);
+    el.style.maxHeight = open ? full + 'px' : '0px';
+    void el.offsetHeight;
+    el.style.transition = prev;
+  }
+
+  // 「更多」参数面板：默认收起，预览占更高（对齐 iOS showSettings）
+  function panelFullH() {
+    if (!els.panel) return 0;
+    var h = els.panel.scrollHeight;
+    var cap = Math.round((window.innerHeight || 0) * 0.48);
+    return cap > 0 ? Math.min(h, cap) : h;
+  }
+
+  function setPanelOpen(on, immediate) {
+    if (!els.panelWrap) return;
+    var open = !!on;
+    if (immediate) els.panelWrap.classList.add('no-anim');
+    // 展开高度同样按内容实际高度给，动画才「整段都在长」
+    els.panelWrap.style.maxHeight = open ? panelFullH() + 'px' : '0px';
+    els.panelWrap.classList.toggle('is-open', open);
+    if (immediate) {
+      // 读一次 offsetHeight 强制布局，让新高度立刻生效后再恢复过渡
+      void els.panelWrap.offsetHeight;
+      els.panelWrap.classList.remove('no-anim');
+    }
+    if (els.btnMore) {
+      els.btnMore.classList.toggle('vt-on', open);
+      els.btnMore.setAttribute('aria-pressed', open ? 'true' : 'false');
     }
   }
 
-  function unlockPvRatio() {
-    state._pvRatio = 0;
-    els.previewShell.style.height = '';
+  function isPanelOpen() {
+    return !!(els.panelWrap && els.panelWrap.classList.contains('is-open'));
+  }
+
+  // 面板/工具条高度变了 → 预览区尺寸跟着变，要重新适配。
+  // 过渡期间容器尺寸一直在变：有 ResizeObserver 时逐帧跟随，
+  // 这里再补一次收尾同步，保证过渡结束后图片中心与容器中心仍然对得上。
+  function afterPanelToggle() {
+    setTimeout(function () {
+      if (!fit2dAnim && !morphAnim && !zoom3dAnim) syncViewportResize();
+    }, SOFT_MS + 20);
   }
 
   function setEditOn(on) {
     if (on && !state.gridData) return;
     state.editOn = !!on;
     if (on) {
+      // 编辑与设置互斥：进手绘只出编辑条，收起参数面板（对齐 iOS onChange(isEditing)）
+      setPanelOpen(false, true);
       if (!state.brush) {
         var top = sortedCounts()[0];
         if (top) {
@@ -4117,23 +4318,32 @@
       // 落笔时看清真实颜色，退出高亮定位态
       state.highlightCode = null;
       renderLegend();
-      // 顺序关键：先确保是普通布局（工具条隐藏、预览按 flex:1 满铺），
-      // 量得高度比例，再加 edit-mode 并固定高度，预览框保持不变
-      els.screenEdit.classList.remove('edit-mode');
-      unlockPvRatio();
-      var sh = els.screenEdit.clientHeight;
-      var h = els.previewShell.getBoundingClientRect().height;
-      if (sh > 0 && h > 0) state._pvRatio = h / sh;
+      // 进编辑模式只做两件事：整屏允许滚动、工具条柔和展开。
+      // 预览框仍是 flex:1，会随工具条「长出来」平滑让位；
+      // 尺寸连续变化由 ResizeObserver 逐帧跟随，图片中心和边界都跟着重新对齐。
       els.screenEdit.classList.add('edit-mode');
-      applyPvLock();
-      refreshEditUI();
+      var in3d = state.view.mode === '3d' || (morphAnim && morphAnim.dir === 'to3d');
+      if (in3d) {
+        // 高度先落到终点，预览区尺寸稳定后再开 3D→2D，避免 morph 按高视口取景、
+        // 收尾再按矮视口 fit 造成闪一下；工具行仍走淡入动画。
+        setEtGroupHeightNow(true);
+        if (els.btnEdit) {
+          els.btnEdit.classList.add('vt-on');
+          els.btnEdit.setAttribute('aria-pressed', 'true');
+        }
+        syncToolChips();
+        syncColorChip();
+        syncUndoBtns();
+        if (els.viewport) void els.viewport.offsetHeight;
+        setViewMode3d(false);
+      } else {
+        refreshEditUI();
+      }
       toast('画笔：单指点涂 · 双指缩放/平移');
     } else {
       els.screenEdit.classList.remove('edit-mode');
-      unlockPvRatio();
       refreshEditUI();
     }
-    // 工具条显示/隐藏后布局按锁定高度稳定，预览不会跳变
     renderPreview();
   }
 
@@ -4491,6 +4701,16 @@
     setViewMode3d(!going3d);
   });
   els.btnFit.addEventListener('click', doResetView);
+
+  if (els.btnMore) {
+    els.btnMore.addEventListener('click', function () {
+      var willOpen = !isPanelOpen();
+      // 展开设置就退出手绘（互斥），对应 iOS 点「更多」时的处理
+      if (willOpen && state.editOn) setEditOn(false);
+      setPanelOpen(willOpen);
+      afterPanelToggle();
+    });
+  }
   if (els.btnBoardAll) {
     els.btnBoardAll.addEventListener('click', function () {
       if (!state.gridData) return;
@@ -4611,13 +4831,32 @@
 
   window.addEventListener('resize', function () {
     if (!state.gridData) return;
-    if (state.editOn) {
-      // 编辑中：按锁定比例重新套用预览高度，避免屏幕变化后预览跳变
-      applyPvLock();
-    } else {
-      fitView();
-    }
+    // 转屏后可视高度变了：展开中的高度上限要重算，否则可能留一截空白或被切掉
+    if (isPanelOpen()) els.panelWrap.style.maxHeight = panelFullH() + 'px';
+    if (state.editOn) setEtGroupOpen(true, true);
+    syncViewportResize();
   });
+
+  // 容器尺寸变化就重新适配（转屏、「更多」面板过渡、编辑条显隐都会触发）。
+  // 尺寸连续变化的这几百毫秒里逐帧跟随，收尾即对得上。
+  if (typeof ResizeObserver === 'function') {
+    new ResizeObserver(function () {
+      // 动画进行中不插手，避免和动画抢 state.view
+      if (fit2dAnim || morphAnim || zoom3dAnim) return;
+      syncViewportResize();
+    }).observe(els.viewport);
+  }
+
+  // 系统外观切换：预览画布的配色是两态的，换了要重绘。
+  // 导出图纸仍是白底（EXPORT_GRID_COLOR + 白色淡化），不受外观影响。
+  if (darkQuery) {
+    var onSchemeChange = function () {
+      if (!state.gridData) return;
+      renderPreview();
+    };
+    if (darkQuery.addEventListener) darkQuery.addEventListener('change', onSchemeChange);
+    else if (darkQuery.addListener) darkQuery.addListener(onSchemeChange);
+  }
 
   showScreen('home');
 })();

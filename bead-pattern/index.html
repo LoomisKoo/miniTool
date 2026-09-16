@@ -27,7 +27,7 @@
             </svg>
           </span>
           <span>选择图片</span>
-          <small>生成可拼的豆格图纸 · PNG 透明处不铺豆</small>
+          <small>生成可拼的豆格图纸<br />透明处不铺豆</small>
         </label>
       </div>
     </section>
@@ -38,6 +38,7 @@
           <canvas id="preview-canvas"></canvas>
           <p class="view-hint" id="view-hint"></p>
         </div>
+        <p class="meta" id="meta-line">—</p>
         <div class="preview-bar" id="preview-bar">
           <div class="board-nav" id="board-nav">
             <button type="button" class="bar-btn bar-btn-icon" id="btn-board-prev" aria-label="上一板">‹</button>
@@ -53,56 +54,63 @@
         </div>
       </div>
 
-      <div class="panel">
-        <div class="group et-group" id="et-group" hidden>
+      <div class="group et-group" id="et-group">
+        <div class="et-group-inner">
           <div class="et-tools">
-            <button type="button" class="chip et-tool on" data-tool="brush">画笔</button>
-            <button type="button" class="chip et-tool" data-tool="eraser">橡皮</button>
-            <button type="button" class="chip et-tool" data-tool="dropper">取色</button>
-            <button type="button" class="chip chip-select et-paint" id="et-paint" aria-label="选择画笔豆色"></button>
+            <button type="button" class="chip on" data-tool="brush">画笔</button>
+            <button type="button" class="chip" data-tool="eraser">橡皮</button>
+            <button type="button" class="chip" data-tool="dropper">取色</button>
+            <button type="button" class="chip chip-ghost et-paint" id="et-paint" aria-label="选择画笔豆色"></button>
           </div>
           <div class="et-acts">
-            <button type="button" class="chip et-act" id="et-undo" disabled>撤销</button>
-            <button type="button" class="chip et-act" id="et-redo" disabled>重做</button>
-            <button type="button" class="chip et-act et-clear" id="et-clear">清空手绘</button>
+            <button type="button" class="chip" id="et-undo" disabled>撤销</button>
+            <button type="button" class="chip" id="et-redo" disabled>重做</button>
+            <button type="button" class="chip" id="et-clear">清空手绘</button>
           </div>
         </div>
-        <div class="group">
-          <div class="row chips-row">
-            <button type="button" class="chip chip-select" id="btn-palette">MARD</button>
-            <button type="button" class="chip chip-select chip-color" id="btn-colors" aria-label="查看豆色">
-              <span class="colors-preview" id="colors-preview"></span>
-            </button>
-            <button type="button" class="chip chip-sm on" id="btn-grid" aria-pressed="true">网格</button>
-            <button type="button" class="chip chip-sm" id="btn-merge" aria-pressed="false">合并</button>
-            <button type="button" class="chip chip-sm" id="btn-dither" aria-pressed="false">抖动</button>
-            <button type="button" class="chip chip-sm" id="btn-avg" aria-pressed="false">均值</button>
-          </div>
-          <div class="row">
-            <span class="label">豆宽</span>
-            <input type="range" id="width-slider" min="16" max="116" value="29" />
-            <span class="val" id="width-val">29</span>
-          </div>
-          <div class="row">
-            <span class="label">拼板</span>
-            <button type="button" class="chip chip-select board-select" id="btn-board-size">29×29</button>
-            <button type="button" class="chip chip-sm on board-seam" id="btn-seam" aria-pressed="true">分板线</button>
-          </div>
-          <div class="row">
-            <span class="label">限色</span>
-            <input type="range" id="color-slider" min="8" max="80" value="60" />
-            <span class="val" id="color-val">60</span>
-          </div>
-        </div>
-
-        <p class="meta" id="meta-line">—</p>
       </div>
 
-      <div class="actions">
-        <button class="btn btn-ghost" id="btn-reselect" type="button">重选</button>
-        <button class="btn btn-ghost" id="btn-crop" type="button">裁切</button>
-        <button class="btn btn-primary" id="btn-save" type="button">导出图纸</button>
-        <button class="btn btn-xhs" id="export-share" type="button" hidden>发布笔记</button>
+      <div class="panel-collapse" id="panel-wrap">
+        <div class="panel" id="panel">
+          <div class="group">
+            <div class="row chips-row chips-info">
+              <button type="button" class="chip chip-info on" id="btn-palette">MARD</button>
+              <button type="button" class="chip chip-ghost chip-dot" id="btn-colors" aria-label="查看豆色">
+                <span class="colors-preview" id="colors-preview"></span>
+              </button>
+            </div>
+            <div class="row chips-row">
+              <button type="button" class="chip on" id="btn-grid" aria-pressed="true">网格</button>
+              <button type="button" class="chip" id="btn-merge" aria-pressed="false">合并</button>
+              <button type="button" class="chip" id="btn-dither" aria-pressed="false">抖动</button>
+              <button type="button" class="chip" id="btn-avg" aria-pressed="false">均值</button>
+            </div>
+            <div class="row">
+              <span class="label">豆宽</span>
+              <input type="range" id="width-slider" min="16" max="116" value="29" />
+              <span class="val" id="width-val">29</span>
+            </div>
+            <div class="row">
+              <span class="label">拼板</span>
+              <button type="button" class="chip chip-info on chip-hug" id="btn-board-size">29×29</button>
+              <button type="button" class="chip chip-info" id="btn-seam" aria-pressed="false">分板线</button>
+            </div>
+            <div class="row">
+              <span class="label">限色</span>
+              <input type="range" id="color-slider" min="8" max="80" value="60" />
+              <span class="val" id="color-val">60</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="footer-bar" id="footer-bar">
+        <button type="button" class="bar-btn" id="btn-more" aria-pressed="false">更多</button>
+        <button type="button" class="bar-btn" id="btn-crop">裁切</button>
+        <button type="button" class="bar-btn" id="btn-reselect">重选</button>
+        <span class="footer-spacer"></span>
+        <button type="button" class="bar-btn bar-btn-primary" id="btn-save">导出</button>
+        <button type="button" class="bar-btn bar-btn-outline" id="export-share" hidden>发布笔记</button>
       </div>
     </section>
   </div>
