@@ -1638,18 +1638,64 @@
 
   /* ── 卡片 ─────────────────────────────────── */
 
+  /* dataURL → Blob（纯本地转码：atob + Uint8Array，不走 fetch，避免构建期网络关键字告警） */
+  function dataURLToBlob(dataURL) {
+    var parts = dataURL.split(',');
+    var mime = (parts[0].match(/:(.*?);/) || [])[1] || 'image/jpeg';
+    var bin = atob(parts[1]);
+    var n = bin.length, u8 = new Uint8Array(n);
+    for (var i = 0; i < n; i++) u8[i] = bin.charCodeAt(i);
+    return new Blob([u8], { type: mime });
+  }
+
+  var cardExport = { url: '', name: '仙鹿起名.jpg' };
+
   function openCard(data) {
     var canvas = document.createElement('canvas');
     NM.renderCard(canvas, data);
     var url = NM.cardToDataURL(canvas);
-    var img = $('#modal-img');
-    img.src = url;
-    var m = $('#modal');
+    $('#modal-img').src = url;
     /* 清掉残留的关闭态，确保每次打开都重放进入动画 */
-    m.classList.remove('hidden', 'modal-closing');
-    $('#modal-dl').href = url;
-    $('#modal-dl').download = '仙鹿起名-' +
+    $('#modal').classList.remove('hidden', 'modal-closing');
+    cardExport.url = url;
+    cardExport.name = '仙鹿起名-' +
       (data.full || (data.enName && data.enName.n) || 'name') + '.jpg';
+  }
+
+  /* 保存卡片。曾经的写法是把 data: URL 直接挂在 <a download> 上，但部分浏览器
+   * （Safari 及某些容器 webview）不认这个 download 属性，点一下会当场导航到该
+   * data URL —— macOS 找不到能打开它的 App，就弹「没有可打开的程序」。 */
+  function saveCard() {
+    if (!cardExport.url) return;
+
+    /* 小红书等容器：<a download> 被禁用，改走原生桥存相册（与星空跳一跳同一套） */
+    var bridge = window.xhs && window.xhs.miniTool;
+    if (bridge && typeof bridge.saveImageToPhotosAlbum === 'function') {
+      var toAlbum = function (filePath) {
+        return bridge.saveImageToPhotosAlbum({ filePath: filePath });
+      };
+      var p = typeof bridge.writeTempFile === 'function'
+        ? bridge.writeTempFile({ data: cardExport.url }).then(function (res) { return toAlbum(res.filePath); })
+        : toAlbum(cardExport.url);
+      p.then(function () { toast('已保存到相册'); })
+       .catch(function () { toast('保存失败，请检查相册权限后重试'); });
+      return;
+    }
+
+    /* 普通浏览器：先转成 blob: 再交给 <a download>，download 才稳定生效 */
+    try {
+      var objURL = URL.createObjectURL(dataURLToBlob(cardExport.url));
+      var a = document.createElement('a');
+      a.href = objURL;
+      a.download = cardExport.name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(function () { URL.revokeObjectURL(objURL); }, 2000);
+    } catch (e) {
+      /* 极端兜底：另开一页显示图片，交给用户长按保存 */
+      window.open(cardExport.url, '_blank');
+    }
   }
 
   function closeModal() {
@@ -2227,6 +2273,7 @@
     goBack(back[state.screen] || 'home');
   });
   $('#modal-close').addEventListener('click', closeModal);
+  $('#modal-dl').addEventListener('click', function (e) { e.preventDefault(); saveCard(); });
   $('#sheet-close').addEventListener('click', function () { closeSheet(); });
   $('#sheet-mask').addEventListener('click', function () { closeSheet(); });
   document.addEventListener('keydown', function (e) {

@@ -1058,6 +1058,7 @@ html.sheet-open, body.sheet-open { overflow: hidden; }
   display: inline-block; color: #fff; background: rgba(255, 255, 255, 0.14);
   border: 1px solid rgba(255, 255, 255, 0.3); padding: 10px 24px; border-radius: var(--r-pill);
   font-size: 14px; text-decoration: none; letter-spacing: 0.02em;
+  cursor: pointer;   /* 无 href 的 <a> 不会自带手型光标，这里补一下 */
 }
 /* 退出动画：关闭时先放反向动画，播完再由 JS 加 .hidden 收掉（display:none） */
 .modal-closing { animation: modalFadeOut 0.22s ease both; }
