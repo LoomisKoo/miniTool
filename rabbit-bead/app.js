@@ -21,7 +21,7 @@
 
   // 3D 底板（豆插在上面的塑料板）。名字不能叫 plateColor —— render3d 里有个同名局部变量会把它遮住
   function plateBaseColor() {
-    return '#232329';
+    return '#FFFFFF';
   }
 
   function gridLineColor() {
@@ -85,7 +85,10 @@
   var els = {
     screenHome: document.getElementById('screen-home'),
     screenEdit: document.getElementById('screen-edit'),
+    screenHand: document.getElementById('screen-hand-edit'),
+    screenCrop: document.getElementById('screen-crop'),
     previewShell: document.getElementById('preview-shell'),
+    headerTitle: document.getElementById('header-title'),
     headerSub: document.getElementById('header-sub'),
     fileInput: document.getElementById('file-input'),
     viewport: document.getElementById('viewport'),
@@ -96,10 +99,13 @@
     colorVal: document.getElementById('color-val'),
     metaLine: document.getElementById('meta-line'),
     boardLabel: document.getElementById('board-label'),
+    boardGroup: document.getElementById('board-group'),
+    boardAllSep: document.getElementById('board-all-sep'),
     btnBoardPrev: document.getElementById('btn-board-prev'),
     btnBoardNext: document.getElementById('btn-board-next'),
     btnReselect: document.getElementById('btn-reselect'),
-    btnSave: document.getElementById('btn-save'),
+    btnSave: document.getElementById('btn-export') || document.getElementById('btn-save'),
+    btnSaveWork: document.getElementById('btn-save'),
     saveTip: document.getElementById('save-tip'),
     saveTipText: document.getElementById('save-tip-text'),
     saveTipList: document.getElementById('save-tip-list'),
@@ -115,7 +121,7 @@
     btnAvg: document.getElementById('btn-avg'),
     btnColors: document.getElementById('btn-colors'),
     btnCrop: document.getElementById('btn-crop'),
-    cropScreen: document.getElementById('crop-screen'),
+    cropScreen: document.getElementById('screen-crop'),
     cropViewport: document.getElementById('crop-viewport'),
     cropCanvas: document.getElementById('crop-canvas'),
     cropRatioChips: document.getElementById('crop-ratio-chips'),
@@ -123,7 +129,6 @@
     cropRotate: document.getElementById('crop-rotate'),
     cropFlip: document.getElementById('crop-flip'),
     cropCancel: document.getElementById('crop-cancel'),
-    cropReset: document.getElementById('crop-reset'),
     cropConfirm: document.getElementById('crop-confirm'),
     colorsPreview: document.getElementById('colors-preview'),
     colorsList: document.getElementById('colors-list'),
@@ -138,6 +143,8 @@
     colorsSheetBackdrop: document.getElementById('colors-sheet-backdrop'),
     colorsSheetCancel: document.getElementById('colors-sheet-cancel'),
     btnFit: document.getElementById('btn-fit'),
+    btnZoomIn: document.getElementById('btn-zoom-in'),
+    btnZoomOut: document.getElementById('btn-zoom-out'),
     btn3d: document.getElementById('btn-3d'),
     btnBoardAll: document.getElementById('btn-board-all'),
     viewHint: document.getElementById('view-hint'),
@@ -157,6 +164,8 @@
     expModeFull: document.getElementById('exp-mode-full'),
     expModeEach: document.getElementById('exp-mode-each'),
     btnEdit: document.getElementById('btn-edit'),
+    btnEditDone: document.getElementById('btn-edit-done'),
+    btnEditCancel: document.getElementById('btn-edit-cancel'),
     btnMore: document.getElementById('btn-more'),
     btnPanelCollapse: document.getElementById('btn-panel-collapse'),
     panelWrap: document.getElementById('panel-wrap'),
@@ -166,6 +175,13 @@
     etUndo: document.getElementById('et-undo'),
     etRedo: document.getElementById('et-redo'),
     etClear: document.getElementById('et-clear'),
+    etFit: document.getElementById('et-fit'),
+    etZoomIn: document.getElementById('et-zoom-in'),
+    etZoomOut: document.getElementById('et-zoom-out'),
+    paintLoupe: document.getElementById('paint-loupe'),
+    paintLoupeCanvas: document.getElementById('paint-loupe-canvas'),
+    paintLoupeCoord: document.getElementById('paint-loupe-coord'),
+    paintLoupeReadout: document.getElementById('paint-loupe-readout'),
     pickSheet: document.getElementById('pick-sheet'),
     pickSheetBackdrop: document.getElementById('pick-sheet-backdrop'),
     pickSheetCancel: document.getElementById('pick-sheet-cancel'),
@@ -194,10 +210,24 @@
   }
 
   function toastBottom() {
+    var route = currentRoute();
+    if (route === 'hand') {
+      var acts = document.getElementById('edit-actions');
+      if (acts) {
+        var ar = acts.getBoundingClientRect();
+        if (ar.height > 0.5) return Math.round(window.innerHeight - ar.top + 8);
+      }
+    }
+    if (route === 'crop' && els.cropScreen) {
+      var ca = els.cropScreen.querySelector('.crop-actions');
+      if (ca) {
+        var cr = ca.getBoundingClientRect();
+        if (cr.height > 0.5) return Math.round(window.innerHeight - cr.top + 8);
+      }
+    }
     var f = els.footerBar ? els.footerBar.getBoundingClientRect() : null;
-    if (!f || f.height < 0.5) return 0; // 不在编辑页：用 CSS 里的默认值
-    var up = openTargetH(els.panelWrap) + openTargetH(els.etGroup);
-    if (els.etGroup && els.etGroup.classList.contains('is-open')) up += 2 * 8; // 卡片上下各 8 外边距
+    if (!f || f.height < 0.5) return 0;
+    var up = openTargetH(els.panelWrap);
     return Math.round(window.innerHeight - f.top + up + 8);
   }
 
@@ -212,9 +242,257 @@
     }, 1800);
   }
 
-  function showScreen(name) {
-    els.screenHome.classList.toggle('active', name === 'home');
-    els.screenEdit.classList.toggle('active', name === 'edit');
+  // ---------- 页面栈：右进右出 ----------
+  var NAV_MS = 340;
+  var routeStack = ['home'];
+  var navBusy = false;
+  var ROUTE_EL = {
+    home: function () { return els.screenHome; },
+    edit: function () { return els.screenEdit; },
+    hand: function () { return els.screenHand; },
+    crop: function () { return els.screenCrop || els.cropScreen; }
+  };
+  var ROUTE_TITLE = {
+    home: '兔格拼豆',
+    edit: '兔格拼豆',
+    hand: '编辑',
+    crop: '裁切图片'
+  };
+
+  function currentRoute() {
+    return routeStack[routeStack.length - 1] || 'home';
+  }
+
+  function routeEl(name) {
+    var fn = ROUTE_EL[name];
+    return fn ? fn() : null;
+  }
+
+  function syncHeader() {
+    // 标题已内嵌在各页面；这里只刷新生成页副标题
+    if (!els.headerSub) return;
+    if (state.gridData) {
+      els.headerSub.textContent = getPalette().name + ' · ' + state.width + ' 豆宽';
+    } else {
+      els.headerSub.textContent = '照片转拼豆色号图纸';
+    }
+  }
+
+  function clearScreenFlags(el) {
+    if (!el) return;
+    el.classList.remove('is-active', 'is-behind', 'is-exit', 'no-anim');
+  }
+
+  function showScreen(name, opts) {
+    opts = opts || {};
+    var replace = !!opts.replace;
+    var instant = !!opts.instant;
+    var next = name;
+    var cur = currentRoute();
+    if (next === cur && !replace) {
+      syncHeader();
+      return;
+    }
+
+    var fromEl = routeEl(cur);
+    var toEl = routeEl(next);
+    if (!toEl) return;
+
+    if (replace) {
+      routeStack[routeStack.length - 1] = next;
+    } else {
+      routeStack.push(next);
+    }
+
+    if (instant || !fromEl) {
+      Object.keys(ROUTE_EL).forEach(function (k) { clearScreenFlags(routeEl(k)); });
+      toEl.classList.add('no-anim', 'is-active');
+      void toEl.offsetHeight;
+      toEl.classList.remove('no-anim');
+      if (next === 'crop' && toEl) toEl.setAttribute('aria-hidden', 'false');
+      if (cur === 'crop' && fromEl) fromEl.setAttribute('aria-hidden', 'true');
+      syncHeader();
+      return;
+    }
+
+    if (navBusy) {
+      Object.keys(ROUTE_EL).forEach(function (k) { clearScreenFlags(routeEl(k)); });
+      toEl.classList.add('is-active');
+      syncHeader();
+      return;
+    }
+    navBusy = true;
+
+    clearScreenFlags(toEl);
+    toEl.classList.add('no-anim');
+    toEl.style.transform = 'translateX(100%)';
+    void toEl.offsetHeight;
+    toEl.classList.remove('no-anim');
+
+    fromEl.classList.remove('is-active');
+    fromEl.classList.add('is-behind');
+    toEl.classList.add('is-active');
+    toEl.style.transform = '';
+    if (next === 'crop') toEl.setAttribute('aria-hidden', 'false');
+
+    syncHeader();
+    setTimeout(function () {
+      navBusy = false;
+    }, NAV_MS + 20);
+  }
+
+  function goBack(opts) {
+    opts = opts || {};
+    if (routeStack.length <= 1) return;
+    var instant = !!opts.instant;
+    var leaving = routeStack.pop();
+    var next = currentRoute();
+    var fromEl = routeEl(leaving);
+    var toEl = routeEl(next);
+    if (!fromEl || !toEl) {
+      syncHeader();
+      return;
+    }
+
+    if (instant) {
+      clearScreenFlags(fromEl);
+      clearScreenFlags(toEl);
+      toEl.classList.add('no-anim', 'is-active');
+      void toEl.offsetHeight;
+      toEl.classList.remove('no-anim');
+      if (leaving === 'crop') fromEl.setAttribute('aria-hidden', 'true');
+      syncHeader();
+      return;
+    }
+
+    if (navBusy) {
+      clearScreenFlags(fromEl);
+      toEl.classList.add('is-active');
+      syncHeader();
+      return;
+    }
+    navBusy = true;
+
+    toEl.classList.add('is-behind');
+    toEl.classList.remove('is-active');
+    // 强制重绘后：当前页右滑退出，下层变 active
+    fromEl.classList.remove('is-behind');
+    fromEl.classList.add('is-active', 'is-exit');
+    // 下一帧把下层抬成 active，当前继续 exit
+    requestAnimationFrame(function () {
+      toEl.classList.remove('is-behind');
+      toEl.classList.add('is-active');
+      fromEl.classList.remove('is-active');
+      fromEl.classList.add('is-exit');
+    });
+
+    syncHeader();
+    setTimeout(function () {
+      fromEl.classList.remove('is-exit', 'is-active', 'is-behind');
+      if (leaving === 'crop') fromEl.setAttribute('aria-hidden', 'true');
+      navBusy = false;
+    }, NAV_MS + 20);
+  }
+
+  function ensurePreviewPlaceholder() {
+    var ph = document.getElementById('preview-placeholder');
+    if (!ph) {
+      ph = document.createElement('div');
+      ph.id = 'preview-placeholder';
+      ph.className = 'preview-shell preview-placeholder';
+      ph.setAttribute('aria-hidden', 'true');
+    }
+    var view = ph.querySelector('.preview-placeholder-view');
+    if (!view) {
+      view = document.createElement('div');
+      view.className = 'preview-placeholder-view';
+      ph.insertBefore(view, ph.firstChild);
+    }
+    // 占住 meta / 预览条高度，冻帧才不会比真预览「往下沉」
+    if (!ph.querySelector('.preview-placeholder-meta')) {
+      var meta = document.createElement('p');
+      meta.className = 'meta preview-placeholder-meta';
+      meta.innerHTML = '&nbsp;';
+      ph.appendChild(meta);
+    }
+    if (!ph.querySelector('.preview-placeholder-bar')) {
+      var bar = document.createElement('div');
+      bar.className = 'preview-bar preview-placeholder-bar';
+      ph.appendChild(bar);
+    }
+    return ph;
+  }
+
+  // 挪走 canvas 前先拍一帧，避免底层生成页在转场里露出空白
+  function fillPreviewPlaceholder(ph) {
+    if (!ph || !els.canvas) return;
+    var view = ph.querySelector('.preview-placeholder-view');
+    if (!view) return;
+    var img = view.querySelector('img');
+    if (!img) {
+      img = document.createElement('img');
+      img.alt = '';
+      view.appendChild(img);
+    }
+    try {
+      if (els.canvas.width > 0 && els.canvas.height > 0) {
+        img.src = els.canvas.toDataURL('image/png');
+      }
+    } catch (e) { /* ignore */ }
+    var liveMeta = els.metaLine;
+    var liveBar = document.getElementById('preview-bar');
+    var metaPh = ph.querySelector('.preview-placeholder-meta');
+    var barPh = ph.querySelector('.preview-placeholder-bar');
+    if (metaPh && liveMeta) {
+      metaPh.textContent = liveMeta.textContent || '\u00a0';
+      metaPh.style.height = Math.max(1, Math.round(liveMeta.getBoundingClientRect().height)) + 'px';
+    }
+    if (barPh && liveBar) {
+      barPh.style.height = Math.max(1, Math.round(liveBar.getBoundingClientRect().height)) + 'px';
+    }
+  }
+
+  function mountPreviewOn(host) {
+    if (!els.previewShell || !host) return;
+    var edit = els.screenEdit;
+    var ph = ensurePreviewPlaceholder();
+
+    function pageHeader(el) {
+      return el.querySelector(':scope > .header') || el.querySelector('.header');
+    }
+
+    // 去手绘页：先在生成页落冻结帧，再挪走真预览（canvas 一挪就可能被清空）
+    if (edit && host !== edit) {
+      fillPreviewPlaceholder(ph);
+      var editHeader = pageHeader(edit);
+      if (els.previewShell.parentNode === edit) {
+        edit.insertBefore(ph, els.previewShell);
+      } else {
+        var anchor = editHeader ? editHeader.nextSibling : edit.firstChild;
+        if (ph.parentNode !== edit) {
+          edit.insertBefore(ph, anchor);
+        } else if (editHeader && ph.previousElementSibling !== editHeader) {
+          edit.insertBefore(ph, editHeader.nextSibling);
+        }
+      }
+    }
+
+    var header = pageHeader(host);
+    if (!header) {
+      if (els.previewShell.parentNode !== host) {
+        host.insertBefore(els.previewShell, host.firstChild);
+      }
+    } else {
+      var after = header.nextElementSibling;
+      if (!(els.previewShell.parentNode === host && after === els.previewShell)) {
+        host.insertBefore(els.previewShell, header.nextSibling);
+      }
+    }
+
+    // 回到生成页：撤掉占位
+    if (host === edit && ph.parentNode) {
+      ph.parentNode.removeChild(ph);
+    }
   }
 
   function getPalette() {
@@ -772,6 +1050,8 @@
     }
     refreshEditUI(true);
     if (state.boardIndex >= state.boardsX * state.boardsY) state.boardIndex = -1;
+    // 分板数可能变：先刷新翻板条，再适配预览（避免首帧不显示）
+    updateBoardLabel();
     if (geomChanged) {
       fitView();
     } else {
@@ -973,9 +1253,11 @@
   // 容器尺寸变了（「更多」面板展开/收起、编辑条出现、切 3D、转屏）就重新适配：
   // - 未放大：重新铺满并居中（图片中心 = 容器中心）；
   // - 已放大：保持缩放，按「内容中心在容器里的比例」延续视口，再严格夹紧。
-  // 这条路径是幂等的，重复调用结果一致。
-  function syncViewportResize() {
+  // - keepTransform：只更新 fitS / 防溢出，不重新居中（进手绘页时用，避免预览下跳）。
+  function syncViewportResize(opts) {
     if (!state.gridData) return;
+    opts = opts || {};
+    var keep = !!(opts.keepTransform || (state.editOn && currentRoute() === 'hand'));
     var m = previewMetrics();
     var v = viewportSize();
     if (!m.pw || !m.ph || !v.vw || !v.vh) return;
@@ -984,16 +1266,33 @@
     // 判「用户在放大态」要用变更前的拟合值，否则面板一动就误判成未放大
     var wasFit = !prevFitS || state.view.s <= prevFitS * 1.001;
     state.view.fitS = fitS;
+    if (keep) {
+      var s = state.view.s;
+      if (!isFinite(s) || s <= 0) s = fitS;
+      // 视口变矮时允许缩小到新 fit；变高时保持原缩放，避免被重新铺满后下移
+      if (s > fitS) s = fitS;
+      state.view.s = Math.min(MAX_ZOOM, s);
+      var cw = m.cw * state.view.s;
+      var ch = m.ch * state.view.s;
+      if (cw > v.vw) {
+        state.view.tx = Math.max(v.vw - cw, Math.min(0, state.view.tx));
+      }
+      if (ch > v.vh) {
+        state.view.ty = Math.max(v.vh - ch, Math.min(0, state.view.ty));
+      }
+      renderPreview();
+      return;
+    }
     if (wasFit) {
       state.view.s = fitS;
       state.view.tx = (v.vw - m.cw * fitS) / 2;
       state.view.ty = (v.vh - m.ch * fitS) / 2;
     } else {
-      var s = state.view.s;
-      var rx = (v.vw / 2 - state.view.tx) / (m.cw * s);
-      var ry = (v.vh / 2 - state.view.ty) / (m.ch * s);
-      state.view.tx = v.vw / 2 - rx * m.cw * s;
-      state.view.ty = v.vh / 2 - ry * m.ch * s;
+      var s2 = state.view.s;
+      var rx = (v.vw / 2 - state.view.tx) / (m.cw * s2);
+      var ry = (v.vh / 2 - state.view.ty) / (m.ch * s2);
+      state.view.tx = v.vw / 2 - rx * m.cw * s2;
+      state.view.ty = v.vh / 2 - ry * m.ch * s2;
       clampView2d();
     }
     renderPreview();
@@ -1771,23 +2070,46 @@
   function updateBoardLabel() {
     var total = state.boardsX * state.boardsY;
     var multi = total > 1;
-    els.btnBoardPrev.hidden = !multi;
-    els.btnBoardNext.hidden = !multi;
-    if (els.btnBoardAll) {
-      els.btnBoardAll.hidden = !(multi && state.boardIndex >= 0);
+    var showAll = multi && state.boardIndex >= 0;
+    if (els.boardGroup) {
+      if (multi) els.boardGroup.removeAttribute('hidden');
+      else els.boardGroup.setAttribute('hidden', '');
     }
+    if (els.btnBoardPrev) {
+      if (multi) els.btnBoardPrev.removeAttribute('hidden');
+      else els.btnBoardPrev.setAttribute('hidden', '');
+    }
+    if (els.btnBoardNext) {
+      if (multi) els.btnBoardNext.removeAttribute('hidden');
+      else els.btnBoardNext.setAttribute('hidden', '');
+    }
+    if (els.btnBoardAll) {
+      els.btnBoardAll.classList.toggle('is-collapsed', !showAll);
+      els.btnBoardAll.setAttribute('aria-hidden', showAll ? 'false' : 'true');
+      els.btnBoardAll.tabIndex = showAll ? 0 : -1;
+    }
+    if (els.boardAllSep) {
+      els.boardAllSep.classList.toggle('is-collapsed', !showAll);
+      els.boardAllSep.setAttribute('aria-hidden', showAll ? 'false' : 'true');
+    }
+    if (!els.boardLabel) return;
     if (!multi) {
-      els.boardLabel.hidden = true;
+      els.boardLabel.setAttribute('hidden', '');
       els.boardLabel.textContent = '';
       return;
     }
-    els.boardLabel.hidden = false;
-    // 固定文案长度，避免箭头左右跳动
-    if (state.boardIndex < 0) {
-      els.boardLabel.textContent = '全图';
-    } else {
-      els.boardLabel.textContent = (state.boardIndex + 1) + '/' + total;
-    }
+    els.boardLabel.removeAttribute('hidden');
+    els.boardLabel.textContent = state.boardIndex < 0
+      ? '全图'
+      : (state.boardIndex + 1) + '/' + total;
+  }
+
+  function afterBoardChange() {
+    updateBoardLabel();
+    // 预览内容瞬时切换；「全图」钮显隐走布局动画
+    var in3d = state.view.mode === '3d' || (morphAnim && morphAnim.dir === 'to3d');
+    if (in3d) reset3dView();
+    else fitView();
   }
 
   function updateMeta() {
@@ -1806,9 +2128,8 @@
       state.width + '×' + state.height + ' · ' +
       colors + '色 · ' + total + '颗 · ' +
       cmW + '×' + cmH + 'cm · ' +
-      state.boardSize + '×' + state.boardSize + '拼板 · ' +
       state.boardsX + '×' + state.boardsY + '板';
-    els.headerSub.textContent = getPalette().name + ' · ' + state.width + ' 豆宽';
+    syncHeader();
   }
 
   function sortedCounts() {
@@ -1998,10 +2319,17 @@
     state.gridW = 0;
     state.editOn = false;
     state.brush = null;
-    els.screenEdit.classList.remove('edit-mode');
+    if (currentRoute() === 'hand' || currentRoute() === 'crop') {
+      while (routeStack.length > 1 && currentRoute() !== 'edit' && currentRoute() !== 'home') {
+        goBack({ instant: true });
+      }
+      mountPreviewOn(els.screenEdit);
+    }
     setEtGroupOpen(false, true);
     flushEdits();
-    showScreen('edit');
+    if (currentRoute() === 'home') showScreen('edit');
+    else if (currentRoute() !== 'edit') showScreen('edit', { replace: true, instant: true });
+    else syncHeader();
     setPanelOpen(true, true);
     freshImage = true;
     syncShareBtn();
@@ -2129,13 +2457,14 @@
     return r && r.w ? r.w / r.h : 1;
   }
 
-  // 旋转后的图片包围盒（未旋转时退化为图片自身显示尺寸）
-  function cropBoxAt(scale) {
+  // 旋转后的图片包围盒；可传入固定角（旋转动画中用终点 90°，避免中间角 AABB 变大把图撑开）
+  function cropBoxAt(scale, rotationOverride) {
     var img = crop.image;
     var dw = img.naturalWidth * scale;
     var dh = img.naturalHeight * scale;
-    var cos = Math.abs(Math.cos(crop.rotation));
-    var sin = Math.abs(Math.sin(crop.rotation));
+    var rot = rotationOverride != null ? rotationOverride : crop.rotation;
+    var cos = Math.abs(Math.cos(rot));
+    var sin = Math.abs(Math.sin(rot));
     return { w: dw * cos + dh * sin, h: dw * sin + dh * cos };
   }
 
@@ -2288,10 +2617,14 @@
     var cw = s.cropW || s.targetW;
     var ch = s.cropH || s.targetH;
     if (!cw || !ch) { cropComputeTarget(); cw = s.targetW; ch = s.targetH; }
-    var box = cropBoxAt(1);
+    // 缩放几何一律按最近 90°（或动画指定终点）算，中间角不参与
+    var rotForBox = opts && opts.scaleRotation != null
+      ? opts.scaleRotation
+      : snapCropRotation(s.rotation);
+    var box = cropBoxAt(1, rotForBox);
     var minS = Math.max(cw / box.w, ch / box.h);
     s.minScale = minS;
-    // 自由拖框时保持图片绝对缩放，只抬 minScale；其余路径仍按 zoomExtra 相对换算
+    // 自由拖框 / 旋转：保持绝对缩放，只抬 minScale；其余路径仍按 zoomExtra 相对换算
     if (opts && opts.preserveScale) {
       var kept = s.scale;
       if (kept < minS) {
@@ -2306,10 +2639,11 @@
     s.scale = minS * (1 + s.zoomExtra / 100);
   }
 
-  function cropClampOffset() {
+  function cropClampOffset(rotationOverride) {
     var s = crop;
     if (!s.image) return;
-    var box = cropBoxAt(s.scale);
+    var rot = rotationOverride != null ? rotationOverride : snapCropRotation(s.rotation);
+    var box = cropBoxAt(s.scale, rot);
     var bl = s.vw / 2 - box.w / 2 + s.offsetX;
     var bt = s.vh / 2 - box.h / 2 + s.offsetY;
     if (bl > s.cropX) s.offsetX -= bl - s.cropX;
@@ -2336,21 +2670,33 @@
     var ctx = cropCtx();
     var w = s.vw;
     var h = s.vh;
+    var bg = '#e5eaf2';
     ctx.setTransform(crop.dpr, 0, 0, crop.dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
-    ctx.fillStyle = '#f2f2f7';
+
+    // 浅色底
+    ctx.fillStyle = bg;
     ctx.fillRect(0, 0, w, h);
 
-    // 原图
+    // 整图
     ctx.save();
     cropDrawImage(ctx);
     ctx.restore();
 
-    // 选区外压暗
-    ctx.fillStyle = 'rgba(242, 242, 247, 0.72)';
+    // 框外：浅色底 + 淡化图片（不用整层黑罩，避免把底色染脏）
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 0, w, h);
+    ctx.rect(s.cropX, s.cropY, s.cropW, s.cropH);
+    ctx.clip('evenodd');
+    ctx.fillStyle = bg;
     ctx.fillRect(0, 0, w, h);
+    ctx.globalAlpha = 0.38;
+    cropDrawImage(ctx);
+    ctx.globalAlpha = 1;
+    ctx.restore();
 
-    // 选区内重绘原图（等效“打洞”）
+    // 框内清晰
     ctx.save();
     ctx.beginPath();
     ctx.rect(s.cropX, s.cropY, s.cropW, s.cropH);
@@ -2359,10 +2705,10 @@
     ctx.restore();
 
     // 选边框 + 三分参考线
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.95)';
     ctx.lineWidth = 2;
     ctx.strokeRect(s.cropX + 0.75, s.cropY + 0.75, s.cropW - 1.5, s.cropH - 1.5);
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(s.cropX + s.cropW / 3, s.cropY);
@@ -2379,7 +2725,7 @@
     if (s.ratioId === 'free') {
       var hs = 14;
       ctx.fillStyle = '#ffffff';
-      ctx.strokeStyle = 'rgba(0, 122, 255, 0.9)';
+      ctx.strokeStyle = 'rgba(75, 142, 240, 0.95)';
       ctx.lineWidth = 2;
       var corners = [
         [s.cropX, s.cropY],
@@ -2416,7 +2762,7 @@
   }
 
   function cropLayout() {
-    if (!els.cropScreen.classList.contains('is-open')) return;
+    if (currentRoute() !== 'crop') return;
     if (!cropSyncCanvasSize()) return;
     if (!crop.image) return;
     // 视口尺寸变了：按当前比例重算框，保留缩放倍率与偏移
@@ -2449,6 +2795,10 @@
   }
 
   function setCropRatio(id) {
+    if (id === 'orig') {
+      resetCrop();
+      return;
+    }
     if (crop.ratioId === id) return;
     crop.ratioId = id;
     syncCropRatioChips();
@@ -2609,54 +2959,117 @@
   }
 
   // ---- 动画：比例切换 / 重置 / 旋转 / 镜像 都走同一条 tween ----
-  var cropAnim = { raf: 0, target: null, done: null };
+  var cropAnim = { raf: 0, target: null, done: null, opts: null };
 
   function cancelCropAnim() {
     if (cropAnim.raf) cancelAnimationFrame(cropAnim.raf);
     cropAnim.raf = 0;
     cropAnim.target = null;
     cropAnim.done = null;
+    cropAnim.opts = null;
   }
 
-  // 让进行中的动画立刻落到终态（用户中途点了应用/拖动时需要）
-  function finishCropAnim() {
-    if (!cropAnim.raf) return;
-    cancelAnimationFrame(cropAnim.raf);
+  /** 旋转角量化到 0/90/180/270（四分之一圈整数，避免浮点漂移） */
+  function snapCropRotation(rad) {
+    var q = Math.PI / 2;
+    var steps = Math.round(Number(rad) / q);
+    steps = ((steps % 4) + 4) % 4;
+    return steps * q;
+  }
+
+  /** 当前已提交的旋转角：有进行中的旋转动画时用其终点，否则 snap 当前值 */
+  function cropCommittedRotation() {
+    if (cropAnim.target && cropAnim.target.rotation != null) {
+      return snapCropRotation(cropAnim.target.rotation);
+    }
+    return snapCropRotation(crop.rotation);
+  }
+
+  function rotateCrop() {
+    pulseCropBtn(els.cropRotate, 'is-spin');
+    var q = Math.PI / 2;
+    // 连点时绝不能从中间帧（如 45°）起算：先落到已承诺的 90° 格
+    var base = cropCommittedRotation();
+    // 硬取消进行中的补间（不要 finish 到半途再 lerp）
+    if (cropAnim.raf) cancelAnimationFrame(cropAnim.raf);
     cropAnim.raf = 0;
-    var to = cropAnim.target;
-    var cb = cropAnim.done;
     cropAnim.target = null;
     cropAnim.done = null;
-    if (!to) return;
-    Object.keys(to).forEach(function (k) { crop[k] = to[k]; });
-    cropAfterChange(cb);
+    cropAnim.opts = null;
+    crop.rotation = base;
+
+    var animTo = base + q;
+    var end = snapCropRotation(animTo);
+    cropTween(
+      { rotation: animTo },
+      280,
+      function () {
+        crop.rotation = end;
+      },
+      { preserveScale: true, scaleRotation: end }
+    );
+  }
+
+  function flipCrop() {
+    pulseCropBtn(els.cropFlip, 'is-flip');
+    cropTween({ flipX: crop.flipX === 1 ? -1 : 1 }, 280, null, { preserveScale: true });
+  }
+
+  // 让进行中的动画立刻落到终态（用户中途点了应用/拖动/连点旋转时需要）
+  function finishCropAnim() {
+    var to = cropAnim.target;
+    var cb = cropAnim.done;
+    var opts = cropAnim.opts;
+    if (cropAnim.raf) cancelAnimationFrame(cropAnim.raf);
+    cropAnim.raf = 0;
+    cropAnim.target = null;
+    cropAnim.done = null;
+    cropAnim.opts = null;
+    if (!to) {
+      // 无目标时也清掉可能残留的中间角
+      crop.rotation = snapCropRotation(crop.rotation);
+      return;
+    }
+    Object.keys(to).forEach(function (k) {
+      crop[k] = k === 'rotation' ? snapCropRotation(to[k]) : to[k];
+    });
+    cropAfterChange(cb, opts);
   }
 
   function cropEaseOut(t) {
     return 1 - Math.pow(1 - t, 3);
   }
 
-  // 每帧重算最小缩放 + 钳制偏移 + 重绘
-  function cropAfterChange(done) {
-    cropComputeMinScale();
-    cropClampOffset();
+  // opts.preserveScale：旋转/镜像时保持绝对缩放
+  // opts.scaleRotation：算 minScale / 钳制用的固定角（旋转动画用终点，避免中间角撑图）
+  function cropAfterChange(done, opts) {
+    cropComputeMinScale(opts);
+    var rot = opts && opts.scaleRotation != null ? opts.scaleRotation : undefined;
+    cropClampOffset(rot);
     drawCrop();
     if (done) done();
   }
 
   // 把 crop 上的若干数值属性补间到目标值；每帧后重算 minScale / 钳制 / 重绘
-  function cropTween(to, dur, done) {
+  function cropTween(to, dur, done, opts) {
     finishCropAnim();
     var keys = Object.keys(to);
     var from = {};
-    keys.forEach(function (k) { from[k] = crop[k]; });
+    keys.forEach(function (k) {
+      // 旋转起点必须落在 90° 格上，避免从 45° 中间态再插值
+      from[k] = k === 'rotation' ? snapCropRotation(crop[k]) : crop[k];
+      if (k === 'rotation') crop.rotation = from[k];
+    });
     if (!dur) {
-      keys.forEach(function (k) { crop[k] = to[k]; });
-      cropAfterChange(done);
+      keys.forEach(function (k) {
+        crop[k] = k === 'rotation' ? snapCropRotation(to[k]) : to[k];
+      });
+      cropAfterChange(done, opts);
       return;
     }
     cropAnim.target = to;
     cropAnim.done = done;
+    cropAnim.opts = opts || null;
     var start = performance.now();
     function frame(now) {
       var t = Math.min(1, (now - start) / dur);
@@ -2665,13 +3078,17 @@
         crop[k] = from[k] + (to[k] - from[k]) * e;
       });
       if (t < 1) {
-        cropAfterChange(null);
+        cropAfterChange(null, opts);
         cropAnim.raf = requestAnimationFrame(frame);
       } else {
         cropAnim.raf = 0;
         cropAnim.target = null;
         cropAnim.done = null;
-        cropAfterChange(done);
+        cropAnim.opts = null;
+        keys.forEach(function (k) {
+          crop[k] = k === 'rotation' ? snapCropRotation(to[k]) : to[k];
+        });
+        cropAfterChange(done, opts);
       }
     }
     cropAnim.raf = requestAnimationFrame(frame);
@@ -2701,19 +3118,6 @@
     setTimeout(function () { btn.classList.remove(cls); }, 400);
   }
 
-  function rotateCrop() {
-    pulseCropBtn(els.cropRotate, 'is-spin');
-    cropTween({ rotation: crop.rotation + Math.PI / 2 }, 320, function () {
-      // 归一到 [0, 2π)，避免多次旋转后数值无限增大
-      crop.rotation = ((crop.rotation % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
-    });
-  }
-
-  function flipCrop() {
-    pulseCropBtn(els.cropFlip, 'is-flip');
-    cropTween({ flipX: crop.flipX === 1 ? -1 : 1 }, 320);
-  }
-
   function syncCropZoomSlider(zoom) {
     if (els.cropZoom) els.cropZoom.value = String(Math.round(Math.min(CROP_ZOOM_MAX, zoom)));
   }
@@ -2729,7 +3133,9 @@
     crop.initRect = cr
       ? { x: cr.x * nw, y: cr.y * nh, w: cr.w * nw, h: cr.h * nh }
       : { x: 0, y: 0, w: nw, h: nh };
-    crop.ratioId = cr ? cropMatchRatio(crop.initRect.w / crop.initRect.h) : 'orig';
+    crop.ratioId = (!cr || (cr.x <= 0.002 && cr.y <= 0.002 && cr.w >= 0.996 && cr.h >= 0.996))
+      ? 'orig'
+      : cropMatchRatio(crop.initRect.w / crop.initRect.h);
     crop.initRatioId = crop.ratioId;
     crop.rotation = 0;
     crop.flipX = 1;
@@ -2738,25 +3144,26 @@
     crop.offsetY = 0;
     stopCropInertia();
     finishCropAnim();
-    els.cropScreen.classList.add('is-open');
-    els.cropScreen.setAttribute('aria-hidden', 'false');
-    // 等布局稳定后再算尺寸
+    showScreen('crop');
+    // 等转场布局稳定后再算尺寸
     requestAnimationFrame(function () {
-      if (!cropSyncCanvasSize()) return;
-      var to = cropInitViewTarget();
-      // 开场：整图铺满裁切框，再动画收到初始区域
-      cropSetRect(to.cropX, to.cropY, to.cropW, to.cropH);
-      crop.zoomExtra = 0;
-      crop.offsetX = 0;
-      crop.offsetY = 0;
-      cropComputeMinScale();
-      cropClampOffset();
-      drawCrop();
-      syncCropRatioChips();
-      syncCropZoomSlider(0);
-      crop.initSnapshot = cropSnapshotOf(to);
-      cropTween(to, 320, function () {
-        syncCropZoomSlider(crop.zoomExtra);
+      requestAnimationFrame(function () {
+        if (!cropSyncCanvasSize()) return;
+        var to = cropInitViewTarget();
+        // 开场：整图铺满裁切框，再动画收到初始区域
+        cropSetRect(to.cropX, to.cropY, to.cropW, to.cropH);
+        crop.zoomExtra = 0;
+        crop.offsetX = 0;
+        crop.offsetY = 0;
+        cropComputeMinScale();
+        cropClampOffset();
+        drawCrop();
+        syncCropRatioChips();
+        syncCropZoomSlider(0);
+        crop.initSnapshot = cropSnapshotOf(to);
+        cropTween(to, 320, function () {
+          syncCropZoomSlider(crop.zoomExtra);
+        });
       });
     });
   }
@@ -2764,25 +3171,47 @@
   function closeCrop() {
     stopCropInertia();
     cancelCropAnim();
-    els.cropScreen.classList.remove('is-open');
-    els.cropScreen.setAttribute('aria-hidden', 'true');
+    if (currentRoute() === 'crop') goBack();
+  }
+
+  // 整图回正：裁切框贴合图片比例，图片刚好铺满框（框与图同大）
+  function cropFullImageTarget() {
+    var s = crop;
+    var img = s.image;
+    var nw = img.naturalWidth;
+    var nh = img.naturalHeight;
+    var f = cropFrameForRatio(nw / nh, false);
+    return {
+      cropW: f.w,
+      cropH: f.h,
+      cropX: (s.vw - f.w) / 2,
+      cropY: (s.vh - f.h) / 2,
+      zoomExtra: 0,
+      offsetX: 0,
+      offsetY: 0,
+      rotation: 0,
+      flipX: 1
+    };
   }
 
   function resetCrop() {
     if (!crop.image) return;
     stopCropInertia();
     finishCropAnim();
-    crop.ratioId = crop.initRatioId;
+    crop.ratioId = 'orig';
     syncCropRatioChips();
-    var to = cropInitViewTarget();
-    // 旋转走最短路径回正
+    var to = cropFullImageTarget();
+    // 旋转走最短路径回正（始终对齐到 90° 网格）
     var twoPi = Math.PI * 2;
-    var d = to.rotation - crop.rotation;
-    to.rotation = crop.rotation + d - twoPi * Math.round(d / twoPi);
-    syncCropZoomSlider(to.zoomExtra);
-    cropTween(to, 320, function () {
+    var cur = snapCropRotation(crop.rotation);
+    crop.rotation = cur;
+    var d = to.rotation - cur;
+    to.rotation = cur + d - twoPi * Math.round(d / twoPi);
+    syncCropZoomSlider(0);
+    cropTween(to, 280, function () {
       crop.rotation = 0;
-    });
+      syncCropZoomSlider(crop.zoomExtra);
+    }, { scaleRotation: 0 });
   }
 
   function applyCrop() {
@@ -3804,6 +4233,23 @@
     else animateFit2d();
   }
 
+  function stepZoom(dir) {
+    if (!state.gridData || fit2dAnim || morphAnim || zoom3dAnim) return;
+    var factor = dir > 0 ? 1.28 : (1 / 1.28);
+    var in3d = state.view.mode === '3d';
+    if (in3d) {
+      var z0 = state.view3d.zoom == null ? 1 : state.view3d.zoom;
+      animateZoom3d(Math.max(0.45, Math.min(3.5, z0 * factor)));
+      return;
+    }
+    var v = viewportSize();
+    var minS = state.view.fitS || 1;
+    var s0 = state.view.s || minS;
+    var s1 = Math.max(minS, Math.min(MAX_ZOOM, s0 * factor));
+    if (Math.abs(s1 - s0) < 0.002) return;
+    animateZoom2d(v.vw * 0.5, v.vh * 0.5, s1);
+  }
+
   function setViewMode3d(on) {
     if (!state.gridData) return;
     if (morphAnim) {
@@ -3812,15 +4258,9 @@
       return;
     }
 
-    // 只能在 2D 编辑：进 3D 时自动退出手绘（高度瞬时收起，避免 morph 中途视口变高）
+    // 只能在 2D 编辑：进 3D 时自动退出手绘
     if (on && state.editOn) {
-      state.editOn = false;
-      els.screenEdit.classList.remove('edit-mode');
-      setEtGroupHeightNow(false);
-      if (els.btnEdit) {
-        els.btnEdit.classList.remove('vt-on');
-        els.btnEdit.setAttribute('aria-pressed', 'false');
-      }
+      setEditOn(false);
     }
 
     var s3 = state.view3d;
@@ -4101,6 +4541,7 @@
     lastTapT: 0, lastTapX: 0, lastTapY: 0,
     pinch: null,
     painting: false,
+    picking: false,
     stroke: null,
     downX: 0, downY: 0
   };
@@ -4126,6 +4567,7 @@
     // 桌面端：按住 Shift / 右键拖动 = 平移而不是落笔
     var panIntent = !!(e.button === 2 || e.shiftKey || (e.ctrlKey && !e.metaKey));
     gd.painting = gd.count === 1 && toolPainting() && !panIntent;
+    gd.picking = gd.count === 1 && toolPicking() && !panIntent;
 
     if (gd.count === 1) {
       gd.prevX = p.x;
@@ -4139,7 +4581,11 @@
         // 画笔/橡皮：直接落笔；屏蔽双击缩放，避免连续点涂被误判成双击
         gd.lastTapT = 0;
         strokeStart(p.x, p.y);
+        updateLoupe(p.x, p.y, false);
         requestRender();
+      } else if (gd.picking) {
+        gd.lastTapT = 0;
+        updateLoupe(p.x, p.y, true);
       } else if (now - gd.lastTapT < 340 &&
         Math.abs(p.x - gd.lastTapX) < 46 && Math.abs(p.y - gd.lastTapY) < 46) {
         gd.lastTapT = 0;
@@ -4162,6 +4608,8 @@
         requestRender();
       }
       gd.painting = false;
+      gd.picking = false;
+      hideLoupe();
       var q = twoPtList();
       if (q) {
         var s3 = state.view3d;
@@ -4198,7 +4646,12 @@
       if (gd.painting) {
         if (fit2dAnim) return;
         strokeTo(p.x, p.y);
+        updateLoupe(p.x, p.y, false);
         requestRender();
+        return;
+      }
+      if (gd.picking) {
+        updateLoupe(p.x, p.y, true);
         return;
       }
       if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) return;
@@ -4249,6 +4702,7 @@
 
   function onVpUp(e) {
     if (!gd.pointers[e.pointerId]) return;
+    var up = vpPos(e);
     delete gd.pointers[e.pointerId];
     gd.count = Object.keys(gd.pointers).length;
     if (gd.count === 1) {
@@ -4260,29 +4714,31 @@
       gd.pinch = null;
       gd.tapBlock = false;
       gd.painting = false;
+      gd.picking = false;
+      hideLoupe();
     } else if (gd.count === 0) {
       gd.pinch = null;
       var wasTapZoom = gd.tapBlock;
       gd.tapBlock = false;
       var wasStroke = !!gd.stroke;
+      var wasPicking = !!gd.picking;
+      // 取色：松手定色，成功后切回画笔
+      if (wasPicking && !wasTapZoom) {
+        var pickIdx = cellAtScreen(up.x, up.y);
+        if (pickIdx >= 0 && state.gridData[pickIdx] && !isEmptyCell(state.gridData[pickIdx])) {
+          var got = state.gridData[pickIdx];
+          state.brush = { code: got.code, hex: got.hex, r: got.r, g: got.g, b: got.b };
+          syncColorChip();
+          setTool('brush');
+          toast('已取色 ' + got.code);
+        }
+      }
       if (wasStroke) {
         strokeEnd(true);
       }
-      // 取色：单击（几乎无位移）拾取格子颜色
-      if (!wasTapZoom && !wasStroke && !gd.painting &&
-        state.editOn && state.view.mode === '2d' && state.tool === 'dropper' &&
-        gd.travX + gd.travY < 14) {
-        var idx = cellAtScreen(gd.downX, gd.downY);
-        if (idx >= 0 && state.gridData[idx] && !isEmptyCell(state.gridData[idx])) {
-          var got = state.gridData[idx];
-          state.brush = { code: got.code, hex: got.hex, r: got.r, g: got.g, b: got.b };
-          state.tool = 'brush';
-          syncColorChip();
-          syncToolChips();
-          toast('已取色 ' + got.code + '，切换为画笔');
-        }
-      }
       gd.painting = false;
+      gd.picking = false;
+      hideLoupe();
       // 双击缩放动画进行中或刚触发时不夹紧，避免抬手瞬间偏移跳动
       if (state.view.mode === '2d' && !fit2dAnim && !wasTapZoom) {
         clampView2d();
@@ -4463,9 +4919,11 @@
   }
 
   function refreshEditUI(immediate) {
-    // 不要求 mode===2d：3D→2D 动画期间就要能展开工具条（与切视角同时）
     var on = !!(state.editOn && state.gridData);
-    setEtGroupOpen(on, immediate);
+    if (els.etGroup) {
+      els.etGroup.classList.toggle('is-open', on);
+      els.etGroup.style.maxHeight = on ? '' : '0px';
+    }
     if (els.btnEdit) {
       els.btnEdit.classList.toggle('vt-on', on);
       els.btnEdit.setAttribute('aria-pressed', on ? 'true' : 'false');
@@ -4475,10 +4933,94 @@
     syncUndoBtns();
   }
 
+  var editSnapshot = null;
+  var editUndoMark = 0;
+
+  function captureEditSnapshot() {
+    editSnapshot = state.gridData ? state.gridData.slice() : null;
+    editUndoMark = undoStack.length;
+  }
+
+  function restoreEditSnapshot() {
+    if (!editSnapshot || !state.gridData) {
+      editSnapshot = null;
+      return;
+    }
+    state.gridData = editSnapshot.slice();
+    while (undoStack.length > editUndoMark) undoStack.pop();
+    redoStack.length = 0;
+    editSnapshot = null;
+    recount();
+    syncUndoBtns();
+    syncColorChip();
+    renderLegend();
+    renderPreview();
+  }
+
+  function setEditOn(on) {
+    if (on && !state.gridData) return;
+    if (!!on === !!state.editOn && ((on && currentRoute() === 'hand') || (!on && currentRoute() !== 'hand'))) {
+      refreshEditUI(true);
+      return;
+    }
+    state.editOn = !!on;
+    if (on) {
+      captureEditSnapshot();
+      if (!state.brush) {
+        var top = sortedCounts()[0];
+        if (top) {
+          state.brush = { code: top.code, hex: top.hex, r: top.r, g: top.g, b: top.b };
+        }
+      }
+      state.highlightCode = null;
+      renderLegend();
+      var in3d = state.view.mode === '3d' || (morphAnim && morphAnim.dir === 'to3d');
+      // 先冻帧占位 + 挂预览到编辑页，再滑入（底层仍显示冻帧，不会露空白）
+      mountPreviewOn(els.screenHand);
+      showScreen('hand');
+      refreshEditUI(true);
+      requestAnimationFrame(function () {
+        requestAnimationFrame(function () {
+          if (els.viewport) void els.viewport.offsetHeight;
+          if (!fit2dAnim && !morphAnim && !zoom3dAnim) {
+            syncViewportResize({ keepTransform: true });
+          } else {
+            renderPreview();
+          }
+        });
+      });
+      if (in3d) {
+        setViewMode3d(false);
+      }
+      toast('画笔：单指点涂 · 双指缩放/平移');
+    } else {
+      hideLoupe();
+      editSnapshot = null;
+      // 先把预览挂回生成页，再滑出编辑页
+      mountPreviewOn(els.screenEdit);
+      if (currentRoute() === 'hand') goBack();
+      refreshEditUI(true);
+      requestAnimationFrame(function () {
+        requestAnimationFrame(function () {
+          if (!fit2dAnim && !morphAnim && !zoom3dAnim) syncViewportResize();
+          renderPreview();
+        });
+      });
+    }
+    renderPreview();
+  }
+
+  function cancelHandEdit() {
+    if (!state.editOn) return;
+    restoreEditSnapshot();
+    setEditOn(false);
+  }
+
   // 手绘工具条的展开/收起 —— 和「更多」面板同一套动画，只是更柔。
   // 关键在于：展开高度按「内容实际高度 + 卡片上下描边」给死，不能留大余量。
   // max-height 给多了，内容在过渡前 1/4 就露完了，剩下的时间全在空转，
   // 观感就是「啪一下弹出来」——这正是之前嫌太快的原因。
+  // 整页编辑模式下 CSS 会强制常显，这里仍写 maxHeight 以兼容旧路径。
   var etOpen = false;
   var etAnimToken = 0;
   function setEtGroupOpen(on, immediate) {
@@ -4495,7 +5037,7 @@
     etOpen = open;
     etAnimToken += 1;
     var token = etAnimToken;
-    if (immediate) {
+    if (immediate || state.editOn) {
       el.classList.add('no-anim');
       el.classList.toggle('is-open', open);
       el.style.maxHeight = open ? full + 'px' : '0px';
@@ -4574,57 +5116,13 @@
     }, SOFT_MS + 20);
   }
 
-  function setEditOn(on) {
-    if (on && !state.gridData) return;
-    state.editOn = !!on;
-    if (on) {
-      // 编辑与设置互斥：进手绘只出编辑条，收起参数面板（对齐 iOS onChange(isEditing)）
-      setPanelOpen(false, true);
-      if (!state.brush) {
-        var top = sortedCounts()[0];
-        if (top) {
-          state.brush = { code: top.code, hex: top.hex, r: top.r, g: top.g, b: top.b };
-        }
-      }
-      // 落笔时看清真实颜色，退出高亮定位态
-      state.highlightCode = null;
-      renderLegend();
-      // 进编辑模式只做两件事：整屏允许滚动、工具条柔和展开。
-      // 预览框仍是 flex:1，会随工具条「长出来」平滑让位；
-      // 尺寸连续变化由 ResizeObserver 逐帧跟随，图片中心和边界都跟着重新对齐。
-      els.screenEdit.classList.add('edit-mode');
-      var in3d = state.view.mode === '3d' || (morphAnim && morphAnim.dir === 'to3d');
-      if (in3d) {
-        // 高度先落到终点，预览区尺寸稳定后再开 3D→2D，避免 morph 按高视口取景、
-        // 收尾再按矮视口 fit 造成闪一下；工具行仍走淡入动画。
-        setEtGroupHeightNow(true);
-        if (els.btnEdit) {
-          els.btnEdit.classList.add('vt-on');
-          els.btnEdit.setAttribute('aria-pressed', 'true');
-        }
-        syncToolChips();
-        syncColorChip();
-        syncUndoBtns();
-        if (els.viewport) void els.viewport.offsetHeight;
-        setViewMode3d(false);
-      } else {
-        refreshEditUI();
-      }
-      toast('画笔：单指点涂 · 双指缩放/平移');
-    } else {
-      els.screenEdit.classList.remove('edit-mode');
-      refreshEditUI();
-    }
-    renderPreview();
-  }
-
   function setTool(t) {
     if (t !== 'brush' && t !== 'eraser' && t !== 'dropper') return;
     state.tool = t;
     syncToolChips();
     toast(t === 'brush' ? '画笔：单指点涂 · 双指缩放/平移'
       : t === 'eraser' ? '橡皮：擦回自动生成色'
-        : '取色：点一下吸取格内豆色');
+        : '取色：按住拖动吸取 · 松手定色');
   }
 
   function openPickSheet() {
@@ -4673,6 +5171,157 @@
   function toolPainting() {
     return !!(state.editOn && state.view.mode === '2d' &&
       (state.tool === 'brush' || state.tool === 'eraser') && state.gridData);
+  }
+
+  function toolPicking() {
+    return !!(state.editOn && state.view.mode === '2d' &&
+      state.tool === 'dropper' && state.gridData);
+  }
+
+  // ---------- 落笔 / 取色 5×5 放大镜（对齐 iOS BeadLoupe） ----------
+  var LOUPE_SPAN = 5;
+  var LOUPE_DIAM = 150;
+  var LOUPE_GAP = 34;
+  var LOUPE_EDGE = 8;
+  var loupeCtx = els.paintLoupeCanvas
+    ? (els.paintLoupeCanvas.getContext('2d', { colorSpace: 'srgb' }) || els.paintLoupeCanvas.getContext('2d'))
+    : null;
+
+  function hideLoupe() {
+    if (els.paintLoupe) els.paintLoupe.hidden = true;
+    if (els.paintLoupeReadout) els.paintLoupeReadout.hidden = true;
+  }
+
+  function cellAtColRow(col, row) {
+    if (!state.gridData) return null;
+    if (col < 0 || row < 0 || col >= state.width || row >= state.height) return null;
+    return state.gridData[row * state.width + col];
+  }
+
+  function updateLoupe(sx, sy, showReadout) {
+    if (!els.paintLoupe || !loupeCtx || !state.gridData) return;
+    var idx = cellAtScreen(sx, sy);
+    if (idx < 0) {
+      hideLoupe();
+      return;
+    }
+    var rect = boardRect(state.boardIndex);
+    var col = idx % state.width;
+    var row = (idx / state.width) | 0;
+    var half = (LOUPE_SPAN / 2) | 0;
+    var originCol = Math.min(Math.max(col - half, rect.x0), Math.max(rect.x0, rect.x1 - LOUPE_SPAN));
+    var originRow = Math.min(Math.max(row - half, rect.y0), Math.max(rect.y0, rect.y1 - LOUPE_SPAN));
+    var cell = LOUPE_DIAM / LOUPE_SPAN;
+    var i;
+    var j;
+    var bead;
+    var px;
+    var py;
+    var lum;
+
+    loupeCtx.setTransform(1, 0, 0, 1, 0, 0);
+    loupeCtx.fillStyle = viewBgColor();
+    loupeCtx.fillRect(0, 0, LOUPE_DIAM, LOUPE_DIAM);
+
+    for (j = 0; j < LOUPE_SPAN; j++) {
+      for (i = 0; i < LOUPE_SPAN; i++) {
+        bead = cellAtColRow(originCol + i, originRow + j);
+        if (!bead || isEmptyCell(bead)) continue;
+        px = i * cell;
+        py = j * cell;
+        loupeCtx.fillStyle = bead.hex;
+        loupeCtx.fillRect(px, py, cell + 0.4, cell + 0.4);
+      }
+    }
+
+    // 格线
+    loupeCtx.strokeStyle = gridLineColor();
+    loupeCtx.lineWidth = 1;
+    loupeCtx.beginPath();
+    for (i = 0; i <= LOUPE_SPAN; i++) {
+      px = i * cell + 0.5;
+      loupeCtx.moveTo(px, 0);
+      loupeCtx.lineTo(px, LOUPE_DIAM);
+      loupeCtx.moveTo(0, px);
+      loupeCtx.lineTo(LOUPE_DIAM, px);
+    }
+    loupeCtx.stroke();
+
+    // 格内色号（圆窗一格≈30px，刚好够）
+    loupeCtx.font = Math.round(cell * CODE_SHOW_FONT) + 'px sans-serif';
+    loupeCtx.textAlign = 'center';
+    loupeCtx.textBaseline = 'middle';
+    for (j = 0; j < LOUPE_SPAN; j++) {
+      for (i = 0; i < LOUPE_SPAN; i++) {
+        bead = cellAtColRow(originCol + i, originRow + j);
+        if (!bead || isEmptyCell(bead)) continue;
+        lum = bead.r * 0.299 + bead.g * 0.587 + bead.b * 0.114;
+        loupeCtx.fillStyle = lum > 160 ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.85)';
+        loupeCtx.fillText(bead.code, i * cell + cell / 2, j * cell + cell / 2);
+      }
+    }
+
+    // 焦点格：白圈 + 主题色
+    var fx = (col - originCol) * cell;
+    var fy = (row - originRow) * cell;
+    loupeCtx.strokeStyle = 'rgba(255,255,255,0.92)';
+    loupeCtx.lineWidth = 4;
+    loupeCtx.strokeRect(fx + 1, fy + 1, cell - 2, cell - 2);
+    loupeCtx.strokeStyle = '#3478e0';
+    loupeCtx.lineWidth = 2;
+    loupeCtx.strokeRect(fx + 2, fy + 2, cell - 4, cell - 4);
+
+    if (els.paintLoupeCoord) {
+      // 图纸坐标：1 起算（与导出轴同口径）
+      els.paintLoupeCoord.textContent = '列 ' + (col + 1) + ' · 行 ' + (row + 1);
+    }
+
+    if (els.paintLoupeReadout) {
+      if (showReadout) {
+        bead = cellAtColRow(col, row);
+        if (bead && !isEmptyCell(bead)) {
+          els.paintLoupeReadout.innerHTML =
+            '<span class="paint-loupe-swatch" style="background:' + bead.hex + '"></span>' +
+            '<span>' + bead.code + '</span>';
+        } else {
+          els.paintLoupeReadout.innerHTML = '<span>空格</span>';
+        }
+        els.paintLoupeReadout.hidden = false;
+      } else {
+        els.paintLoupeReadout.hidden = true;
+      }
+    }
+
+    // 定位：优先指尖上方，放不下翻下方，再夹回画布
+    var vp = els.viewport.getBoundingClientRect();
+    var labelH = showReadout ? (26 * 2 + 6) : 26;
+    var blockW = LOUPE_DIAM;
+    var blockH = LOUPE_DIAM + 6 + labelH;
+    var halfW = blockW / 2;
+    var halfH = blockH / 2;
+    var x;
+    var y;
+    if (vp.width >= blockW + LOUPE_EDGE * 2) {
+      x = Math.min(Math.max(sx, LOUPE_EDGE + halfW), vp.width - LOUPE_EDGE - halfW);
+    } else {
+      x = vp.width / 2;
+    }
+    var above = sy - LOUPE_GAP - halfH;
+    if (above - halfH >= LOUPE_EDGE) {
+      y = above;
+    } else {
+      var below = sy + LOUPE_GAP + halfH;
+      if (below + halfH <= vp.height - LOUPE_EDGE) {
+        y = below;
+      } else {
+        var minY = LOUPE_EDGE + halfH;
+        var maxY = Math.max(minY, vp.height - LOUPE_EDGE - halfH);
+        y = Math.min(Math.max(above, minY), maxY);
+      }
+    }
+    els.paintLoupe.style.left = x + 'px';
+    els.paintLoupe.style.top = y + 'px';
+    els.paintLoupe.hidden = false;
   }
 
   function screenContent(x, y) {
@@ -4771,7 +5420,6 @@
   // 裁切（搬自 crop-grid 的交互：图片在固定比例框下平移/缩放）
   if (els.btnCrop) els.btnCrop.addEventListener('click', openCrop);
   if (els.cropCancel) els.cropCancel.addEventListener('click', closeCrop);
-  if (els.cropReset) els.cropReset.addEventListener('click', resetCrop);
   if (els.cropConfirm) els.cropConfirm.addEventListener('click', applyCrop);
   if (els.cropRotate) els.cropRotate.addEventListener('click', rotateCrop);
   if (els.cropFlip) els.cropFlip.addEventListener('click', flipCrop);
@@ -4833,14 +5481,14 @@
   }
   if (els.cropViewport) {
     els.cropViewport.addEventListener('wheel', function (e) {
-      if (!els.cropScreen.classList.contains('is-open')) return;
+      if (currentRoute() !== 'crop') return;
       e.preventDefault();
       cropSetZoom(crop.zoomExtra + (e.deltaY < 0 ? 12 : -12));
       syncCropZoomSlider(crop.zoomExtra);
     }, { passive: false });
   }
   window.addEventListener('resize', function () {
-    if (els.cropScreen && els.cropScreen.classList.contains('is-open')) cropLayout();
+    if (currentRoute() === 'crop') cropLayout();
   });
 
   els.btnSave.addEventListener('click', openExportSheet);
@@ -4976,6 +5624,8 @@
     setViewMode3d(!going3d);
   });
   els.btnFit.addEventListener('click', doResetView);
+  if (els.btnZoomIn) els.btnZoomIn.addEventListener('click', function () { stepZoom(1); });
+  if (els.btnZoomOut) els.btnZoomOut.addEventListener('click', function () { stepZoom(-1); });
 
   if (els.btnMore) {
     els.btnMore.addEventListener('click', function () {
@@ -4996,8 +5646,9 @@
   if (els.btnBoardAll) {
     els.btnBoardAll.addEventListener('click', function () {
       if (!state.gridData) return;
+      if (state.boardIndex < 0) return;
       state.boardIndex = -1;
-      fitView();
+      afterBoardChange();
     });
   }
 
@@ -5025,7 +5676,7 @@
     } else {
       state.boardIndex -= 1;
     }
-    fitView();
+    afterBoardChange();
   });
 
   els.btnBoardNext.addEventListener('click', function () {
@@ -5039,7 +5690,7 @@
     } else {
       state.boardIndex += 1;
     }
-    fitView();
+    afterBoardChange();
   });
 
   // 导出图纸选项
@@ -5077,8 +5728,16 @@
   // 手绘编辑事件
   if (els.btnEdit) {
     els.btnEdit.addEventListener('click', function () {
-      setEditOn(!state.editOn);
+      if (!state.editOn) setEditOn(true);
     });
+  }
+  if (els.btnEditDone) {
+    els.btnEditDone.addEventListener('click', function () {
+      setEditOn(false);
+    });
+  }
+  if (els.btnEditCancel) {
+    els.btnEditCancel.addEventListener('click', cancelHandEdit);
   }
   if (els.etGroup) {
     els.etGroup.addEventListener('click', function (e) {
@@ -5107,6 +5766,9 @@
   if (els.etUndo) els.etUndo.addEventListener('click', undoEdit);
   if (els.etRedo) els.etRedo.addEventListener('click', redoEdit);
   if (els.etClear) els.etClear.addEventListener('click', clearEdits);
+  if (els.etFit) els.etFit.addEventListener('click', doResetView);
+  if (els.etZoomIn) els.etZoomIn.addEventListener('click', function () { stepZoom(1); });
+  if (els.etZoomOut) els.etZoomOut.addEventListener('click', function () { stepZoom(-1); });
 
   // 长按保存浮层
   if (els.saveTipClose) els.saveTipClose.addEventListener('click', closeSaveTip);
@@ -5159,5 +5821,5 @@
     }).observe(els.viewport);
   }
 
-  showScreen('home');
+  showScreen('home', { instant: true });
 })();

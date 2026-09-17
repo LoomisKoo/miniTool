@@ -5,18 +5,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <title>兔格拼豆</title>
   <link rel="icon" href="icon.png" type="image/png" />
-  <link rel="stylesheet" href="./style.css?v=20260913k" />
+  <link rel="stylesheet" href="./style.css?v=20260917an" />
 </head>
 <body>
   <div class="app">
-    <header class="header">
-      <div class="header-text">
-        <h1>兔格拼豆</h1>
-        <p id="header-sub">照片转拼豆色号图纸</p>
-      </div>
-    </header>
-
-    <section class="screen active" id="screen-home">
+    <div class="app-stage" id="app-stage">
+    <section class="screen is-active" id="screen-home" data-route="home">
+      <header class="header">
+        <div class="header-text">
+          <h1>兔格拼豆</h1>
+          <p>照片转拼豆色号图纸</p>
+        </div>
+      </header>
       <div class="upload-area">
         <label class="upload-box" id="upload-box" for="file-input">
           <span class="upload-icon" aria-hidden="true">
@@ -32,59 +32,59 @@
       </div>
     </section>
 
-    <section class="screen" id="screen-edit">
-      <div class="preview-shell" id="preview-shell">
+    <section class="screen" id="screen-edit" data-route="edit">
+      <header class="header">
+        <div class="header-text">
+          <h1>兔格拼豆</h1>
+          <p id="header-sub">照片转拼豆色号图纸</p>
+        </div>
+      </header>
+<div class="preview-shell" id="preview-shell">
         <div class="viewport" id="viewport">
           <canvas id="preview-canvas"></canvas>
+          <div class="paint-loupe" id="paint-loupe" hidden>
+            <canvas class="paint-loupe-win" id="paint-loupe-canvas" width="150" height="150"></canvas>
+            <div class="paint-loupe-labels">
+              <span class="paint-loupe-pill" id="paint-loupe-coord"></span>
+              <span class="paint-loupe-pill paint-loupe-readout" id="paint-loupe-readout" hidden></span>
+            </div>
+          </div>
           <p class="view-hint" id="view-hint"></p>
         </div>
         <p class="meta" id="meta-line">—</p>
         <div class="preview-bar" id="preview-bar">
           <div class="board-nav" id="board-nav">
-            <button type="button" class="bar-btn bar-btn-icon" id="btn-board-prev" aria-label="上一板">‹</button>
-            <span id="board-label">全图</span>
-            <button type="button" class="bar-btn bar-btn-icon" id="btn-board-next" aria-label="下一板">›</button>
-            <button type="button" class="bar-btn" id="btn-board-all" hidden>全图</button>
+            <div class="board-group" id="board-group" role="group" aria-label="分板">
+              <button type="button" class="bar-btn" id="btn-board-prev" aria-label="上一板">‹</button>
+              <span id="board-label">全图</span>
+              <button type="button" class="bar-btn" id="btn-board-next" aria-label="下一板">›</button>
+              <span class="zoom-group-sep is-collapsed" id="board-all-sep" aria-hidden="true"></span>
+              <button type="button" class="bar-btn is-collapsed" id="btn-board-all" aria-hidden="true" tabindex="-1">全图</button>
+            </div>
           </div>
           <div class="view-tools" id="view-tools">
-            <button type="button" class="bar-btn" id="btn-fit">复位</button>
-            <button type="button" class="bar-btn vt-switch" id="btn-edit" aria-pressed="false">编辑</button>
+            <div class="zoom-group" role="group" aria-label="缩放">
+              <button type="button" class="bar-btn bar-btn-icon" id="btn-zoom-in" aria-label="放大">+</button>
+              <span class="zoom-group-sep" aria-hidden="true"></span>
+              <button type="button" class="bar-btn" id="btn-fit">复位</button>
+              <span class="zoom-group-sep" aria-hidden="true"></span>
+              <button type="button" class="bar-btn bar-btn-icon" id="btn-zoom-out" aria-label="缩小">−</button>
+            </div>
             <button type="button" class="bar-btn vt-switch" id="btn-3d" aria-pressed="false">3D</button>
           </div>
         </div>
       </div>
 
-      <div class="group et-group" id="et-group">
-        <div class="et-group-inner">
-          <div class="et-tools">
-            <button type="button" class="chip on" data-tool="brush">画笔</button>
-            <button type="button" class="chip" data-tool="eraser">橡皮</button>
-            <button type="button" class="chip" data-tool="dropper">取色</button>
-            <button type="button" class="chip chip-ghost et-paint" id="et-paint" aria-label="选择画笔豆色"></button>
-          </div>
-          <div class="et-acts">
-            <button type="button" class="chip" id="et-undo" disabled>撤销</button>
-            <button type="button" class="chip" id="et-redo" disabled>重做</button>
-            <button type="button" class="chip" id="et-clear">清空手绘</button>
-          </div>
-        </div>
-      </div>
-
-      <div class="panel-collapse" id="panel-wrap">
+      <div class="panel-collapse is-open" id="panel-wrap">
         <div class="panel" id="panel">
           <div class="group">
             <div class="row chips-row chips-info">
               <button type="button" class="chip chip-info on" id="btn-palette">MARD</button>
-              <button type="button" class="chip chip-ghost chip-dot" id="btn-colors" aria-label="查看豆色">
+              <button type="button" class="chip chip-ghost chip-bead" id="btn-colors" aria-label="查看豆色">
                 <span class="colors-preview" id="colors-preview"></span>
               </button>
-              <button type="button" class="chip chip-ghost chip-hug panel-collapse-btn" id="btn-panel-collapse" aria-label="收起更多">
-                <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-                  <path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-              </button>
             </div>
-            <div class="row chips-row">
+            <div class="row chips-row chips-scroll">
               <button type="button" class="chip on" id="btn-grid" aria-pressed="true">网格</button>
               <button type="button" class="chip" id="btn-merge" aria-pressed="false">合并</button>
               <button type="button" class="chip" id="btn-dither" aria-pressed="false">抖动</button>
@@ -110,17 +110,112 @@
       </div>
 
       <div class="footer-bar" id="footer-bar">
-        <button type="button" class="bar-btn" id="btn-more" aria-pressed="false">更多</button>
-        <button type="button" class="bar-btn" id="btn-crop">裁切</button>
-        <button type="button" class="bar-btn" id="btn-reselect">重选</button>
-        <span class="footer-spacer"></span>
-        <button type="button" class="bar-btn bar-btn-primary" id="btn-save">导出</button>
-        <button type="button" class="bar-btn bar-btn-note" id="export-share" hidden>发布笔记</button>
+        <div class="footer-bar__icons">
+          <button type="button" class="bar-icon" id="btn-more" aria-pressed="true" aria-label="更多">
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+              <circle cx="5" cy="12" r="1.7" fill="currentColor"/>
+              <circle cx="12" cy="12" r="1.7" fill="currentColor"/>
+              <circle cx="19" cy="12" r="1.7" fill="currentColor"/>
+            </svg>
+          </button>
+          <button type="button" class="bar-icon" id="btn-crop" aria-label="裁切">
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+              <path d="M7 3v14h14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M17 21V7H3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+          <button type="button" class="bar-icon" id="btn-edit" aria-pressed="false" aria-label="编辑">
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+              <path d="M4 20l1.2-4.6L15.8 4.8a2.1 2.1 0 013 3L8.2 18.6 4 20z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+              <path d="M13.5 7.2l3.3 3.3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+            </svg>
+          </button>
+          <button type="button" class="bar-icon" id="btn-reselect" aria-label="重选">
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+              <rect x="4" y="6" width="16" height="13" rx="2" fill="none" stroke="currentColor" stroke-width="1.7"/>
+              <circle cx="9.2" cy="11" r="1.6" fill="currentColor"/>
+              <path d="M7 17l3.2-3.4 2.2 2.2L16 12l3 5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+        </div>
+        <div class="footer-bar__actions">
+          <button type="button" class="bar-text bar-text-primary" id="btn-export">导出</button>
+          <button type="button" class="bar-text bar-text-ghost" id="btn-save" hidden>保存</button>
+          <button type="button" class="bar-btn bar-btn-note" id="export-share" hidden>发布笔记</button>
+        </div>
       </div>
     </section>
+
+        <section class="screen" id="screen-hand-edit" data-route="hand">
+      <header class="header header-solo">
+        <div class="header-text">
+          <h1>编辑</h1>
+        </div>
+      </header>
+<div class="group et-group is-open" id="et-group">
+        <div class="et-group-inner">
+          <div class="et-tools">
+            <button type="button" class="chip on" data-tool="brush">画笔</button>
+            <button type="button" class="chip" data-tool="eraser">橡皮</button>
+            <button type="button" class="chip" data-tool="dropper">取色</button>
+            <button type="button" class="chip chip-ghost et-paint" id="et-paint" aria-label="选择画笔豆色"></button>
+          </div>
+          <div class="et-acts">
+            <button type="button" class="chip" id="et-undo" disabled>撤销</button>
+            <button type="button" class="chip" id="et-redo" disabled>重做</button>
+            <button type="button" class="chip" id="et-clear">清空手绘</button>
+            <div class="zoom-group zoom-group-chip" role="group" aria-label="缩放">
+              <button type="button" class="chip chip-hug" id="et-zoom-in" aria-label="放大">+</button>
+              <span class="zoom-group-sep" aria-hidden="true"></span>
+              <button type="button" class="chip chip-hug" id="et-fit">复位</button>
+              <span class="zoom-group-sep" aria-hidden="true"></span>
+              <button type="button" class="chip chip-hug" id="et-zoom-out" aria-label="缩小">−</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="crop-actions" id="edit-actions">
+        <button type="button" class="bar-btn" id="btn-edit-cancel">取消</button>
+        <button type="button" class="bar-btn bar-btn-primary" id="btn-edit-done">完成</button>
+      </div>
+    </section>
+
+        <section class="screen" id="screen-crop" data-route="crop" aria-hidden="true">
+      <header class="header header-solo">
+        <div class="header-text">
+          <h1>裁切图片</h1>
+        </div>
+      </header>
+<div class="crop-viewport" id="crop-viewport">
+        <canvas id="crop-canvas"></canvas>
+      </div>
+      <div class="crop-panel">
+        <div class="crop-bar">
+          <span class="crop-label">比例</span>
+          <div class="crop-chips" id="crop-ratio-chips"></div>
+        </div>
+        <div class="crop-bar">
+          <span class="crop-label">缩放</span>
+          <input class="crop-slider" type="range" id="crop-zoom" min="0" max="500" value="0" />
+          <div class="crop-icon-row">
+            <button type="button" class="crop-icon-btn" id="crop-rotate" title="旋转" aria-label="旋转">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3.2-6.9"></path><path d="M21 4v6h-6"></path></svg>
+            </button>
+            <button type="button" class="crop-icon-btn" id="crop-flip" title="镜像" aria-label="镜像">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"></path><path d="M7 8 3 12l4 4"></path><path d="M17 8l4 4-4 4"></path></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="crop-actions">
+        <button type="button" class="bar-btn" id="crop-cancel">取消</button>
+        <button type="button" class="bar-btn bar-btn-primary" id="crop-confirm">应用</button>
+      </div>
+    </section>
+    </div>
   </div>
 
-  <div class="sheet-mask" id="palette-sheet" aria-hidden="true">
+<div class="sheet-mask" id="palette-sheet" aria-hidden="true">
     <button type="button" class="sheet-backdrop" id="palette-sheet-backdrop" aria-label="关闭"></button>
     <div class="sheet" role="dialog" aria-label="选择色卡">
       <div class="sheet-handle"></div>
@@ -128,12 +223,14 @@
       <button type="button" class="sheet-option" data-palette="mard">
         <span class="sheet-option-main">MARD</span>
         <span class="sheet-option-sub">221 色 · 国内主流</span>
+        <span class="sheet-option-check" aria-hidden="true">✓</span>
       </button>
       <button type="button" class="sheet-option" data-palette="coco">
         <span class="sheet-option-main">COCO</span>
         <span class="sheet-option-sub">291 色</span>
+        <span class="sheet-option-check" aria-hidden="true">✓</span>
       </button>
-      <button type="button" class="sheet-cancel" id="palette-sheet-cancel">取消</button>
+      <button type="button" class="sheet-cancel" id="palette-sheet-cancel">完成</button>
     </div>
   </div>
 
@@ -196,7 +293,7 @@
           <span class="sheet-option-sub">最大拼接板</span>
         </button>
       </div>
-      <button type="button" class="sheet-cancel" id="board-size-sheet-cancel">取消</button>
+      <button type="button" class="sheet-cancel" id="board-size-sheet-cancel">完成</button>
     </div>
   </div>
 
@@ -281,38 +378,6 @@
     </div>
   </div>
 
-  <div class="crop-screen" id="crop-screen" aria-hidden="true">
-    <div class="crop-nav">
-      <span class="crop-nav-title">裁切图片</span>
-    </div>
-    <div class="crop-viewport" id="crop-viewport">
-      <canvas id="crop-canvas"></canvas>
-    </div>
-    <div class="crop-panel">
-      <div class="crop-bar">
-        <span class="crop-label">比例</span>
-        <div class="crop-chips" id="crop-ratio-chips"></div>
-      </div>
-      <div class="crop-bar">
-        <span class="crop-label">缩放</span>
-        <input class="crop-slider" type="range" id="crop-zoom" min="0" max="500" value="0" />
-        <div class="crop-icon-row">
-          <button type="button" class="crop-icon-btn" id="crop-rotate" title="旋转" aria-label="旋转">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3.2-6.9"></path><path d="M21 4v6h-6"></path></svg>
-          </button>
-          <button type="button" class="crop-icon-btn" id="crop-flip" title="镜像" aria-label="镜像">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"></path><path d="M7 8 3 12l4 4"></path><path d="M17 8l4 4-4 4"></path></svg>
-          </button>
-        </div>
-      </div>
-    </div>
-    <div class="crop-actions">
-      <button type="button" class="btn btn-ghost" id="crop-cancel">取消</button>
-      <button type="button" class="btn btn-ghost" id="crop-reset">重置</button>
-      <button type="button" class="btn btn-primary" id="crop-confirm">应用裁切</button>
-    </div>
-  </div>
-
   <input type="file" id="file-input" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,image/*" />
   <div class="export-busy" id="export-busy" aria-hidden="true">
     <div class="export-busy-card" role="alertdialog" aria-live="assertive" aria-busy="true">
@@ -336,6 +401,6 @@
   <div class="toast" id="toast"></div>
 
   <script src="./palettes.js"></script>
-  <script src="./app.js?v=20260913k"></script>
+  <script src="./app.js?v=20260917v"></script>
 </body>
 </html>
