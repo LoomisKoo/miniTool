@@ -233,14 +233,28 @@
 
   function toast(msg) {
     els.toast.textContent = msg;
-    var b = toastBottom();
-    els.toast.style.bottom = b ? b + 'px' : '';
     els.toast.classList.add('show');
     if (toastTimer) clearTimeout(toastTimer);
     toastTimer = setTimeout(function () {
       els.toast.classList.remove('show');
     }, 1800);
   }
+
+  // 部分小红书容器不触发可靠的 `:active`，用触摸态补上系统按钮反馈。
+  function pressButton(target, pressed) {
+    var button = target && target.closest ? target.closest('button') : null;
+    if (button) button.classList.toggle('is-pressed', pressed);
+  }
+
+  document.addEventListener('touchstart', function (e) {
+    pressButton(e.target, true);
+  }, { passive: true });
+  document.addEventListener('touchend', function (e) {
+    pressButton(e.target, false);
+  }, { passive: true });
+  document.addEventListener('touchcancel', function (e) {
+    pressButton(e.target, false);
+  }, { passive: true });
 
   // ---------- 页面栈：右进右出 ----------
   var NAV_MS = 340;
@@ -2201,13 +2215,14 @@
     for (i = 0; i < list.length; i++) {
       var item = list[i];
       var el = document.createElement('button');
+      var ink = luma(item.hex) > 160 ? '#1a1a1a' : '#ffffff';
       el.type = 'button';
       el.className = 'colors-item' + (state.highlightCode === item.code ? ' is-on' : '');
       el.setAttribute('data-code', item.code);
       el.innerHTML =
         '<span class="colors-swatch" style="background:' + item.hex + '"></span>' +
-        '<span class="colors-item-code">' + item.code + '</span>' +
-        '<span class="colors-item-count">' + item.n + '</span>';
+        '<span class="colors-item-code" style="color:' + ink + '">' + item.code + '</span>' +
+        '<span class="colors-item-count" style="color:' + ink + '">' + item.n + '</span>';
       els.colorsList.appendChild(el);
     }
   }
@@ -4882,7 +4897,6 @@
       }
     }
     if (!cells.length) {
-      toast('当前没有手绘改动');
       return;
     }
     for (i = 0; i < cells.length; i++) {
@@ -4986,7 +5000,6 @@
       if (in3d) {
         setViewMode3d(false);
       }
-      toast('画笔：单指点涂 · 双指缩放/平移');
     } else {
       hideLoupe();
       editSnapshot = null;
