@@ -16,6 +16,9 @@ import SwiftUI
 struct BeadPreviewPane: View {
     let model: BeadEditorModel
     let resetToken: Int
+    /// 步进缩放请求：`token` 变化时按 `factor` 缩放（对齐 H5 ± 按钮）。
+    var zoomStepToken: Int = 0
+    var zoomStepFactor: CGFloat = 1
 
     @Environment(\.colorScheme) private var colorScheme
 
@@ -28,8 +31,10 @@ struct BeadPreviewPane: View {
 
     @State private var isPainting = false
     @State private var abortStroke = false
-    /// 落笔时手指所在的格。非 nil 时在画布上浮出放大镜（见 `BeadPaintLoupe`）。
-    @State private var paintLoupe: PaintLoupe?
+    /// 取色拖动是否进行中（单指按住吸色，见 `flatDragGesture`）。
+    @State private var isPicking = false
+    /// 手指所在的格。非 nil 时在画布上浮出放大镜（见 `BeadLoupe`）：落笔与取色共用。
+    @State private var loupe: Loupe?
     @State private var panning = false
     @State private var pinchActive = false
     @State private var pinchStartScale: CGFloat = 1
@@ -103,11 +108,12 @@ struct BeadPreviewPane: View {
         var duration: Double
     }
 
-    /// 落笔放大镜的锚点：手指在哪一格 + 手指在预览框里的位置。
-    private struct PaintLoupe: Equatable {
+    /// 放大镜的锚点：手指在哪一格 + 手指在预览框里的位置（+ 取色时吸到的色号）。
+    private struct Loupe: Equatable {
         var col: Int
         var row: Int
         var screen: CGPoint
+        var pickedCode: String?
     }
 
     /// 3D 旋转的手势基准。`translation` 是记下基准那一刻的累计位移，
@@ -224,6 +230,9 @@ struct BeadPreviewPane: View {
                 fit(animated: true)
             }
         }
+        .onChange(of: zoomStepToken) { _, _ in
+            stepZoom(by: zoomStepFactor)
+        }
     }
 
     // MARK: - 画布
@@ -314,22 +323,24 @@ struct BeadPreviewPane: View {
             .clipShape(RoundedRectangle(cornerRadius: BeadRadius.lg, style: .continuous))
             // 全项目唯一一处投影：作品压在台面上的那点重量。
             .beadProductShadow()
-            // 落笔放大镜浮在作品上（在裁剪之后，允许轻微越出预览框边缘）。
-            .overlay(alignment: .topLeading) { paintLoupeOverlay(in: viewport) }
+            // 放大镜浮在作品上（在裁剪之后，允许轻微越出预览框边缘）。
+            .overlay(alignment: .topLeading) { loupeOverlay(in: viewport) }
         }
     }
 
-    /// 放大镜只在落笔时出现（画笔 / 橡皮），取色不需要。
+    /// 放大镜在落笔（画笔 / 橡皮）与取色时都出现；取色多一行吸到的色号。
     @ViewBuilder
-    private func paintLoupeOverlay(in viewport: CGSize) -> some View {
-        if let loupe = paintLoupe, let grid = model.grid {
-            BeadPaintLoupe(
+    private func loupeOverlay(in viewport: CGSize) -> some View {
+        if let anchor = loupe, let grid = model.grid {
+            BeadLoupe(
                 grid: grid,
                 rect: model.visibleRect,
-                col: loupe.col,
-                row: loupe.row,
-                touch: loupe.screen,
+                col: anchor.col,
+                row: anchor.row,
+                touch: anchor.screen,
                 viewport: viewport,
+                showsReadout: pickingEnabled,
+                pickedCode: anchor.pickedCode,
                 appearance: BeadAppearance(colorScheme)
             )
         }
@@ -361,7 +372,6 @@ struct BeadPreviewPane: View {
         .contentShape(Rectangle())
         .gesture(flatDragGesture)
         .simultaneousGesture(magnifyGesture)
-        .simultaneousGesture(singleTapGesture)
         .simultaneousGesture(doubleTapGesture)
     }
 
@@ -647,9 +657,23 @@ struct BeadPreviewPane: View {
         model.isEditing && (model.tool == .brush || model.tool == .eraser)
     }
 
+    /// 取色也是「单指按住格子」的操作，所以和落笔共用同一条拖动：按到哪格就吸哪格，
+    /// 拖动过程中连续吸（放大镜里能看清格与色号），松手停在最后一格。
+    private var pickingEnabled: Bool {
+        model.isEditing && model.tool == .dropper
+    }
+
     private var flatDragGesture: some Gesture {
         DragGesture(minimumDistance: 0)
             .onChanged { value in
+                if pickingEnabled {
+                    if !isPicking {
+                        isPicking = true
+                        settleTransform()
+                    }
+                    updateLoupe(at: value.location)
+                    return
+                }
                 if paintingEnabled {
                     if !isPainting {
                         isPainting = true
@@ -657,7 +681,7 @@ struct BeadPreviewPane: View {
                         model.beginStroke(at: contentPoint(value.startLocation))
                     }
                     guard !abortStroke else { return }
-                    updatePaintLoupe(at: value.location)
+                    updateLoupe(at: value.location)
                     model.extendStroke(to: contentPoint(value.location))
                     return
                 }
@@ -674,11 +698,19 @@ struct BeadPreviewPane: View {
                 )
             }
             .onEnded { value in
+                if isPicking {
+                    isPicking = false
+                    loupe = nil
+                    if let code = model.pickColor(at: contentPoint(value.location)) {
+                        model.showHint("取色：%@".loc(code))
+                    }
+                    return
+                }
                 if isPainting {
                     model.endStroke(commit: !abortStroke)
                     isPainting = false
                     abortStroke = false
-                    paintLoupe = nil
+                    loupe = nil
                     return
                 }
                 panning = false
@@ -698,12 +730,14 @@ struct BeadPreviewPane: View {
     private var magnifyGesture: some Gesture {
         MagnifyGesture()
             .onChanged { value in
+                // 双指一进来就作废单指那一笔 / 那一次取色。
                 if isPainting, !abortStroke {
                     abortStroke = true
                     model.endStroke(commit: false)
                     isPainting = false
-                    paintLoupe = nil
                 }
+                isPicking = false
+                loupe = nil
                 if !pinchActive {
                     pinchActive = true
                     settleTransform()
@@ -731,19 +765,8 @@ struct BeadPreviewPane: View {
             }
     }
 
-    private var singleTapGesture: some Gesture {
-        SpatialTapGesture()
-            .onEnded { value in
-                // 非编辑状态：点击预览无反应（高亮只从「豆色」面板进）
-                guard model.isEditing else { return }
-                if model.tool == .dropper {
-                    if let code = model.pickColor(at: contentPoint(value.location)) {
-                        model.showHint("取色：%@".loc(code))
-                    }
-                    return
-                }
-            }
-    }
+    /// 单击 / 按住都交给 `flatDragGesture` 处理（取色走它就是「按到哪格吸哪格，拖动连续吸」），
+    /// 这里只留双击放大。
 
     private var doubleTapGesture: some Gesture {
         SpatialTapGesture(count: 2)
@@ -779,6 +802,35 @@ struct BeadPreviewPane: View {
         }
     }
 
+    /// 预览条 ±：相对当前缩放乘 `factor`，锚点在视口中心（对齐 H5 `stepZoom`）。
+    private func stepZoom(by factor: CGFloat) {
+        guard factor > 0, abs(factor - 1) > 0.001 else { return }
+        if model.viewMode == .threeD {
+            var next = model.camera
+            next.zoom = min(3.5, max(0.45, next.zoom * Double(factor)))
+            withAnimation(.easeInOut(duration: 0.28)) {
+                model.setCamera(next.clamped)
+            }
+            return
+        }
+        guard viewSize.width > 1, viewSize.height > 1 else { return }
+        let minS = fittedScale
+        let s0 = scale
+        let s1 = min(max(minS, s0 * factor), max(minS, Self.maxZoom))
+        guard abs(s1 - s0) > 0.002 else { return }
+        let center = CGPoint(x: viewSize.width * 0.5, y: viewSize.height * 0.5)
+        let content = contentPoint(center)
+        let cell = BeadPreviewCanvas.contentCell * s1
+        let next = clampedOffset(
+            CGSize(
+                width: center.x - (content.x - CGFloat(model.visibleRect.x0)) * cell,
+                height: center.y - (content.y - CGFloat(model.visibleRect.y0)) * cell
+            ),
+            scale: s1
+        )
+        startTransformRun(toScale: s1, toOffset: next, duration: 0.35)
+    }
+
     private func contentPoint(_ screen: CGPoint) -> CGPoint {
         let cell = BeadPreviewCanvas.contentCell * scale
         guard cell > 0 else { return .zero }
@@ -788,18 +840,24 @@ struct BeadPreviewPane: View {
         )
     }
 
-    /// 落笔位置 → 放大镜锚点（格坐标 + 手指在预览框里的位置）。
+    /// 手指位置 → 放大镜锚点（格坐标 + 手指在预览框里的位置）。
     ///
     /// 只认落在可见区域内的点：手指滑出板外时放大镜收起，而不是停在上一格。
-    private func updatePaintLoupe(at location: CGPoint) {
+    /// 取色时顺手读出这一格的色号（**只读**：拖动不改画笔色，松手那一刻才定）。
+    private func updateLoupe(at location: CGPoint) {
         let content = contentPoint(location)
         let col = Int(floor(content.x))
         let row = Int(floor(content.y))
         guard model.visibleRect.contains(x: col, y: row) else {
-            paintLoupe = nil
+            loupe = nil
             return
         }
-        paintLoupe = PaintLoupe(col: col, row: row, screen: location)
+        var picked: String?
+        if pickingEnabled, let grid = model.grid {
+            let cell = grid[col, row]
+            if !cell.isEmpty { picked = cell.code }
+        }
+        loupe = Loupe(col: col, row: row, screen: location, pickedCode: picked)
     }
 
     // MARK: - 3D 手势

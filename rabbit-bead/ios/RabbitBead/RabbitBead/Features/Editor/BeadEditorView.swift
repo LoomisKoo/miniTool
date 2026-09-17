@@ -32,6 +32,9 @@ struct BeadEditorView: View {
     @State private var showSettings = true
     /// 复位请求：+1 让预览区重新适配
     @State private var resetToken = 0
+    /// 步进缩放：token +1 时按 zoomStepFactor 缩放
+    @State private var zoomStepToken = 0
+    @State private var zoomStepFactor: CGFloat = 1
 
     private var store: ProjectStore { ProjectStore.shared }
     private var entitlements: EntitlementStore { EntitlementStore.shared }
@@ -243,7 +246,12 @@ struct BeadEditorView: View {
 
     private var previewShell: some View {
         VStack(spacing: 4) {
-            BeadPreviewPane(model: model, resetToken: resetToken)
+            BeadPreviewPane(
+                model: model,
+                resetToken: resetToken,
+                zoomStepToken: zoomStepToken,
+                zoomStepFactor: zoomStepFactor
+            )
                 .overlay(alignment: .bottom) { BeadHintBanner(hint: model.hint) }
 
             Text(model.metaText)
@@ -257,59 +265,140 @@ struct BeadEditorView: View {
         }
     }
 
-    /// 左下分板翻页，右下视图工具（复位 / 3D）。
+    /// 左下分板翻页，右下视图工具（+ / 复位 / − · 3D）—— 对齐 H5 白底分段模块。
     private var previewBar: some View {
         HStack(spacing: BeadSpace.xs) {
             if model.boardCount > 1 {
-                HStack(spacing: 8) {
-                    pagerButton("chevron.left") { model.previousBoard() }
-                    Text(model.boardLabel)
-                        .beadDigits(14, weight: .medium)
-                        .foregroundStyle(BeadTheme.inkMuted48)
-                        .frame(width: 56)
-                    pagerButton("chevron.right") { model.nextBoard() }
-                    if model.boardIndex >= 0 {
-                        compactBarButton("全图".loc, kind: .neutral) {
-                            model.showAllBoards()
-                        }
-                    }
-                }
+                boardSegment
             }
 
             Spacer(minLength: 0)
 
-            HStack(spacing: 8) {
-                BeadIconButton(systemName: "arrow.counterclockwise", size: 36) { resetView() }
-                    .accessibilityLabel("复位")
-                BeadIconButton(
-                    systemName: "cube",
-                    isOn: model.viewMode == .threeD,
-                    size: 36
-                ) {
-                    model.toggleViewMode()
-                }
-                .accessibilityLabel("3D 预览")
+            HStack(spacing: 6) {
+                zoomSegment
+                threeDButton
             }
         }
         .frame(minHeight: 36)
     }
 
-    private func pagerButton(_ systemName: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: systemName)
-                .font(.system(size: 14, weight: .semibold))
+    /// ‹ 板号 › | 全图
+    private var boardSegment: some View {
+        HStack(spacing: 0) {
+            segmentChevron(systemName: "chevron.left") { model.previousBoard() }
+            Text(model.boardLabel)
+                .font(.system(size: 12, weight: .regular))
                 .foregroundStyle(BeadTheme.inkMuted80)
-                .frame(width: 36, height: 36)
-                .background(
-                    BeadTheme.pearl,
-                    in: RoundedRectangle(cornerRadius: BeadRadius.sm, style: .continuous)
-                )
+                .monospacedDigit()
+                .frame(width: 32, height: 36)
+                .multilineTextAlignment(.center)
+            segmentChevron(systemName: "chevron.right") { model.nextBoard() }
+            if model.boardIndex >= 0 {
+                segmentDivider
+                Button {
+                    model.showAllBoards()
+                } label: {
+                    Text("全图".loc)
+                        .font(.system(size: 12, weight: .regular))
+                        .foregroundStyle(BeadTheme.inkMuted80)
+                        .padding(.horizontal, 10)
+                        .frame(height: 36)
+                }
+                .buttonStyle(BeadPressStyle(pressedScale: 0.96))
+            }
+        }
+        .background(
+            BeadTheme.canvas,
+            in: RoundedRectangle(cornerRadius: BeadRadius.sm, style: .continuous)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: BeadRadius.sm, style: .continuous)
+                .strokeBorder(BeadTheme.hairline, lineWidth: 1)
+        }
+        .animation(.easeInOut(duration: 0.28), value: model.boardIndex >= 0)
+    }
+    private var zoomSegment: some View {
+        HStack(spacing: 0) {
+            segmentGlyph("+") { stepZoom(1.28) }
+            segmentDivider
+            Button { resetView() } label: {
+                Text("复位".loc)
+                    .font(.system(size: 12, weight: .regular))
+                    .foregroundStyle(BeadTheme.inkMuted80)
+                    .padding(.horizontal, 10)
+                    .frame(height: 36)
+            }
+            .buttonStyle(BeadPressStyle(pressedScale: 0.96))
+            .accessibilityLabel("复位")
+            segmentDivider
+            segmentGlyph("−") { stepZoom(1 / 1.28) }
+        }
+        .background(
+            BeadTheme.canvas,
+            in: RoundedRectangle(cornerRadius: BeadRadius.sm, style: .continuous)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: BeadRadius.sm, style: .continuous)
+                .strokeBorder(BeadTheme.hairline, lineWidth: 1)
+        }
+    }
+
+    private var threeDButton: some View {
+        Button {
+            model.toggleViewMode()
+        } label: {
+            Text(model.viewMode == .threeD ? "2D" : "3D")
+                .font(.system(size: 12, weight: .regular))
+                .foregroundStyle(model.viewMode == .threeD ? BeadTheme.onPrimary : BeadTheme.inkMuted80)
+                .padding(.horizontal, 10)
+                .frame(height: 36)
+                .background {
+                    RoundedRectangle(cornerRadius: BeadRadius.sm, style: .continuous)
+                        .fill(model.viewMode == .threeD ? AnyShapeStyle(BeadTheme.primaryGradient) : AnyShapeStyle(BeadTheme.canvas))
+                }
                 .overlay {
                     RoundedRectangle(cornerRadius: BeadRadius.sm, style: .continuous)
-                        .strokeBorder(BeadTheme.hairline, lineWidth: 1)
+                        .strokeBorder(
+                            model.viewMode == .threeD ? Color.clear : BeadTheme.hairline,
+                            lineWidth: 1
+                        )
                 }
         }
-        .buttonStyle(BeadPressStyle(pressedScale: 0.94))
+        .buttonStyle(BeadPressStyle(pressedScale: 0.96))
+        .accessibilityLabel("3D 预览")
+    }
+
+    private var segmentDivider: some View {
+        Rectangle()
+            .fill(BeadTheme.hairline)
+            .frame(width: 1, height: 14)
+    }
+
+    private func segmentChevron(systemName: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(BeadTheme.inkMuted80)
+                .frame(width: 28, height: 36)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(BeadPressStyle(pressedScale: 0.96))
+    }
+
+    private func segmentGlyph(_ text: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(text)
+                .font(.system(size: 18, weight: .regular))
+                .foregroundStyle(BeadTheme.inkMuted80)
+                .frame(width: 36, height: 36)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(BeadPressStyle(pressedScale: 0.96))
+    }
+
+    private func stepZoom(_ factor: CGFloat) {
+        zoomStepFactor = factor
+        zoomStepToken += 1
     }
 
     // MARK: - 设置折叠 + 底栏
@@ -356,7 +445,7 @@ struct BeadEditorView: View {
                         .frame(width: 36, height: 36)
                         .background {
                             RoundedRectangle(cornerRadius: BeadRadius.sm, style: .continuous)
-                                .fill(BeadTheme.pearl)
+                                .fill(BeadTheme.canvas)
                         }
                         .overlay {
                             RoundedRectangle(cornerRadius: BeadRadius.sm, style: .continuous)
@@ -494,7 +583,7 @@ struct BeadEditorView: View {
         case .neutral:
             return isOn
                 ? AnyShapeStyle(BeadTheme.primaryGradient)
-                : AnyShapeStyle(BeadTheme.pearl)
+                : AnyShapeStyle(BeadTheme.canvas)
         }
     }
 
