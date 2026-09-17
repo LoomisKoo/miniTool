@@ -2193,14 +2193,8 @@
     clearBtn.setAttribute('data-clear', '1');
     clearBtn.setAttribute('aria-label', '全选');
     clearBtn.innerHTML =
-      '<span class="colors-clear" aria-hidden="true">' +
-      '<svg viewBox="0 0 24 24" fill="currentColor">' +
-      '<rect x="3.5" y="3.5" width="7.6" height="7.6" rx="1.8"></rect>' +
-      '<rect x="12.9" y="3.5" width="7.6" height="7.6" rx="1.8"></rect>' +
-      '<rect x="3.5" y="12.9" width="7.6" height="7.6" rx="1.8"></rect>' +
-      '<rect x="12.9" y="12.9" width="7.6" height="7.6" rx="1.8"></rect>' +
-      '</svg></span>' +
-      '<span class="colors-item-code">全选</span>';
+      '<span class="colors-clear">' +
+      '<span class="colors-item-code">全部</span></span>';
     els.colorsList.appendChild(clearBtn);
 
     var i;
