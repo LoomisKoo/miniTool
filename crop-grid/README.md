@@ -8,11 +8,11 @@
 - 简介：图片裁切与多宫格分图
 - 图标：`icon.png`
 
-| 平台 | 产物 |
-| --- | --- |
-| 小红书 | `dist/xiaohongshu-qingying.zip` |
-| 抖音 | `dist/douyin-qingying.zip` |
-| 快手 | `dist/kuaishou-qingying.zip` |
+| 平台 | 版本 | 产物 |
+| --- | --- | --- |
+| 小红书 | 1.0.1 | `dist/xiaohongshu-qingying.zip` |
+| 抖音 | — | `dist/douyin-qingying.zip` |
+| 快手 | 1.0.1 | `dist/kuaishou-qingying.zip` |
 
 状态：小红书 / 快手 ✅ 已上线。
 

@@ -48,16 +48,16 @@ miniTool/
 
 | 工具 | 目录 | 小红书 | 抖音 | 快手 | B站 | iOS | 备注 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 焚香计时 | `incense-timer/` | ✅ 已上线 | — | ✅ 已上线 | — | — | `*-incense-timer.zip` |
-| 轻映 | `crop-grid/` | ✅ 已上线 | — | ✅ 已上线 | — | 未开始 | 名称「轻映」· `*-qingying.zip` |
-| 兔格拼豆 | `rabbit-bead/` | ✅ 已上线 | — | ✅ 已上线 | — | 开发中 1.0.0 | 1.0.1 · `*-rabbit-bead.zip` · iOS 已对齐 H5 主要功能（含 3D / 手绘 / 分板） |
+| 焚香计时 | `incense-timer/` | ✅ 已上线 1.0.1 | — | ✅ 已上线 1.0.1 | — | — | `*-incense-timer.zip` |
+| 轻映 | `crop-grid/` | ✅ 已上线 1.0.1 | — | ✅ 已上线 1.0.1 | — | 未开始 | 名称「轻映」· `*-qingying.zip` |
+| 兔格拼豆 | `rabbit-bead/` | 审核中 1.0.4 | — | 审核中 1.0.4 | — | 开发中 1.0.0 | `*-rabbit-bead.zip` · iOS 已对齐 H5 主要功能（含 3D / 手绘 / 分板） |
 | 彩码 | `colorqr/` | — | — | — | — | 未开始 | 开发中 · 含花束模式 · `*-colorqr.zip` |
-| 星空跳一跳 | `xingkong-jump/` | ✅ 已上线 | — | ✅ 已上线 | — | — | 简介「跳一跳星空改良版」· `*-xingkong-jump.zip` |
-| 纸灯夜航 | `paper-lantern/` | ✅ 已上线 | — | ✅ 已上线 | — | — | 简介「休闲小游戏，杀时间必备」· `*-paper-lantern.zip` |
+| 星空跳一跳 | `xingkong-jump/` | ✅ 已上线 1.0.1 | — | ✅ 已上线 1.0.1 | — | — | 简介「跳一跳星空改良版」· `*-xingkong-jump.zip` |
+| 纸灯夜航 | `paper-lantern/` | ✅ 已上线 1.0.2 | — | ✅ 已上线 1.0.2 | — | — | 简介「休闲小游戏，杀时间必备」· `*-paper-lantern.zip` |
 | 图轻 | `tuqing/` | — | — | — | — | 未开始 | 开发中 · 图片瘦身防二次压缩 · `*-tuqing.zip` |
-| 美食地图 | `food-map/` | — | — | — | — | — | 开发中 · 简介「地图上看懂各地饮食」· `*-meishitujian.zip` |
-| 风铃物语 | `wind-chime/` | ✅ 已上线 | — | ✅ 已上线 | — | — | 治愈系梦幻风铃 · `*-wind-chime.zip` |
-| 爆红书 | `baohongshu/` | — | — | — | — | — | 简介「模拟爆红，看笔记从零涨到爆」· `*-baohongshu.zip` |
+| 美食地图 | `food-map/` | ✅ 已上线 1.0.0 | — | ✅ 已上线 1.0.0 | — | — | 简介「地图上看懂各地饮食」· `*-meishitujian.zip` |
+| 风铃物语 | `wind-chime/` | ✅ 已上线 1.0.0 | — | ✅ 已上线 1.0.0 | — | — | 治愈系梦幻风铃 · `*-wind-chime.zip` |
+| 爆红书 | `baohongshu/` | ✅ 已上线 1.0.0 | — | ✅ 已上线 1.0.0 | — | — | 简介「模拟爆红，看笔记从零涨到爆」· `*-baohongshu.zip` |
 | 观影座舱 | `cinema-seat/` | — | — | — | — | — | 开发中 · 第一视角影厅观感模拟 · `*-cinema-seat.zip` |
 | 取名馆 | `naming/` | — | — | — | — | — | 开发中 · 性格测试取名 / 外文名转中文名 · `*-naming.zip` |
 

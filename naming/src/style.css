@@ -906,14 +906,18 @@ body.has-dock-quiz .to-top { bottom: calc(var(--safe-bottom) + 92px); }
 
 /* ── 收藏 ─────────────────────────────── */
 /* 收藏页只当列表用：一条一行，尽量薄 */
-.fav-card { padding: 4px 14px; }
+.fav-card {
+  padding: 0;
+  overflow: hidden;
+}
 /* 整行是一条：手指落在行的任何位置（名字、右边那颗心、两者之间的空隙）都算同一行，
    按下时整行一起变底色 —— 只让名字那一块亮的话，右边空档按下去像没反应。 */
 .fav-row {
   position: relative;
   display: flex; align-items: center; gap: 6px;
+  padding: 0 18px;
   border-bottom: 1px solid var(--line-2);
-  border-radius: var(--r-sm);
+  border-radius: 0;
   transition: background 0.12s ease;
 }
 .fav-row:last-of-type { border-bottom: none; }
@@ -921,8 +925,8 @@ body.has-dock-quiz .to-top { bottom: calc(var(--safe-bottom) + 92px); }
 /* 行内那颗「打开」按钮铺满行高，自己不再上底色（底色归整行管） */
 .fav-open {
   flex: 1; min-width: 0; display: flex; align-items: center;
-  padding: 13px 2px; border: none; background: none; text-align: left;
-  font-family: inherit; color: var(--ink); border-radius: var(--r-sm);
+  padding: 13px 0; border: none; background: none; text-align: left;
+  font-family: inherit; color: var(--ink); border-radius: 0;
 }
 .fav-body { flex: 1; min-width: 0; }
 .fav-body b {

@@ -8,10 +8,10 @@
 
 ## 状态
 
-| 平台 | 状态 | 产物 |
-| --- | --- | --- |
-| 小红书 | ✅ 已上线 | `dist/xiaohongshu-paper-lantern.zip` |
-| 快手 | ✅ 已上线 | `dist/kuaishou-paper-lantern.zip` |
+| 平台 | 状态 | 版本 | 产物 |
+| --- | --- | --- | --- |
+| 小红书 | ✅ 已上线 | 1.0.2 | `dist/xiaohongshu-paper-lantern.zip` |
+| 快手 | ✅ 已上线 | 1.0.2 | `dist/kuaishou-paper-lantern.zip` |
 
 ## 打包
 

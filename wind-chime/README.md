@@ -8,11 +8,11 @@
 
 ## 状态
 
-| 平台 | 状态 | 产物 |
-| --- | --- | --- |
-| 小红书 | ✅ 已上线 | `dist/xiaohongshu-wind-chime.zip` |
-| 抖音 | 未上架 | `dist/douyin-wind-chime.zip` |
-| 快手 | ✅ 已上线 | `dist/kuaishou-wind-chime.zip` |
+| 平台 | 状态 | 版本 | 产物 |
+| --- | --- | --- | --- |
+| 小红书 | ✅ 已上线 | 1.0.0 | `dist/xiaohongshu-wind-chime.zip` |
+| 抖音 | 未上架 | — | `dist/douyin-wind-chime.zip` |
+| 快手 | ✅ 已上线 | 1.0.0 | `dist/kuaishou-wind-chime.zip` |
 
 ## 场景
 

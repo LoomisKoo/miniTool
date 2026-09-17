@@ -18,9 +18,9 @@
 
 | 平台 | 状态 | 版本 | 产物 |
 | --- | --- | --- | --- |
-| 小红书 | ✅ 已上线 | — | `dist/xiaohongshu-incense-timer.zip` |
+| 小红书 | ✅ 已上线 | 1.0.1 | `dist/xiaohongshu-incense-timer.zip` |
 | 抖音 | 未上架 | — | `dist/douyin-incense-timer.zip` |
-| 快手 | ✅ 已上线 | — | `dist/kuaishou-incense-timer.zip` |
+| 快手 | ✅ 已上线 | 1.0.1 | `dist/kuaishou-incense-timer.zip` |
 
 发版后在此更新版本号，并同步根目录总表。
 

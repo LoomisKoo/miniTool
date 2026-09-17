@@ -28,11 +28,11 @@
 
 仓库根目录有跨项目 [发布总表](../README.md#发布总表)；此处只记本工具。
 
-| 平台 | 状态 | 产物 |
-| --- | --- | --- |
-| 小红书 | 未上架 | `dist/xiaohongshu-baohongshu.zip` |
-| 抖音 | 未上架 | `dist/douyin-baohongshu.zip` |
-| 快手 | 未上架 | `dist/kuaishou-baohongshu.zip` |
+| 平台 | 状态 | 版本 | 产物 |
+| --- | --- | --- | --- |
+| 小红书 | ✅ 已上线 | 1.0.0 | `dist/xiaohongshu-baohongshu.zip` |
+| 抖音 | 未上架 | — | `dist/douyin-baohongshu.zip` |
+| 快手 | ✅ 已上线 | 1.0.0 | `dist/kuaishou-baohongshu.zip` |
 
 ## 平台顶部适配（小红书 vs 快手）
 

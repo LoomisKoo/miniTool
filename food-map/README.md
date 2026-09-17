@@ -56,3 +56,11 @@ node build.mjs xiaohongshu         # 仅小红书
 | 简介 | 地图上看懂各地饮食 |
 | 图标 | `assets/icon.jpg`（1024×1024，定位钉 + 碗饭） |
 | 封面海报 | `covers/美食地图_封面.jpg`（1024×1365，3:4） |
+
+### 发布状态
+
+| 平台 | 状态 | 版本 | 产物 |
+| --- | --- | --- | --- |
+| 小红书 | ✅ 已上线 | 1.0.0 | `dist/xiaohongshu-meishitujian.zip` |
+| 抖音 | 未上架 | — | `dist/douyin-meishitujian.zip` |
+| 快手 | ✅ 已上线 | 1.0.0 | `dist/kuaishou-meishitujian.zip` |
