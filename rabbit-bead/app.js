@@ -1171,8 +1171,8 @@
       }
     }
 
-    if (forExport && cell >= 22 && state.exp.codes) {
-      targetCtx.font = Math.max(8, (cell * 0.32) | 0) + 'px sans-serif';
+    if (forExport && state.exp.codes) {
+      targetCtx.font = Math.max(6, (cell * 0.32) | 0) + 'px sans-serif';
       targetCtx.textAlign = 'center';
       targetCtx.textBaseline = 'middle';
       for (y = y0; y < y1; y++) {
@@ -1180,7 +1180,7 @@
           var bead = mapped[y * w + x];
           if (isEmptyCell(bead)) continue;
           var lum = bead.r * 0.299 + bead.g * 0.587 + bead.b * 0.114;
-          targetCtx.fillStyle = lum > 160 ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.75)';
+          targetCtx.fillStyle = lum > 160 ? 'rgba(0,0,0,0.88)' : 'rgba(255,255,255,0.95)';
           targetCtx.fillText(
             bead.code,
             (x - x0) * cell + cell / 2,
@@ -1188,6 +1188,17 @@
           );
         }
       }
+    }
+
+    if (forExport) {
+      targetCtx.strokeStyle = EXPORT_GRID_COLOR;
+      targetCtx.lineWidth = Math.max(1, Math.round(cell / 18));
+      targetCtx.strokeRect(
+        targetCtx.lineWidth / 2,
+        targetCtx.lineWidth / 2,
+        canvasW - targetCtx.lineWidth,
+        canvasH - targetCtx.lineWidth
+      );
     }
   }
 
@@ -3363,6 +3374,8 @@
     var padBottom = Math.max(pad + 24, Math.round(cell * 1.4));
     var axisTop = axes ? Math.max(28, Math.round(cell * 0.85)) : 0;
     var axisLeft = axes ? Math.max(40, Math.round(cell * 1.0)) : 0;
+    var axisBottom = axes ? axisTop : 0;
+    var axisRight = axes ? axisLeft : 0;
     var titleSize = Math.max(28, Math.round(cell * 0.58));
     var subSize = Math.max(18, Math.round(cell * 0.4));
     var tipSize = Math.max(14, Math.round(cell * 0.3));
@@ -3379,23 +3392,26 @@
     var itemW = sw;
     var patternW = pw * cell;
     var patternH = ph * cell;
-    var outW = pad + axisLeft + patternW + pad;
+    var outW = pad + axisLeft + patternW + axisRight + pad;
     var innerW = outW - pad * 2;
     var maxCols = showLegend && legendCount
       ? Math.max(1, Math.floor((innerW + itemGapX) / (itemW + itemGapX)))
       : 1;
     var legendCols = showLegend && legendCount ? Math.min(maxCols, legendCount) : 1;
     var legendRows = showLegend && legendCount ? Math.ceil(legendCount / legendCols) : 0;
-    var legendTop = pad + metaH + axisTop + patternH + (legendRows ? Math.round(cell * 0.55) : 0);
+    var legendTop = pad + metaH + axisTop + patternH + axisBottom +
+      (legendRows ? Math.round(cell * 0.55) : 0);
     var legendH = legendRows ? legendRows * (itemH + itemGapY) - itemGapY : 0;
     var outH = (showLegend && legendCount)
       ? legendTop + legendH + padBottom
-      : pad + metaH + axisTop + patternH + padBottom;
+      : pad + metaH + axisTop + patternH + axisBottom + padBottom;
     return {
       pad: pad,
       padBottom: padBottom,
       axisTop: axisTop,
       axisLeft: axisLeft,
+      axisBottom: axisBottom,
+      axisRight: axisRight,
       metaH: metaH,
       titleSize: titleSize,
       subSize: subSize,
@@ -3540,6 +3556,40 @@
         var rowCy = y0 + j * cell + cell / 2;
         octx.fillStyle = 'rgba(0,0,0,0.08)';
         octx.fillRect(x0 - 2, rowCy - 0.5, 4, 1);
+        octx.fillStyle = '#333';
+      }
+
+      // 下方列号与右侧行号：每个刻度都和对应格子中心对齐。
+      octx.textAlign = 'center';
+      octx.textBaseline = 'middle';
+      octx.font = axFont(colLabels.font);
+      for (i = 0; i < pw; i += colLabels.step) {
+        octx.fillText(
+          String(rect.x0 + i + 1),
+          x0 + i * cell + cell / 2,
+          y0 + ph * cell + m.axisBottom / 2
+        );
+      }
+      for (i = 0; i < pw; i++) {
+        var bottomCx = x0 + i * cell + cell / 2;
+        octx.fillStyle = 'rgba(0,0,0,0.08)';
+        octx.fillRect(bottomCx - 0.5, y0 + ph * cell - 2, 1, 4);
+        octx.fillStyle = '#333';
+      }
+
+      octx.textAlign = 'left';
+      octx.font = axFont(rowLabels.font);
+      for (j = 0; j < ph; j += rowLabels.step) {
+        octx.fillText(
+          String(rect.y0 + j + 1),
+          x0 + pw * cell + 8,
+          y0 + j * cell + cell / 2
+        );
+      }
+      for (j = 0; j < ph; j++) {
+        var rightCy = y0 + j * cell + cell / 2;
+        octx.fillStyle = 'rgba(0,0,0,0.08)';
+        octx.fillRect(x0 + pw * cell - 2, rightCy - 0.5, 4, 1);
         octx.fillStyle = '#333';
       }
       octx.textAlign = 'start';
