@@ -10,9 +10,9 @@
 
 | 平台 | 状态 | 产物 |
 | --- | --- | --- |
-| 小红书 | 待提审 | `dist/xiaohongshu-wind-chime.zip` |
+| 小红书 | ✅ 已上线 | `dist/xiaohongshu-wind-chime.zip` |
 | 抖音 | 未上架 | `dist/douyin-wind-chime.zip` |
-| 快手 | 待提审 | `dist/kuaishou-wind-chime.zip` |
+| 快手 | ✅ 已上线 | `dist/kuaishou-wind-chime.zip` |
 
 ## 场景
 

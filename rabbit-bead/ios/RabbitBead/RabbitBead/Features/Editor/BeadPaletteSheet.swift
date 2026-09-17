@@ -29,7 +29,7 @@ struct BeadSheetOptionRow: View {
                 }
             }
             .padding(.horizontal, 16)
-            .frame(height: 48)
+            .frame(height: 44)
             .background(
                 RoundedRectangle(cornerRadius: BeadRadius.md, style: .continuous)
                     .fill(isSelected ? BeadTheme.accentSoft : BeadTheme.canvas)
@@ -43,7 +43,7 @@ struct BeadSheetOptionRow: View {
             }
             .contentShape(Rectangle())
         }
-        .buttonStyle(BeadPressStyle(pressedScale: 0.99))
+        .buttonStyle(.automatic)
     }
 }
 
@@ -59,11 +59,11 @@ struct BeadPickerSheet<Content: View>: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                LazyVStack(spacing: 0) {
-                    content()
-                }
+            List {
+                content()
             }
+            .listStyle(.insetGrouped)
+            .scrollContentBackground(.hidden)
             .background {
                 BeadTheme.parchmentGradient.ignoresSafeArea()
             }
@@ -85,7 +85,7 @@ struct BeadSheetRowDivider: View {
     var body: some View {
         Rectangle()
             .fill(Color.clear)
-            .frame(height: 8)
+            .frame(height: 4)
     }
 }
 
@@ -98,7 +98,7 @@ struct BeadPaletteSheet: View {
 
     var body: some View {
         BeadPickerSheet(title: "色卡".loc) {
-            ForEach(Array(PaletteLibrary.all.enumerated()), id: \.element.id) { index, palette in
+            ForEach(PaletteLibrary.all) { palette in
                 BeadSheetOptionRow(
                     title: palette.name,
                     detail: "%ld 色".loc(palette.colors.count),
@@ -107,12 +107,8 @@ struct BeadPaletteSheet: View {
                     onSelect(palette.id)
                     dismiss()
                 }
-                if index < PaletteLibrary.all.count - 1 {
-                    BeadSheetRowDivider()
-                }
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
+            .padding(.horizontal, 12)
         }
         .presentationDetents([.medium])
         .presentationDragIndicator(.visible)
@@ -148,8 +144,16 @@ struct BeadBoardSizeSheet: View {
             .navigationTitle("拼板规格")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("完成") { dismiss() }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 14, weight: .bold))
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(BeadTheme.primary)
+                    .accessibilityLabel("完成".loc)
                 }
             }
             .toolbarBackground(.visible, for: .navigationBar)
@@ -183,7 +187,7 @@ struct BeadBoardSizeSheet: View {
                         )
                 }
         }
-        .buttonStyle(BeadPressStyle(pressedScale: 0.97))
+                        .buttonStyle(.automatic)
         .accessibilityLabel(option.title)
     }
 }

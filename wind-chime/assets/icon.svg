@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <!-- night sky vertical gradient (colors from envCanvas) -->
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0b0d26"/>
+      <stop offset="0.55" stop-color="#1a1e4e"/>
+      <stop offset="1" stop-color="#2e2a5e"/>
+    </linearGradient>
+    <!-- far hills mist -->
+    <linearGradient id="mist" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#141a3c" stop-opacity="0"/>
+      <stop offset="1" stop-color="#141a3c" stop-opacity="0.55"/>
+    </linearGradient>
+    <!-- rod: dark wood -->
+    <linearGradient id="rod" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#9a7b57"/>
+      <stop offset="0.5" stop-color="#7d5f3e"/>
+      <stop offset="1" stop-color="#5f452a"/>
+    </linearGradient>
+    <!-- tube: slightly wider bottom (Cylinder rTop=0.92r), left gloss + right shade -->
+    <linearGradient id="tubeA" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#f4f9fb"/>
+      <stop offset="0.2" stop-color="#dfe9ee"/>
+      <stop offset="0.62" stop-color="#c7d4dc"/>
+      <stop offset="0.85" stop-color="#8fa0ac"/>
+      <stop offset="1" stop-color="#5c6a76"/>
+    </linearGradient>
+    <linearGradient id="tubeB" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#fbf3e0"/>
+      <stop offset="0.2" stop-color="#f0dbb0"/>
+      <stop offset="0.62" stop-color="#ddc087"/>
+      <stop offset="0.85" stop-color="#a98f5e"/>
+      <stop offset="1" stop-color="#6f5b36"/>
+    </linearGradient>
+    <linearGradient id="tubeC" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#fdecf0"/>
+      <stop offset="0.2" stop-color="#f4d3db"/>
+      <stop offset="0.62" stop-color="#e0b2bc"/>
+      <stop offset="0.85" stop-color="#aa7f8a"/>
+      <stop offset="1" stop-color="#6b4a53"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1024" height="1024" fill="url(#sky)"/>
+
+  <!-- stars -->
+  <g fill="#dbe4ff">
+    <circle cx="620" cy="120" r="2.6" opacity="0.8"/>
+    <circle cx="720" cy="210" r="1.8" opacity="0.5"/>
+    <circle cx="830" cy="120" r="2.2" opacity="0.7"/>
+    <circle cx="910" cy="260" r="1.6" opacity="0.45"/>
+    <circle cx="500" cy="240" r="1.5" opacity="0.4"/>
+    <circle cx="370" cy="120" r="1.7" opacity="0.55"/>
+    <circle cx="150" cy="470" r="1.5" opacity="0.5"/>
+    <circle cx="760" cy="430" r="2.4" opacity="0.6"/>
+    <circle cx="940" cy="520" r="1.8" opacity="0.45"/>
+    <circle cx="60" cy="320" r="1.7" opacity="0.5"/>
+    <circle cx="480" cy="120" r="1.5" opacity="0.4"/>
+    <circle cx="880" cy="330" r="1.6" opacity="0.4"/>
+    <circle cx="250" cy="160" r="1.4" opacity="0.4"/>
+    <circle cx="180" cy="330" r="1.6" opacity="0.4"/>
+  </g>
+
+  <!-- far hills mist -->
+  <path d="M0 920 Q 210 840 460 912 T 1024 880 L1024 1024 L0 1024 Z" fill="url(#mist)"/>
+
+  <!-- 3 strands (rope + one long tube each), hang from rod -->
+  <line x1="330" y1="302" x2="330" y2="352" stroke="#b3a184" stroke-width="6"/>
+  <line x1="512" y1="302" x2="512" y2="352" stroke="#b3a184" stroke-width="6"/>
+  <line x1="694" y1="302" x2="694" y2="352" stroke="#b3a184" stroke-width="6"/>
+
+  <!-- long tubes: narrower top, wider bottom, open end glow; near full height -->
+  <path d="M312 352 L310 830 Q309.6 840 317 840.8 L343 840.8 Q350.4 840 350 830 L348 352 Q348 344 342 344 L318 344 Q312 344 312 352 Z" fill="url(#tubeA)"/>
+  <path d="M494 352 L492 830 Q491.6 840 499 840.8 L525 840.8 Q532.4 840 532 830 L530 352 Q530 344 524 344 L500 344 Q494 344 494 352 Z" fill="url(#tubeB)"/>
+  <path d="M676 352 L674 830 Q673.6 840 681 840.8 L707 840.8 Q714.4 840 714 830 L712 352 Q712 344 706 344 L682 344 Q676 344 676 352 Z" fill="url(#tubeC)"/>
+  <!-- tube mouth bottom highlight -->
+  <ellipse cx="330" cy="836" rx="15" ry="3" fill="#eef2f6" opacity="0.8"/>
+  <ellipse cx="512" cy="836" rx="15" ry="3" fill="#fdf6e2" opacity="0.8"/>
+  <ellipse cx="694" cy="836" rx="15" ry="3" fill="#fdeef1" opacity="0.8"/>
+  <!-- small rings under rod -->
+  <circle cx="330" cy="308" r="4.5" fill="none" stroke="#8fa0ac" stroke-width="3"/>
+  <circle cx="512" cy="308" r="4.5" fill="none" stroke="#8fa0ac" stroke-width="3"/>
+  <circle cx="694" cy="308" r="4.5" fill="none" stroke="#8fa0ac" stroke-width="3"/>
+
+  <!-- wooden rod with round knobs -->
+  <rect x="112" y="274" width="800" height="28" rx="14" fill="url(#rod)"/>
+  <rect x="112" y="274" width="800" height="28" rx="14" fill="none" stroke="#4a331c" stroke-opacity="0.5" stroke-width="2"/>
+  <circle cx="112" cy="288" r="26" fill="url(#rod)" stroke="#4a331c" stroke-opacity="0.5" stroke-width="2"/>
+  <circle cx="912" cy="288" r="26" fill="url(#rod)" stroke="#4a331c" stroke-opacity="0.5" stroke-width="2"/>
+  <!-- rod highlight only between the two knobs (138..886) -->
+  <rect x="138" y="276" width="748" height="6" rx="3" fill="#fff" opacity="0.12"/>
+</svg>

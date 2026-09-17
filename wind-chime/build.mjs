@@ -40,11 +40,13 @@ function assertXhs(html) {
 
 function report(cfg, platformId, outDir, zipPath) {
   const fmt = n => `${(n / 1024).toFixed(1)} KB`;
-  const files = ['index.html', 'style.css', 'app.js', 'three.min.js', 'assets/icon.jpg'];
+  const files = ['index.html', 'style.css', 'app.js', 'three.min.js', 'assets/icon.jpg', 'assets/bgm.mp3'];
   const sizes = {};
   let total = 0;
   for (const f of files) {
-    const n = fs.statSync(path.join(outDir, f)).size;
+    const p = path.join(outDir, f);
+    if (!fs.existsSync(p)) continue;
+    const n = fs.statSync(p).size;
     sizes[f] = n;
     total += n;
   }
@@ -88,14 +90,33 @@ ${body}
 </html>
 `;
 
-  assertOffline(html + style + app);
+  // 小红书 / 快手：不放独立音频，把压缩 AAC 嵌进 app.js（base64）
+  // 抖音仍复制 assets/bgm.mp3
+  const embedBgm = platformId === 'xiaohongshu' || platformId === 'kuaishou';
+  let appOut = app;
+  if (embedBgm) {
+    const embedSrc = path.join(__dirname, 'assets/bgm.xhs.m4a');
+    if (!fs.existsSync(embedSrc)) {
+      throw new Error('缺少 assets/bgm.xhs.m4a（内嵌 BGM）');
+    }
+    const b64 = fs.readFileSync(embedSrc).toString('base64');
+    appOut = app
+      .replace("const BGM_URL = 'assets/bgm.mp3';", "const BGM_URL = '';")
+      .replace("const BGM_DATA = '';", `const BGM_DATA = '${b64}';`);
+  }
+
+  assertOffline(html + style + appOut.replace(/const BGM_DATA = '[^']*';/, "const BGM_DATA = '';"));
   if (platformId === 'xiaohongshu') assertXhs(html);
 
   fs.writeFileSync(path.join(outDir, 'index.html'), html);
   fs.writeFileSync(path.join(outDir, 'style.css'), style);
-  fs.writeFileSync(path.join(outDir, 'app.js'), app);
+  fs.writeFileSync(path.join(outDir, 'app.js'), appOut);
   fs.writeFileSync(path.join(outDir, 'three.min.js'), three);
   fs.copyFileSync(iconSrc, path.join(outDir, 'assets/icon.jpg'));
+  const bgmSrc = path.join(__dirname, 'assets/bgm.mp3');
+  if (!embedBgm && fs.existsSync(bgmSrc)) {
+    fs.copyFileSync(bgmSrc, path.join(outDir, 'assets/bgm.mp3'));
+  }
 
   const zipPath = path.join(__dirname, 'dist', `${platformId}-wind-chime.zip`);
   if (fs.existsSync(zipPath)) fs.unlinkSync(zipPath);

@@ -23,6 +23,12 @@ node build.mjs <平台>        # 仅单个平台
 
 产物：`dist/{平台}-{工具}.zip`（`dist/` 已在 `.gitignore` 中忽略）。
 
+## 小红书容器能力
+
+- 官方：[小工具容器能力清单](https://miniapp-sandbox.xiaohongshu.com/minitool/doc)（可用 / 不可用能力、端能力 JS API、FAQ）
+- 本地速查：[`xiaohongshu/guidelines.md` §端能力速查](../../xiaohongshu/guidelines.md)；字段级契约见 [`jsbridge-api.md`](../../xiaohongshu/minitool-zip-builder/references/jsbridge-api.md)
+- 要点：持久化首选 **Storage JS API**（客户端 ≥ 9.46.0，单 key 1MB / 总量 10MB），`localStorage` 仅作低版本降级；导出图片走 `writeTempFile` + `saveImageToPhotosAlbum`（`a[download]` 已禁用）。
+
 ## 与 iOS 的边界
 
 内容平台规范只约束 **H5 小工具**。iOS 原生 App 走 App Store 流程，见 [../ios/README.md](../ios/README.md)。

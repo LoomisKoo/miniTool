@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#000000">
+<title>积木搭建</title>
+
+<link rel="stylesheet" href="src/style.css">
+</head>
+<body>
+<div id="stage"></div>
+
+<header id="hud">
+  <div class="brand">积木搭建</div>
+  <div class="status-pill" id="statusPill">放置模式 · 轻点落砖 · 滑动转视角</div>
+  <div class="hud-tools">
+    <button class="icon-btn" id="fieldBtn" type="button" aria-label="场地" title="场地">
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M3 3h8v8H3V3zm10 0h8v8h-8V3zM3 13h8v8H3v-8zm10 0h8v8h-8v-8z"/></svg>
+    </button>
+    <button class="icon-btn" id="undoBtn" type="button" aria-label="撤销" title="撤销">
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M12.5 8c-2.7 0-5.1 1-7 2.7L3 8v8h8l-2.3-2.3c1.4-1.3 3.3-2.2 5.3-2.2 3.3 0 6.1 2.1 7.1 5.1l2.2-.7C21.8 11.5 17.6 8 12.5 8z"/></svg>
+    </button>
+    <button class="icon-btn" id="redoBtn" type="button" aria-label="前进" title="前进">
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M11.5 8c2.7 0 5.1 1 7 2.7L21 8v8h-8l2.3-2.3c-1.4-1.3-3.3-2.2-5.3-2.2-3.3 0-6.1 2.1-7.1 5.1l-2.2-.7C2.2 11.5 6.4 8 11.5 8z"/></svg>
+    </button>
+    <button class="icon-btn" id="clearBtn" type="button" aria-label="清空" title="清空">
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+    </button>
+    <button class="icon-btn" id="shotBtn" type="button" aria-label="截图" title="截图">
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M12 15.2A3.2 3.2 0 1 0 12 8.8a3.2 3.2 0 0 0 0 6.4zM9 2 7.2 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-3.2L15 2H9z"/></svg>
+    </button>
+  </div>
+</header>
+
+<div id="selBar" hidden>
+  <div class="sel-meta">
+    <span class="sel-dot"></span>
+    <span class="sel-label" id="selLabel">已选中</span>
+  </div>
+  <div class="sel-actions">
+    <button class="sel-ico" id="selRotate" type="button" aria-label="旋转" title="旋转">
+      <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 5V1L7 6l5 5V7c3.3 0 6 2.7 6 6a6 6 0 0 1-6 6 6 6 0 0 1-6-6H4a8 8 0 0 0 8 8 8 8 0 0 0 8-8c0-4.4-3.6-8-8-8z"/></svg>
+    </button>
+    <button class="sel-ico danger" id="selDelete" type="button" aria-label="删除" title="删除">
+      <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+    </button>
+    <button class="sel-ico" id="selDeselect" type="button" aria-label="取消" title="取消">
+      <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M18.3 5.7 12 12l6.3 6.3-1.4 1.4L10.6 13.4 4.3 19.7 2.9 18.3 9.2 12 2.9 5.7 4.3 4.3l6.3 6.3 6.3-6.3z"/></svg>
+    </button>
+  </div>
+</div>
+
+<footer id="dock">
+  <div class="dock-inner">
+    <div class="row bricks" id="brickRow"></div>
+    <div class="dock-bar">
+      <div class="row colors" id="colorRow"></div>
+      <div class="dock-tools">
+        <button class="tool-btn" id="editBtn" type="button" aria-label="编辑" title="编辑">
+          <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M3 17.3V21h3.8l11-11.1-3.7-3.7L3 17.3zM20.7 7c.4-.4.4-1 0-1.4l-2.3-2.3a1 1 0 0 0-1.4 0l-1.8 1.8 3.7 3.7L20.7 7z"/></svg>
+        </button>
+        <button class="tool-btn" id="rotBtn" type="button" aria-label="换向" title="换向">
+          <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 5V1L7 6l5 5V7c3.3 0 6 2.7 6 6s-2.7 6-6 6-6-2.7-6-6H4c0 4.4 3.6 8 8 8s8-3.6 8-8-3.6-8-8-8z"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<div id="toast"></div>
+
+<div class="overlay sheet-ov" id="fieldOv">
+  <div class="panel sheet field-panel" role="dialog" aria-modal="true" aria-label="扩展场地">
+    <div class="sheet-grab"></div>
+    <h2>扩展场地</h2>
+    <p class="panel-sub">当前 <b id="fieldSize">50 × 50</b> · 每次加宽 30 · 上限 300</p>
+    <div class="fp-grid">
+      <button class="fp-btn fp-up" id="expNegZ" type="button" aria-label="向上加宽">＋</button>
+      <button class="fp-btn fp-left" id="expNegX" type="button" aria-label="向左加宽">＋</button>
+      <div class="fp-core">场地</div>
+      <button class="fp-btn fp-right" id="expPosX" type="button" aria-label="向右加宽">＋</button>
+      <button class="fp-btn fp-down" id="expPosZ" type="button" aria-label="向下加宽">＋</button>
+    </div>
+    <p class="fp-hint">点对应边的 ＋ 加宽该方向</p>
+    <button class="btn" id="fieldClose" type="button">完成</button>
+  </div>
+</div>
+
+<div class="overlay" id="clearOv">
+  <div class="panel">
+    <h2>清空全部积木？</h2>
+    <p class="panel-sub">此操作可通过「撤销」找回最近一次清空前的状态。</p>
+    <button class="btn danger" id="clearConfirm" type="button">确认清空</button>
+    <button class="btn ghost" id="clearCancel" type="button">取 消</button>
+  </div>
+</div>
+
+<div class="overlay show" id="startOv">
+  <div class="panel">
+    <h1>积木搭建</h1>
+    <ul id="jimuGuide">
+      <li><b>轻点</b>场地或砖顶 → 放置积木</li>
+      <li><b>滑动</b>屏幕 → 旋转视角（任意模式）</li>
+      <li>点「编辑」后，轻点已放积木可选中编辑</li>
+      <li>「换向」旋转下一块砖的朝向</li>
+      <li>双指 pinch 缩放</li>
+    </ul>
+    <button class="btn" id="startBtn" type="button">开始</button>
+  </div>
+</div>
+
+<div class="overlay" id="shotOv">
+  <div class="panel">
+    <h2>作品卡</h2>
+    <div class="shot-wrap"><img id="shotImg" alt="作品卡" /></div>
+    <button class="btn" id="shotSave" type="button">保存图片</button>
+    <button class="btn ghost" id="shotClose" type="button">关闭</button>
+    <p class="hint" id="shotHint"></p>
+  </div>
+</div>
+
+<script src="vendor/three.min.js"></script>
+<script src="src/app.js"></script>
+</body>
+</html>

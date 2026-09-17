@@ -10,8 +10,9 @@
   const PER = 10;                // 节数 +2
   const ANCHOR_Y = 1.9;
   const ROD_Y = ANCHOR_Y - 0.08;
-  let ROD_HALF = 1.12;           // resize 时按屏宽撑满（左右 padding）
-  const ROD_PAD = 0.07;          // 左右各留约 7% 屏宽
+  let ROD_HALF = 1.0;            // resize 时按可见屏宽设定（左右留白）
+  const ROD_PAD = 0.12;          // 左右各留约 12%（小红书 WebView 可视区常窄于 innerWidth）
+  const ROD_TIP = 0.04;          // 两端圆头伸出，算进半宽预算
   const TUBE_GAP = 0.01;
   // 节略短，总长仍够摆、底部易相碰
   const tubeLen = k => 0.068 + k * 0.0065;
@@ -24,8 +25,8 @@
     return PENTA[(j + (PER - 1 - k)) % 5];
   }
   const STRAND_COLOR = [
-    0xcdd8e0, 0xe3c9a0, 0xbfd2cc, 0xe4bcc6, 0xc2c8e6, 0xdcc7a4,
-    0xd0d8e8, 0xe8d4b0, 0xc8d8d0, 0xe8c8d0, 0xc8d0e8, 0xe0d0b8
+    0xe8f0f6, 0xf6e6c8, 0xdceee8, 0xf6d8e0, 0xdde2f6, 0xf0e2c4,
+    0xe6ecf6, 0xf8e8cc, 0xe0eee6, 0xf6dce4, 0xe0e6f6, 0xf0e4d0
   ];
 
   const G = 9.8;
@@ -42,7 +43,7 @@
   if (hintBar) hintBar.style.display = 'none';
 
   let renderer, scene, camera, pmrem, envTex = null, projPlane;
-  let rodMesh, hangL, hangR, tipL, tipR;
+  let rodMesh, tipL, tipR;
   const bellMesh = [];
   const ropeMesh = [];
   const tubePose = [];
@@ -136,12 +137,34 @@
   }
   function tubeGeo(k) {
     const len = tubeLen(k), r = tubeR();
-    return new THREE.CylinderGeometry(r * 0.92, r, len, 12, 1, false);
+    // 实心圆柱比空心双层更省面数；openEnded 去掉盖子略减三角面
+    return new THREE.CylinderGeometry(r * 0.95, r, len, 10, 1, true);
+  }
+
+  // 圆柱周向淡高光（浅色，不压暗管色）
+  let _tubeMap = null;
+  function tubeMap() {
+    if (_tubeMap) return _tubeMap;
+    const cv = document.createElement('canvas');
+    cv.width = 64; cv.height = 16;
+    const c = cv.getContext('2d');
+    const g = c.createLinearGradient(0, 0, 64, 0);
+    g.addColorStop(0, '#e8e8e8');
+    g.addColorStop(0.38, '#f4f4f4');
+    g.addColorStop(0.5, '#ffffff');
+    g.addColorStop(0.62, '#f4f4f4');
+    g.addColorStop(1, '#e4e4e4');
+    c.fillStyle = g;
+    c.fillRect(0, 0, 64, 16);
+    _tubeMap = new THREE.CanvasTexture(cv);
+    if (THREE.SRGBColorSpace) _tubeMap.colorSpace = THREE.SRGBColorSpace;
+    _tubeMap.needsUpdate = true;
+    return _tubeMap;
   }
 
   function addAll() {
-    // 窗帘横杆（长度由 layoutRod 按屏宽设定）
-    const rodLen = ROD_HALF * 2 + 0.08;
+    // 窗帘横杆（长度由 layoutRod 按可见屏宽设定；无上方吊绳）
+    const rodLen = ROD_HALF * 2;
     rodMesh = new THREE.Mesh(
       new THREE.CylinderGeometry(0.016, 0.016, rodLen, 12),
       wood(0x8a6b48, 0.3, 0.5)
@@ -149,13 +172,6 @@
     rodMesh.rotation.z = Math.PI / 2;
     rodMesh.position.set(0, ROD_Y, 0);
     scene.add(rodMesh);
-
-    // 两端吊到廊檐
-    hangL = new THREE.Mesh(new THREE.CylinderGeometry(0.003, 0.003, ANCHOR_Y - ROD_Y, 5), wood(0xb0a083, 0.35, 0.55));
-    hangR = hangL.clone();
-    hangL.position.set(-ROD_HALF, (ANCHOR_Y + ROD_Y) / 2, 0);
-    hangR.position.set(ROD_HALF, (ANCHOR_Y + ROD_Y) / 2, 0);
-    scene.add(hangL); scene.add(hangR);
 
     tipL = new THREE.Mesh(new THREE.SphereGeometry(0.018, 10, 8), wood(0xc9ae86, 0.4, 0.45));
     tipR = tipL.clone();
@@ -173,7 +189,11 @@
         ropeMesh[j].push(rope);
 
         const b = new THREE.Mesh(tubeGeo(k), new THREE.MeshStandardMaterial({
-          color: STRAND_COLOR[j % STRAND_COLOR.length], metalness: 0.88, roughness: 0.28
+          color: STRAND_COLOR[j % STRAND_COLOR.length],
+          map: tubeMap(),
+          metalness: 0.08,
+          roughness: 0.68,
+          envMapIntensity: 0.12
         }));
         scene.add(b);
         bellMesh[j].push(b);
@@ -181,19 +201,28 @@
     }
   }
 
+  function viewSize() {
+    const vv = window.visualViewport;
+    // 小红书等 WebView 可视区常窄于 layout viewport
+    return {
+      w: Math.max(1, (vv && vv.width) || innerWidth),
+      h: Math.max(1, (vv && vv.height) || innerHeight)
+    };
+  }
+
   function worldHalfWidth() {
     const vFov = (camera.fov * Math.PI) / 180;
-    return Math.tan(vFov / 2) * CAM_Z * (innerWidth / Math.max(1, innerHeight));
+    const { w, h } = viewSize();
+    return Math.tan(vFov / 2) * CAM_Z * (w / h);
   }
 
   function layoutRod() {
     if (!camera || !rodMesh) return;
-    ROD_HALF = Math.max(0.55, worldHalfWidth() * (1 - ROD_PAD * 2));
-    const rodLen = ROD_HALF * 2 + 0.08;
+    // 半宽扣掉左右留白 + 两端圆头，避免小红书预览两侧穿出
+    ROD_HALF = Math.max(0.45, worldHalfWidth() * (1 - ROD_PAD * 2) - ROD_TIP);
+    const rodLen = ROD_HALF * 2;
     rodMesh.geometry.dispose();
     rodMesh.geometry = new THREE.CylinderGeometry(0.016, 0.016, rodLen, 12);
-    hangL.position.x = -ROD_HALF;
-    hangR.position.x = ROD_HALF;
     tipL.position.x = -ROD_HALF - 0.02;
     tipR.position.x = ROD_HALF + 0.02;
     settleStrands();
@@ -219,7 +248,7 @@
     rodP.v.set(0, 0);
   }
 
-  // 从绳节点摆放管/短绳
+  // 从绳节点摆放管/短绳：圆柱管跟随节方向，长度固定
   function placeStrand(j) {
     const pts = ropePts[j];
     for (let k = 0; k < PER; k++) {
@@ -239,7 +268,7 @@
 
       const rm = ropeMesh[j][k];
       rm.position.set((a.x + tx) * 0.5, (a.y + ty) * 0.5, (a.z + tz) * 0.5);
-      rm.scale.y = Math.max(0.008, Math.min(rope, dlen * 0.35));
+      rm.scale.y = rope;
       rm.quaternion.setFromUnitVectors(_up, _dir);
 
       const mesh = bellMesh[j][k];
@@ -265,21 +294,19 @@
       windPh += dt * 0.35;
       gustDir += Math.sin(windPh * 0.4) * dt * 0.3;
     } else {
-      // 风停后缓慢衰减，给各串不同回落时间留空间
-      windAmp += (0 - windAmp) * Math.min(1, dt * 0.22);
+      windAmp += (0 - windAmp) * Math.min(1, dt * 0.35);
+      if (windAmp < 0.02) windAmp = 0;
       nextBreezeT -= dt;
       if (nextBreezeT <= 0) {
-        gustPush(0.32 + Math.random() * 0.4, Math.random() * Math.PI * 2);
-        nextBreezeT = 6 + Math.random() * 9;
+        gustPush(0.28 + Math.random() * 0.32, Math.random() * Math.PI * 2);
+        nextBreezeT = 8 + Math.random() * 12;
       }
     }
-    const peak = 0.025 + 0.42 * windAmp;
+    const calm = windAmp < 0.04;
+    const peak = calm ? 0 : (0.015 + 0.4 * windAmp);
     const dx = Math.cos(gustDir), dz = Math.sin(gustDir);
-    const flutter = Math.sin(windT * 0.85 + windPh) * 0.1 * windAmp;
-    windV.set(
-      dx * peak + flutter * (-dz) + 0.008 * Math.sin(windT * 0.25),
-      dz * peak + flutter * dx + 0.008 * Math.sin(windT * 0.22 + 1)
-    );
+    const flutter = calm ? 0 : Math.sin(windT * 0.85 + windPh) * 0.08 * windAmp;
+    windV.set(dx * peak + flutter * (-dz), dz * peak + flutter * dx);
   }
 
   function pinHang(j) {
@@ -292,8 +319,8 @@
   }
 
   function satisfyConstraints(j) {
+    // 角度软约束弱化：主要靠摆锤投影保长，避免多关节像弹簧折叠
     const pts = ropePts[j];
-    // 定长：串成一根绳
     for (let k = 0; k < PER; k++) {
       const a = pts[k], b = pts[k + 1];
       let dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
@@ -301,7 +328,6 @@
       const rest = restLen[k];
       const corr = (dist - rest) / dist;
       if (k === 0) {
-        // 顶端钉死，只挪下一节点
         b.x -= dx * corr;
         b.y -= dy * corr;
         b.z -= dz * corr;
@@ -311,44 +337,53 @@
         b.x -= dx * half; b.y -= dy * half; b.z -= dz * half;
       }
     }
-    // 软角度：限制相邻两节夹角别折死（仍可弯）
-    for (let k = 1; k < PER; k++) {
-      const a = pts[k - 1], b = pts[k], c = pts[k + 1];
-      let abx = b.x - a.x, aby = b.y - a.y, abz = b.z - a.z;
-      let bcx = c.x - b.x, bcy = c.y - b.y, bcz = c.z - b.z;
-      const lab = Math.sqrt(abx * abx + aby * aby + abz * abz) || 1;
-      const lbc = Math.sqrt(bcx * bcx + bcy * bcy + bcz * bcz) || 1;
-      abx /= lab; aby /= lab; abz /= lab;
-      bcx /= lbc; bcy /= lbc; bcz /= lbc;
-      const dot = abx * bcx + aby * bcy + abz * bcz;
-      // cos 最小约 -0.35（更软，可弯得像布帘）
-      if (dot < -0.35) {
-        const t = (-0.35 - dot) * 0.22;
-        c.x += (abx - bcx) * t * lbc * 0.5;
-        c.y += (aby - bcy) * t * lbc * 0.5;
-        c.z += (abz - bcz) * t * lbc * 0.5;
-      }
-    }
     pinHang(j);
   }
 
-  // Verlet 软绳：重力 + 每串独立风感 + 定长约束
+  // 摆锤式硬投影：每节定长，Y 由水平偏摆决定，杜绝上下弹簧压缩/拉长
+  function projectStrandLengths(j) {
+    pinHang(j);
+    const pts = ropePts[j];
+    for (let k = 0; k < PER; k++) {
+      const a = pts[k], b = pts[k + 1];
+      const rest = restLen[k];
+      let dx = b.x - a.x, dz = b.z - a.z;
+      let hdist = Math.sqrt(dx * dx + dz * dz);
+      const maxH = rest * 0.992;
+      if (hdist > maxH) {
+        const s = maxH / (hdist || 1e-6);
+        dx *= s; dz *= s;
+        hdist = maxH;
+      }
+      const dy = -Math.sqrt(Math.max(1e-12, rest * rest - hdist * hdist));
+      const nx = a.x + dx;
+      const ny = a.y + dy;
+      const nz = a.z + dz;
+      const vx = b.x - b.px, vy = b.y - b.py, vz = b.z - b.pz;
+      b.x = nx; b.y = ny; b.z = nz;
+      b.px = nx - vx; b.py = ny - vy; b.pz = nz - vz;
+    }
+  }
+
+  // Verlet 软绳：重力 + 每串独立风感 + 定长约束（不定死）
   let physWarm = 0;
   function stepPhys(dt) {
     physWarm = Math.min(1, physWarm + dt * 0.55);
     const windFade = physWarm * physWarm;
+    const calm = windAmp < 0.05 && pointers.size === 0;
 
-    rodP.v.x += (-rodP.w2 * rodP.p.x - 1.6 * rodP.v.x + windV.x * 0.18 * windFade) * dt;
-    rodP.v.y += (-rodP.w2 * rodP.p.y - 1.6 * rodP.v.y + windV.y * 0.18 * windFade) * dt;
+    // 横杆几乎固定，避免撩动后整排左右晃
+    rodP.v.x += (-12 * rodP.p.x - 8 * rodP.v.x + windV.x * 0.03 * windFade) * dt;
+    rodP.v.y += (-12 * rodP.p.y - 8 * rodP.v.y + windV.y * 0.03 * windFade) * dt;
     rodP.p.x += rodP.v.x * dt;
     rodP.p.y += rodP.v.y * dt;
     const rr = rodP.p.lengthSq();
-    if (rr > 0.028 * 0.028) {
-      rodP.p.multiplyScalar(0.028 / Math.sqrt(rr));
-      rodP.v.multiplyScalar(0.5);
+    if (rr > 0.006 * 0.006) {
+      rodP.p.multiplyScalar(0.006 / Math.sqrt(rr));
+      rodP.v.multiplyScalar(0.35);
     }
 
-    const sub = 3;
+    const sub = 2;
     const h = Math.min(dt, 0.033) / sub;
     for (let j = 0; j < N_STRAND; j++) {
       if (strandCool[j] > 0) strandCool[j] = Math.max(0, strandCool[j] - dt);
@@ -364,28 +399,32 @@
         const follow = Math.min(1, (h * 5.5) / sw.lag);
         sw.lx += (targetX - sw.lx) * follow;
         sw.lz += (targetZ - sw.lz) * follow;
-        const damp = windAmp > 0.12 ? 0.984 : sw.damp;
+        // 回落略增阻尼，单串自然停；去掉整排回中拉力（那会造成整体左右摆）
+        const damp = calm ? 0.975 : (windAmp > 0.12 ? 0.986 : 0.988);
         for (let i = 1; i <= PER; i++) {
           const p = pts[i];
           let vx = (p.x - p.px) * damp;
-          let vy = (p.y - p.py) * damp * 0.9;
+          let vy = (p.y - p.py) * damp * 0.92;
           let vz = (p.z - p.pz) * damp;
           p.px = p.x; p.py = p.y; p.pz = p.z;
           const depth = i / PER;
           const wF = (0.01 + depth * 0.024) * h;
-          const wob = 0.0022 * Math.sin(windT * 1.05 + sw.ph + i * 0.35) * windAmp * windFade;
+          const wob = windAmp > 0.12
+            ? 0.0014 * Math.sin(windT * 1.05 + sw.ph + i * 0.35) * windAmp * windFade
+            : 0;
           p.x += vx + (sw.lx * wF + wob * h);
           p.y += vy - G * h * h;
           p.z += vz + sw.lz * wF;
         }
-        for (let it = 0; it < 7; it++) satisfyConstraints(j);
+        for (let it = 0; it < 2; it++) satisfyConstraints(j);
+        projectStrandLengths(j);
       }
     }
   }
 
-  // 拨动：软冲量沿绳向下传，邻串轻带；之后交给物理自然回落
+  // 拨动：主要带动本串，邻串只极轻带一点
   function pluckStrand(j, k, dirX, dirZ, strength) {
-    const amp = Math.min(0.014, 0.0065 + (strength || 0.5) * 0.007);
+    const amp = Math.min(0.024, 0.01 + (strength || 0.5) * 0.012);
     const dd = Math.hypot(dirX, dirZ) || 1;
     const ix = (dirX / dd) * amp;
     const iz = (dirZ / dd) * amp;
@@ -398,16 +437,12 @@
     softKick(strand, k + 1, 0.9);
     softKick(strand, k, 0.48);
     for (let d = 1; d <= PER - k; d++) {
-      softKick(strand, k + 1 + d, 0.58 * Math.pow(0.7, d));
+      softKick(strand, k + 1 + d, 0.55 * Math.pow(0.72, d));
     }
-    for (const off of [-2, -1, 1, 2]) {
+    for (const off of [-1, 1]) {
       const nj = j + off;
       if (nj < 0 || nj >= N_STRAND) continue;
-      const side = Math.abs(off) === 1 ? 0.28 : 0.12;
-      const np = ropePts[nj];
-      softKick(np, Math.min(PER, k + 1), side);
-      softKick(np, Math.min(PER, k + 2), side * 0.55);
-      softKick(np, Math.max(1, k), side * 0.4);
+      softKick(ropePts[nj], Math.min(PER, k + 1), 0.08);
     }
   }
 
@@ -598,7 +633,6 @@
   function animate() {
     requestAnimationFrame(animate);
     const dt = Math.min(clock.getDelta(), 0.05);
-    const t = clock.elapsedTime;
     stepWind(dt);
     stepPhys(dt);
 
@@ -606,17 +640,16 @@
     rodMesh.position.set(rx, ROD_Y, rz);
     rodMesh.rotation.x = rz * 0.25;
     rodMesh.rotation.y = -rx * 0.15;
-    hangL.position.x = -ROD_HALF + rx * 0.3;
-    hangR.position.x = ROD_HALF + rx * 0.3;
+    tipL.position.set(-ROD_HALF - 0.02 + rx, ROD_Y, rz);
+    tipR.position.set(ROD_HALF + 0.02 + rx, ROD_Y, rz);
 
     for (let j = 0; j < N_STRAND; j++) placeStrand(j);
     detectCollisions(dt);
 
-    WC.audio.setWind(Math.min(1, 0.02 + windAmp * 0.35));
-    camera.position.x = Math.sin(t * 0.05) * 0.02;
+    WC.audio.setWind(Math.min(1, windAmp * 0.35));
     camera.lookAt(0, CAM_TY, 0);
 
-    const ap = toPx(0, ANCHOR_Y, 0);
+    const ap = toPx(0, ROD_Y, 0);
     WC.fx.feedAnchor(ap[0], ap[1]);
     WC.fx.feedWind(windV.x, windV.y, windAmp);
 
@@ -669,15 +702,30 @@
     window.addEventListener('pointerup', onUp, { passive: true });
     window.addEventListener('pointercancel', onUp, { passive: true });
     window.addEventListener('resize', () => {
-      camera.aspect = innerWidth / innerHeight;
+      const { w, h } = viewSize();
+      camera.aspect = w / h;
       camera.updateProjectionMatrix();
       renderer.setSize(innerWidth, innerHeight);
       layoutRod();
     });
+    if (window.visualViewport) {
+      visualViewport.addEventListener('resize', () => {
+        const { w, h } = viewSize();
+        camera.aspect = w / h;
+        camera.updateProjectionMatrix();
+        layoutRod();
+      });
+    }
   }
 
   function init() {
-    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+    // 始终开抗锯齿；DPR 仍封顶 2，避免过热但不再压到发糊锯齿
+    renderer = new THREE.WebGLRenderer({
+      antialias: true,
+      alpha: true,
+      preserveDrawingBuffer: true,
+      powerPreference: 'low-power'
+    });
     renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
     renderer.setSize(innerWidth, innerHeight);
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -685,12 +733,13 @@
     stageHost.appendChild(renderer.domElement);
 
     scene = new THREE.Scene();
-    camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 80);
+    const vs0 = viewSize();
+    camera = new THREE.PerspectiveCamera(50, vs0.w / vs0.h, 0.1, 80);
     camera.position.set(0, CAM_PY, CAM_Z);
     camera.lookAt(0, CAM_TY, 0);
 
-    scene.add(new THREE.HemisphereLight(0xc4ceff, 0x2c2a4a, 0.9));
-    const dl = new THREE.DirectionalLight(0xfff1d8, 0.5);
+    scene.add(new THREE.HemisphereLight(0xd8e4ff, 0x3a3858, 1.15));
+    const dl = new THREE.DirectionalLight(0xfff6e8, 0.75);
     dl.position.set(1.5, 3, 4);
     scene.add(dl);
 

@@ -23,7 +23,7 @@ enum EditTool: String, CaseIterable, Identifiable {
         switch self {
         case .brush: "画笔：单指点涂 · 双指缩放/平移".loc
         case .eraser: "橡皮：擦回自动生成色".loc
-        case .dropper: "取色：点一下吸取格内豆色".loc
+        case .dropper: "取色：点一下吸色，按住拖动可连续吸".loc
         }
     }
 }
@@ -172,6 +172,8 @@ final class BeadEditorModel {
     /// 刷新工作图代数：避免去背景并发互相覆盖。
     private var refreshSerial = 0
     private var saveTask: Task<Void, Never>?
+    private var draftSaveTask: Task<Void, Never>?
+    private var didRestoreDraft = false
     private var undoStack: [EditOp] = []
     private var redoStack: [EditOp] = []
     private var strokeEdits: [CellEdit]?
@@ -306,12 +308,37 @@ final class BeadEditorModel {
             guard !Task.isCancelled else { return }
             SettingsStore.save(snapshot)
         }
+        scheduleDraftSave()
+    }
+
+    private func scheduleDraftSave() {
+        draftSaveTask?.cancel()
+        draftSaveTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled, let self, let image = self.baseImage else { return }
+            ProjectStore.shared.saveDraft(sourceImage: image, settings: self.settings)
+        }
+    }
+
+    /// 恢复上次未显式保存的拼豆图草稿。
+    func restoreDraftIfNeeded() {
+        guard !didRestoreDraft, originalSourceImage == nil,
+              let draft = ProjectStore.shared.loadDraft() else { return }
+        didRestoreDraft = true
+        suppressSettingsEffects = true
+        settings = draft.settings
+        suppressSettingsEffects = false
+        load(image: draft.image)
     }
 
     func flushPendingSave() {
         saveTask?.cancel()
         saveTask = nil
         SettingsStore.save(settings)
+        draftSaveTask?.cancel()
+        if let image = baseImage {
+            ProjectStore.shared.saveDraft(sourceImage: image, settings: settings)
+        }
     }
 
     // MARK: - 载入图片
@@ -626,6 +653,7 @@ final class BeadEditorModel {
             if self.brushCode == nil || palette.color(for: self.brushCode!) == nil {
                 self.brushCode = self.usage.first?.color.code
             }
+            self.scheduleDraftSave()
         }
     }
 
@@ -777,23 +805,34 @@ final class BeadEditorModel {
     /// 只能在 2D 编辑：3D 下进编辑会先切回平面；切 3D 见 `toggleViewMode` 会清掉编辑态。
     ///
     /// 用 `withAnimation` 包住：进编辑会顺带切回 2D（预览区换一层），页面本身也会换
-    /// （`BeadEditorView` 在生成页与 `BeadEditView` 之间换），不包的话这一帧会跳一下。
+    /// （生成页与 `BeadEditView` 之间换），不包的话这一帧会跳一下。
+    ///
+    /// **只在进入时给一条工具提示，退出不提示**（见下面的 `else` 分支）。
+    /// 退出**不**走布局动画：生成页布局并不随 `isEditing` 变，带动画反而会在退栈时
+    /// 让底下预览多跳一帧。
     func setEditing(_ on: Bool) {
         guard on == false || grid != nil else { return }
-        withLayoutAnimation {
-            if on && viewMode == .threeD {
-                viewMode = .flat
-            }
-            isEditing = on
-        }
         if on {
+            withLayoutAnimation {
+                if viewMode == .threeD {
+                    viewMode = .flat
+                }
+                isEditing = true
+            }
             if brushCode == nil {
                 brushCode = usage.first?.color.code
             }
             highlightedCode = nil
             tool = .brush
+            showHint(EditTool.brush.hint)
+        } else {
+            isEditing = false
+            // 退出不提示：退栈本身就是「退出」的反馈；顺手收掉还挂着的提示浮层，
+            // 免得退回生成页后继续飘一会儿。
+            hintTask?.cancel()
+            hintTask = nil
+            hint = nil
         }
-        showHint(on ? EditTool.brush.hint : "已退出编辑".loc)
     }
 
     /// 布局级过渡（预览区尺寸变化）统一走这一条曲线。
@@ -851,10 +890,13 @@ final class BeadEditorModel {
         } else {
             pushUndo(EditOp(edits: edits, cellCount: grid?.cells.count ?? 0))
             recount()
+            scheduleDraftSave()
         }
     }
 
-    /// 取色：命中则吸取该格色号并切回画笔。
+    /// 取色：命中则把该格色号设为当前画笔色。**不切回画笔工具** —— 取色常常要连着吸
+    /// 好几个色（拖动还支持连续吸），自动切走会让每次都要重新点一下「取色」。
+    /// 返回吸到的色号；空格 / 出界返回 nil（画笔色保持不变）。
     func pickColor(at point: CGPoint) -> String? {
         guard let grid else { return nil }
         let col = Int(floor(point.x))
@@ -863,7 +905,6 @@ final class BeadEditorModel {
         let cell = grid[col, row]
         guard !cell.isEmpty else { return nil }
         brushCode = cell.code
-        tool = .brush
         return cell.code
     }
 
@@ -917,6 +958,7 @@ final class BeadEditorModel {
         }
         grid = value
         recount()
+        scheduleDraftSave()
     }
 
     var autoBeadCount: Int { autoGrid?.beadCount ?? 0 }
@@ -939,6 +981,7 @@ final class BeadEditorModel {
         grid = value
         pushUndo(EditOp(edits: edits, cellCount: value.cells.count))
         recount()
+        scheduleDraftSave()
         showHint("已清空手绘（可撤销）".loc)
     }
 

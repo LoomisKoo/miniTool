@@ -11,8 +11,8 @@ Bundle ID `com.loomiskoo.rabbitbead` · 版本 1.0.0 · 内购 `com.loomiskoo.ra
 
 | 字段 | 值 |
 | --- | --- |
-| Privacy Policy URL | `https://loomiskoo.github.io/RabbitBead-pages/privacy.html` |
-| Support URL | `https://loomiskoo.github.io/RabbitBead-pages/support.html` |
+| Privacy Policy URL | `https://loomiskoo.github.io/BeadPattern-pages/privacy.html` |
+| Support URL | `https://loomiskoo.github.io/BeadPattern-pages/support.html` |
 | Marketing URL（选填） | 留空，或同上 support 页 |
 | 主分类 | Graphics & Design（图形与设计） |
 | 次分类 | Utilities（工具） |

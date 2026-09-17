@@ -15,6 +15,7 @@ struct CropRatio: Identifiable, Equatable {
     }
     
     static let presets: [CropRatio] = [
+        CropRatio(id: "orig", label: "原始".loc, width: nil, height: nil),
         CropRatio(id: "1:1", label: "1:1", width: 1, height: 1),
         CropRatio(id: "3:4", label: "3:4", width: 3, height: 4),
         CropRatio(id: "4:3", label: "4:3", width: 4, height: 3),
@@ -22,6 +23,9 @@ struct CropRatio: Identifiable, Equatable {
         CropRatio(id: "16:9", label: "16:9", width: 16, height: 9),
         CropRatio(id: "free", label: "自由".loc, width: nil, height: nil)
     ]
+
+    static var original: CropRatio { presets.first { $0.id == "orig" }! }
+    static var free: CropRatio { presets.first { $0.id == "free" }! }
 }
 
 /// 裁切区域（相对源图归一化坐标，0-1范围）。

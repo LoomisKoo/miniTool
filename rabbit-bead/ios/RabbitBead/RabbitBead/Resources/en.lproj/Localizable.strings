@@ -1,3 +1,5 @@
+"全部" = "All";
+"当前图纸包含的颜色，点击后高亮" = "Colors in this pattern · tap to highlight";
 /* RabbitBead — English.
    key 是中文原文（和 Swift 源码里的字面量一致），不要改 key。 */
 
@@ -61,7 +63,7 @@
 "取色：%@" = "Picked: %1$@";
 "取色：格内主色" = "Sampling: dominant color";
 "取色：格内均值" = "Sampling: average color";
-"取色：点一下吸取格内豆色" = "Pick: tap a cell to grab its bead color";
+"取色：点一下吸色，按住拖动可连续吸" = "Pick: tap a cell to grab its color, or press and drag to keep picking";
 "只用手头有的色号出图，图纸能真拼" = "Only use colors you own, so the pattern is actually buildable";
 "合并" = "Merge";
 "合并邻近相似色：关" = "Merge similar colors: off";
@@ -102,7 +104,6 @@
 "已清空手绘（可撤销）" = "Hand edits cleared (undoable)";
 "已解锁 Pro" = "Pro unlocked";
 "已还原原图" = "Original restored";
-"已退出编辑" = "Exited editing";
 "库存保存失败：%@" = "Couldn’t save the inventory: %1$@";
 "应用" = "Apply";
 "当前没有手绘改动" = "No hand edits to clear";
@@ -165,6 +166,7 @@
 "白底照片不再铺出一片白豆" = "No more sea of white beads behind cut-out photos";
 "相册识别" = "Choose from Photos";
 "空" = "Empty";
+"空格" = "Empty";
 "第%ld板" = "Board %1$ld";
 "练习小板" = "Practice board";
 "给这个作品起个名字，方便以后找到。" = "Give this project a name so you can find it later.";
@@ -174,6 +176,8 @@
 "网格：关" = "Grid: off";
 "网格：开" = "Grid: on";
 "自由" = "Free";
+"原始" = "Original";
+"比例" = "Ratio";
 "色卡" = "Palette";
 "色卡：%@" = "Palette: %1$@";
 "色块 + 编号 + 颗数" = "Swatch + code + bead count";
@@ -210,6 +214,8 @@
 "限色" = "Colors";
 "非订阅，一次买断。可在此页恢复购买。" = "Not a subscription — a one-time purchase. You can restore it on this page.";
 "顶行列号 + 左侧行号" = "Column numbers on top + row numbers on the left";
+"上下左右四边都标行列号" = "Row/column numbers on all four sides";
+"四边一圈坐标格，紧贴图案" = "A ring of coordinate cells flush with the pattern";
 "颗" = "beads";
 "高清打印导出" = "HD print export";
 "关于" = "About";
@@ -223,3 +229,9 @@
 "隐私政策" = "Privacy Policy";
 
 /* —— 关于页 —— */
+
+/* —— 内嵌网页（隐私政策 / 支持） —— */
+"在浏览器打开" = "Open in Browser";
+"无法打开页面" = "Can't Open Page";
+"检查网络后重试" = "Check your connection and try again";
+"重试" = "Retry";

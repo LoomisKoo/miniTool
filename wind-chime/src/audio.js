@@ -1,7 +1,7 @@
 /* 微风铃语 - 音频引擎
- * 全部声音用 Web Audio 实时合成（零音频素材）：
- *  - 铃管 = 非谐波泛音组(铝管特征泛音比) + 指数衰减 + 敲击瞬态 + 共享卷积混响
- *  - 风声 = 循环噪声 → 带通滤波，强度随风环境起伏
+ * 铃管 / 风声 = Web Audio 实时合成
+ * 背景乐：默认 assets/bgm.mp3；小红书/快手打包注入 BGM_DATA（base64 AAC）循环
+ * 静音开关同时关闭：BGM、风声、敲击（经 master 与显式风增益）
  */
 (function () {
   const WC = window.WC = window.WC || {};
@@ -25,9 +25,17 @@
     { r: 13.35,  a: 0.09, d: 0.22 }
   ];
 
+  // BGM：默认读 mp3；小红书/快手打包时注入 BGM_DATA（纯 base64，无 data: 前缀）
+  const BGM_URL = 'assets/bgm.mp3';
+  const BGM_DATA = '';
+  const BGM_VOL = 0.58;
+
   let ctx = null, started = false, muted = false;
   let master = null, comp = null, verbSend = null, verb = null;
   let windSrc = null, windFilt = null, windGain = null;
+  let windWant = 0;
+  let bgmEl = null, bgmNode = null, bgmGain = null;
+  let bgmBuf = null, bgmSrc = null, bgmDecoding = false;
 
   function ensure() {
     if (ctx) return true;
@@ -35,7 +43,7 @@
     const AC = window.AudioContext || window.webkitAudioContext;
     try { ctx = new AC(); } catch (e) { return false; }
 
-    master = ctx.createGain(); master.gain.value = 1;
+    master = ctx.createGain(); master.gain.value = muted ? 0 : 1;
 
     comp = ctx.createDynamicsCompressor();
     comp.threshold.value = -14; comp.knee.value = 22;
@@ -66,18 +74,117 @@
     windGain = ctx.createGain(); windGain.gain.value = 0;
     windSrc.connect(windFilt); windFilt.connect(windGain); windGain.connect(master);
     windSrc.start();
+
+    bgmGain = ctx.createGain();
+    bgmGain.gain.value = BGM_VOL;
+    bgmGain.connect(master);
+    setupBgm();
     return true;
+  }
+
+  function b64ToAb(b64) {
+    const bin = atob(b64);
+    const len = bin.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) bytes[i] = bin.charCodeAt(i);
+    return bytes.buffer;
+  }
+
+  function stopBufBgm() {
+    if (!bgmSrc) return;
+    try { bgmSrc.onended = null; bgmSrc.stop(); } catch (e) {}
+    try { bgmSrc.disconnect(); } catch (e) {}
+    bgmSrc = null;
+  }
+
+  function playBufBgm() {
+    if (!ctx || !bgmBuf || !bgmGain || muted || !started) return;
+    stopBufBgm();
+    bgmSrc = ctx.createBufferSource();
+    bgmSrc.buffer = bgmBuf;
+    bgmSrc.loop = true;
+    bgmSrc.connect(bgmGain);
+    try { bgmSrc.start(0); } catch (e) { bgmSrc = null; }
+  }
+
+  function setupBgm() {
+    if (!ctx || bgmEl || bgmBuf || bgmDecoding) return;
+
+    // 小红书：内嵌 base64 → decodeAudioData（zip 内无独立音频文件）
+    if (BGM_DATA) {
+      bgmDecoding = true;
+      let ab;
+      try { ab = b64ToAb(BGM_DATA); } catch (e) { bgmDecoding = false; return; }
+      const done = function (buf) {
+        if (bgmBuf || !buf) { bgmDecoding = false; return; }
+        bgmDecoding = false;
+        bgmBuf = buf;
+        if (started && !muted) playBufBgm();
+      };
+      const fail = function () { bgmDecoding = false; };
+      // 拷贝一份，避免部分 WebView detach 原 ArrayBuffer
+      const copy = ab.slice(0);
+      ctx.decodeAudioData(copy, done, fail);
+      return;
+    }
+
+    if (!BGM_URL) return;
+    bgmEl = new Audio(BGM_URL);
+    bgmEl.loop = true;
+    bgmEl.preload = 'auto';
+    try {
+      bgmNode = ctx.createMediaElementSource(bgmEl);
+      bgmNode.connect(bgmGain);
+    } catch (e) {
+      // 个别环境不支持 MediaElementSource，退回元素直出
+      bgmEl.volume = BGM_VOL;
+    }
+  }
+
+  function startBgm() {
+    if (BGM_DATA) {
+      if (!bgmBuf) setupBgm();
+      else playBufBgm();
+      return;
+    }
+    if (!bgmEl) setupBgm();
+    if (!bgmEl) return;
+    const p = bgmEl.play();
+    if (p && p.catch) p.catch(function () {});
+  }
+
+  function applyWindGain() {
+    if (!ctx || !windGain) return;
+    const t = ctx.currentTime;
+    const level = muted ? 0 : Math.max(0, Math.min(1, windWant)) * 0.07;
+    windGain.gain.setTargetAtTime(level, t, 0.35);
   }
 
   function resume() {
     if (!ctx) ensure();
     if (ctx && ctx.state !== 'running') { ctx.resume().catch(function () {}); }
-    if (!started) { started = true; windSrc && windSrc.start(); }
+    if (!started) started = true;
+    startBgm();
   }
 
   function setMuted(v) {
     muted = !!v;
-    if (master) master.gain.setTargetAtTime(muted ? 0 : 1, ctx.currentTime, 0.02);
+    if (ctx && master) {
+      master.gain.setTargetAtTime(muted ? 0 : 1, ctx.currentTime, 0.02);
+    }
+    // MediaElement 未接入图时，直接控元素音量
+    if (bgmEl && !bgmNode) bgmEl.volume = muted ? 0 : BGM_VOL;
+    if (bgmEl && muted) {
+      try { bgmEl.pause(); } catch (e) {}
+    } else if (bgmEl && !muted && started) {
+      startBgm();
+    }
+    // 内嵌 BGM：停/启 BufferSource
+    if (bgmBuf) {
+      if (muted) stopBufBgm();
+      else if (started) playBufBgm();
+    }
+    applyWindGain();
     try { localStorage.setItem('wc_sound_muted', muted ? '1' : '0'); } catch (e) {}
     return muted;
   }
@@ -87,13 +194,14 @@
     try { muted = localStorage.getItem('wc_sound_muted') === '1'; } catch (e) {}
   }
 
-  // 风强度 0..1（每秒平滑跟随）
+  // 风强度 0..1（静音时强制为 0）
   function setWind(st) {
-    if (!ctx || !master) return;
-    st = Math.max(0, Math.min(1, st));
-    const t = ctx.currentTime;
-    windGain.gain.setTargetAtTime(st * 0.16, t, 0.35);
-    windFilt.frequency.setTargetAtTime(380 + st * 900, t, 0.4);
+    if (!ctx || !windGain) return;
+    windWant = Math.max(0, Math.min(1, st));
+    applyWindGain();
+    if (!muted) {
+      windFilt.frequency.setTargetAtTime(380 + windWant * 900, ctx.currentTime, 0.4);
+    }
   }
 
   // 敲一只铃管：power 0..1
@@ -110,7 +218,7 @@
     const t0 = ctx.currentTime + (o.at || 0);
     const detune = (Math.random() - 0.5) * 6; // 每颗铃音分微差
     const bright = 0.5 + 0.3 * power;
-    const vol = (o.vol != null ? o.vol : 1) * (0.15 + 0.7 * power);
+    const vol = (o.vol != null ? o.vol : 1) * (0.08 + 0.36 * power);
 
     // 敲击瞬态（短促的“嗒”，赋予金属击打质感）
     const click = ctx.createBufferSource();
@@ -119,7 +227,7 @@
     for (let i = 0; i < cd.length; i++) cd[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / cd.length, 2.4);
     click.buffer = cbs;
     const cg = ctx.createGain();
-    cg.gain.value = 0.10 * power;
+    cg.gain.value = 0.05 * power;
     click.connect(cg);
     const chp = ctx.createBiquadFilter(); chp.type = 'highpass'; chp.frequency.value = 2400;
     cg.connect(chp); chp.connect(master); chp.connect(verbSend);

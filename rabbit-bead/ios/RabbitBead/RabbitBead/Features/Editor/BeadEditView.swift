@@ -1,15 +1,19 @@
 import SwiftUI
 
-/// 手绘编辑页：从预览条上的「编辑」按钮**换到的独立页面**（在「拼豆」tab 内整体换页，
-/// 不是弹一层 cover —— 底部 tab 要一直在，见 `BeadRootView`）。
+/// 手绘编辑页：由预览条上的「编辑」按钮以 `NavigationLink` **推出来的子页**
+/// （各自 tab 内的 `NavigationStack`）。
 ///
-/// 编辑状态仍然记在 `model.isEditing` 上：进来置 true（在 3D 下顺带切回 2D），
-/// 退出置 false。模型是同一个（`BeadRootView` 持有），所以落笔改的就是主页面那张
-/// 图纸，退回后预览立刻是新样子。
+/// 顶栏用**系统导航栏**：左上系统返回、中间标题、右上蓝色填充打钩完成。
+///
+/// 编辑状态仍然记在 `model.isEditing` 上：进出跟着栈的路径走（`BeadRootView` 的
+/// `onChange(of: path)`），本页只做兜底；模型是同一个（`BeadRootView` 持有），
+/// 所以落笔改的就是主页面那张图纸，退回后预览立刻是新样子。
+///
+/// **不**再藏底部 tab：进出编辑若藏/露 tab，底下生成页预览高度会变一截，退栈时跳一下。
 struct BeadEditView: View {
     @Bindable var model: BeadEditorModel
-    /// 「完成」：由调用方把页面换回生成页。
-    let onClose: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
 
     /// 复位请求：+1 让预览区重新适配。
     @State private var resetToken = 0
@@ -17,11 +21,10 @@ struct BeadEditView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            header
-
             BeadPreviewPane(model: model, resetToken: resetToken)
                 .overlay(alignment: .bottom) { BeadHintBanner(hint: model.hint) }
                 .padding(.horizontal, 16)
+                .padding(.top, BeadSpace.sm)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             tools
@@ -31,12 +34,32 @@ struct BeadEditView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background {
-            BeadTheme.parchment.ignoresSafeArea()
+            BeadTheme.parchmentGradient.ignoresSafeArea()
         }
-        // 进页面必须处于编辑态（3D 下顺带切回 2D）。调用方 `openEdit()` 已经切好了，
-        // 这里只是兜底 —— 重复调用会把画笔工具复位、提示重播一遍。
+        .navigationTitle("编辑".loc)
+        .navigationBarTitleDisplayMode(.inline)
+        // 拼豆栈根收起了导航栏；本页要显式拉回来，系统返回键才出现。
+        .toolbar(.visible, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
+        .toolbarBackground(BeadTheme.parchment.opacity(0.8), for: .navigationBar)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 14, weight: .bold))
+                }
+                // 系统填充按钮：蓝的是**按钮底**，不是给图标单独套圆。
+                .buttonStyle(.borderedProminent)
+                .tint(BeadTheme.primary)
+                .accessibilityLabel("完成".loc)
+            }
+        }
+        // 进页面必须处于编辑态（3D 下顺带切回 2D）。正常情况下 `BeadRootView` 的
+        // `onChange(of: path)` 在 push 时就切好了，这里兜底；带判断所以重复调用不会把
+        // 画笔工具复位、提示重播。
         .onAppear { if !model.isEditing { model.setEditing(true) } }
-        // 退出时收尾（`完成` 只负责换页，状态收口统一放这里，幂等）。
         .onDisappear { if model.isEditing { model.setEditing(false) } }
         .sheet(isPresented: $showBrush) {
             BeadBrushSheet(
@@ -47,45 +70,6 @@ struct BeadEditView: View {
                 model.setBrush(code)
             }
         }
-    }
-
-    // MARK: - 顶栏
-
-    /// 自绘顶栏而不是导航栏：本页在「拼豆」tab 内换页，套一层 `NavigationStack`
-    /// 会连带改安全区、把预览区挤一下（生成页特意没有导航栏，见 `BeadRootView`）。
-    private var header: some View {
-        ZStack {
-            Text("编辑".loc)
-                .beadBodyStrong()
-                .foregroundStyle(BeadTheme.ink)
-
-            HStack(spacing: BeadSpace.xs) {
-                Button {
-                    resetToken += 1
-                } label: {
-                    Image(systemName: "arrow.counterclockwise")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(BeadTheme.inkMuted80)
-                        .frame(width: 32, height: 32)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(BeadPressStyle(pressedScale: 0.94))
-                .accessibilityLabel("复位".loc)
-
-                Spacer(minLength: 0)
-
-                Button("完成".loc) {
-                    onClose()
-                }
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(BeadTheme.primary)
-                .frame(height: 32)
-                .contentShape(Rectangle())
-                .buttonStyle(BeadPressStyle(pressedScale: 0.94))
-            }
-        }
-        .frame(height: 44)
-        .padding(.horizontal, 16)
     }
 
     // MARK: - 工具条
@@ -111,6 +95,7 @@ struct BeadEditView: View {
                         .opacity(model.canRedo ? 1 : 0.36)
                         .disabled(!model.canRedo)
                     BeadChip(title: "清空手绘".loc) { model.clearHandEdits() }
+                    BeadChip(title: "复位".loc) { resetToken += 1 }
                 }
             }
             .padding(.horizontal, 16)
@@ -138,10 +123,12 @@ struct BeadEditView: View {
             .background(BeadTheme.pearl, in: Capsule())
             .overlay { Capsule().strokeBorder(BeadTheme.hairline, lineWidth: 1) }
         }
-        .buttonStyle(BeadPressStyle(pressedScale: 0.96))
+        .buttonStyle(.automatic)
     }
 }
 
 #Preview {
-    BeadEditView(model: BeadEditorModel(), onClose: {})
+    NavigationStack {
+        BeadEditView(model: BeadEditorModel())
+    }
 }

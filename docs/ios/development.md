@@ -7,7 +7,7 @@
 
 | 字段 | 值 |
 | --- | --- |
-| Product Name | 见 [README 命名对照](README.md#命名对照)，如 `BeadPattern` |
+| Product Name | 见 [README 命名对照](README.md#命名对照)，如 `RabbitBead` |
 | Team | 自己的开发者账号 |
 | Organization Identifier | `com.loomiskoo` |
 | Interface | `SwiftUI` |
@@ -24,7 +24,7 @@ miniTool/<工具>/ios/
 最终路径示例：
 
 ```text
-miniTool/bead-pattern/ios/BeadPattern/BeadPattern.xcodeproj
+miniTool/rabbit-bead/ios/RabbitBead/RabbitBead.xcodeproj
 ```
 
 不要放在 `<工具>/` 根目录，避免和 H5 源码、`dist/`、`build.mjs` 混在一起。
@@ -34,9 +34,9 @@ miniTool/bead-pattern/ios/BeadPattern/BeadPattern.xcodeproj
 小工具项目体量小，按**功能分层**而不是按类型分层：
 
 ```text
-BeadPattern/
+RabbitBead/
 ├── App/
-│   └── BeadPatternApp.swift
+│   └── RabbitBeadApp.swift
 ├── Features/
 │   ├── Import/            # 选图
 │   ├── Editor/            # 主编辑界面

@@ -52,6 +52,8 @@ enum ProjectPaths {
     static var images: URL { root.appendingPathComponent("images", isDirectory: true) }
     static var thumbs: URL { root.appendingPathComponent("thumbs", isDirectory: true) }
     static var index: URL { root.appendingPathComponent("projects.json") }
+    static var draftImage: URL { root.appendingPathComponent("draft.jpg") }
+    static var draftSettings: URL { root.appendingPathComponent("draft-settings.json") }
     /// 「我的豆子」库存（色卡/色号 → 已有颗数）。
     static var inventory: URL { root.appendingPathComponent("inventory.json") }
 

@@ -15,37 +15,37 @@ struct BeadCropView: View {
     let onApply: (CropOutput?) -> Void
 
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-                cropCanvas
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .padding(.horizontal, 12)
-                    .padding(.top, 8)
-                controlPanel
-                actionButtons
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(BeadTheme.background)
-            .navigationTitle("裁切图片")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button {
-                        dismiss()
-                    } label: {
-                        Image(systemName: "chevron.backward")
-                    }
-                    .accessibilityLabel("返回")
-                }
-            }
-            .modifier(BeadCropNavChrome())
+        VStack(spacing: 0) {
+            cropCanvas
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(.horizontal, 12)
+                .padding(.top, 8)
+            controlPanel
+                .padding(.bottom, BeadSpace.md)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background {
+            BeadTheme.parchmentGradient.ignoresSafeArea()
+        }
+        .navigationTitle("裁切图片".loc)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("应用".loc) {
+                    let result = model.applyCrop()
+                    onApply(result)
+                    dismiss()
+                }
+                .fontWeight(.semibold)
+            }
+        }
+        .modifier(BeadCropNavChrome())
     }
 
     private var cropCanvas: some View {
         GeometryReader { geometry in
             ZStack {
-                BeadTheme.viewport
+                BeadTheme.cropSurface
                     .clipShape(RoundedRectangle(cornerRadius: BeadRadius.lg, style: .continuous))
 
                 CropCanvasView(
@@ -84,6 +84,7 @@ struct BeadCropView: View {
                         }
                 )
             }
+            .beadCardShadow()
             .onAppear { openIfNeeded(geometry.size) }
             .onChange(of: geometry.size) { _, size in openIfNeeded(size) }
         }
@@ -109,10 +110,11 @@ struct BeadCropView: View {
             ratioChips
 
             HStack(spacing: BeadSpace.sm) {
-                Text("缩放")
-                    .beadCaption()
+                Text("缩放".loc)
+                    .font(.system(size: 12))
                     .foregroundStyle(BeadTheme.inkMuted80)
-                    .frame(width: 32, alignment: .leading)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
 
                 Slider(value: $model.zoomPercent, in: 0...500)
                     .tint(BeadTheme.primary)
@@ -126,87 +128,58 @@ struct BeadCropView: View {
                     }
                 }
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, 14)
         }
-        .padding(.vertical, BeadSpace.sm)
-        .background(BeadTheme.canvas)
-        .overlay(alignment: .top) {
-            Rectangle()
-                .fill(BeadTheme.hairline)
-                .frame(height: 0.5)
-        }
+        .padding(.vertical, 10)
+        .background(
+            BeadTheme.canvas,
+            in: RoundedRectangle(cornerRadius: BeadRadius.lg, style: .continuous)
+        )
+        .beadCardShadow()
+        .padding(.horizontal, 12)
+        .padding(.top, 10)
     }
 
     private var ratioChips: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: BeadSpace.xs) {
+                Text("比例".loc)
+                    .font(.system(size: 12))
+                    .foregroundStyle(BeadTheme.inkMuted80)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+
                 ForEach(CropRatio.presets) { ratio in
                     BeadChip(
                         title: ratio.label,
                         selected: model.selectedRatio.id == ratio.id,
+                        prominentWhenSelected: false,
                         hugContent: true
                     ) {
                         model.selectRatio(ratio)
                     }
                 }
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, 14)
         }
     }
 
     private func cropToolButton(systemName: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: systemName)
-                .font(.system(size: 15, weight: .semibold))
+                .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(BeadTheme.inkMuted80)
-                .frame(width: 40, height: 34)
-                .background(BeadTheme.pearl, in: Capsule())
-                .overlay { Capsule().strokeBorder(BeadTheme.hairline, lineWidth: 1) }
+                .frame(width: 28, height: 28)
+                .background(
+                    BeadTheme.pearl,
+                    in: RoundedRectangle(cornerRadius: BeadRadius.sm, style: .continuous)
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: BeadRadius.sm, style: .continuous)
+                        .strokeBorder(BeadTheme.hairline, lineWidth: 1)
+                }
         }
-        .buttonStyle(BeadPressStyle(pressedScale: 0.94))
-    }
-
-    private var actionButtons: some View {
-        HStack(spacing: BeadSpace.xs) {
-            Button {
-                model.reset()
-            } label: {
-                secondaryActionLabel("重置".loc)
-            }
-            .buttonStyle(BeadPressStyle())
-
-            Button {
-                let result = model.applyCrop()
-                onApply(result)
-                dismiss()
-            } label: {
-                primaryActionLabel("应用".loc)
-            }
-            .buttonStyle(BeadPressStyle())
-        }
-        .padding(.horizontal, 16)
-        .padding(.top, BeadSpace.sm)
-        .padding(.bottom, BeadSpace.md)
-        .background(BeadTheme.canvas)
-    }
-
-    private func secondaryActionLabel(_ title: String) -> some View {
-        Text(title)
-            .beadCaption()
-            .foregroundStyle(BeadTheme.inkMuted80)
-            .frame(maxWidth: .infinity)
-            .frame(height: 44)
-            .background(BeadTheme.pearl, in: Capsule())
-            .overlay { Capsule().strokeBorder(BeadTheme.hairline, lineWidth: 1) }
-    }
-
-    private func primaryActionLabel(_ title: String) -> some View {
-        Text(title)
-            .beadBody()
-            .foregroundStyle(BeadTheme.onPrimary)
-            .frame(maxWidth: .infinity)
-            .frame(height: 44)
-            .background(BeadTheme.primary, in: Capsule())
+        .buttonStyle(.automatic)
     }
 }
 
@@ -269,19 +242,29 @@ private struct CropCanvasView: View, Animatable {
 
     var body: some View {
         Canvas { context, size in
+            let bg = BeadTheme.cropSurface
             context.fill(
                 Path(CGRect(origin: .zero, size: size)),
-                with: .color(BeadTheme.viewport)
+                with: .color(bg)
             )
 
             if let image = image {
                 drawImage(context: context, image: image, size: size)
             }
 
-            context.fill(
-                Path(CGRect(origin: .zero, size: size)),
-                with: .color(.black.opacity(0.5))
-            )
+            // 框外：同色底 + 淡化图片（对齐 H5，不用整层黑罩）
+            var outside = Path(CGRect(origin: .zero, size: size))
+            outside.addRect(cropFrame)
+            context.fill(outside, with: .color(bg), style: FillStyle(eoFill: true))
+            context.drawLayer { layerContext in
+                var clip = Path(CGRect(origin: .zero, size: size))
+                clip.addRect(cropFrame)
+                layerContext.clip(to: clip, style: FillStyle(eoFill: true))
+                layerContext.opacity = 0.38
+                if let image = image {
+                    drawImage(context: layerContext, image: image, size: size)
+                }
+            }
 
             context.drawLayer { layerContext in
                 layerContext.clip(to: Path(cropFrame))
@@ -294,7 +277,7 @@ private struct CropCanvasView: View, Animatable {
             cropPath.addRect(cropFrame)
             context.stroke(
                 cropPath,
-                with: .color(.white.opacity(0.9)),
+                with: .color(.white.opacity(0.95)),
                 lineWidth: 2
             )
 

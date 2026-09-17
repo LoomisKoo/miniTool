@@ -80,7 +80,7 @@ struct BeadMineView: View {
                 } label: {
                     proCard
                 }
-                .buttonStyle(BeadPressStyle(pressedScale: 0.98))
+                .buttonStyle(.automatic)
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
                 // insetGrouped section 会裁切贴边内容；留出空隙，描边/阴影才不被切掉
@@ -124,7 +124,9 @@ struct BeadMineView: View {
         Section {
             // 不用 Button + `path.append`：`NavigationLink(value:)` 才带系统行样式
             // （点按高亮、disclosure 箭头、无障碍），也不需要自己补 chevron。
-            NavigationLink(value: BeadRoute.inventory(paletteId: paletteId)) {
+            NavigationLink {
+                BeadInventoryView(paletteId: paletteId)
+            } label: {
                 VStack(alignment: .leading, spacing: 8) {
                     inventoryTitleRow
                     inventoryDotsRow
@@ -180,7 +182,9 @@ struct BeadMineView: View {
                     .listRowBackground(Color.clear)
             } else {
                 ForEach(store.projects) { project in
-                    NavigationLink(value: BeadRoute.project(project)) {
+                    NavigationLink {
+                        BeadProjectEditorView(project: project)
+                    } label: {
                         projectRow(project)
                     }
                     .swipeActions(edge: .trailing) {

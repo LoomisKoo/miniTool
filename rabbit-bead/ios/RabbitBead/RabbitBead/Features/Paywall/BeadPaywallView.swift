@@ -13,15 +13,19 @@ struct BeadPaywallView: View {
                 VStack(alignment: .leading, spacing: BeadSpace.md) {
                     header
                     benefits
-                    purchaseButton
-                    restoreButton
+                    VStack(spacing: BeadSpace.xs) {
+                        purchaseButton
+                        restoreButton
+                    }
                     footnote
                 }
                 .padding(.horizontal, BeadSpace.md)
                 .padding(.top, BeadSpace.xs)
                 .padding(.bottom, BeadSpace.lg)
             }
-            .background(BeadTheme.parchment)
+            .background {
+                BeadTheme.parchmentGradient.ignoresSafeArea()
+            }
             .navigationTitle("解锁 Pro")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -76,7 +80,7 @@ struct BeadPaywallView: View {
                 .font(.system(size: 13, weight: .bold))
                 .foregroundStyle(BeadTheme.onPrimary)
                 .frame(width: 22, height: 22)
-                .background(BeadTheme.primary, in: Circle())
+                .background(BeadTheme.primaryGradient, in: Circle())
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .beadRowTitle()

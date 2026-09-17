@@ -9,9 +9,6 @@ struct BeadExportSheet: View {
 
     @Environment(\.dismiss) private var dismiss
 
-    /// 面板内直接弹付费墙（不再往外层模型挂，避免和导出面板抢同一个 sheet）。
-    @State private var showPaywall = false
-
     private var isPro: Bool { EntitlementStore.shared.isPro }
 
     var body: some View {
@@ -60,7 +57,7 @@ struct BeadExportSheet: View {
 
                 Section("图纸内容") {
                     Toggle(isOn: $options.coordinates) {
-                        labeled("行列坐标".loc, "顶行列号 + 左侧行号".loc)
+                        labeled("行列坐标".loc, "四边一圈坐标格，紧贴图案".loc)
                     }
                     Toggle(isOn: $options.codes) {
                         labeled("格内色号".loc, "每格标注豆色编号".loc)
@@ -78,6 +75,10 @@ struct BeadExportSheet: View {
                     }
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background {
+                BeadTheme.parchmentGradient.ignoresSafeArea()
+            }
             .navigationTitle("图纸选项")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -90,22 +91,19 @@ struct BeadExportSheet: View {
                         onSave()
                     }
                     .fontWeight(.semibold)
+                    .foregroundStyle(BeadTheme.primary)
                 }
             }
+            .toolbarBackground(.visible, for: .navigationBar)
+            .toolbarBackground(BeadTheme.parchment.opacity(0.8), for: .navigationBar)
         }
         // 一开始就要能看到全部选项（medium 那档会把「图纸内容」切掉一半，
         // 必须手动上拉才看得全）。
         .presentationDetents([.large])
-        .sheet(isPresented: $showPaywall) {
-            BeadPaywallView()
-        }
-        // 在面板里买断成功后自动收起付费墙。
-        .onChange(of: isPro) { _, unlocked in
-            if unlocked { showPaywall = false }
-        }
     }
 
-    /// 免费 / Pro 差别这一句。需要 Pro 时挂小锁：点一下直接弹付费墙，不做灰态禁用。
+    /// 免费 / Pro 差别这一句。需要 Pro 时挂小锁：点一下先收导出面板，再由根上弹付费墙
+    /// （嵌套 sheet 容易闪一下就没）。
     @ViewBuilder
     private var qualityLine: some View {
         if isPro {
@@ -118,7 +116,12 @@ struct BeadExportSheet: View {
             .foregroundStyle(BeadTheme.primary)
         } else {
             Button {
-                showPaywall = true
+                dismiss()
+                // 等导出面板收完再弹根上的付费墙，避免两层 sheet 抢 present。
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(320))
+                    EntitlementStore.shared.showPaywall = true
+                }
             } label: {
                 HStack(spacing: 4) {
                     Image(systemName: "lock.fill")

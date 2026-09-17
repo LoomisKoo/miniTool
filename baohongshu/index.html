@@ -1,0 +1,1777 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#fff">
+<title>爆红书</title>
+<style>
+/* 顶部两段：--safe-t 手机安全区 + --nav-h 小红书容器导航栏(44px)；--xhs-nav = 二者之和 */
+:root{--red:#ff2442;--ink:#222;--muted:#999;--line:#eee;--bg:#f7f7f7;--bar:64px;--nav-h:44px;--safe-t:var(--safe-area-inset-top,env(safe-area-inset-top,0px));--safe-b:var(--safe-area-inset-bottom,env(safe-area-inset-bottom,0px));--xhs-top:var(--safe-t);--xhs-nav:calc(var(--safe-t) + var(--nav-h))}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;min-height:100%;background:#eee;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;color:var(--ink)}
+button,input,textarea,select{font:inherit}button{border:0;background:none;color:inherit;cursor:pointer}
+/* 图标容器统一：<i> 默认斜体会让 emoji 头像发歪，一律拉正 */
+i,em{font-style:normal}
+.avatar,.big-avatar,.cat-icon,.eye-icon,.badge{line-height:1;text-align:center;font-style:normal}
+.app{max-width:430px;min-height:calc(100vh - var(--xhs-nav));margin:var(--xhs-nav) auto 0;background:#fff;position:relative;overflow:hidden}
+.scroll{min-height:calc(100vh - var(--xhs-nav));padding-bottom:calc(var(--bar) + env(safe-area-inset-bottom) + 14px);overflow-y:auto;-webkit-overflow-scrolling:touch}
+.top{height:58px;display:flex;align-items:center;padding:0 16px;gap:15px;border-bottom:1px solid #f4f4f4;position:sticky;top:0;background:rgba(255,255,255,.94);backdrop-filter:blur(14px);z-index:4}
+.logo{font-size:18px;font-weight:800;letter-spacing:-1px}.logo i{font-style:normal;color:var(--red)}
+.search{height:34px;flex:1;border-radius:18px;background:#f5f5f5;color:#aaa;display:flex;align-items:center;padding:0 13px;gap:7px;font-size:13px}
+.search span{font-size:17px;color:#777}.top-icon{font-size:21px;position:relative}.badge{position:absolute;right:-7px;top:-7px;background:var(--red);color:#fff;border:0;font-size:9px;line-height:14px;height:18px;min-width:18px;padding:0 4px;border-radius:10px;text-align:center;font-weight:700;white-space:nowrap;display:inline-flex;align-items:center;justify-content:center}
+.tabs{height:45px;display:flex;align-items:center;justify-content:center;gap:28px;border-bottom:1px solid #f4f4f4;position:sticky;top:58px;background:#fff;z-index:3}
+.tabs button{height:45px;color:#888;font-size:15px;position:relative}.tabs button.active{color:#222;font-weight:700}.tabs button.active:after{content:"";position:absolute;bottom:0;left:50%;width:23px;height:3px;border-radius:3px;background:#222;transform:translateX(-50%)}
+.feed{display:block;width:100%;-webkit-column-count:2;column-count:2;-webkit-column-gap:8px;column-gap:8px;padding:10px 7px}.feed .card{-webkit-column-break-inside:avoid;break-inside:avoid;page-break-inside:avoid;display:inline-block;width:100%;margin:0 0 8px}.card{overflow:hidden}.cover{height:222px;border-radius:8px;position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden;color:#fff;font-size:58px;background-size:cover;background-position:center;box-shadow:inset 0 -48px 40px rgba(0,0,0,.07)}.cover.ratio-tall{height:auto;aspect-ratio:3/4}.cover.ratio-short{height:auto;aspect-ratio:4/3}.cover.ratio-square{height:auto;aspect-ratio:1/1}.cover.ratio-34{height:auto;aspect-ratio:3/4}.cover.ratio-11{height:auto;aspect-ratio:1/1}.cover.ratio-43{height:auto;aspect-ratio:4/3}.cover.ratio-photo{height:auto;aspect-ratio:var(--cover-ar,3/4)}.cover.has-image{background-size:cover;background-position:center center;background-repeat:no-repeat;background-color:#1a191f}
+.my-posts .cover{height:auto!important}.cover:after{content:"";position:absolute;top:0;right:0;bottom:0;left:0;background:linear-gradient(145deg,rgba(255,255,255,.25),transparent 45%,rgba(0,0,0,.1));pointer-events:none}.cover span{filter:drop-shadow(0 4px 7px rgba(0,0,0,.12))}.cover-stats{position:absolute;left:9px;bottom:8px;z-index:1;color:#fff;font-size:11px;text-shadow:0 1px 4px rgba(0,0,0,.4);font-weight:600}.cover.small{height:170px}.c1{background:linear-gradient(145deg,#fbc2eb,#a6c1ee)}.c2{background:linear-gradient(145deg,#f6d365,#fda085)}.c3{background:linear-gradient(145deg,#84fab0,#8fd3f4)}.c4{background:linear-gradient(145deg,#d4fc79,#96e6a1)}.c5{background:linear-gradient(145deg,#fccb90,#d57eeb)}.c6{background:linear-gradient(145deg,#e0c3fc,#8ec5fc)}.c7{background:linear-gradient(145deg,#ffecd2,#fcb69f)}.cover .new{position:absolute;top:8px;left:8px;padding:3px 7px;border-radius:10px;background:var(--red);font-size:10px;color:#fff;z-index:1}
+.title{font-size:14px;line-height:1.4;margin:7px 2px 5px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.author{display:flex;align-items:center;gap:5px;color:#888;font-size:11px;padding:0 2px}.avatar{width:20px;height:20px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#ffc3a0,#ffafbd);font-size:11px;flex:none}.likes{margin-left:auto}.liked{color:var(--red)!important}.empty{padding:70px 25px;text-align:center;color:#aaa;font-size:14px}.empty b{font-size:40px;display:block;margin-bottom:10px}
+.section{padding:15px}.section-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}.section-head h2{font-size:18px;margin:0}.section-head small{color:#999}
+.hot-list{display:flex;gap:10px;overflow:auto;padding-bottom:3px}.hot{min-width:150px;height:92px;border-radius:10px;padding:11px;color:#333;background:linear-gradient(135deg,#fff1eb,#ffe3ed)}.hot:nth-child(2){background:linear-gradient(135deg,#edf7ff,#dceeff)}.hot:nth-child(3){background:linear-gradient(135deg,#f4edff,#e9d8ff)}.hot b{display:block;font-size:14px;margin-bottom:7px}.hot span{font-size:12px;color:#999}
+.inbox-head{padding:16px 15px 10px;background:#fff}.inbox-title{font-size:23px;font-weight:800}.inbox-cats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;padding:26px 15px 10px}.inbox-cat{text-align:center;font-size:13px;color:#555}.cat-icon{width:58px;height:58px;border-radius:18px;margin:0 auto 8px;display:flex;align-items:center;justify-content:center;font-size:29px;position:relative;box-shadow:0 5px 14px rgba(0,0,0,.08)}.cat-icon.like{background:linear-gradient(145deg,#ffe0df,#ffb8bd);color:#ff5268}.cat-icon.follow{background:linear-gradient(145deg,#dceaff,#a8caff);color:#4789e9}.cat-icon.comment{background:linear-gradient(145deg,#d4f7e4,#9fe5c2);color:#19a76a}.cat-icon svg{width:30px;height:30px;display:block;fill:currentColor}.cat-count{position:absolute;right:-10px;top:-8px;min-width:31px;height:22px;padding:0 7px;border-radius:13px;background:var(--red);border:2px solid #fff;color:#fff;font-size:11px;line-height:18px;font-weight:700}.message-group{padding:0 15px}.message{display:flex;gap:12px;padding:15px 0;border-bottom:1px solid #f3f3f3;align-items:center;cursor:pointer}.message .avatar{width:46px;height:46px;font-size:20px}.message-body{flex:1;min-width:0;font-size:14px;line-height:1.45}.message-body b{font-weight:650;display:block;font-size:15px;margin-bottom:4px}.message-body small{display:block;color:#aaa;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.message.unread .message-body b:before{content:"";display:inline-block;background:var(--red);width:6px;height:6px;border-radius:50%;margin-right:6px;vertical-align:2px}.message-meta{align-self:stretch;display:flex;flex-direction:column;align-items:flex-end;justify-content:space-between;color:#aaa;font-size:11px;min-width:37px}.chat-badge{min-width:20px;height:20px;border-radius:12px;background:var(--red);color:#fff;display:flex;align-items:center;justify-content:center;padding:0 5px;font-size:11px;font-weight:700}
+.profile-head{padding:24px 18px 20px;background:linear-gradient(180deg,#fff6f7,#fff)}.profile-row{display:flex;align-items:center;gap:14px}.big-avatar{width:68px;height:68px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:30px;background:linear-gradient(135deg,#ffd3b6,#ff8cae);border:3px solid #fff;box-shadow:0 2px 12px #f5c7cf}.profile-name{font-weight:700;font-size:20px}.profile-id{font-size:12px;color:#999;margin-top:4px}.stats{display:flex;gap:28px;margin-top:22px}.stats b{display:block;font-size:19px;line-height:26px;font-variant-numeric:tabular-nums}.stats span{display:block;color:#999;font-size:12px;line-height:16px;margin-top:3px}.profile-tabs{display:flex;height:45px;border-bottom:1px solid #eee}.profile-tabs button{flex:1;color:#999}.profile-tabs button.active{color:#222;font-weight:700;border-bottom:2px solid #222}.my-posts{display:block;-webkit-column-count:2;column-count:2;-webkit-column-gap:3px;column-gap:3px;padding:3px}.my-posts .card{-webkit-column-break-inside:avoid;break-inside:avoid;page-break-inside:avoid;display:inline-block;width:100%;margin:0 0 3px;vertical-align:top}.my-posts .cover{border-radius:3px}.my-posts .title{padding:0 5px;margin-top:7px}
+.bottom{height:calc(var(--bar) + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));position:fixed;bottom:0;left:50%;transform:translateX(-50%);max-width:430px;width:100%;background:rgba(255,255,255,.94);border-top:1px solid #eee;display:flex;align-items:center;justify-content:space-around;z-index:8;padding:0 0 var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))}.bottom button{flex:1;height:var(--bar);display:flex;align-items:center;justify-content:center;color:#999;font-size:14px;padding:0;position:relative}.bottom button.active{color:#222;font-weight:700}.bottom button>.badge{right:calc(50% - 28px);top:12px}.bottom .badge{right:-17px;top:-6px}.bottom .publish{display:flex;align-items:center;justify-content:center;font-size:25px;color:#fff;background:var(--red);width:48px;height:34px;margin:0 auto;border-radius:8px;line-height:1;font-weight:400;padding:0 0 2px}
+.modal-back{position:fixed;top:var(--xhs-nav);right:0;bottom:0;left:0;background:rgba(0,0,0,.38);z-index:20;opacity:0;pointer-events:none;transition:.2s}.modal-back.open{opacity:1;pointer-events:auto}.modal{position:absolute;bottom:0;left:50%;transform:translateX(-50%) translateY(100%);width:100%;max-width:430px;background:#fff;border-radius:18px 18px 0 0;padding:10px 18px calc(18px + env(safe-area-inset-bottom));transition:.28s;max-height:100%;overflow:auto}.modal-back.open .modal{transform:translateX(-50%) translateY(0)}.handle{width:36px;height:4px;border-radius:3px;background:#ddd;margin:0 auto 15px}.modal h2{font-size:18px;margin:0 0 18px}.upload{height:190px;border-radius:10px;background:#f7f7f7;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#aaa;position:relative;overflow:hidden}.upload strong{font-size:34px;font-weight:300;color:#bbb}.upload img{width:100%;height:100%;object-fit:cover;display:none}.upload.has img{display:block}.upload.has>*:not(img){display:none}.fields{display:grid;gap:12px;margin-top:15px}.field{display:flex;flex-direction:column;gap:6px}.field label{font-size:12px;color:#888}.field input,.field textarea,.field select{border:0;background:#f7f7f7;border-radius:8px;padding:12px;outline:none;color:#222}.field textarea{resize:none;height:65px}.category{display:flex;gap:7px;flex-wrap:wrap}.category button{padding:7px 13px;border-radius:20px;background:#f5f5f5;color:#888;font-size:12px}.category button.on{background:#fff0f2;color:var(--red);font-weight:600}.publish-btn{width:100%;height:46px;border-radius:23px;background:var(--red);color:#fff;margin-top:18px;font-weight:700;font-size:16px}.close{position:absolute;right:17px;top:15px;color:#999;font-size:22px}
+.detail-back{position:fixed;top:var(--xhs-nav);right:0;bottom:0;left:0;background:#f7f7f7;z-index:12;display:none;overflow:auto}.detail-back.open{display:block}.detail{max-width:430px;margin:auto;background:#fff;min-height:calc(100vh - var(--xhs-nav))}.detail-top{height:52px;display:flex;align-items:center;padding:0 15px;border-bottom:1px solid #eee;background:#fff;position:sticky;top:0;z-index:2}.detail-top button{font-size:25px;width:35px}.detail-top h3{margin:auto;font-size:16px}.detail-cover{height:350px;margin:12px 15px 0;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:90px;background-size:cover;background-position:center;box-shadow:0 5px 18px rgba(0,0,0,.08)}.detail-cover.has-image{height:auto!important;aspect-ratio:var(--cover-ar,3/4);max-height:min(72vh,640px);background-size:cover;background-position:center center;background-repeat:no-repeat;background-color:#1a191f}.detail-content{padding:18px 18px 30px}.detail-author{display:flex;align-items:center;gap:8px;color:#555;font-size:13px;margin-bottom:18px}.detail-author .avatar{width:30px;height:30px}.detail-content h1{font-size:21px;line-height:1.35;margin:0 0 10px}.detail-content p{color:#555;line-height:1.7;margin:0 0 12px}.detail-actions{display:flex;gap:24px;padding:15px 0;border-bottom:1px solid #eee;color:#666;font-size:14px}.detail-actions b{color:#222;margin-left:4px}.tag{color:#456bb3;margin-right:8px;font-size:13px}.comment-head{font-weight:700;margin:20px 0 4px}.comment{padding:12px 0;border-bottom:1px solid #f1f1f1;font-size:13px;line-height:1.7}.comment .avatar{margin-right:7px}.toast{position:fixed;bottom:82px;left:50%;transform:translateX(-50%) translateY(10px);background:rgba(30,30,30,.9);color:#fff;padding:10px 16px;border-radius:22px;font-size:13px;opacity:0;pointer-events:none;z-index:30;transition:.2s}.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.detail-back{position:fixed;top:var(--xhs-nav);right:0;bottom:0;left:0;background:#f7f7f7;z-index:12;display:none;overflow:auto}.detail-back.open{display:block}.detail{max-width:430px;margin:auto;background:#fff;min-height:calc(100vh - var(--xhs-nav))}.detail-top{height:52px;display:flex;align-items:center;padding:0 15px;border-bottom:1px solid #eee;background:#fff;position:sticky;top:0;z-index:2}.detail-top button{font-size:25px;width:35px}.detail-top h3{margin:auto;font-size:16px}.detail-cover{height:350px;margin:12px 15px 0;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:90px;background-size:cover;background-position:center;box-shadow:0 5px 18px rgba(0,0,0,.08)}.detail-cover.has-image{height:auto!important;aspect-ratio:var(--cover-ar,3/4);max-height:min(72vh,640px);background-size:cover;background-position:center center;background-repeat:no-repeat;background-color:#1a191f}.detail-content{padding:18px 18px 30px}.detail-author{display:flex;align-items:center;gap:8px;color:#555;font-size:13px;margin-bottom:18px}.detail-author .avatar{width:30px;height:30px}.detail-content h1{font-size:21px;line-height:1.35;margin:0 0 10px}.detail-content p{color:#555;line-height:1.7;margin:0 0 12px}.detail-actions{display:flex;gap:24px;padding:15px 0;border-bottom:1px solid #eee;color:#666;font-size:14px}.detail-actions b{color:#222;margin-left:4px}.tag{color:#456bb3;margin-right:8px;font-size:13px}.comment-head{font-weight:700;margin:20px 0 4px}.comment{padding:12px 0;border-bottom:1px solid #f1f1f1;font-size:13px;line-height:1.7}.comment .avatar{margin-right:7px}.chat-back{position:fixed;top:var(--xhs-nav);right:0;bottom:0;left:0;background:#f7f7f7;z-index:15;display:none;overflow:auto}.chat-back.open{display:block}.chat-page{max-width:430px;min-height:calc(100vh - var(--xhs-nav));margin:auto;background:#f7f7f7;padding-bottom:0;display:flex;flex-direction:column}.chat-head{height:54px;background:#fff;border-bottom:1px solid #eee;display:flex;align-items:center;padding:0 15px;position:sticky;top:0;z-index:2}.chat-head button{font-size:25px;width:35px}.chat-head h3{margin:auto;font-size:16px}.chat-body{padding:18px 14px;display:flex;flex-direction:column;gap:13px}.chat-row{display:flex;gap:8px;align-items:flex-end}.chat-row.me{justify-content:flex-end}.chat-row .avatar{width:34px;height:34px}.bubble{max-width:76%;padding:10px 12px;border-radius:14px;background:#fff;color:#333;font-size:14px;line-height:1.55;box-shadow:0 1px 2px rgba(0,0,0,.04)}.chat-row.me .bubble{background:#ff2442;color:#fff}.chat-compose{position:fixed;bottom:0;left:50%;transform:translateX(-50%);max-width:430px;width:100%;padding:10px 12px calc(10px + env(safe-area-inset-bottom));background:#fff;border-top:1px solid #eee;display:flex;gap:8px}.chat-compose input{flex:1;border:0;background:#f5f5f5;border-radius:20px;padding:10px 14px;outline:none}.chat-compose button{border-radius:19px;background:var(--red);color:#fff;padding:0 16px;font-size:13px}.toast{position:fixed;bottom:82px;left:50%;transform:translateX(-50%) translateY(10px);background:rgba(30,30,30,.9);color:#fff;padding:10px 16px;border-radius:22px;font-size:13px;opacity:0;pointer-events:none;z-index:30;transition:.2s}.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.detail-back{position:fixed;top:var(--xhs-nav);right:0;bottom:0;left:0;background:#f7f7f7;z-index:12;display:none;overflow:auto}.detail-back.open{display:block}.detail{max-width:430px;margin:auto;background:#fff;min-height:calc(100vh - var(--xhs-nav))}.detail-top{height:52px;display:flex;align-items:center;padding:0 15px;border-bottom:1px solid #eee;background:#fff;position:sticky;top:0;z-index:2}.detail-top button{font-size:25px;width:35px}.detail-top h3{margin:auto;font-size:16px}.detail-cover{height:350px;margin:12px 15px 0;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:90px;background-size:cover;background-position:center;box-shadow:0 5px 18px rgba(0,0,0,.08)}.detail-cover.has-image{height:auto!important;aspect-ratio:var(--cover-ar,3/4);max-height:min(72vh,640px);background-size:cover;background-position:center center;background-repeat:no-repeat;background-color:#1a191f}.detail-content{padding:18px 18px 30px}.detail-author{display:flex;align-items:center;gap:8px;color:#555;font-size:13px;margin-bottom:18px}.detail-author .avatar{width:30px;height:30px}.detail-content h1{font-size:21px;line-height:1.35;margin:0 0 10px}.detail-content p{color:#555;line-height:1.7;margin:0 0 12px}.detail-actions{display:flex;gap:24px;padding:15px 0;border-bottom:1px solid #eee;color:#666;font-size:14px}.detail-actions b{color:#222;margin-left:4px}.tag{color:#456bb3;margin-right:8px;font-size:13px}.comment-head{font-weight:700;margin:20px 0 4px}.comment{padding:12px 0;border-bottom:1px solid #f1f1f1;font-size:13px;line-height:1.7}.comment .avatar{margin-right:7px}.activity-back{position:fixed;top:var(--xhs-nav);right:0;bottom:0;left:0;background:#fff;z-index:14;display:none;overflow:auto}.activity-back.open{display:block}.activity-page{max-width:430px;min-height:calc(100vh - var(--xhs-nav));margin:auto;background:#fff;padding-bottom:20px}.chat-back{position:fixed;top:var(--xhs-nav);right:0;bottom:0;left:0;background:#f7f7f7;z-index:15;display:none;overflow:auto}.chat-back.open{display:block}.chat-page{max-width:430px;min-height:calc(100vh - var(--xhs-nav));margin:auto;background:#f7f7f7;padding-bottom:0;display:flex;flex-direction:column}.chat-head{height:54px;background:#fff;border-bottom:1px solid #eee;display:flex;align-items:center;padding:0 15px;position:sticky;top:0;z-index:2}.chat-head button{font-size:25px;width:35px}.chat-head h3{margin:auto;font-size:16px}.chat-body{padding:18px 14px;display:flex;flex-direction:column;gap:13px}.chat-row{display:flex;gap:8px;align-items:flex-end}.chat-row.me{justify-content:flex-end}.chat-row .avatar{width:34px;height:34px}.bubble{max-width:76%;padding:10px 12px;border-radius:14px;background:#fff;color:#333;font-size:14px;line-height:1.55;box-shadow:0 1px 2px rgba(0,0,0,.04)}.chat-row.me .bubble{background:#ff2442;color:#fff}.chat-compose{position:fixed;bottom:0;left:50%;transform:translateX(-50%);max-width:430px;width:100%;padding:10px 12px calc(10px + env(safe-area-inset-bottom));background:#fff;border-top:1px solid #eee;display:flex;gap:8px}.chat-compose input{flex:1;border:0;background:#f5f5f5;border-radius:20px;padding:10px 14px;outline:none}.chat-compose button{border-radius:19px;background:var(--red);color:#fff;padding:0 16px;font-size:13px}.toast{position:fixed;bottom:82px;left:50%;transform:translateX(-50%) translateY(10px);background:rgba(30,30,30,.9);color:#fff;padding:10px 16px;border-radius:22px;font-size:13px;opacity:0;pointer-events:none;z-index:30;transition:.2s}.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+/* 顶部不留白、不圆角：所有页面容器一律贴顶铺满 */
+@media(min-width:431px){body{padding:0!important}.app{border-radius:0!important;box-shadow:none!important;min-height:calc(100vh - var(--xhs-nav))}}
+ .detail-actions{gap:10px}.detail-action{border:0;background:#f7f7f7;border-radius:18px;padding:7px 10px;color:#555}.detail-action.on{color:var(--red);background:#fff0f2}.comment-form{display:flex;gap:8px;margin:10px 0 4px}.comment-form input{flex:1;border:0;background:#f5f5f5;border-radius:18px;padding:9px 12px;outline:none}.comment-form button{border-radius:18px;background:var(--red);color:#fff;padding:0 14px}.detail{background:#1A191F!important;color:#F5F4F7}.detail-top{height:58px;background:#1A191F!important;border:0!important;color:#F5F4F7}.detail-top button{color:#F5F4F7}.detail-cover{height:min(68vh,560px);margin:0;border-radius:0;box-shadow:none}.detail-cover .media-count{display:none}.detail-content{padding:18px 18px 24px}.detail-content h1{font-size:20px;color:#F5F4F7}.detail-content p{color:#C8C5D0}.detail-bottom{position:fixed;left:50%;bottom:0;transform:translateX(-50%);z-index:4;width:100%;max-width:430px;display:flex;align-items:center;gap:10px;padding:10px 14px calc(10px + env(safe-area-inset-bottom));background:#1A191F;border-top:1px solid #302F37}.detail-bottom .comment-form{flex:1;margin:0}.detail-bottom .comment-form input{height:38px;background:#25242B;color:#F5F4F7}.detail-bottom .comment-form button{display:none}.detail-bottom .detail-action{background:transparent;color:#F5F4F7;padding:4px;font-size:14px;white-space:nowrap}.detail-bottom .detail-action.on{color:var(--red)}.detail-bottom .detail-action:first-child{font-size:22px}
+ .eye-icon{display:inline-block;width:13px;height:8px;border:1.5px solid currentColor;border-radius:12px/8px;margin-right:3px;vertical-align:-1px;position:relative}.eye-icon:after{content:"";position:absolute;width:3px;height:3px;border-radius:50%;background:currentColor;left:3.5px;top:1px}.stats{justify-content:space-around;gap:0}.stats>div{text-align:center;min-width:72px}.my-posts .empty{grid-column:1/-1;width:100%;min-height:300px;display:flex;flex-direction:column;align-items:center;justify-content:center}.follow-btn{margin-left:auto;color:#fff!important;background:var(--red);border-radius:18px;padding:7px 15px}.follow-btn.followed{color:#888!important;background:#fff;border:1px solid #ccc}.detail-menu{position:absolute;right:12px;top:46px;z-index:5;background:#fff;border-radius:12px;box-shadow:0 5px 20px rgba(0,0,0,.16);padding:6px;display:none}.detail-menu.open{display:block}.detail-menu button{display:block;width:120px;text-align:left;padding:9px 10px;font-size:13px}.activity-back,.detail-back,.chat-back{transform:translateX(100%);transition:transform .28s cubic-bezier(.22,.61,.36,1);display:block;visibility:hidden;pointer-events:none}.activity-back.open,.detail-back.open,.chat-back.open{transform:translateX(0);visibility:visible;pointer-events:auto}.activity-back.closing,.detail-back.closing,.chat-back.closing{transform:translateX(-100%)}
+.detail-top .detail-author{margin:0;flex:1;min-width:0;align-items:center}.detail-top .detail-author b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}/* 顶栏的返回/菜单键是 25px 图标字号，关注按钮必须显式收小，否则会被一起撑大 */
+.detail-top .follow-btn{width:auto!important;white-space:nowrap;flex:none;margin:0 8px;padding:6px 14px;font-size:13px!important;line-height:1;font-weight:500;border-radius:15px}.detail-top>button{flex:none;white-space:nowrap}.detail-content .comment{display:flex;gap:10px;padding:14px 0;border-bottom:1px solid #f1f1f1;font-size:13px;position:static;min-height:0}
+.detail-content .comment .avatar{position:static;width:30px;height:30px;font-size:14px;flex:none}
+.c-main{flex:1;min-width:0}
+.c-top{display:flex;align-items:center;gap:7px;margin-bottom:3px;line-height:1.3}
+.c-top b{color:#8a8794;font-size:12.5px;font-weight:500}
+.c-meta{color:#b3b0bb;font-size:11px}
+.c-text{margin:0!important;padding:0;color:#333;line-height:1.45;word-break:break-word}
+.c-acts{display:flex;gap:16px;margin:0;padding:0;line-height:1}
+.c-act{color:#9a97a2;font-size:12px;padding:0;margin:0;background:none;line-height:1;height:auto;min-height:0}
+.c-act.on{color:var(--red)}.detail-bottom .detail-action,.detail-bottom .detail-action.on{background:transparent!important}
+.profile-head{position:relative}.theme-toggle{position:absolute;right:16px;top:18px;border:1px solid #ddd;background:#fff;border-radius:18px;padding:6px 10px;color:#777}
+.chat-row{align-items:flex-start!important}.activity-back.closing,.detail-back.closing,.chat-back.closing{transform:translateX(100%)}
+body.dark{background:#111;color:#f5f5f5}body.dark .app,body.dark .scroll,body.dark .detail,body.dark .activity-page,body.dark .chat-page{background:#17171c;color:#f5f5f5}body.dark .top,body.dark .tabs,body.dark .bottom,body.dark .inbox-head,body.dark .chat-head,body.dark .chat-compose{background:rgba(23,23,28,.96);border-color:#303039}body.dark .search,body.dark .field input,body.dark .field textarea,body.dark .chat-compose input,body.dark .comment-form input{background:#292930;color:#f5f5f5}body.dark .tabs button,body.dark .bottom button,body.dark .message-body small,body.dark .profile-id,body.dark .section-head small{color:#a9a9b3}body.dark .profile-head{background:linear-gradient(180deg,#29202a,#17171c)}body.dark .profile-tabs,body.dark .message,body.dark .comment{border-color:#303039}body.dark .profile-tabs button{color:#999}body.dark .message-body,body.dark .detail-content p{color:#ddd}body.dark .bubble,body.dark .detail-action,body.dark .detail-menu{background:#292930;color:#eee}body.dark .theme-toggle{background:#292930;border-color:#444;color:#eee}body.dark .inbox-cats{border-color:#25252b}body.dark .empty{color:#aaa}
+</style>
+<style>
+body{background:#1A191F}
+body.dark{background:#1A191F;color:#F5F4F7}
+body.dark .app,body.dark .scroll{background:#1A191F;color:#F5F4F7}
+body.dark .top,body.dark .tabs,body.dark .bottom,body.dark .inbox-head,body.dark .chat-head,body.dark .chat-compose{background:#1A191F;border-color:#302F37}
+body.dark .logo,body.dark .tabs button.active,body.dark .bottom button.active,body.dark .inbox-title,body.dark .profile-name,body.dark .detail-content h1{color:#F5F4F7}
+body.dark .tabs button,body.dark .bottom button,body.dark .profile-id,body.dark .author,body.dark .section-head small{color:#92909B}
+body.dark .search,body.dark .field input,body.dark .field textarea,body.dark .chat-compose input,body.dark .comment-form input{background:#25242B;color:#F5F4F7}
+body.dark .search{color:#92909B}
+body.dark .profile-head{background:#1A191F}
+body.dark .profile-tabs,body.dark .message,body.dark .comment{border-color:#302F37}
+body.dark .profile-tabs button{color:#92909B}
+body.dark .profile-tabs button.active{color:#F5F4F7}
+body.dark .section,body.dark .hot,body.dark .modal,body.dark .detail,body.dark .activity-page,body.dark .chat-page{background:#1A191F;color:#F5F4F7}
+body.dark .hot{background:#25242B}
+body.dark .message-body,body.dark .detail-content p,body.dark .comment{color:#D0CED6}
+body.dark .message-body small{color:#92909B}
+body.dark .bubble,body.dark .detail-action,body.dark .detail-menu,body.dark .upload{background:#25242B;color:#F5F4F7}
+body.dark .detail-menu button{color:#F5F4F7}
+body.dark .detail-cover{box-shadow:0 5px 18px rgba(0,0,0,.3)}
+body.dark .theme-toggle{display:none}
+body.dark .empty{color:#92909B}body.dark .detail-top{background:#1A191F;border-color:#302F37;color:#F5F4F7}body.dark .detail-top button{color:#F5F4F7}
+.cat-count{border:0!important}
+.cat-count{width:22px;min-width:22px;padding:0;border-radius:50%}.cat-count.wide{width:auto;min-width:31px;padding:0 7px;border-radius:13px}
+.cat-count{display:flex;align-items:center;justify-content:center;line-height:1!important;text-align:center}
+/* 新评论提示条：不打断阅读，用户点击才把新评论插入列表顶部 */
+.new-comments{position:fixed;left:50%;bottom:calc(74px + env(safe-area-inset-bottom));z-index:80;display:none;align-items:center;gap:7px;padding:9px 15px;border-radius:20px;background:rgba(255,255,255,.97);color:var(--red);font-size:13px;font-weight:650;box-shadow:0 6px 22px rgba(0,0,0,.2);border:1px solid rgba(0,0,0,.06);cursor:pointer}
+.new-comments.show{display:flex;animation:ncIn .24s cubic-bezier(.22,1,.36,1) both}
+.new-comments b{font-weight:700}
+@keyframes ncIn{from{opacity:0;transform:translate(-50%,10px) scale(.96)}to{opacity:1;transform:translate(-50%,0) scale(1)}}
+body.dark .new-comments{background:rgba(41,41,48,.97);border-color:#3a3a44;color:#FF6B7E}
+.comment-flash{animation:cFlash 1.1s ease}
+@keyframes cFlash{0%{background:rgba(255,36,66,.09)}100%{background:transparent}}
+.profile-page{padding:0!important;background:#1A191F!important}.profile-hero{position:relative;min-height:auto;padding:12px 16px 14px;color:#fff;overflow:hidden;background:radial-gradient(circle at 65% 15%,rgba(74,111,168,.9),transparent 24%),radial-gradient(circle at 25% 20%,rgba(85,54,130,.8),transparent 32%),linear-gradient(145deg,#080b18,#192d4d 52%,#12131d)}.profile-hero:before{content:"✦　·　✧　　·　✦　　·　✧　·";position:absolute;top:20px;left:0;right:0;color:rgba(255,255,255,.55);font-size:18px;letter-spacing:9px;white-space:nowrap;transform:rotate(-12deg)}.profile-top{display:none}.profile-row.profile-user{position:relative;z-index:1;margin-top:0;gap:12px;align-items:flex-start}.profile-row.profile-user>div{flex:1;min-width:0;padding-top:2px}.profile-row.profile-user .profile-edit-btn{margin-left:auto;flex:none;margin-top:0}.profile-page .big-avatar{width:76px;height:76px;background:linear-gradient(135deg,#5d7da8,#e6a7bd);font-size:35px;box-shadow:0 0 0 2px rgba(255,255,255,.8),0 5px 18px rgba(0,0,0,.35)}.profile-page .profile-name{font-size:21px;color:#fff;display:flex;align-items:center}.profile-page .profile-id{color:rgba(255,255,255,.65)}.profile-bio{position:relative;z-index:1;margin:14px 0 8px;font-size:13px;line-height:1.7;color:rgba(255,255,255,.88)}.profile-tags{display:flex;gap:7px;position:relative;z-index:1}.profile-tags span{padding:4px 10px;border-radius:13px;background:rgba(255,255,255,.14);font-size:11px;color:#e8edf6}.profile-page .stats{position:relative;z-index:1;justify-content:flex-start;gap:27px;margin-top:14px}.profile-page .stats>div{text-align:left;min-width:auto}.profile-page .stats b{color:#fff}.profile-page .stats span{color:rgba(255,255,255,.7)}.profile-actions{display:none!important}.profile-page .profile-tabs{height:48px;background:#1A191F;border-color:#302F37}.profile-page .my-posts{background:#1A191F}
+/* ===== 我的页面：编辑资料入口 + 标签选择器 ===== */
+.profile-tags{flex-wrap:wrap;align-items:center}
+.profile-edit-btn{position:relative;z-index:1;display:inline-flex;align-items:center;height:24px;padding:0 11px;border:1px solid rgba(255,255,255,.3);border-radius:12px;background:rgba(255,255,255,.12);color:rgba(255,255,255,.92);font-size:11.5px;line-height:1;font-weight:500}
+.profile-edit-btn.dashed{border-style:dashed;border-color:rgba(255,255,255,.45);background:rgba(255,255,255,.08)}
+.profile-edit-btn:active{transform:scale(.95)}
+.profile-name.is-empty{color:rgba(255,255,255,.6);font-weight:500}
+.profile-bio.is-empty{color:rgba(255,255,255,.5);cursor:pointer}
+.field label .hint{color:#aaa;font-weight:400;margin-left:2px}
+.tag-picker{display:flex;flex-wrap:wrap;gap:8px}
+.tag-chip{padding:8px 13px;border-radius:16px;background:#f4f4f7;color:#555;font-size:12.5px;border:1px solid transparent;transition:.15s}
+.tag-chip.on{background:#ffe8ee;color:#E5365F;border-color:#ffbccd;font-weight:600}
+.tag-add{display:flex;gap:8px}
+.tag-add input{flex:1;height:40px;border-radius:10px;background:#f7f7f7;padding:0 12px;font-size:13.5px;border:1px solid transparent}
+.tag-add input:focus{background:#fff;border-color:#ffbccd}
+.tag-add button{padding:0 16px;border-radius:10px;background:#222;color:#fff;font-size:13px;font-weight:600;flex:none}
+.tag-selected{display:flex;flex-wrap:wrap;gap:8px}
+.tag-selected:empty{display:none}
+.tag-custom{display:inline-flex;align-items:center;gap:3px;padding:7px 10px 7px 12px;border-radius:16px;background:#ffe8ee;color:#E5365F;font-size:12.5px;font-weight:600}
+.tag-custom i{font-style:normal;font-size:15px;line-height:1;opacity:.55;padding:0 2px}
+body.dark .tag-chip{background:#25242B;color:#C8C6D0}
+body.dark .tag-chip.on{background:#3A2530;color:#FF9DB8;border-color:#6E3A4C}
+body.dark .tag-add input{background:#25242B;color:#F5F4F7}
+body.dark .tag-add button{background:#F0F0F3;color:#111}
+body.dark .tag-custom{background:#3A2530;color:#FF9DB8}
+/* ===== 自适应屏幕宽度：撑满横向空间 ===== */
+html,body{height:100%;width:100%;max-width:100%;overflow:hidden;overscroll-behavior:none}
+.app{max-width:100%!important;height:100%;min-height:100%;display:flex;flex-direction:column;overflow:hidden}
+.scroll{flex:1;min-width:0;min-height:0!important;overflow-y:auto;overflow-x:hidden}
+@media(min-width:431px){.app{height:100%}}
+.bottom{left:0!important;transform:none!important;max-width:100%!important}
+.modal{left:0!important;max-width:100%!important;transform:translateY(100%)!important}
+.modal-back.open .modal{transform:translateY(0)!important}
+.detail{max-width:100%!important}
+.detail-bottom{left:0!important;transform:none!important;max-width:100%!important}
+.activity-page{max-width:100%!important}
+.chat-page{max-width:100%!important}
+.chat-compose{left:0!important;transform:none!important;max-width:100%!important}
+.feed{width:100%;-webkit-column-count:2;column-count:2;column-width:auto}
+.my-posts{-webkit-column-count:2;column-count:2}
+.inbox-cats{grid-template-columns:repeat(auto-fit,minmax(110px,1fr))}
+/* 消息页顶部导航：固定吸顶、无圆角、无上边距、标题水平居中 */
+#page .inbox-head{position:sticky;top:0;z-index:6;height:52px;padding:0 15px;display:flex;align-items:center;justify-content:center;border-radius:0;border:0;border-bottom:1px solid var(--ih-line);background:var(--ih-bg);color:var(--ih-fg);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}
+#page .inbox-title{font-size:17px;font-weight:600;line-height:1;margin:0;color:inherit}
+/* 消息列表页顶部的「消息」标题由小红书容器导航栏显示，页面里不再重复显示；
+   保留 52px 的 .inbox-head 作为等高留白（否则列表会顶到容器导航栏下面） */
+#page>.inbox-head .inbox-title{display:none}
+:root{--ih-bg:rgba(255,255,255,.96);--ih-fg:#222;--ih-line:#f0f0f2}
+body.dark{--ih-bg:rgba(26,25,31,.96);--ih-fg:#F5F4F7;--ih-line:#2A2A32}
+body.tab-messages .app{border-radius:0!important;box-shadow:none!important;height:calc(100vh - var(--xhs-nav))!important;min-height:calc(100vh - var(--xhs-nav))!important}
+body.tab-messages{padding:0!important}
+body.tab-messages .app>.scroll{padding-top:0}
+/* 消息列表紧贴屏幕顶部：把 app 钉死在视口顶部，清掉任何上边距/圆角/留白 */
+body.tab-messages{margin:0!important;padding:0!important;border:0!important}
+/* 消息列表页顶部只有标题、左右无控件，标题由小红书容器导航栏显示，
+   所以这一页不预留容器高度：内容直接从屏幕顶部开始（隐藏在我们的 52px 标题栏之下） */
+body.tab-messages .app{position:fixed!important;top:0!important;right:0!important;bottom:0!important;left:0!important;margin:0!important;max-width:100%!important;height:auto!important;min-height:0!important;border-radius:0!important;box-shadow:none!important}
+body.tab-messages .scroll,body.tab-messages .app>.scroll,body.tab-messages #page{padding-top:0!important;margin-top:0!important;scroll-padding-top:0}
+/* 首页：顶栏只有 title「爆红书」（标题由小红书容器导航栏显示，页面内的 logo 只是同高度占位），
+   所以同样不预留容器高度，文字区从屏幕顶部开始；标题水平居中 */
+body.tab-home .app,body.tab-explore .app{margin-top:0!important;padding-top:var(--xhs-nav);height:100%!important;min-height:100%!important}
+body.tab-home .app>.scroll,body.tab-explore .app>.scroll{min-height:0}
+body.tab-home .top,body.tab-explore .top{justify-content:center}
+/* 我的页：内容需要避开容器导航栏，但顶部背景（星夜/粉色渐变）不跟着下移，直接铺到屏幕最顶 */
+body.tab-me .app{margin-top:0!important;height:100%!important;min-height:100%!important}
+body.tab-me .app>.scroll{min-height:0}
+body.tab-me #page .profile-hero{padding-top:calc(var(--xhs-nav) + 18px)}
+body.tab-me .theme-toggle{top:calc(var(--xhs-nav) + 22px)}
+body.tab-messages #page>.inbox-head{margin-top:0!important;padding-top:0!important;top:0!important;border-top:0!important;border-radius:0!important}
+body.tab-messages #page>.inbox-head .inbox-title{line-height:52px}
+/* 笔记详情页整页撑满横向空间：顶栏 / 封面 / 正文不再限宽居中 */
+.detail-top,.detail-cover,.detail-content{max-width:100%!important;width:100%;margin-left:0!important;margin-right:0!important}
+/* 聊天页消息区撑满横向：.chat-page 是列方向 flex 容器，
+   flex 子项上的 margin:auto 会让它收缩成内容宽度（而不是拉伸满宽），所以这里必须显式 width:100% */
+.chat-body{max-width:100%!important;width:100%!important;margin-left:0!important;margin-right:0!important}
+/* 手机端上线：所有内容区一律撑满横向，左右留白由各自的 padding 负责（不再居中限宽） */
+.chat-compose>*{max-width:100%!important}
+.message-group,.inbox-head{max-width:100%!important;width:100%;margin-left:0!important;margin-right:0!important}
+/* 关闭键（圆形按钮）和添加图片方块要按自己的尺寸走，不能被这条「一律撑满」的规则拉宽 */
+.modal>*:not(.close):not(.upload){max-width:100%!important;width:100%;margin-left:0!important;margin-right:0!important}
+.dm-toast{max-width:100%!important}
+body.dark .c-text{color:#D0CED6}
+body.dark .c-top b{color:#92909B}
+body.dark .c-meta{color:#7f7d88}
+body.dark .c-act{color:#8f8c98}
+body.dark .c-act.on{color:var(--red)}
+@media(min-width:768px){.feed{-webkit-column-count:3;column-count:3}.my-posts{-webkit-column-count:3;column-count:3}}
+@media(min-width:1440px){.feed{-webkit-column-count:4;column-count:4}}
+/* ===== 全局私信通知（顶部下拉，同屏最多 1 条，新消息把旧消息顶掉） ===== */
+.dm-layer{position:fixed;top:var(--xhs-nav);left:0;right:0;height:0;z-index:40;pointer-events:none}
+.dm-toast{pointer-events:auto;position:absolute;top:8px;left:10px;right:10px;margin:0 auto;max-width:900px;display:flex;align-items:center;gap:11px;padding:11px 14px;border-radius:14px;background:rgba(255,255,255,.97);box-shadow:0 8px 26px rgba(0,0,0,.16);border:1px solid rgba(0,0,0,.05);text-align:left;will-change:transform,opacity;opacity:0;transform:translateY(-160%) scale(.97);touch-action:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
+.dm-toast.in{animation:dmDrop .34s cubic-bezier(.22,1,.36,1) both}
+.dm-toast.out{animation:dmUp .2s ease forwards}
+.dm-toast .avatar{width:34px;height:34px;font-size:17px;flex:none}
+.dm-body{flex:1;min-width:0}
+.dm-body b{display:block;font-size:14px;font-weight:650;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dm-body small{display:block;color:#999;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dm-time{color:#bbb;font-size:11px;flex:none;align-self:flex-start;margin-top:2px}
+@keyframes dmDrop{from{transform:translateY(-160%) scale(.97);opacity:0}to{transform:translateY(0) scale(1);opacity:1}}
+@keyframes dmUp{from{transform:translateY(0) scale(1);opacity:1}to{transform:translateY(-160%) scale(.97);opacity:0}}
+body.dark .dm-toast{background:rgba(41,41,48,.97);border-color:#3a3a44}
+body.dark .dm-body b{color:#F5F4F7}
+body.dark .dm-body small{color:#92909B}
+/* 私信会话中的真实时间戳 */
+.chat-time{text-align:center;color:#b3b0bb;font-size:11px;margin:3px 0 1px;line-height:1.4}
+body.dark .chat-time{color:#7f7d88}
+/* ===== 所有页面顶部统一：无圆角、无上留白 ===== */
+html,body{margin:0;padding:0}
+.app,.detail,.activity-page,.chat-page,.detail-back,.activity-back,.chat-back{border-radius:0!important}
+.app>.top,.tabs,.inbox-head,.detail-top,.chat-head,.profile-hero,.activity-page>.inbox-head{margin-top:0!important;border-radius:0!important}
+.scroll,#page{padding-top:0!important;margin-top:0!important}
+.top,.detail-top,.chat-head,.inbox-head{top:0!important}
+/* 浮层仍从容器导航栏下方开始（偏移量保持），但用同色把导航栏那一截填实，避免透过看到上一页 */
+.detail-back,.activity-back,.chat-back{background:#1A191F;box-shadow:0 calc(-1 * var(--xhs-nav)) 0 0 #1A191F}
+.modal-back{box-shadow:0 calc(-1 * var(--xhs-nav)) 0 0 rgba(0,0,0,.38)}
+/* 详情页 / 私信页 底部栏：改为 sticky 钉在滚动容器底部。
+   fixed 会被父级 .detail-back/.chat-back 的 transform（滑入动画）变成「相对滚动容器」，
+   于是底栏会跟着列表一起滚走；sticky 不受 transform 影响。 */
+.detail-bottom,.chat-compose{position:sticky!important;left:0!important;right:0!important;top:auto!important;bottom:0!important;transform:none!important;width:100%!important;max-width:100%!important;margin:0!important;flex:none!important;z-index:5!important}
+/* 内容不足一屏时也把底栏顶到最底部 */
+.detail{display:flex!important;flex-direction:column}
+.detail-content,.chat-body{flex:1 0 auto}
+.detail-bottom,.chat-compose{margin-top:auto!important}
+.detail-bottom .comment-form{flex:1 1 0!important;min-width:0!important;max-width:52%!important}
+.detail-bottom .comment-form input{flex:1 1 auto!important;min-width:0!important}
+/* 聊天页改为「上中下三段」弹性布局：头部固定、消息区自己滚动、输入栏永远贴底。
+   完全不依赖 sticky/fixed，因此在任何浏览器、任何滚动位置都不会跑位。 */
+.chat-back{display:flex!important;flex-direction:column;overflow:hidden!important}
+.chat-page{flex:1 1 auto!important;width:100%!important;min-height:0!important;height:auto!important;margin:0!important;display:flex!important;flex-direction:column;overflow:hidden}
+.chat-head{flex:0 0 auto!important;position:relative!important;top:auto!important}
+.chat-body{flex:1 1 auto!important;min-height:0!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch}
+.chat-compose{position:static!important;left:auto!important;right:auto!important;top:auto!important;bottom:auto!important;transform:none!important;flex:0 0 auto!important;width:100%!important;max-width:100%!important;margin:0!important;z-index:6!important}
+/* ===== 首次进入：昵称 + 性别 引导页（盖住全屏，必须填完才能进） ===== */
+.onboard{position:fixed;top:0;right:0;bottom:0;left:0;width:100%;height:100%;z-index:200;display:none;align-items:center;justify-content:center;padding:24px 18px 24px;padding-bottom:calc(24px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));background:radial-gradient(circle at 72% 10%,rgba(255,36,66,.3),transparent 46%),linear-gradient(160deg,#141018,#221b27 58%,#110e15);box-sizing:border-box}
+.onboard.open{display:flex}
+body.onboarding .bottom,body.onboarding .new-comments,body.onboarding .dm-layer{display:none!important}
+.onboard-card{width:100%;max-width:360px;max-height:100%;overflow:auto;background:#fff;border-radius:22px;padding:26px 22px 22px;box-shadow:0 20px 60px rgba(0,0,0,.5);animation:obIn .3s cubic-bezier(.22,1,.36,1) both}
+@keyframes obIn{from{opacity:0;transform:translateY(14px) scale(.97)}to{opacity:1;transform:none}}
+.onboard-logo{text-align:center;font-size:26px;font-weight:800;letter-spacing:-1px;color:#222}
+.onboard-logo i{font-style:normal;color:var(--red)}
+.onboard-sub{text-align:center;color:#999;font-size:13px;line-height:1.6;margin:8px 0 22px}
+.onboard-field{margin-bottom:16px}
+.onboard-field>label{display:block;font-size:12px;color:#888;margin-bottom:8px}
+.onboard-field input{width:100%;height:46px;border:0;border-radius:12px;background:#f6f6f8;padding:0 14px;font-size:15px;outline:none;color:#222}
+.onboard-field input:focus{background:#fff;box-shadow:0 0 0 2px rgba(255,36,66,.32)}
+.gender-picker{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}
+.gender-picker button{height:44px;border-radius:12px;background:#f6f6f8;color:#777;font-size:14px;transition:.15s}
+.gender-picker button.on{background:#fff0f2;color:var(--red);font-weight:700;box-shadow:inset 0 0 0 1.5px var(--red)}
+.onboard-err{margin:0;min-height:17px;color:var(--red);font-size:12px;line-height:17px}
+.onboard-btn{width:100%;height:48px;border-radius:24px;background:var(--red);color:#fff;font-weight:700;font-size:16px;margin-top:8px}
+.onboard-btn:active{transform:scale(.985)}
+.profile-name .profile-gender{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;padding:0;margin-left:8px;border-radius:50%;background:rgba(255,255,255,.14);font-size:13px;font-weight:500;color:rgba(255,255,255,.72);line-height:22px;text-align:center;flex:none;align-self:center;overflow:hidden}
+.profile-name .profile-gender .g-sym{font-size:13px;width:100%;height:100%;display:inline-flex;align-items:center;justify-content:center;line-height:1;font-weight:700}
+/* 性别符号：女 ♀ 红、男 ♂ 蓝、未填 人形图标 */
+.g-sym{display:inline-flex;align-items:center;justify-content:center;line-height:1;font-weight:700;font-size:1.05em}
+.g-sym.female{color:#ff2442}
+.g-sym.male{color:#2f74e0}
+.g-sym.other{color:#9a9aa4}
+.g-sym svg{width:.86em;height:.86em;display:block;margin:0 auto}
+.avatar.has-photo,.big-avatar.has-photo,.avatar-edit.has-photo{background-size:cover!important;background-position:center!important;background-repeat:no-repeat!important;color:transparent;font-size:0!important}
+.big-avatar{position:relative;overflow:hidden;cursor:pointer;border-width:1px!important}
+.profile-page .big-avatar{box-shadow:0 0 0 1px rgba(255,255,255,.55),0 5px 18px rgba(0,0,0,.35)!important}
+.avatar-edit{position:relative;width:76px;height:76px;border-radius:50%;overflow:hidden;display:inline-flex;align-items:center;justify-content:center;font-size:32px;background:linear-gradient(135deg,#5d7da8,#e6a7bd);color:#fff;border:1px solid rgba(255,255,255,.55)}
+body.dark .avatar-edit{border-color:#4a4952}
+body.dark .onboard-card{background:#1F1E25}
+body.dark .onboard-logo{color:#F5F4F7}
+body.dark .onboard-field input,body.dark .gender-picker button{background:#2A2931;color:#E8E6EE}
+body.dark .gender-picker button.on{background:#3A2530;color:#FF9DB8;box-shadow:inset 0 0 0 1.5px #FF6B7E}
+/* ===== 弹窗改版（发布图文 / 编辑资料 共用）=====
+   ①去掉顶部那条灰色指示条（两边都由右上角的圆形关闭键来表达「可关闭」）
+   ②关闭键：右上角、圆形浅灰底，白底弹窗上更醒目，点按区域也更大
+   ③添加图片：从整行大色块收成「圆角正方形」缩略块，符合发布页的图片位直觉 */
+.modal{padding-top:18px}
+#profile-modal .modal{display:flex;flex-direction:column;max-height:calc(100% - var(--xhs-nav))!important}
+#profile-modal.activity-back{padding-top:calc(var(--xhs-top) + 29px)!important}
+.profile-edit-page{display:flex;flex-direction:column;overflow:hidden}
+.profile-edit-page>.inbox-head{flex:none}
+.profile-edit-page .nav-save{margin-left:auto;flex:none;height:30px;padding:0 14px;border-radius:15px;background:var(--red);color:#fff;font-size:13px;font-weight:600}
+.edit-scroll{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:18px}
+.edit-scroll .fields{max-width:100%}
+.modal .handle,.modal>.handle{display:none!important}
+.modal>.close{position:absolute!important;right:14px!important;top:14px!important;width:32px!important;height:32px!important;min-width:32px!important;max-width:32px!important;padding:0!important;margin:0!important;border-radius:50%!important;background:#f1f1f3;color:#6b6b73;font-size:19px!important;line-height:1!important;display:flex!important;align-items:center!important;justify-content:center!important;z-index:3;transition:.15s}
+.modal>.close:active{background:#e3e3e7;transform:scale(.94)}
+.modal h2{padding-right:44px}
+.upload{width:104px!important;height:104px!important;min-height:0!important;max-width:104px!important;border-radius:16px!important;align-self:flex-start;margin:0!important;gap:3px}
+.upload strong{font-size:25px;line-height:1}
+.upload span{font-size:11px;line-height:1.3;padding:0 6px}
+.upload img{border-radius:16px}
+.upload:active{background:#f0f0f2}
+/* 图片是必填项：标红星；点「发布笔记」漏图时给方块描红 + 轻微抖动，不用只靠 toast */
+.upload .req{color:var(--red);font-style:normal;margin-left:1px;font-weight:700}
+.field label .req{color:var(--red);font-style:normal;margin-left:2px;font-weight:700}
+.upload.missing{background:#fff3f5!important;box-shadow:inset 0 0 0 1.5px var(--red)!important;animation:shakeX .42s}
+.upload.missing span,.upload.missing strong{color:var(--red)!important}
+@keyframes shakeX{0%,100%{transform:translateX(0)}20%{transform:translateX(-4px)}40%{transform:translateX(4px)}60%{transform:translateX(-3px)}80%{transform:translateX(3px)}}
+body.dark .upload.missing{background:#3A2530!important}
+body.dark .modal>.close{background:#2A2931;color:#C8C6D0}
+body.dark .modal>.close:active{background:#34333C}
+body.dark .upload:active{background:#2E2D36}
+/* ===== 发现页：话题热搜卡（可点）=====
+   .hot 从装饰性 div 改成 button，所以要自己声明文字对齐、flex 布局和按压反馈 */
+.hot{display:flex;flex-direction:column;align-items:flex-start;gap:5px;flex:0 0 auto;text-align:left;font:inherit;cursor:pointer;transition:.15s}
+.hot .hot-rank{font-size:11px;font-weight:800;letter-spacing:1px;color:var(--red)}
+.hot .hot-meta{font-size:11.5px;color:#999}
+.hot:active{transform:scale(.97)}
+.shuffle{padding:5px 11px;border-radius:14px;background:#f5f5f5;color:#666;font-size:12px;transition:.15s}
+.shuffle:active{background:#ececec;transform:scale(.96)}
+body.dark .shuffle{background:#292930;color:#C8C6D0}
+/* ===== 话题聚合页 ===== */
+.topic-page .inbox-head{position:sticky;top:0;z-index:6;height:52px;padding:0 15px;display:flex;align-items:center;border-radius:0;border:0;border-bottom:1px solid var(--ih-line);background:var(--ih-bg);color:var(--ih-fg);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}
+.topic-page .inbox-title{font-size:17px;font-weight:600;line-height:52px;margin:0;color:inherit}
+.topic-hero{padding:20px 18px 18px;background:radial-gradient(circle at 82% 0%,rgba(255,36,66,.16),transparent 58%),linear-gradient(180deg,#fff6f7,#fff)}
+.topic-emoji{font-size:34px;line-height:1}
+.topic-hero h1{font-size:22px;margin:10px 0 6px}
+.topic-hero p{margin:0 0 12px;color:#999;font-size:12.5px}
+.topic-meta{display:flex;align-items:center;gap:5px;flex-wrap:wrap;color:#999;font-size:12px}
+.topic-meta b{color:#222;font-size:13px;font-variant-numeric:tabular-nums}
+.topic-join{margin-top:15px;height:36px;padding:0 18px;border-radius:18px;background:var(--red);color:#fff;font-size:13px;font-weight:600;transition:.15s}
+.topic-join:active{transform:scale(.97);opacity:.9}
+.topic-notes{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:3px;padding:3px}
+.topic-notes .card{display:block;width:100%;margin:0}
+.topic-notes .cover{height:180px;border-radius:3px}
+.topic-more{padding:16px 15px 6px;font-size:15px;font-weight:700}
+body.dark .topic-hero{background:radial-gradient(circle at 82% 0%,rgba(255,36,66,.2),transparent 58%),linear-gradient(180deg,#221b22,#1A191F)}
+body.dark .topic-meta b{color:#F5F4F7}
+/* 顶栏：安全区 + 容器导航（规范）；浮层用 padding 让出，内部自己滚，避免 sticky 顶到容器按钮上 */
+html,body{width:100%;max-width:100%;overflow:hidden;overscroll-behavior:none;-webkit-text-size-adjust:100%}
+.chat-back,.detail-back,.activity-back,.modal-back{
+  top:0!important;right:0!important;bottom:0!important;left:0!important;
+  width:auto!important;max-width:none!important;
+  padding-top:var(--xhs-nav)!important;
+  box-sizing:border-box;
+  box-shadow:none!important;
+  overflow-x:hidden!important;
+  overscroll-behavior:none;
+}
+.chat-back,.detail-back,.activity-back{
+  display:none!important;
+  transform:none!important;
+}
+.chat-back.open,.detail-back.open,.activity-back.open{
+  display:flex!important;
+  flex-direction:column;
+  overflow:hidden!important;
+  visibility:visible!important;
+  pointer-events:auto!important;
+}
+.detail,.chat-page,.activity-page{
+  flex:1 1 auto!important;
+  width:100%!important;
+  max-width:100%!important;
+  min-width:0!important;
+  min-height:0!important;
+  margin:0!important;
+  overflow-x:hidden!important;
+  overflow-y:auto;
+  -webkit-overflow-scrolling:touch;
+}
+.detail{
+  display:flex!important;
+  flex-direction:column;
+  overflow:hidden!important;
+}
+.detail-scroll{
+  flex:1 1 auto;
+  min-height:0;
+  overflow-x:hidden;
+  overflow-y:auto;
+  -webkit-overflow-scrolling:touch;
+}
+.chat-page{display:flex!important;flex-direction:column;overflow:hidden!important}
+.detail-top{
+  flex:0 0 auto!important;
+  position:relative!important;
+  top:auto!important;
+  z-index:6!important;
+  background:#1A191F!important;
+}
+.chat-head,.activity-page>.inbox-head,.topic-page .inbox-head{
+  flex:0 0 auto!important;
+  position:relative!important;
+  top:auto!important;
+}
+body.tab-messages .app{
+  padding-top:var(--xhs-nav)!important;
+  box-sizing:border-box;
+  overflow-x:hidden;
+}
+body.tab-home .app,body.tab-explore .app{
+  padding-top:var(--xhs-top)!important;
+  box-sizing:border-box;
+  overflow-x:hidden;
+}
+body.tab-me .app{padding-top:0!important}
+body.tab-messages #page>.inbox-head{height:0!important;min-height:0!important;padding:0!important;margin:0!important;border:0!important;overflow:hidden}
+body.tab-me #page .profile-hero{padding-top:calc(var(--xhs-nav) + 28px)}
+.profile-page .profile-row.profile-user{margin-top:0;align-items:flex-start}
+body.tab-home .top,body.tab-explore .top{height:var(--nav-h)}
+.inbox-cats{padding-top:12px}
+.detail-content .c-text,.detail-content p.c-text{margin:0!important;padding:0}
+.dm-layer{top:var(--xhs-nav)!important}
+.dm-toast{top:8px!important}
+.detail-cover{
+  flex:none!important;
+  height:280px!important;
+  min-height:220px!important;
+  max-height:70vh;
+  margin:0!important;
+  border-radius:0!important;
+}
+.detail-cover.has-image{
+  height:320px!important;
+  min-height:240px!important;
+}
+.detail-content{padding:16px 20px 28px!important}
+.detail-content h1,.detail-content p,.detail-content .tag,.comment-head,.detail-content .comment{padding-left:0;padding-right:0}
+.nav-back,#close-detail,#close-chat,[data-inbox-back],[data-topic-back],[data-user-back]{
+  position:relative;z-index:2;flex:none;
+  width:48px!important;min-width:48px;height:48px!important;
+  font-size:40px!important;line-height:46px!important;font-weight:200;
+  padding:0!important;display:flex!important;align-items:center;justify-content:center;
+  margin-left:-12px!important
+}
+.nav-head,.detail-top,.chat-head,.activity-page>.inbox-head,.topic-page .inbox-head{
+  position:relative!important;display:flex!important;align-items:center!important;
+}
+.nav-title,.chat-head h3{
+  position:absolute;left:52px;right:52px;margin:0!important;
+  text-align:center;font-size:16px;font-weight:600;line-height:48px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none;
+}
+.nav-spacer{width:48px;min-width:48px;height:1px;margin-left:auto;flex:none}
+.top{justify-content:center!important}
+.top .logo{width:100%;text-align:center}
+.detail-top .detail-author{position:absolute!important;left:48px;right:80px;top:0;bottom:0;margin:0!important;display:flex;align-items:center;justify-content:center;pointer-events:auto}
+.detail-top .follow-btn{position:relative;z-index:2;margin-left:auto!important;flex:none;width:auto!important;height:auto!important;font-size:13px!important}
+.user-page .follow-btn{width:auto!important;height:28px!important;font-size:13px!important;line-height:1;padding:0 12px}
+.chat-back,.detail-back,.activity-back{
+  display:flex!important;flex-direction:column;
+  visibility:hidden;pointer-events:none;
+  transform:translate3d(100%,0,0)!important;
+  transition:transform .28s cubic-bezier(.22,.61,.36,1);
+}
+.chat-back.open,.detail-back.open,.activity-back.open{
+  visibility:visible!important;pointer-events:auto!important;
+  transform:translate3d(0,0,0)!important;
+}
+.chat-back.closing,.detail-back.closing,.activity-back.closing{
+  visibility:visible!important;pointer-events:none!important;
+  transform:translate3d(100%,0,0)!important;
+}
+body.tab-me #page .profile-hero{padding-top:calc(var(--xhs-nav) + 28px)!important}
+.user-page .profile-hero{padding-top:16px}
+#user.activity-back{padding-top:calc(var(--xhs-top) + 15px)!important}
+#detail.detail-back{padding-top:calc(var(--xhs-top) + 29px)!important}
+.user-page{display:flex!important;flex-direction:column;overflow:hidden!important}
+.user-page>.inbox-head{flex:none}
+.user-scroll{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.user-page .profile-edit-btn.followed{opacity:.75}
+.profile-stats-row{display:flex;align-items:flex-end;gap:20px;margin-top:14px;position:relative;z-index:1}
+.profile-stats-row .stats{margin-top:0}
+.profile-stats-row .profile-edit-btn{margin-left:auto;flex:none;align-self:flex-end}
+.author-hit{display:inline-flex;align-items:center;gap:5px;min-width:0;cursor:pointer}
+</style>
+</head>
+<body class="onboarding">
+<div class="app">
+<main class="scroll" id="page"></main>
+<nav class="bottom">
+  <button data-tab="home" class="active">首页</button>
+  <button data-tab="explore">发现</button>
+  <button id="open-publish" aria-label="发布"><span class="publish">＋</span></button>
+  <button data-tab="messages">消息<i class="badge" id="nav-badge" style="display:none">0</i></button>
+  <button data-tab="me">我</button>
+</nav>
+</div>
+<div class="modal-back" id="publish-modal">
+  <section class="modal">
+    <button class="close" id="close-publish">×</button>
+    <h2>发布图文</h2>
+    <label class="upload" id="upload"><strong>＋</strong><span>添加图片<i class="req">*</i></span><img id="upload-img" alt="作品预览"></label>
+    <input id="file-input" type="file" accept="image/*" hidden>
+    <div class="fields">
+      <div class="field"><label>选择内容分类<i class="req">*</i></label><div class="category" id="categories"></div></div>
+      <div class="field"><label>标题<i class="req">*</i></label><input id="post-title" maxlength="35" placeholder="记录一下今天的生活"></div>
+      <div class="field"><label>正文 <span class="hint">选填，最多 100 字</span></label><textarea id="post-desc" maxlength="100" placeholder="分享你的生活和发现…"></textarea></div>
+    </div>
+    <button class="publish-btn" id="publish-post">发布笔记</button>
+  </section>
+</div>
+<div class="activity-back" id="profile-modal">
+  <section class="activity-page profile-edit-page">
+    <section class="inbox-head nav-head">
+      <button class="nav-back" data-edit-back>‹</button>
+      <span class="nav-title">编辑资料</span>
+      <button type="button" class="nav-save" id="save-profile">保存</button>
+    </section>
+    <div class="edit-scroll">
+      <div class="fields">
+        <div class="field"><label>头像</label><button type="button" class="avatar-edit" id="edit-avatar" data-pick-avatar></button></div>
+        <div class="field"><label>昵称</label><input id="edit-name" maxlength="12" placeholder="给自己起个名字"></div>
+        <div class="field"><label>性别</label><div class="gender-picker" id="edit-gender"><button type="button" data-egender="女">女</button><button type="button" data-egender="男">男</button><button type="button" data-egender="保密">保密</button></div></div>
+        <div class="field"><label>简介 <span class="hint">选填，最多 80 字</span></label><textarea id="edit-bio" maxlength="80" placeholder="介绍一下自己，让别人更了解你…"></textarea></div>
+        <div class="field">
+          <label>标签 <span class="hint" id="tag-count">最多 6 个</span></label>
+          <div class="tag-picker" id="tag-picker"></div>
+          <div class="tag-add"><input id="tag-input" maxlength="10" placeholder="自定义标签，例如「露营」"><button id="tag-add-btn">添加</button></div>
+          <div class="tag-selected" id="tag-selected"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+<input id="avatar-input" type="file" accept="image/*" hidden>
+<div class="detail-back" id="detail"></div>
+<div class="activity-back" id="activity"></div>
+<div class="activity-back" id="topic"></div>
+<div class="chat-back" id="chat"></div>
+<div class="activity-back" id="user"></div>
+<div class="dm-layer" id="dm-layer"></div>
+<div class="new-comments" id="new-comments" role="button" aria-label="查看新评论"><b id="new-comments-n">0</b> 条新评论<span>›</span></div>
+<div class="toast" id="toast"></div>
+<div class="onboard open" id="onboard">
+  <section class="onboard-card">
+    <div class="onboard-logo">爆红书<i>·</i></div>
+    <p class="onboard-sub">第一次见，先留个名字吧<br>刷新后会重新开始</p>
+    <div class="onboard-field">
+      <label>昵称</label>
+      <input id="ob-name" maxlength="12" placeholder="输入你的昵称（最多 12 字）" autocomplete="off">
+    </div>
+    <div class="onboard-field">
+      <label>性别</label>
+      <div class="gender-picker" id="ob-gender">
+        <button type="button" data-gender="女">女</button>
+        <button type="button" data-gender="男">男</button>
+        <button type="button" data-gender="保密">保密</button>
+      </div>
+    </div>
+    <p class="onboard-err" id="ob-err"></p>
+    <button class="onboard-btn" id="ob-start">进 入 爆 红 书</button>
+  </section>
+</div>
+<script>
+const categories=["日常","旅行","美食","穿搭","宠物"];
+const avatars=["🌷","🧸","🍓","🪴","🐶","🦋","☕","🎧"];
+const coverClasses=["c1","c2","c3","c4","c5","c6","c7"];
+const seedPosts=[
+ {id:1,title:"周末去了一个很治愈的地方",desc:"天气很好，适合慢慢走一下午。把生活调成自己喜欢的频道。",cat:"旅行",author:"小鹿不迷路",avatar:"🌷",cover:"c1",emoji:"🌸",likes:238,comments:["这个地方在哪里呀？","风景好舒服，想去！"]},
+ {id:2,title:"拼豆奶茶做了一整组",desc:"一颗一颗拼完才发现，比喝一杯还解压。",cat:"日常",author:"手作间",avatar:"🧸",cover:"c2",emoji:"🧋",likes:186,comments:["好喜欢这种像素感","求图纸！"]},
+ {id:3,title:"浅色系穿搭真的很显气质",desc:"最近很喜欢这种轻松又不费力的搭配。",cat:"穿搭",author:"下班去逛街",avatar:"🦋",cover:"c3",emoji:"👗",likes:421,comments:["这个搭配很干净","显得比例好好"]},
+ {id:4,title:"我家小狗今天也营业啦",desc:"拍到一张特别满意的照片，分享给大家吸一下可爱。",cat:"宠物",author:"奶油小狗",avatar:"🐶",cover:"c4",emoji:"🐕",likes:562,comments:["宝宝也太可爱了吧","想rua"]},
+ {id:5,title:"一些普通但闪闪发光的日子",desc:"认真生活，慢慢记录。",cat:"日常",author:"认真生活的人",avatar:"🪴",cover:"c5",emoji:"✨",likes:97,comments:["好喜欢这种松弛感","一起认真生活"]},
+ {id:6,title:"窗边这只猫太适合入画了",desc:"一边喝茶一边画，它一动不动地看着我。",cat:"日常",author:"手作间",avatar:"🦋",cover:"c6",emoji:"🐱",likes:309,comments:["画得好细","这只猫也太灵了"]},
+ {id:7,title:"一碗云吞面就把人拿下了",desc:"虾饺、肠粉、青菜，热气腾腾地摆了一桌。",cat:"美食",author:"今天也要吃饱",avatar:"🍓",cover:"c7",emoji:"🍜",likes:275,comments:["看饿了","这是什么店？"]},
+ {id:8,title:"今晚只想早点睡觉",desc:"把灯调暗一点，手机放到另一个房间。",cat:"日常",author:"日和小",avatar:"🎧",cover:"c1",emoji:"🌙",likes:142,comments:["被提醒到了","我今晚也试试"]},
+ {id:9,title:"路过一家很小的面馆",desc:"汤很清，葱花很香，坐了二十分钟就不想走了。",cat:"美食",author:"慢慢煮饭人",avatar:"🍓",cover:"c2",emoji:"🍜",likes:208,comments:["求地址","看起来就很暖"]},
+ {id:10,title:"把阳台收拾干净了",desc:"两盆绿植，一把旧椅子，下午的光刚刚好。",cat:"日常",author:"小阳台",avatar:"🪴",cover:"c3",emoji:"🌿",likes:167,comments:["好想拥有这样的角落","收拾完一定很爽"]},
+ {id:11,title:"一件旧白衬衫也很好看",desc:"不用买新的，把袖子卷一下就有精神了。",cat:"穿搭",author:"趁早",avatar:"🦋",cover:"c4",emoji:"👕",likes:254,comments:["学到了","简单反而难"]},
+ {id:12,title:"小猫今天踩了我的键盘",desc:"于是这篇笔记就这样开始了。",cat:"宠物",author:"木木记事本",avatar:"🐶",cover:"c5",emoji:"🐱",likes:388,comments:["允许的","代我吸一口"]},
+ {id:13,title:"下雨天最适合出门乱走",desc:"伞也不打太开，听听雨落在树叶上。",cat:"旅行",author:"听风",avatar:"🌊",cover:"c6",emoji:"🌧️",likes:191,comments:["好浪漫","收藏了这个天气"]},
+ {id:14,title:"自己煮了一壶花茶",desc:"没有仪式感，就是想喝点热的。",cat:"日常",author:"泡茶铺",avatar:"☕",cover:"c7",emoji:"🍵",likes:113,comments:["好安静的一篇","我去烧水了"]},
+ {id:15,title:"这条小路没有导航",desc:"跟着树荫走，走到腿酸再回头。",cat:"旅行",author:"慢慢走",avatar:"🌷",cover:"c2",emoji:"🛤️",likes:226,comments:["想去","这种路最舒服"]},
+ {id:16,title:"第一次把便当装得还行",desc:"米饭、青菜、一个蛋，已经很满足。",cat:"美食",author:"好好吃饭",avatar:"🧸",cover:"c4",emoji:"🍱",likes:174,comments:["看起来很香","为你鼓掌"]},
+ {id:17,title:"拼豆汉堡也太解压了",desc:"薯条、芝士、一杯橙汁，全是一颗颗拼出来的。",cat:"日常",author:"手作间",avatar:"🧸",cover:"c3",emoji:"🍔",likes:219,comments:["好想拼一套","细节也太全了"]}
+];
+localStorage.removeItem("baohongshu-posts");
+/* 每次刷新都重置个人信息（昵称/性别/简介/标签），所以引导页每次都会出现 */
+localStorage.removeItem("baohongshu-profile");
+localStorage.removeItem("baohongshu-onboard");
+let posts=JSON.parse(JSON.stringify(seedPosts));
+posts.push({id:"me-default",title:"回家先躺平的正当理由",desc:"人还没挨到沙发，它已经把平板和毯子占好了。",cat:"日常",author:"我",avatar:"👤",cover:"c5",emoji:"🐱",likes:0,collects:0,views:0,commentCount:0,comments:["这才是真正的下班仪式","允许猫咪先休息"],zeroStats:true,tags:["生活方式","日常","宠物"]});
+const COVER_FILES={
+  travel:"covers/cover-travel.webp",
+  food:"covers/cover-food.webp",
+  outfit:"covers/cover-outfit.webp",
+  pet:"covers/cover-pet.webp",
+  life:"covers/cover-life.webp",
+  art:"covers/cover-art.webp",
+  craft:"covers/cover-craft.webp",
+  boba:"covers/cover-boba.webp",
+  cat:"covers/cover-cat.webp"
+};
+const imageMap={};
+const imageAR={};
+/* 每张图只给一条笔记，首页/发现页不会重复同一张封面 */
+[[1,"travel"],[2,"boba"],[3,"outfit"],[4,"pet"],[5,"life"],[6,"art"],[7,"food"],[17,"craft"],["me-default","cat"]].forEach(([id,key])=>{let u=COVER_FILES[key];if(u){imageMap[id]=u;probeCoverAR(id,u)}});
+function probeCoverAR(id,src){
+  if(!src||imageAR[id])return;
+  let im=new Image();
+  im.onload=()=>{
+    if(!im.naturalWidth)return;
+    /* 封面只取 1:1 / 3:4 / 4:3 三种，照片接近哪种就用哪种，多余裁切（background-size:cover） */
+    let r=im.naturalWidth/im.naturalHeight;
+    let opts=[["1/1",1],["3/4",.75],["4/3",4/3]];
+    let best=opts[0];for(let o of opts)if(Math.abs(o[1]-r)<Math.abs(best[1]-r))best=o;
+    imageAR[id]=best[0];
+    document.querySelectorAll(`[data-id="${id}"] .cover, .detail-cover[data-cover-id="${id}"]`).forEach(el=>el.style.setProperty("--cover-ar",best[0]));
+  };
+  im.src=src;
+}
+function emojiRatio(p){return ["34","11","43"][Math.abs(Number(p.id)||String(p.id).length)%3]}
+function coverRatioClass(p,image){return image?"ratio-photo":"ratio-"+emojiRatio(p)}
+function coverBoxStyle(p,image){
+  let s=[];
+  if(image)s.push(`background-image:url('${image}')`);
+  if(image&&imageAR[p.id])s.push(`--cover-ar:${imageAR[p.id]}`);
+  return s.length?` style="${s.join(";")}"`:"";
+}
+let selectedCat="", unread=0, currentTab="home", uploadedImage="", profileSection="posts", messageFilter="all", messageRenderClock=0;
+/* ===== 我的资料：昵称 / 简介 / 标签。默认只有昵称，简介和标签留空等用户自己填，改动存本地 ===== */
+const PROFILE_KEY="baohongshu-profile";
+const TAG_MAX=6;
+const PROFILE_DEFAULTS={name:"正在变红的小林",bio:"",tags:[]};
+let myProfile=(()=>{
+  try{let s=JSON.parse(localStorage.getItem(PROFILE_KEY)||"null");
+    if(s&&typeof s==="object")return{name:typeof s.name==="string"?s.name:PROFILE_DEFAULTS.name,bio:typeof s.bio==="string"?s.bio:"",tags:Array.isArray(s.tags)?s.tags.filter(t=>typeof t==="string").slice(0,TAG_MAX):[],gender:typeof s.gender==="string"?s.gender:"",avatar:""};
+  }catch(e){}
+  return{name:PROFILE_DEFAULTS.name,bio:"",tags:[],gender:"",avatar:""};
+})();
+/* 预设标签：覆盖常见的兴趣/内容方向，用户也可以自己输入不在表里的 */
+const TAG_PRESETS=["生活记录","穿搭日常","美食探店","旅行日记","摄影","咖啡","手作","阅读","健身","宠物","数码","护肤","家居","音乐","电影","情绪日记","好物分享","极简生活","治愈系","学习打卡","职场","独立开发","产品设计","AI","视觉创作","城市漫步","露营","烘焙","花艺","二次元"];
+let editTags=[];
+const profileStats={followers:0,likes:0,collects:0,views:0};
+/* ===== 全局唯一数据源 =====
+   posts[].views 是唯一主动增长的量，其余全部由它派生；
+   interactions 是「我的笔记」累计互动总数，消息页的赞/收藏、关注、评论全部读它，
+   保证主页数据涨多少，消息页就同步涨多少，绝不会两套数字互相漂移。
+   seen[type] 记录已读位置，未读数 = 累计总数 - 已读。 */
+const interactions={like:0,collect:0,follow:0,comment:0};
+const seen={likes:0,follows:0,comments:0};
+let liveMessages=[];
+/* 互动列表版本号：每次有新互动 +1，用来判断要不要往列表里增量插入 */
+let liveVersion=0,lastLiveVersion=-1;
+const keywords={旅行:["旅行","旅游","景点","西湖","海边","风景","出游","目的地"],美食:["好吃","餐厅","火锅","咖啡","探店","美食","吃","甜品"],穿搭:["穿搭","裙子","衣服","显瘦","ootd","搭配"],宠物:["猫","狗","小猫","小狗","宠物","宝宝"],日常:["周末","生活","日常","记录","下班"]};
+const replyPool={旅行:["这个地方在哪里呀？","风景好舒服，想去！","已经加入周末计划了","收藏这个目的地，谢谢你的分享","最近状态有点低落，看到这条突然被治愈了","你拍下来的不是风景，是一种想重新出发的勇气","希望我也能拥有这样一个慢慢走路的下午"],美食:["看起来也太好吃了吧","求店名！","这家值得专门去吗？","看饿了","谢谢你认真分享，今天下班突然有了期待","这种热气腾腾的生活感太珍贵了","被你说得好像闻到香味了"],穿搭:["这个搭配很适合春天","显得比例好好","求同款链接","好有氛围感","原来普通衣服也可以穿出这么舒服的感觉","你真的很会发现适合自己的风格","今天的穿搭给了我一点重新打扮自己的勇气"],宠物:["宝宝也太可爱了吧","想rua","这个表情好有戏","被可爱到了","今天的不开心被它一下子治好了","谢谢你把这么小小的幸福分享出来","看完心情变好了，允许我云吸一下"],日常:["好喜欢这种松弛感","一起认真生活","很有共鸣","平凡的日子也很闪亮","谢谢你提醒我，普通的一天也值得被记录","最近也有点累，但看到这条感觉被轻轻抱了一下","你写得好真诚，愿你一直保有这份温柔"]};
+/* 名字用「前缀 × 后缀」随机拼，组合数决定能出现多少个不同的人，所以要留足；
+   前缀 60 × 后缀 56 ≈ 3360 种组合，私信量再大也不会被同几个人刷屏 */
+const nameFirst=["小","阿","柚子","奶油","晚风","认真","今天也要","不加班","温柔","爱笑","慢慢","山野","橘子","月亮","下班后","一只","半糖","云边","南岸","拾光","荔枝","麦田","青柠","白桃","夏日","眠眠","小满","青梅","海盐","雾里","星野","木木","千层","泡芙","日和小","甜筒","浮云","栗子","陈皮","苏打","花信","次第","暖阳","灯下","竹里","雨时","雪顶","桃子","小鹿","陌上","听风","趁早","恰好","窝窝","小圆","春日","九月","初见","长夏","微微"];
+const nameLast=["同学","日记","在路上","研究所","碎片","生活家","小铺","不迷路","的春天","收藏家","放映室","吃饱饱","去散步","有点甜","记录员","记事本","观察手册","收集者","散步中","煮饭人","慢慢走","打卡簿","小纸条","面包店","研究所","不打烊","小阳台","看云人","读书角","听歌房","手作间","小厨房","夜归人","早八人","旅行袋","胶卷铺","旧时光","小森林","泡茶铺","微光集","睡醒后","小确幸","慢慢来","碎碎念","小日子","好好吃饭","爱发呆","晒太阳","吹晚风","看海人","数星星","漫游者","小瓶子","捡落叶","等风来","发呆中"];
+const welcomeDmPool=["你终于入驻爆红书啦！等你的第一篇笔记等了好久。","欢迎你入驻爆红书，已经开始期待你的新作品了。","恭喜你来到爆红书！希望你在这里被很多人看见。","终于在爆红书刷到你了，快把生活里的宝藏分享出来吧。","欢迎新朋友，看到你的名字出现在这里真的很惊喜。","你一来，爆红书好像都变得热闹了一点。","欢迎入驻！第一条笔记准备分享什么主题呀？","终于等到你开账号了，先送上一句迟到的欢迎。","欢迎来到爆红书，希望这里能记录下你的高光时刻。","看到你入驻的提示了，替你开心，慢慢发就好。","新朋友你好呀，愿你在这里遇到很多温柔的回应。","恭喜开张！你的第一篇作品一定会被好好看见。"];
+const dmPool=["看到你的分享了，突然觉得今天也没那么糟。","你拍的这组照片好有感觉，方便聊聊灵感吗？","刚好刷到你的笔记，想把这份好心情也传给你。","最近在找周末去处，你的分享来得太及时了。","谢谢你写下这些，给了我一点继续生活的力气。","你的文字很舒服，像朋友在认真听我说话。","我也有过类似的时刻，愿我们都慢慢变好。","这条笔记我看了好几遍，真的很喜欢。","今天发生了一件小事，第一时间想来和你分享。","你推荐的地方我去啦，回来告诉你真的很棒。","你会不会也有那种突然不想说话的晚上？","我把这条分享转给朋友了，她也说很治愈。","本来只是随手刷到，没想到看完停留了很久。","你写的那句话我记下来了，今天真的用上了。","最近有点迷茫，但看到你的内容感觉被提醒了。","方便问一下这张照片是在哪里拍的吗？","如果你愿意的话，可以和我分享更多生活碎片吗？","你今天看起来也在认真生活，替你开心。","好久没有看到这么真诚的分享了，谢谢你。","我刚刚按照你的方法试了一下，真的有效。","这条内容让我想起了一个很久没联系的人。","虽然我们不认识，但还是想说一句加油。","你拍到的光好漂亮，我看了心情变好。","最近工作特别累，刷到你的笔记刚好喘口气。","我收藏了，等状态好一点一定去看看。","你的表达很有分寸感，让人觉得很舒服。","不知道为什么，今天特别想和你说声谢谢。","你有没有推荐的歌？想配着这组照片一起看。","我也在练习好好吃饭、好好睡觉，和你共勉。","这条笔记让我重新期待周末了。"];
+const careDmPool=["最近降温了，记得多穿一件，别硬扛。","你那边下雨了吗？出门记得带伞。","今天有没有好好吃饭？别又忙到忘记。","看你更新到这么晚，记得早点睡。","最近是不是有点累？允许自己休息一下。","不要总是一个人扛着，累了就说出来。","天气干，记得多喝热水，嗓子会舒服一些。","你今天开心吗？如果不开心，也没关系。","熬夜伤身，能早点睡就早点睡呀。","有没有人和你说过，你已经做得够好了。","如果最近压力大，就少看手机多走走。","记得吃早饭，胃舒服了整个人都会好。","别总盯着屏幕，眼睛也该休息一下。","出门记得看天气，早晚温差大。","心情不好的时候，可以来找我说说话。","你不需要一直都很坚强，偶尔脆弱也可以。","记得给自己留一点发呆的时间。","最近天冷了，手脚冰的话记得泡个脚。","别人怎么看你都不重要，先照顾好自己。","今天如果什么都没做成，也值得被原谅。","记得按时吃饭，别用外卖随便对付。","你今天的疲惫我看见了，真的辛苦了。","要是睡不着，就放点轻音乐，别逼自己。","有情绪就说出来，憋着最伤身体。","换季容易感冒，出门带件外套。","忙的时候也记得站起来走两步。","你有在好好生活，这本身就很了不起。","记得多晒晒太阳，心情会亮一点。","别忘了喝水，一整天对着屏幕容易忘。","如果撑不住，就停下来，没人会怪你。","愿你今天遇到的人都温柔。","希望你这周能有时间做点喜欢的事。","肩膀酸的话记得起来活动一下。","别太在意数据，你开心最重要。","记得吃水果，对身体好。","你今天有没有对自己好一点？","降温了，被窝暖一点再睡。","难过的时候不用假装没事。","记得给自己买点喜欢吃的东西。","你的努力有人在看，也值得被心疼。","慢慢来，你不需要追上任何人。","记得关掉手机，早点休息。","希望你今天的烦恼都能被风吹走。","如果累了，就把事情放一放，明天再说。","记得对自己温柔一点，像对朋友那样。","早晚凉，出门记得加件衣服。","你今天已经很努力了，剩下的交给明天。","记得笑一笑，哪怕只是对着镜子。","愿你被这个世界好好地对待。","不舒服就早点休息，别撑。","一个人也要好好吃饭呀。","记得给自己留出喘气的空间。","希望你有热汤喝，有暖被窝睡。","情绪上来的时候，先深呼吸三次。","你值得被认真对待，也别亏待自己。","记得多穿一点，别只顾着赶时间。","如果今天很难，就先熬过今天。","累的时候允许自己什么都不做。","记得把窗户开一条缝，换换空气。","你今天也辛苦了，早点睡吧。","无论怎样，先照顾好自己的胃和睡眠。","记得给自己一点奖励，你值得。","愿你今晚能睡个不会被吵醒的觉。","有我在，想说什么都可以。","记得多喝水，少熬夜，这是我唯一的要求。","你不必完美，只要平安就好。","外面风大，围巾记得带上。","今天也要记得对自己说一句辛苦了。","累的时候，想想还有人在默默支持你。","希望你的疲惫都有人接住，你的难过都有人听。","就算什么都没做，你今天也很值得被爱。","记得按时吃药，身体最要紧。","天气变冷了，晚上记得盖好被子。","你最近是不是瘦了？记得多吃一点。","别熬了，明天的事明天再想。","想哭就哭出来，哭完会舒服一些。","你今天过得怎么样？我有点想知道。","记得停下来看看窗外，别一直赶路。","希望你今天也有一个小小的开心。","再忙也别忘了喘口气，你不是机器。","照顾好自己，这比什么都重要。","你若安好，看你的笔记都会安心一些。","别怕慢，你只是在走自己的节奏。","今天也谢谢你这么努力地生活。"];
+const fanDmPool=["你怎么还没有回复呀，我从刚才一直在等。","刚刚又看了一遍你的主页，真的每条都喜欢。","我今天的好心情全靠你的更新了。","你下一条什么时候发？我会一直等着的。","可以多和我说两句吗，我真的很想听你分享。","我把你的笔记都收藏好了，正在一条条看。","你不回复也没关系，我只是想把想说的话告诉你。","刚刚看到你在线了，今天也要记得开心。","拜托再发一条吧，我真的会反复看的。","你推荐的东西我都记下来了，下次还想听你的意见。","从你还没什么粉丝的时候我就关注你了。","我已经把这条笔记分享给朋友，真的想让更多人认识你。","你每次更新我都会第一时间来看，别有压力，慢慢来。","我会把你的作品一篇篇收藏起来，等你以后回头看。","今天也来报到啦，看到你发新内容我就安心了。","如果你愿意，我可以一直做那个默默支持你的人。"];
+/* 各种身份的来信：学生、上班族、宝妈、夜班族、手艺人、同城、留学生、退休后学拍照的人……
+   全部是非负面的，只是想说明「看的人形形色色」 */
+const dmPersonaPool=["大三在读，明天有早八，但还是想把这条笔记看完。","我是做夜班的，凌晨刷到你这条，突然觉得这个晚上也没那么长。","刚下班到家，地铁上一路都在看你的主页。","宝妈一枚，孩子睡了才有时间刷手机，谢谢你陪我这一小会儿。","在国外读书，看到你拍的街道突然很想家，但也觉得很暖。","退休以后才开始学拍照，你的构图给了我不少灵感。","开了家小店，每天最放松的时候就是刷会儿你的更新。","同城的！你拍的这条路我每天都经过，从没觉得这么好看。","我是理发师，今天剪了一天头发，看你这条刚好歇口气。","护士，刚下夜班，看到你说要好好吃饭，突然有点想哭（是好的那种）。","程序员，看到你记录生活才想起来自己好久没出去走走了。","考研党，本来在自习室待得很闷，看你这条心情好了一点。","高中老师，批作业批到眼睛疼，刷到你这条笑了一下。","刚毕业一个人来大城市，看到你说慢一点也没关系，心里稳了一点。","全职带娃第三年，偶尔也想要点自己的时间，你的笔记刚好给我这点时间。","今天是我生日，收到你的更新，就当是礼物了。","我和我妈妈都关注你了，她比我还会催更。","刚搬完家，累瘫在地上刷手机，看到你这条觉得新家也挺好的。","打工人报到，工位上偷偷看你的更新。","我是学画画的，你照片里的颜色我很喜欢，想试着临一张。","一个人住，晚上安静下来的时候总会翻翻你的主页。","今天第一次自己做饭，成功了一点点，来和你炫耀一下。","我在书店工作，把你这篇分享给了常来的那位客人。","刚跑完步，一边喘一边看你的更新，还挺搭。","养了只猫，它现在压着我手腕，只能单手给你打字。","我爸妈也开始用这个 App 了，他们居然先刷到了你。","做设计的，被甲方改到第七版了，看你这条终于笑出来。","每天通勤两小时，你的内容是我地铁上的固定节目。","刚把阳台收拾干净，种了两盆花，来和你报个喜。","我们是同学，我把你的号推给全班了，别嫌我们吵。","今天下雨没出门，窝在家里看你的笔记，也挺好。","我在工厂上白班，中午吃饭的时候偷偷刷一会儿。","最近情绪有点低，看完你说要好好生活，我决定明天出门走走。","谢谢你让我觉得普通人也可以被看见。","我们这边已经入秋了，看到你拍的叶子特别亲切。","我是开咖啡店的，你推荐的那家我也去过，确实不错。","刚结束一场面试，不管结果怎样，先来你这儿缓一缓。","我妹妹让我帮她问一句：你还会更新吗？","看你的图文特别舒服，不用费力也能看懂。","刚把今天的作业写完，来你这儿打卡。","和室友一起看的，我们俩都觉得你拍得很好看。","我是送外卖的，等单的间隙刷到你这条，今天跑得也没那么累了。"];
+/* 「你可能看不到」类留言：爆火之后消息回不过来，很多人会这么写 —— 不指望被回，只是想留句话 */
+const unseenDmPool=["一定有很多人给你发消息吧，你可能看不到我这条，但还是想说：真的很为你高兴。","知道你现在的消息肯定多到回不完，看不到也没关系，我就想留个脚印，祝越来越好。","你可能不会看到这条，那我就把想说的话放在这里，看不到也值得。","不用回我，我只是想告诉你，你的内容我一直都很喜欢。","你大概已经看不过来了，所以我就说一句：谢谢你，然后默默走开。","如果这条被淹没了也没关系，我只是想说，你值得现在的一切。","知道你很忙，所以不指望回复，就是想告诉你有人在认真看你。","这条大概率会被刷过去，但没关系，我把祝福放在这里了。","你可能不会看到，但我还是要说：愿你一直被温柔对待。","消息太多的话就别回了，记得吃饭睡觉比回我重要。","看不看得到都无所谓，我只想做那个默默替你高兴的人。","全当树洞了，你忙你的，我祝我的。","第一次给你留言，知道你可能看不到，还是想留一句：加油，我们都在。","你的消息应该已经爆了，我就不添乱了，只说一句：别太累。","看到你火起来真的很开心，虽然这条大概率会沉下去。","不打扰你，就是想在这里放一句：愿你所求皆如愿。","知道你这会儿消息肯定看不完，那我就当自己在自言自语吧。","要是哪天你翻到了这条，希望你那天心情很好。","消息多到看不完也正常，我先替你开心一下。","这条留言就当是许愿池吧：希望你一直做喜欢的事。","你不需要回我，你只要继续发，我就继续看。","知道很多人喜欢你，所以我这条也不算特别，但还是想说：我也在。","可能你永远看不到，但那又怎样，我又不是只为了被看到。","看到你被这么多人喜欢，我居然有点想哭，替你高兴。","你忙的话就跳过这条吧，我只是来报个到。","沉在消息堆里也没关系，反正我写的时候是很开心的。","你肯定回不过来，所以我把回复提前送给你：不用回，谢谢你来过。","这条消息大概会和几千条一起被淹没，但我想说的话已经说完了。","不知道你能不能看到，先祝你今天顺顺利利。","人多了以后你大概会累，记得别硬撑，看不完就不看。","就当我把话放进漂流瓶了，你捡到是缘分，捡不到也没关系。","看到你越来越好了，我这条就当是替你鼓掌。","你不用回我，你只要知道有人在很远的地方为你高兴。","我猜你现在的私信已经看不过来了，所以我把话写短一点：谢谢你。","可能看不到，但还是想把今天的开心分你一半。","被淹没也没关系，我只是想说，你的内容帮到了我。","你火了以后应该很忙，记得照顾好自己，比回消息重要。","这条留言不需要回应，我只是想让它存在。","看不看到都行，我只是来留个念想：希望你一直有热饭吃。","知道你看不完，所以我把最想说的那句放在最前面：你很好，别怀疑。","如果某天你翻到了这里，希望你已经睡饱了。","我就是来留一句祝福的，其他都不重要。","消息这么多，你能看到这条算是奇迹，看不到才是常态，我都接受。","不指望回复，只想让你知道，有人把你当成心里的一个小角落。","你现在应该被消息淹着吧，我就不占用你时间了，说一句就撤：谢谢你的分享。","我估计你回复到手指都酸了，所以这条不用回，真的。","看到你被这么多人围住，我突然不舍得再占用你一条消息位了。","我知道自己只是几千条里的一条，但还是要说：喜欢你很久了。","如果你真的翻到了这里，那说明我们有点小运气，祝你今天顺利。","消息太多了就慢慢看，别为了回复把自己熬到很晚。","我这条就静静地待着，你看不看得到，我的祝福都在。","很多人都在等你的回复，你挑重要的回就好，我不急。","你可能永远不会看到这几个字，但它们是真心的：要好好的。","不用回，你只要知道有人在你看不到的地方为你开心。","我知道你忙，所以只留一句：你的内容我会一直看下去。","这条也许会沉底，但没关系，沉底的祝福也是祝福。","被这么多人喜欢是好事，但你别把自己累坏了。","你回不过来的，所以我先替你说：谢谢，收到啦。"];
+/* ===== 被回复之后的自动回复：又惊又喜，但不重复 ===== */
+const replyShocked=["天啊你居然回我了，我刚刚还在想要不要撤回这条消息。","等等，是本人吗？我要截图存下来。","啊啊啊你回复我了，我现在手心都是汗。","我以为这种消息你肯定不会看的，谢谢你真的看到我了。","刚看到回复的时候我愣了三秒，然后笑出声。","你居然认真看了我说的话，我有点想哭（是开心的那种）。","我把手机举给室友看，说这是你回我的。","你是不是回错人了？不过我不打算提醒你。","这条我要置顶，以后心情不好就拿出来看。","刚在喝水，看到你的回复差点呛到。","我以为要等好几天，结果你这么快就回了。","我截图了，真的截图了，别想让我删掉。","太不真实了，你怎么会看到我这条。","朋友问我在笑什么，我说我喜欢的博主回我了。","认真的吗，我看了三遍才敢确认。","本来准备睡了，现在我彻底清醒了。","你回我的这句话我可以开心一整个星期。","我还特意退出重进了一次，确认不是我看花眼。","完了，我现在不知道该怎么打字了。","你居然挑中了我这条，运气也太好了吧。"];
+const replyHappy=["被你回复的这一刻，今天所有的疲惫都值了。","收到你的回复，我今晚能睡个好觉了。","谢谢你愿意一条条看，这真的很难得。","本来今天心情一般，现在完全不一样了。","开心到想给全世界说一遍。","这就是我今天的最大收获。","谢谢你，真的，是那种说不出来的开心。","我刚刚原地转了一圈，室友以为我疯了。","你的一句话，比我今天听到的所有话都管用。","我现在嘴角压不下去，没办法正常说话了。","感觉今天做了件很值的事：给你发了这条消息。","这种被看到的感觉太好了，谢谢你。","我把这句话记在备忘录里了，以后翻出来看看。","今天的坏心情被你一句话治好了。","你回复的这句话，我会记很久。","原来被认真回应是这样的感觉。","谢谢你，今天可以算作很圆满的一天了。","我现在只想说：还好我没犹豫就发了这条。"];
+const replyShy=["你这么说我都不好意思了。","突然被夸到了，脸有点热。","谢谢你，我都不知道回什么好了。","看到你的回复我下意识把手机扣在桌上了。","被你这么一回复，我反而有点紧张了。","我是不是问得有点多了？抱歉抱歉。","你太温柔了，我一下子不太会接话。","谢谢你没有敷衍我，真的很感动。","我不知道该说什么，就……谢谢你。","本来准备了一大段，现在只打得出谢谢两个字。","你说得这么认真，我更要好好说话才行了。","被认真对待的感觉有点奢侈，谢谢你。"];
+const replyThanks=["也谢谢你，愿意分享这么多生活里的小事。","你写的东西给了我很多力气，这句是早就想说的。","那我也答应你，会好好吃饭好好睡觉的。","你也要照顾好自己，别只顾着回我们消息。","谢谢你回我，我会一直默默支持你的。","以后你的每条我都会认真看，你慢慢更就好。","这句话我记住了，我会照做的。","谢谢你让我觉得，普通的日子也值得被记录。"];
+const replyTopic=["那你最近有休息好吗？我看你更新得挺频繁的。","对了我还想问，你一般什么时间更新呀？","听你这么说我就放心了，之前还担心你太累。","你说的那个地方我真的去啦，比想象中还好。","下次你要是有新的分享，我一定第一时间来看。","我把你说的这句转给我朋友了，她也觉得很有道理。","你这句我要记下来，最近刚好用得上。","那我就不客气地多问一句了，可以吗？","既然你回我了，我就厚着脸皮多说两句。","那我下次还来和你分享生活里的小事。"];
+/* 专门回应「你可能看不到」那类留言：被回复本身就是惊喜 */
+const replyUnseenSeen=["你居然真的看到了！我本来都做好被淹没的准备了。","天啊，这条是我随手写的，居然被你翻到了。","我说「你可能看不到」，结果你偏偏看到了，这算不算缘分。","我都没指望有回复，现在有点不知道说什么好了。","看到你的回复我第一反应是：这是真的吗？","谢谢你从那么多消息里把我这条捞出来。","我写的时候真觉得会沉下去，没想到你还认真回了。","你回我这句话，我今天所有的等待都值了。","原来我这条不算被淹没，谢谢你还愿意一条条翻。","我说不用回我，但你回了，我开心得不行。","你居然翻到了最底下这条，我要开心好几天了。","我那句「看不到也没关系」，现在要收回，被看到太好了。","谢谢你在这么多消息里看到了我，这对我很重要。","本来只是留个脚印，结果被你捡起来了，谢谢。","我等着你「看不到」，结果你偏偏看到了，太惊喜了。"];
+/* 商务号的口吻要区别于普通粉丝：公事公办、客气、但不失热情 */
+const replyBiz=["收到，谢谢你的回复！那我们这边准备一份简要的合作方案发你。","太好了，方便的话可以留个邮箱吗？我们发详细资料给你。","感谢回复！样品这两天就寄出，运费我们承担。","合作的细节都可以谈，报价你这边有想法也可以直接说。","那我先加你一下，后续沟通会方便很多。","谢谢你的时间，我们内部先对一下，尽快给你答复。","看到回复很惊喜，说明我们的眼光没错，期待合作。","不着急，你先忙，我们随时都在。","好的，那我把这次合作的权益整理成一页发你，方便看。","感谢愿意回我们，之后有合适的产品一定第一时间想到你。"];
+const fanUsers=[{name:"晚风的春天",avatar:"🦋"},{name:"小小铺",avatar:"🌷"},{name:"认真研究所",avatar:"☕"}];
+const recentNames=[],recentDms=[];
+function randomName(){let name;do{name=nameFirst[Math.floor(Math.random()*nameFirst.length)]+nameLast[Math.floor(Math.random()*nameLast.length)]}while(recentNames.includes(name));recentNames.push(name);if(recentNames.length>24)recentNames.shift();return name}
+/* 通用评论池：和类目池混用，评论量大时也不会来回重复同几句话 */
+const generalCommentPool=["好喜欢这条","路过被治愈了","谢谢你分享这些","已经收藏了，慢慢看","太有生活气息了","看完整个人都安静下来","这种记录方式好舒服","图片和文字都很温柔","默默点了关注","写得好真诚","刚好需要，谢谢","希望多更新一点","看完心情变好了","这就是我想过的生活","细节拍得好好","收藏起来以后再看","隔着屏幕都觉得美好","你真的很会生活","被种草了","平凡但很动人","就喜欢这种不刻意的分享","谢谢你把好心情传过来","看完想出门走走了","这条我可以看很多遍","好有质感","喜欢你文字的节奏","说不出的舒服","今天的小确幸被你拍出来了","很想听你多讲一点","羡慕这种松弛的日常","谢谢，今天刚好需要这一条","看饿了看馋了","氛围感直接拉满","好治愈的一篇","这个角度好特别"];
+/* ===== 按性别定制的文案库 =====
+   同一句话对不同的博主说，情绪价值是不一样的：
+   女 → 姐妹视角：被夸、被心疼、细腻的共鸣；男 → 兄弟视角：被认可、被鼓劲、不给压力；
+   保密 → 中性视角：不称呼、不说教，只谈感受。昵称旁边选了性别，这里所有池子立刻跟着换。 */
+const GENDER_PACKS={
+女:{
+comment:["姐妹你也太会拍了吧，这条我反复看","宝子这条好治愈，想抱抱你","姐姐的文字怎么这么温柔啊","作为女生看到这条真的很有共鸣","你搭配的思路我学到了，谢谢姐妹","好喜欢这种不费力的好看","看哭了，谢谢你把情绪写出来","姐妹你值得被更多人看见","这条我截图存起来了，低落的时候拿来用","女孩子认真生活起来是真的会发光","你慢慢来就好，我们都在","有点羡慕你的生活状态，好想拥有","姐妹，你的状态很真实，不用装","今天也要好好爱自己呀","这条给我一种被抱住的感觉","同为女生，真的很懂你写的那一句","谢谢你替我说出了不敢说的话","你的生活细节好戳我，好想和你做朋友","想跟你说一句：你已经很棒了","你身上那种温柔好像是自带的"],
+dm:["姐妹你今天的更新我第一个看到！","宝，你这条我截图存手机里了","想和你说个事，我最近也开始学着记录生活了","同为女生，看到你这么自洽真的很受鼓舞","姐妹你的状态看起来好好，羡慕","今天被人说了句不好听的话，来你这儿缓缓","你最近是不是有点忙？记得给自己留点空","我把闺蜜也安利给你了，她说很喜欢","想问你一句，怎么做到不那么在意别人眼光","姐妹，你写的这段我看哭了，谢谢你","你今天的照片好温柔，像你说话的感觉","我们都要好好爱自己，一起加油","把你当树洞了，说完心里舒服多了","姐妹，我今天打扮得挺好看的，来跟你报备一下","想给你一个隔空的拥抱","谢谢你让我觉得，女孩子的细腻是被珍惜的"],
+care:["姐妹记得早点睡，皮肤和心情都要顾","那几天别硬撑，红糖水提前备一点","别老替别人着想，也想想你自己想要什么","妆再好看也要记得卸干净再睡呀","你不需要对所有人温柔，对自己好一点就行","姐妹，你今天有没有被人好好对待？","天冷了记得涂护手霜，别总用冷水","你已经很棒了，不要总拿自己和别人比","如果今天不开心，就去买杯想喝的奶茶","抱抱你，累了就歇一会儿，没人会怪你","别熬夜，第二天的状态会谢谢你","愿你不必讨好任何人，也能被喜欢"],
+fan:["姐妹我每天都要来看一眼你的主页","我把小号都关注你了，这是真爱","你怎么还不发新的呀，我等好久了（不催不催）","你更新我就安心，像见到熟人一样","姐妹，你的审美我全盘接收","我要跟着你一起变好","你是什么时候开始做这个的呀，我想从头看起","放心，我会一直在的，你慢慢来"],
+unseen:["知道你消息回不完，那我不添乱了，照顾好自己姐妹","我说你可能看不到，结果还是想再写一句：要开心呀","你火了我比谁都高兴，也怕你太累","姐妹，别为了回消息熬夜，我们不会怪你的","这条沉了也没关系，祝福我已经送到了"]},
+男:{
+comment:["哥们这条拍得可以啊，有内味儿了","兄弟你这构图有点东西","老哥的生活态度我认，学到了","这条我转给我朋友了，都说不错","兄弟别太拼，身体第一","男人也可以慢慢生活，这个我支持","看着挺治愈的，兄弟稳","你这记录方式很真实，不像演的","哥，这条我收藏了，回头照着做","该说不说，你写得挺有劲儿","兄弟，认真生活的人不会被亏待","看完想去运动了，谢谢你给的动力","老哥你可以的，别管数据","这条有点东西，给你点个赞","哥们不容易，但看着也挺爽","你这种不急不躁的劲儿挺难得","兄弟你这拍照设备挺全啊，问问型号","跟着你学了两招，回去试了还真行","老哥，下次多发点这种","有被鼓励到，兄弟谢了"],
+dm:["兄弟，今天刷到你这条，刚好在下班路上","哥们儿，你推荐的路线我骑车跑了一遍，真不错","老哥，最近工作有点顶不住，看你这条松了口气","兄弟你这拍照水平可以，教教我呗","男人也得有个能喘气的地方，你这儿算一个","哥们，今天被老板说了一顿，回来看看你更新的","老哥别太拼，钱是赚不完的","兄弟我照着你的方法试了，确实有用","看完想给你递根烟（不打火那种）","哥们你这条有点治愈，说不上来为什么","下次约上兄弟一起去你说的那个地方","你记录的这些，让我想重新规划一下周末了","老哥，稳。就这两个字","兄弟，压力大的时候看你这条，挺解压","谢了哥们，今天的坏情绪被你分走一半","男人之间不太会说话，就一句：你行"],
+care:["兄弟，酒少喝点，胃是自己的","老哥，熬夜打游戏记得补觉，别硬扛","别什么事都自己咽，说出来不丢人","哥们，压力大就去跑两圈，比闷着强","兄弟，吃口热饭比什么都实在","老哥，别总觉得自己扛得住，也会累的","男人哭一下没事，没人扣你分","哥们，体检别省，一年一次","兄弟，钱慢慢挣，身体垮了不划算","累了就睡，别刷手机刷到凌晨","哥，别老一个人待着，约兄弟吃个饭","你已经做得比你以为的好，别老自责"],
+fan:["兄弟，你这号我设特别关注了","老哥，你更新了我第一个到","哥们，我拉我室友一起关注你了","你发我就看，别管数据","兄弟不用回我，你发我就心满意足","老哥，你这号我给我爸也推了","跟着你看了半年了，从没取关过","哥们，你慢慢更，我慢慢等"],
+unseen:["兄弟消息肯定爆了，我就说一句：别硬撑","老哥，回不完就别回，身体要紧","知道你看不过来，我就是来捧个场，你随意","哥们，红归红，觉还是要睡的","这条大概率沉底，那也祝你越来越稳"]},
+保密:{
+comment:["这条看完心里很安静，谢谢你","认真生活的人真的很动人","记录下来本身就是一件好事","很喜欢你这种不刻意的表达","谢谢你把普通的日子拍得这么好","看完心情确实变好了一点","祝你一直能这样自在地分享","这条我慢慢看，不着急","很喜欢你文字里的分寸感","希望你被这个世界温柔以待","收藏了，会在低落的时候翻出来","你写的东西让人很安心","谢谢你替很多人说出了心里话","慢慢来，你的节奏挺好的","看完整个人都放松了一点"],
+dm:["今天刚好刷到你这条，谢谢你","我很少留言，但这条我想说点什么","看完你的分享，去楼下走了走，感觉好一些","谢谢你让我觉得普通的一天也值得记录","我最近在学着自己做饭，慢慢有一点成就感了","不说别的，希望你一直发下去","你的文字很安静，看着舒服","我把这条存起来了，等我状态好一点再看","谢谢你，今天本来挺闷的","想问问你，怎么保持这种不着急的心态","祝你今天遇到的人都挺好","你的内容陪了我一段路，谢谢"],
+care:["记得按时吃饭，别用外卖随便对付","屋子通通风，人也会舒服一点","记得喝水，别等渴了才想起来","早点睡，明天的你会谢谢现在的你","难过的时候不用假装没事","给自己留点什么都不做的时间","出门看看天，哪怕十分钟也好","别太逼自己，慢慢来也可以","照顾好身体，其他都能慢慢来","今天已经够辛苦了，早点休息"],
+fan:["你的更新我已经当成日常了","我默默关注你很久了，今天第一次留言","你更新的日子，我会记得看","不用回我，我就想让你知道有人一直在","你的内容是我列表里最期待的那一条","我会一直看下去，你按你的节奏来"],
+unseen:["你可能看不到这条，那就当我把祝福放进漂流瓶了","回不过来很正常，别为此自责","知道你看不完，我只留一句：谢谢你","被淹没也没关系，我写的时候是开心的","不用回我，你只要继续发就好"]}};
+/* 取当前性别对应的文案；没选性别时按「保密」（中性口吻）走 */
+function myGenderKey(){let g=myProfile&&myProfile.gender;return g==="女"||g==="男"?g:"保密"}
+function gPack(kind){let pack=GENDER_PACKS[myGenderKey()];return (pack&&pack[kind])||[]}
+/* ===== 扩展文案库 =====
+   为了在不改动任何调用方的前提下把池子做大，这里全部用「追加池 + 启动时原地 push」的写法：
+   原来的 makeComment / makeDmText / makeUnseenDm / makeReply 一行都不用改，池子自动变大。
+   所有新增句子都跟原有池子风格一致，并且合并时按「已存在就跳过」去重，池子里不会出现重复句。 */
+/* 追加时逐句判重：某个池子已经有的句子不再重复 push（与旧池子撞句时以旧为准） */
+function addUnique(arr,items){items.forEach(t=>{if(!arr.includes(t))arr.push(t)})}
+function mergeExtraPools(){
+  Object.entries(REPLY_EXTRA).forEach(([k,v])=>addUnique(replyPool[k],v));
+  addUnique(generalCommentPool,GENERAL_EXTRA);
+  addUnique(welcomeDmPool,WELCOME_EXTRA);
+  addUnique(dmPool,DM_EXTRA);
+  addUnique(careDmPool,CARE_EXTRA);
+  addUnique(fanDmPool,FAN_EXTRA);
+  addUnique(dmPersonaPool,PERSONA_EXTRA);
+  addUnique(unseenDmPool,UNSEEN_EXTRA);
+  addUnique(replyShocked,SHOCKED_EXTRA);
+  addUnique(replyHappy,HAPPY_EXTRA);
+  addUnique(replyShy,SHY_EXTRA);
+  addUnique(replyThanks,THANKS_EXTRA);
+  addUnique(replyTopic,TOPIC_EXTRA);
+  addUnique(replyUnseenSeen,SEEN_EXTRA);
+  addUnique(replyBiz,BIZ_EXTRA);
+  Object.entries(GENDER_EXTRA).forEach(([g,pack])=>Object.entries(pack).forEach(([k,v])=>addUnique(GENDER_PACKS[g][k],v)));
+}
+const REPLY_EXTRA={
+旅行:["看到这张照片就想出发了","这条路好适合散心","求一个具体的路线，想照着走","下次想去同一个地方","你拍的海比我记忆里的还蓝","谢谢你把远方带到我面前","一个人去安全吗？想试试","这里的日落一定更美","已经在地图上标出来了","看你的照片像是跟着走了一趟","行李都收拾好了，就等放假","好想请个假去看看","被你种草到不行了"],
+美食:["已经截图给朋友了，周末就去","这份量看起来好实在","求一份不踩雷的点单攻略","甜品的部分也太诱人了","看完立刻下单了同款","一个人去吃会不会奇怪","谢谢你，找店找了好久","这家店离我家很近，居然没发现","看你的照片就闻到香味了","摆盘好看，味道应该也不错","下次去要点你推荐的这份","深夜看这个真的很折磨人","已加入我的城市美食清单"],
+穿搭:["想要你衣柜的链接","这个颜色我平时不敢试，被你种草了","看起来很舒服又体面","预算不多也能这样穿吗","求问尺码参考","整体好干净，喜欢这种风格","换个包是不是也好看","这身适合上班吗","我正缺一件这样的，谢谢分享","敢穿比身材更重要，你说得对","第二套我更喜欢一点","跟着你买了一件，期待到货","这种基础款真的很百搭"],
+宠物:["它的眼睛太干净了","想隔着屏幕摸摸头","每天蹲你的更新云吸","它叫什么名字呀","这个睡姿过于可爱了","我家那只看完都沉默了","谢谢你让我今天笑出来","毛色好好，平时怎么保养的","这张表情包我先存了","它看镜头的样子好懂事","我妈妈看到说也想养一只","再多发点，一张都不够看","今天的不开心被它治愈了"],
+日常:["谢谢你记录了这么普通又珍贵的一天","这种节奏我也想要","看完想给自己放个假","原来平淡也可以写得这么好看","很真实，没有刻意摆拍的感觉","愿你的每一天都被温柔对待","跟着你的文字安静下来了","你写的就是我此刻的生活","谢谢你没有把日子过得很敷衍","看完反而没那么焦虑了","这种松弛感是练出来的吗","记录下来本身就很有意义","喜欢你这种不着急的劲儿"]};
+const GENERAL_EXTRA=["看完心情松了一点","这条值得慢慢看","很舒服的记录方式","收藏了以后再看","谢谢你花时间分享","有种被安慰到的感觉","很生活，很真实","文字读起来很顺","这个细节很戳我","愿你一直有好心情","看完想认真过今天了","说得真好，我记下了","关注了，慢慢看你的更新","这条像一杯温水","谢谢你把好的东西讲出来","拍得真好，说不上来的好","很有共鸣，谢谢你","被这句话戳中了","今天最治愈的一条","安静地看完，安静地点赞","你的生活很有质感","一口气看了好几条","这就是我最向往的状态","看完有种被人懂的感觉","很平实但很有力量","这种分享我愿意一直看","谢谢你没有修饰生活","收藏进我的私人清单了","看完决定今天早点睡","被温柔地提醒了一下","很想体验你写的那种下午","你写下的就是我想要的日常","读完有点舍不得划走","很珍贵的一篇，谢谢","这条我会反复看","写得很轻，但很稳","看完整个人都软下来了","这才是真实的生活","被你记录之后变得好美","谢谢你让我也慢下来","有点羡慕，但不嫉妒，是祝福","这句我抄下来了","看你的文字像听朋友说话","希望你被更多人喜欢，但别太累","喜欢你没有讨好谁的样子","这条很干净","谢谢你分享的不是完美","看完想做点小事让自己开心","你的照片有一种安静的力量","这种细节只有认真生活的人才拍得到","谢谢，让我想起家里的味道","看完想给爸妈打个电话","很羡慕你能这样坚持记录","这样的日子多一点就好了","读完心里踏实了","你的更新是我的小确幸","有点想哭，但是舒服的那种","很感谢今天刷到了你","这句话我今年都用得上","谢谢你，评论区里的温柔","好看，而且不吵","这条适合晚上看","默默点了个关注，没有别的话","你写得很诚实，这点最难得","看完不自责了","原来可以这样生活，学到了","日子被你写得好可爱","谢谢你替我说了心里话","希望你的分享一直不用迎合谁","很喜欢这种真实的分寸感","这条看完眼睛有点热","被安抚到了，谢谢","你的文字有重量","谢谢你记录，也谢谢你愿意公开","看完想把手机放下去做点事","很舒服，像午后的阳光","这条我发给朋友了，她说谢谢","喜欢你的节奏，不急","收藏了，低落的时候来看","看完想给自己做顿饭","谢谢你把美好留住","被你的日常打动了好几次","很喜欢，不解释","这条把我从焦虑里拉回来了"];
+const WELCOME_EXTRA=["欢迎欢迎，已经悄悄关注了","入驻第一天就被我发现了，运气不错","期待你的第一条笔记","新号我先占个位，祝你一路长红","来了来了，先送上一个赞","欢迎你呀，这里的人都很温柔","祝福送上，慢慢来，不着急","恭喜入驻，第一位粉丝是我"];
+const DM_EXTRA=["你的主页我翻完了，每条都想留一句","今天加班到很晚，看你的更新缓过来了","我截图了你写的那句话，贴在工位上","在你这儿待一会儿，比刷短视频舒服多了","刚刚和朋友提起你，说你写得很真诚","我把你的号放在收藏夹最前面了","每次不知道该干嘛的时候就会来看看你","你发的这些，让我想认真过好这周","谢谢你没有把生活写得那么用力","想问一下你平时怎么找素材的","看你更新我就知道，日子还在正常往前","我最近也在尝试记录，但总坚持不下来","你的文字让我想起小时候的夏天","今天天气很好，第一个想到来跟你说","我把这条念给我妈听了，她也说好","在外面漂着，看你的内容像回了趟家","谢谢你分享的这些小东西，很实在","本来想划走的，结果看完了整条","想约你（虽然是隔着屏幕）喝杯咖啡","每次看完都会安静一小会儿","我今天把房间收拾干净了，来报个到","跟着你学了一招，生活真的方便了一点","你更新的频率好舒服，不催也不凉","这条我存起来了，等我难过的时候看","在外地出差，酒店里看你的笔记，不那么孤单了","谢谢你让我觉得，认真生活是有回报的","我也开始拍身边的小东西了，谢谢你带的头","你的评论区比内容还温暖，这是真的","今天有点emo，来你这儿坐坐","我把你说的那句写进了日记","一个不太会表达的人，也想说声谢谢"];
+const CARE_EXTRA=["早上起来先喝一杯温水，对胃好","别空腹喝咖啡，先垫两口东西","坐久了记得站一下，腰会感谢你","出门前看一眼天气，别淋着","手机别带到床上，眼睛会舒服很多","如果今天很忙，先吃口饭再忙","情绪不好的时候，先出去走十分钟","别总喝冰的，尤其这个季节","晚饭别吃太撑，睡觉会舒服一点","肩膀僵硬就转两圈，别不管它","记得把要做的事写下来，脑子会清爽一些","不要连续熬三天，身体会记仇的","皮肤干的话，睡前记得抹点东西","眼睛干就闭一会儿，别硬盯着屏幕","喝水这件事，别等渴了再想起来","心里有事就说出来，别攒着","今天没做完的，明天再做也行","出门穿双舒服的鞋，脚很辛苦","不要为了省钱不好好吃饭","天冷的时候，手脚冰就早点睡","给自己定个小小的时间，什么都不干","再急也要吃早饭，这是底线","别熬夜回消息，他们等得起","难过的时候别一个人硬撑，可以找我","换季了，喉咙不舒服就喝点温的","工作再忙，记得站起来看看远处","如果你最近总叹气，那要好好休息了","胃不好就少吃辣，别图一时痛快","记得按时吃水果，比零食强","别穿太少撑面子，冷是真的冷","睡前把明天要穿的衣服准备好，早上会轻松","累到不想说话的时候，就安静待一会儿","不要让手机占用你全部的休息时间","天热记得补水，别等到头晕","记得每年体检，别觉得年轻就没事","心里放不下的事，写下来会好一点","你今天有没有哪一刻是开心的？想听听","如果累了，就晚点再回复工作消息","记得给自己留一顿慢慢吃的饭","别硬扛着冷，多穿一件不丢人","不开心的时候，去晒晒太阳","记得把窗户开一会儿，换换空气","眼睛累了就看看远处，哪怕一分钟","别总是照顾别人，也想想自己","累了就关灯早睡，什么都可以明天说","记得吃早餐，哪怕只是一个鸡蛋","不要总觉得自己不够好，你做得够多了","情绪来了就承认它，不用装作没事","今天也谢谢你这么努力地活着","困了就睡，别用手机硬撑","一个人住也要好好吃饭，别凑合","记得给自己买一件喜欢的小东西","如果睡不着，就听点轻的声音","冷了就加衣服，不要逞强","别把所有的委屈都咽下去","记得偶尔给自己放一天假","难过的时候，抱一抱自己也可以","你的身体比任何数据都重要","天凉了，记得泡个热水脚","不要连续对着屏幕超过两小时","如果有想做的事，今天就做一点点","记得好好刷牙，睡前那一次最要紧","别总想着以后，先过好今天","希望你今晚梦到温柔的事","记得对自己说话轻一点","忙完记得伸个懒腰","降温了，围巾和手套找出来吧","你今天辛苦啦，记得犒劳自己","记得吃点热的，胃暖了人也暖","心情差的时候，先照顾好身体","不要为了赶时间闯红灯，安全第一","记得和朋友聊聊天，别总一个人","如果很烦，就把手机放下五分钟","希望你今天也被善意对待","好好吃饭，好好睡觉，其他慢慢来","别把自己逼得太紧，你已经很好了","记得抬头看看天，今天也很好看","不顺利的时候，允许自己低落一会儿"];
+const FAN_EXTRA=["我每天打开 App 第一件事就是看你更没更","你的每条我都点开看完，从不跳过","我把你推荐给我姐了，她说很喜欢","你更新的时间我都记住了","没事，你按你的节奏来，我们不急","我把你的笔记整理成一个收藏夹了","你的第一篇我都还记得内容","别担心数据，我一直在","你慢慢来，我一直在原地等你的更新","看到你更新我今天的疲惫少了一半","你的内容我一条都没落下","我已经习惯每天来看你一眼了"];
+const PERSONA_EXTRA=["我是做美甲的，今天客人夸我审美好，我想说是学你的","我在工地做技术，休息的时候看你这条","幼儿园老师，今天小朋友给了我一颗糖","我在超市收银，站了一天，看你的内容缓缓","刚下晚自习，坐在车里看完这条才回家","我是兽医，今天救了只小猫，回来看到你的更新","在图书馆自习，偷偷刷到这条，笑了一下","我是剪辑师，你视频的节奏我很喜欢，想问你用的什么思路","刚健完身，浑身酸，但看你这条很开心","送快递的，今天跑了很多楼，来歇一会儿","我在医院陪床，看到你这句突然稳住了","全职妈妈，孩子终于睡了，这两个小时是我自己的","刚考完试，不管成不成，先来你这里放松一下","我是厨子，今天做了一整天菜，看你这条居然还想吃","在便利店上夜班，凌晨没什么人，正好刷到你","今天是我上班第一天，有点紧张，看到你的更新好一点","我是做插画的，你的色调给了我灵感","刚和室友看完电影，回来顺手点开你的主页","我在老家陪爷爷奶奶，信号不好也想看你的更新","骑手一枚，今天被差评了有点难受，看你这条好像也没那么糟","刚退烧，躺着刷到你这条，感觉在被人关心","我是舞蹈老师，今天连上五节课，看你更新就是我的休息","在准备留学申请，压力挺大，谢谢你的陪伴","我是咖啡师，今天做了两百杯，回来看看你","地铁上站着看完的，差点坐过站","我是模型师，加班到十一点，你的更新是我的下班仪式","刚把论文改完一遍，来你这儿报个到","我在北方，今天下雪了，想第一时间告诉你","我是理发店的，今天客人说想剪你那种发型","做外贸的，时差颠倒，凌晨看你的更新刚好"];
+const UNSEEN_EXTRA=["你肯定看不到，但我还是认真写完了这段话","知道你消息多，看不到也正常，我先替你开心","这条就当写给自己看的，你路过就好","不打扰你，只是想说：有人一直在看你","你火得快，也别忘了睡觉","看不到没关系，我把这份喜欢放在这里了","消息爆了就先别回，先把自己照顾好","我猜你翻不到这里，但没关系，我写的时候是笑的","沉底也是一种浪漫，你说是吧","回不过来的，我们都理解的，你慢慢来","知道你现在很忙，那我就长话短说：谢谢你","这条可能永远不会被读到，但它确实存在过","你只要继续更新，我就会继续在这里","不要为了回复把自己熬坏，我们不值得","看到你被这么多人喜欢，我竟然有点想哭","就算被淹了，我写下这些的时候也是开心的","当你哪天翻到这里，希望你那天心情很好","我这条不算什么，就是来打个卡","没有期待回复，只是觉得该说一句","祝福已经寄出，收到与否都行","你忙的话就继续忙，我在这儿静静的就行","这条就存在这儿，什么时候看到都可以","你可能永远不知道我是谁，但我知道你的内容帮过我","消息太多就先不看，身体比这几万条重要","我知道自己只是千万分之一，但还是喜欢你","被淹没很正常，祝福我自己也收到了","这条不用回，只当你收到了一份心意","看到你变好，我这几年的关注就值了","如果哪天你累了，记得还有人盼着你开心","我留的这句话很轻，但我想它是真的"];
+const SHOCKED_EXTRA=["我确定不是在做梦吧，你居然真的回了","刚准备关手机，结果看到你回复，彻底睡不着了","这句话我要截图发给我妈看","我都不敢相信，你回的是我这条","反复确认了三遍用户名，确定是你","我朋友问我为什么突然站起来，我说你回我了","本来想删掉那条消息的，幸好没删","你是不是把所有人的消息都看了？太认真了吧","救命，我现在完全不知道该说什么","心跳好快，比考试出分还紧张","我已经把这条消息截屏存了三份","你回复的速度比我预想的快太多了","这是我今天遇到最好的一件事","我刚刚还在跟朋友说你可能不会回","你回的这句话我要好好收藏","我原来以为这种好事轮不到我","确认了，是你，不是系统消息","我把手机拿远了看了一遍又一遍","谢谢你，我今晚一定睡得很香","你这一句，够我开心好多天"];
+const HAPPY_EXTRA=["真的没想到你会回，谢谢你把我放在心上","今天的事都不算事了，被你这一句抵消了","我会把今天记很久","开心到不知道先跟谁说","突然觉得坚持关注你这件事特别值","谢谢你让我觉得自己没白写","这句话我看了好几遍才划走","今天的运气好像突然变好了","被你回复之后，我连走路都轻快了点","这种被回应到的感觉真的很好","我会好好记着这句话的","谢谢你，这一整天变得很值得","我心里那块石头终于落地了","你回我的时候我正好在难过，谢谢你","这就是普通人的小高光时刻吧","我把这句话念给了我室友听","你让我相信认真说话是有回音的","今天可以算是很好的一天了","突然有了继续努力的理由","谢谢你，这份开心我会还给人间"];
+const SHY_EXTRA=["你别这么说，我脸都红了","被你这么认真地回，我反而不敢多说了","我刚刚把打好的字全删了，只留了一句谢谢","突然有点紧张，像在跟老师说话","你这样我会不好意思的","谢谢你没有敷衍，我会记住这份认真","原来被认真回应的感觉是这样","我说话是不是太啰嗦了，抱歉","被你这么说，我都不好意思再说丧气话了","我把手机翻过来放了一会儿才敢继续看","这种被好好对待的感觉有点陌生，但很好","谢谢你这么耐心，我下次说话简练一点"];
+const THANKS_EXTRA=["你也辛苦了，谢谢你花时间回我","这句我记下了，会照着做的","谢谢你愿意分享，也谢谢你的回信","那我们说好了，都好好生活","你也要记得照顾自己，别只顾着我们","以后我会安静地看，不打扰你","谢谢你还愿意认真听陌生人说话","有你这句，我今天的委屈都散了"];
+const TOPIC_EXTRA=["对了，你最近有没有休息够？","那你平时都几点睡呀，感觉你更新得好晚","想多问一句：你会一直更新下去吗","你说的那个方法我真去试了，回头跟你说结果","下次要是有新的分享，我还来","不打扰你了，你忙你的","如果你有时间，可以再多讲讲那段吗","我把这条转给我朋友了，她也想关注你","那我就常来啦，你别嫌我烦","既然你回我了，我就把想问的都问了"];
+const SEEN_EXTRA=["我写「你可能看不到」的时候是认真的，现在要收回这句话了","原来真的会被看到，我有点想哭","谢谢你从那么多条里翻到了我这条","我都没抱希望，反而是惊喜最大的一次","这句「看不到也没关系」现在看起来好傻，但我不删","你居然回了我这条沉底的留言，我记住了","我说不用回，其实是怕你不会回，谢谢你还是回了","被从消息堆里捞出来的感觉太好了","我写的时候真觉得会石沉大海","看到你的回复，我第一反应是截图给朋友看","原来我在你眼里不是几千分之一","这条我本来准备写给自己看的，现在它有回音了","我以后不写「看不到」了，因为你真的会看","谢谢你没有跳过这条","被翻到牌的感觉，比中奖还开心","我把你的回复存进了备忘录，标注是今天的好事","你说得对，看不到才是常态，但这次不是","谢谢你让我今天有了一个可以讲很久的小故事","我说「不用回」，但你回了，我更开心","这条留言从树洞变成了对话，谢谢你"];
+const BIZ_EXTRA=["感谢回复，我们内部确认一下，最晚明天给你答复","方便的话留个联系方式，后续细节我直接对接你","样品已经寄出，单号稍后发你","权益和档期我们列出了几个方案，你看看哪个合适","不用着急定，你先考虑，我们这边随时可以配合","祝合作顺利，也祝你的内容越做越好"];
+/* 性别专属扩展：女/男/保密，五个场景各补一批 */
+const GENDER_EXTRA={
+女:{
+comment:["姐妹你更新得太慢了，我等得心痒痒（不催）","宝子这条我看了三遍，太喜欢了","姐姐，你是怎么保持这种好心态的","同为女生，我懂你写的那一句","女孩子把日子过成这样真的很厉害","姐妹这个色调我存下来当壁纸了","想跟你做朋友，感觉聊天会很舒服","你身上有种让人安心的力量","姐妹别不自信，你的内容真的很好","这条我把链接发到我们姐妹群了","好想拥有你这种审美","你说的这句我今天正好需要，谢谢","同为女生，看到你活得这么清楚真好","姐妹你拍照的手感太好了","你把生活过得很有自己的样子，羡慕","我以前很怕记录，是你让我敢了","姐妹们都在夸你，我只是其中一个","这条太戳我了，我截屏了","你身上那种温柔不是装的，看得出来","姐妹，愿你一直被好好对待"],
+dm:["姐妹，我今天打扮得挺好看，来跟你炫耀一下","宝，你最近是不是没睡好，眼睛看着有点累","同为女生，我想说你的审美真的很稳","姐妹，我把你的号推给我们宿舍了","今天和男朋友吵架了，来你这儿缓缓","姐妹你有推荐的口红吗？想照着你的风格买","我今天面试过了，第一个来告诉你","宝，我最近也在学着好好吃饭了","姐妹，你说女孩子要怎么才算过得好","我把你当树洞了，说完心里舒服多了","你今天更新的照片我存了三张","姐妹，我最近有点容貌焦虑，怎么办","想给你一个隔空的拥抱，谢谢你陪着我","同为女生，你的自洽比好看还吸引我","宝，今天也谢谢你，我心情好多了","姐妹，我们都要对自己好一点"],
+care:["姐妹那几天别碰冰的，红糖水提前备着","别为了显瘦不好好吃饭，健康最好看","卸妆再睡，皮肤会记住你对它好不好","姐妹，不想笑就别笑，不用对所有人友好","对自己好这件事，不用等别人来提醒","今年体检记得做，别拖","姐妹，你最近有没有给自己买过花？","别老拿自己和别人比，你的路不一样","化妆是开心，不化也是，都行","姐妹，想哭就哭，哭完我们继续过"],
+fan:["姐妹你的审美我全盘接收","我要跟着你一起变好，说到做到","你是什么时候开始做这个的呀，我想从头看起","放心，我会一直在的，你慢慢来","姐妹我每天都要来看你一眼","我把小号也关注你了，这算真爱吧","你更新我就安心，像见到熟人","姐妹你推荐的东西我都买了，没踩雷","我闺蜜也被我安利成功了","你慢慢更，我慢慢等，我们都不急","你身上这种松弛感是我最想学的","姐妹，你的评论区我每条都看"],
+unseen:["知道你消息回不完，那我不添乱了，姐妹照顾好自己","我说你可能看不到，但还是想再写一句：要开心呀","你火了我比谁都高兴，也怕你太累","姐妹，别为了回消息熬夜，我们不会怪你的","这条沉了也没关系，祝福我已经送到了","姐妹，你只要继续做你喜欢的事就好","看不看到都行，我只是想告诉你，你很棒","你被这么多人喜欢，我居然有点想哭","回不过来就别回，我们先心疼你","姐妹，祝你所求皆如愿"]},
+男:{
+comment:["哥们这条我存了，回头照着做","兄弟，你这日子过得挺有章法","老哥，你拍的东西很松弛，我学不来","男人也需要这种安静的时刻，懂你","兄弟，这个角度我下次也试试","哥们，别管数据，你内容真的可以","老哥，看完想去走走了，谢了","你这种稳的状态挺难得的","兄弟，加油，我不说虚的","哥，这条我给我同事看了，他也说好","男人记录生活不丢人，你这样挺好","哥们，你这个更新我每期都追","老哥，压力大的时候看你这个挺解压","兄弟，你写得实在，不装","这条有点东西，收下了","哥们，你说得对，慢一点也没关系","支持你，慢慢做，别急着变现","兄弟这波可以，继续","老哥，你这号我置顶了","哥们，看完这句话我心里舒服多了"],
+dm:["兄弟，刚跑完步，一边喘一边看你的更新","哥们，今天应酬喝了点，回来看看你","老哥，我准备下周去你说的那个地方","兄弟，工作上的事就不细说了，来你这儿坐会儿","男人之间不用多说，看你这条我就懂了","哥们，我照着你的方法弄了一下，真省事","兄弟，你推荐那家我也去了，味道可以","老哥，你别太拼，钱是赚不完的","哥们，今天被客户怼了，看你这条好受点","兄弟，我把你这号推给我爸了，他说挺有意思","老哥，下次多发点户外的","哥们，你这记录方式我打算学","兄弟，谢谢你让我想起还有生活这回事","老哥，我不太会说话，就一句支持","哥们，祝你越做越好，稳着来","兄弟，有空一起（虽然不一定见得到）"],
+care:["哥们，少喝点酒，肝是自己的","兄弟，别连续通宵，第二天开车危险","老哥，腰不舒服就去看看，别拖着","男人不用什么都自己扛，说出来不丢人","哥们，久坐了站起来拉两下","兄弟，体检报告别不看，认真对待","老哥，饭吃热的，胃舒服人也精神","哥们，火气大的时候先走开十分钟","兄弟，你爸妈也惦记你，常打个电话","哥，别为了面子硬撑，真不用"],
+fan:["兄弟，你这号我早就特关了","老哥，你更新了我第一个来","哥们，我把室友也拉来关注你了","男人不用回我，你发我就看","老哥，这号我看了半年，从没取关","兄弟，你慢慢更，我慢慢等","哥们，你的内容我给兄弟们都推了","老哥，跟着你学了挺多，谢了","兄弟，别因为数据焦虑，你行的","哥，你继续拍继续写，我们都在","哥们，你这个更新频率挺舒服","老哥，稳扎稳打，我看好你"],
+unseen:["兄弟，消息肯定爆了，我就说一句：别硬撑","老哥，回不完就别回，身体要紧","知道你看不过来，我就是来捧个场，你随意","哥们，红归红，觉还是要睡的","这条大概率沉底，那也祝你越来越稳","兄弟，看到你起来了，我替你高兴","老哥，火了以后也别丢了原来的劲儿","哥们，你只要继续发，我一直看","回不过来的，我们懂，不催","兄弟，别人怎么说都不重要，你自己高兴就行"]},
+保密:{
+comment:["这条看完很舒服，说不出的放松","你的记录方式让人很安心","很喜欢你这种不刻意的分享","谢谢你愿意把生活公开","读完有种被理解的感觉","你的内容让我安静了一会儿","这种真实很珍贵","希望你一直保持这个状态","看完想认真过完今天","你的文字很有分寸，舒服","这一条我收藏了","很喜欢，说不出理由","谢谢你把普通的日子写好看","看完心情确实好了点","你的更新是我今天的小惊喜"],
+dm:["今天路过一家店，突然想起你拍的这条","谢谢你让我觉得，普通的日子也值得记录","你说的话我记下来了，会用得上","不知道怎么称呼你，但想说声谢谢","看完你的更新，我今天出门走了走","你写的东西很像一个安静的朋友","我把这条存起来，需要的时候再看","最近在学着放慢一点，谢谢你给的启发","你的分享让我少焦虑了一点","祝你今天遇到的都是好事","我不太留言，但这条想留一下","谢谢你陪我过了这一个晚上","看你更新的日子，我好像也在被记录","你的内容陪了我一段路，谢谢你","有空的话多更新一点，但别累着","谢谢你，今天刚好需要这一条"],
+care:["记得吃早饭，一天的状态会不一样","累了就停一下，事没有做完的时候","眼睛累了看看远处，别硬撑","把要做的事写下来，心里会清爽","天气变了记得添衣，别怕麻烦","睡前少看手机，睡眠会好很多","喝水这件事，现在就可以做","不开心的时候，允许自己安静一会儿","按时吃饭比什么都实在","今天也谢谢你这么努力"],
+fan:["你的更新我已经当成日常了","我默默关注你很久了，今天第一次留言","你更新的日子，我会记得看","不用回我，我就想让你知道有人一直在","你的内容是我列表里最期待的那一条","我会一直看下去，你按你的节奏来","你的每一条我都认真看，不跳","被你的分享陪了很久，谢谢","你慢慢来，我不着急","希望你能一直做这件事"],
+unseen:["你可能看不到这条，那就当我把祝福放进漂流瓶了","回不过来很正常，别为此自责","知道你看不完，我只留一句：谢谢你","被淹没也没关系，我写的时候是开心的","不用回我，你只要继续发就好","消息太多就慢慢看，别熬夜","看不看得到都好，祝福已经送到了","我知道自己只是很多条里的一条，但还是想说：支持你","这条就当是给自己写的，你路过就好"]}};
+mergeExtraPools();
+/* ===== 扩展文案库（第二轮）===== */
+const GENERAL_EXTRA2=["这条看完像深呼了一口气","收藏了，想慢慢消化","谢谢你分享这么具体的生活","很细腻的一篇","安静又有力量","看完想把日子过慢一点","这句话说到我心里了","很喜欢这种不喧哗的表达","被认真对待的感觉真好","读完觉得今天还不错","这条让我放下手机想了会儿","你的记录很诚实，谢谢","好治愈，不说别的了","看完想给自己泡杯茶","这种分享太珍贵了","谢谢你让我也想记录点什么","很有生活质感的一篇","看完心里松了一口气","喜欢你的节奏，稳稳的","这条我要留着慢慢看","被你的这句话接住了","今天刷到这条算赚到了","很想认识你这样的人","看完觉得自己也被理解了","不夸张地说，这条救了我今天的心情","好感度直接拉满","这种真实越来越少了","谢谢你没有写得很用力","看完决定原谅今天的自己","读起来像有人在旁边说话","你的日常有种安静的好看","这条我会推荐给朋友","看完第一件事是收藏","很喜欢，说不出的舒服","被提醒到了：生活还可以这样过","谢谢你把平常的日子留住","看完想去窗边站一会儿","这条适合配一杯热的","你的内容让人愿意慢下来","很喜欢你把生活过得这么细","看完突然不着急了","谢谢你，今天心里稳了一点","这条看了两遍，还是喜欢","很温柔，但不腻","喜欢这种不过度修饰的分享","看完想跟家里人说说话","你的文字像晒过太阳的被子","今天最好的一条更新","谢谢你把琐碎写成了好日子","看完想把窗帘拉开","今天这条被我认真看完了","谢谢你，我今天的情绪被接住了","这样的内容多来点也不腻"];
+const CARE_EXTRA2=["起床后别马上喝冰的，先温的","每天走六千步，比躺一天舒服","眼睛看屏幕久了，眨一眨再继续","洗澡水别太烫，皮肤会干","记得刷牙刷够两分钟","吃完饭别马上躺下","夏天出门记得防晒，不只是为了好看","房间记得通风，晚上睡得更沉","桌上放杯水，看见了就会喝","每坐一小时就起来走两步","少喝奶茶，一周两杯差不多","睡前把今天的事写两句，睡得踏实","冬天开暖气记得放一盆水","手机亮度别调太高，眼睛累","耳机音量别超过一半","心情烦的时候擦擦桌子，很管用","别用牙齿开瓶盖，真的会坏","走路别看手机，安全第一","多晒被子，睡着舒服","每天吃点青菜，别只吃肉","心情不好先去洗个热水澡","空腹别喝浓茶","睡前两小时别看惊悚的东西","感冒了多休息，别硬撑上班","记得每年洗一次牙","眼睛干可以用温毛巾敷一下","出门带纸巾和雨伞，总有用得上的时候","走路时抬头挺胸，人会精神一些","别在床上办公，越躺越累","饭前洗个手，简单但有用","累了就闭眼五分钟，比刷手机管用","别把压力都藏在心里，写下来也行","记得补充蛋白质，尤其你在减脂","水果别当饭吃，正餐还是要吃","夏天出汗多，记得补点盐分","冬天出门戴帽子，热量跑得快","睡前泡脚二十分钟，很好睡","心情很低的时候，先别做重要决定","呼吸慢一点，人会跟着安静","每天给自己留十分钟什么都不做","少看让你焦虑的账号，包括我","别和别人比进度，比昨天的自己就行","有条件的话，中午睡二十分钟","坐着的时候别跷二郎腿","开车前别熬夜，真的危险","吃药前先看保质期","伤口小也要处理，别不管","牙疼别拖，越拖越贵","眼睛不舒服就去看，别乱滴眼药水","情绪上来先深呼吸，再说话","别空腹运动，会晕","运动完记得拉伸，第二天不酸","记得给自己买双合脚的鞋","别为了省钱不做体检","家里备点常用药，急的时候有用","天冷记得给家人打个电话","睡前把手机放远一点，你会睡得更早","别总吃外卖，偶尔自己做一顿","每天吃个鸡蛋，简单又实在","心情差的时候允许自己躺平一天","记得和喜欢的人多聊两句","难过的时候不用急着想通","别喝酒助眠，睡不好还伤身","睡前别喝太多水，会起夜","窗帘留一点缝，早上会醒得舒服","别催自己，慢一点也没关系","有条件就养盆植物，看着心情好","心情堵的时候去走一段夜路","别为了赶进度不吃午饭","给自己设一个不加班的晚上","累的时候把音量调小一点","别在情绪里做决定","洗头后吹干再睡","天气好就出去晒晒背","记得多抱抱喜欢的人","一个人也要过生日，买个蛋糕","别把日程排太满，留点空","觉得没意思的时候，换个环境待一会儿","记得给自己写点表扬的话","少吃夜宵，第二天会感谢你","别一直低头看手机，脖子会痛","记得洗手，尤其从外面回来","每天喝够水，尿色浅一点说明够了","情绪差时先别开车","药按时吃，别漏","天热别在太阳底下久站","别总觉得自己在麻烦别人","给自己定个不带手机的时间","累就少说两句，安静一会儿","吃东西前看一眼保质期","别把身体的不适当小事","包里放颗糖，低血糖时有用","心情不好就别硬聊，先自己待会儿","给自己留一件期待的事","天冷别用凉水洗手","别熬夜赶进度，效率其实更低","偶尔做点没用但开心的事","睡前把明天要做的事排个序","谢谢你，今天也撑过来了"];
+const DM_EXTRA2=["你的主页我看了半小时，时间过得好快","今天出门看到晚霞，第一个想发给你看","我刚搬了新家，第一晚就来你的主页待着了","你的文字让我的通勤不那么难熬","我把你推荐的书看了，确实不错","每次焦虑的时候来你这里待一会儿","你更新那天我会特意留着慢慢看","我以前从来不看这类内容，是你让我开始的","今天和朋友聊到生活，就想到你写的那段","我在控制饮食，看你分享的美食只能流口水","你说的那句我记在备忘录里了","我开始每天记一件小事，已经两周了","谢谢你没有把生活写成广告","想问问你是如何保持输出的","今天不开心，但看你这条好一些了","我在准备考试，你的更新是我的休息时间","刚和爸妈通完电话，心情很好，来跟你说一声","你看上去像一个老朋友","我把你这条分享给我男朋友了","最近在学做饭，第一道菜成功了","今天下班早，来把之前落下的都看一遍","你内容里的安静感很难得","我收藏了你的主页，慢慢看","出差路上看你的更新，像带了本书","我不太会评论，但每条都看","今天天气很好，想跟你说声好","我把你的话写在了便利贴上","你让我觉得记录生活不是件难事","想跟你分享一个好消息，我升职了","每次刷到你都会停下来看完","你的评论区让我觉得很安全","今天被夸奖了，想第一个告诉你","你写的日常很像我家附近","我最近在戒手机，但你的更新不舍得戒","谢谢你让我觉得这个城市没那么冷","你更新了就像收到一封朋友的信","今天看到一只很像你照片里的猫","我把你这条念给我奶奶听了","你写得越简单我越喜欢","谢谢你愿意把这些小事写下来"];
+const PERSONA_EXTRA2=["我是做家政的，今天干完活看到你的更新","我在银行柜台，忙完一波来歇一会儿","我是货车司机，停在服务区刷到你这条","幼儿园保育员，孩子们睡了我才有空","我在药店上班，今天给人量了三十次血压","我是做装修的，今天刷完墙一身灰，看你这条舒服","在法院做书记员，今天开了三个庭，眼睛都花了","我是花店老板，今天包了二十束花","我在奶茶店兼职，今天摇了三百杯","我是学农的，今天在试验田待了一整天","在机场做地勤，今天延误了三班","我是宠物美容师，今天剪了八只狗","我在酒店前台值夜班，现在客人少","我是做手工皮具的，今天缝到手指疼","我是做面包的，凌晨三点就起来了","在养老院做护理，今天陪老人聊了很久","我是中学的体育老师，今天带了三节课","我在菜市场摆摊，收摊了来看看你","我是开出租的，刚拉完一趟长途","在图书馆做管理员，今天整理了三排书架","我是做婚礼摄影的，今天跟拍了一整天","我在服装厂做质检，今天看了上千件","我是修车的，今天钻车底钻得腰酸","在加油站上夜班，今晚车不多","我是做民宿的，客人退房后才有空","我在小学食堂做饭，今天中午做了两千份","我是做电商客服的，今天回了四百条消息","在机场做安检，今天说了很多次请配合","我是做早教的，今天小朋友都很闹","我在小区做保安，值夜班的时候刷到你","我是做甜品的，今天试了三个新配方","在影楼做化妆师，今天化了六个人","我是跑网约车的，现在在充电站等电","我在工厂做质检，今天是白班最后一天","我是做翻译的，赶稿赶到眼睛疼","在旅行社做计调，今天处理了一堆改签","我是做陶艺的，今天烧窑等了两小时","我在社区做网格员，今天跑了二十户","我是做广告的，方案被毙了三次","在健身房做教练，今天带了五节课","我是做配音的，今天录了一整天","我是做信贷的，今天看了很多材料","我是玩滑板的，今天摔了两次但很开心","我在超市做理货，晚上补货的时候刷到","我是做茶艺的，今天泡了一下午茶","我在牙科做助理，今天陪了八位患者","我是做汉服的，今天去拍了外景","我在成人教育做老师，晚上还要给学员上课","我是做物流调度的，今天对了一天的单子","我在书店做采购，今天挑书挑到眼花"];
+const UNSEEN_EXTRA2=["你应该已经被人群围着了吧，我站远一点看就好","这条写给你，也写给一年后的我自己","你大概不会翻到这里，那我就当在写日记","祝福不用被收到才算存在，我就放着","消息这么多，你挑着回就好，我不着急","我知道你在忙，所以只留四个字：注意身体","沉在你消息列表的底部也没关系","就算你从来不知道我是谁，你确实陪过我","我这条没有期待，只有祝愿","你被看见是应该的，我为你高兴","看过你还没有什么粉丝的样子，所以更替你开心","你现在的位置是你一条条写出来的，值得","不打扰你，我只是来留一句话","要是你永远看不到，那就当我跟自己聊了会儿","祝你一直有睡够觉的福气","我不算特别的那一个，但我一直都在","不用回，不用看，不用记得","这条被淹没是正常的，我早有准备","你越来越忙了，记得给自己留空隙","我写这些不是为了让你回我","知道你看不完，所以我把想念写短一点","你现在的样子，是我一直希望的样子","就算不回我，我明天还是会来看","你的幸福比一条回复重要","我知道我只是其中之一，但我也来过","这条留言就交给时间吧","如果哪一天你翻到了，笑一下就好","我没有别的意思，只是想让你知道有人在","看你走得这么稳，我就放心了","你只要继续做你的事，我就继续做我的观众","不需要回复，我的心情写完就好了","被淹没也没关系，我不指望奇迹","你要记得吃饭，这比回消息重要一万倍","我猜你今天的消息又满了，那就慢慢来","这条就当我寄出的一封没有地址的信","你越忙我越希望你休息","不用特意找我，我不需要被找到","看到你好，就够了","我不会因为你没回就不喜欢你","祝你知道有人一直在，哪怕你不知道我是谁"];
+const FAN_EXTRA2=["我把你的每条更新都按日期存好了","你停更的那几天我天天来刷新","我从第一条看到现在，一条没落","你的风格我一眼就能认出来","我朋友说我一提你就夸个不停","你更新的时间我都定好提醒了","我收藏夹第一格就是你的主页","我从来不催更，你舒服最重要","你发的我都会看，哪怕只是几句话","我把你的号推给了好几个人","你慢慢更，我会一直在这里","你的内容是我最舍不得取关的","我每周都会把你的旧内容翻出来看","你不用努力维持，做你自己就好","谢谢你还在更新，这对我不只是内容"];
+function mergeExtraPools2(){
+  addUnique(generalCommentPool,GENERAL_EXTRA2);
+  addUnique(careDmPool,CARE_EXTRA2);
+  addUnique(dmPool,DM_EXTRA2);
+  addUnique(dmPersonaPool,PERSONA_EXTRA2);
+  addUnique(unseenDmPool,UNSEEN_EXTRA2);
+  addUnique(fanDmPool,FAN_EXTRA2);
+}
+const GENERAL_EXTRA3=["这条看完之后我停了一会儿","很喜欢你这种不着急的表达","谢谢你把生活里的好留下来","看完想把今天过慢一点","这条让我有点想家了","被你的文字照顾到了","看完觉得自己也该好好吃饭","这种记录很珍贵，别停","很喜欢你的分寸感和安静","今天这条是我的小确幸","看完想给朋友发个消息","谢谢你没有把内容做得很吵","这条让我原谅了今天的自己","读完心里暖和了一点","你的日常真的很好看"];
+const CARE_EXTRA3=["记得今天至少走出去一次","情绪乱了就先收拾桌面","别空着肚子喝咖啡","累的时候少说话，多休息","天凉了记得把被子换厚一点","记得给手机充上电，别半夜没电","饭要一口一口吃，事要一件一件做","别硬撑着陪别人熬夜","记得在包里放把伞","难过的时候先喝口热的","别老盯着体重秤，状态更重要","记得给自己一个小奖励","眼睛酸了就闭一会儿","睡前把窗帘拉严，睡得更沉","记得给自己说一句：今天辛苦了"];
+function mergeExtraPools3(){
+  addUnique(generalCommentPool,GENERAL_EXTRA3);
+  addUnique(careDmPool,CARE_EXTRA3);
+}
+mergeExtraPools2();
+mergeExtraPools3();
+/* ===== 扩展文案库（评论专项：按类目 + 通用 + 性别，共 400+ 条）===== */
+const CATEGORY_EXTRA={
+旅行:["这条路看起来也太好走了","请问几月份去最好","一个人去方便吗","适合带爸妈去吗","照片里的云好低啊","门票大概多少呀","求一个两天的路线","看完想马上请假","这个季节去会不会太热","你是自由行还是跟团","这片湖的颜色好不真实","已经收藏，就等年假","住哪里比较方便呀","这边的日落几点开始","谢谢你把攻略写这么细","这地方人会不会很多","拍得太通透了，喜欢","不自驾的话交通方便吗","这条我转给同行的朋友了","那边手机信号怎么样","像童话里的地方","你走这条线用了几天","想带小孩去，合适吗","这张构图太舒服了","很适合散心的一条","什么时候人最少呀","这天气也太给面子了","想照着你的路线走一遍","海的颜色好干净","谢谢你，第一次有人把这里拍这么好","这边好吃的多吗","想问问整趟花了多少钱","下次去能参考你的时间吗","你这趟拍了好多好片","看完整个人都松弛了","需要提前预约吗","在山里会不会很冷","这条我截图存成攻略了","好想在那儿住上一周","谢谢你带我云旅游了一趟"],
+美食:["这家排队久吗","人均大概多少","几点去人少呀","看着油而不腻","这个做法我自己能复刻吗","求一个具体店名","已经饿了，逃不掉","汤看着好浓","你是当地人吗，太会找了","哪道是必点呀","这个颜色太诱人了","我明天就去打卡","是甜口还是咸口呀","看这个火候就专业","找了好几家都没找到这种","这家的分量足不足","一个人去会不会尴尬","想打包一份带回家","深夜刷到这条是折磨","附近好停车吗","这个摆盘我给满分","看着就很有锅气","是连锁店吗","这份我最想试","谢了，周末就去","辣度能调吗","这家有素食的吗","看起来干净又实在","外卖能点到吗","这个价格太良心了","你会把我馋坏的","想照着点一份一样的","节假日要等多久","这个搭配我第一次见","想去尝一下你说的那道","看完立刻翻了附近的外卖","大概营业到几点呀","这家我路过好多次都没进去","谢谢你认真写了口味","这份适合两个人分吗"],
+穿搭:["身高体重方便说吗","这个版型确实显瘦","上衣在哪里买的呀","这个颜色很显白","裙子长度大概多少","这双鞋好百搭","想照着买一套","是宽松版还是修身版","这个风格我太喜欢了","想问问外套的材质","这套上班穿可以吗","你的比例也太好了","预算多少能拿下","这个配色好高级","包包的牌子是什么呀","这套我已经收藏了","男款也能穿吗","看起来舒服又利落","尺码怎么选呀","这个叠穿思路学到了","在哪里拍的，好衬衣服","这套我很需要","有小个子版本吗","颜色好温柔","这个搭配我给满分","是新品吗","这套我明天就想试","配什么鞋好看呀","你的穿搭越来越稳了","找了半天终于找到链接了","这套的细节好多","适不适合微胖呀","这个面料看着很舒服","哪里能买到同款","我朋友肯定喜欢这套","怎么保养呀","这个季节穿正好","是租的还是买的","太喜欢这种克制的好看","谢谢你给了搭配灵感"],
+宠物:["它多大了呀","这个毛色太漂亮了","是什么品种呀","好想抱一下","平时黏人吗","每天靠你的更新续命","喂的什么粮呀","这个睡姿笑死我了","它看起来好有安全感","怎么训练它的呀","眼睛亮晶晶的","养了几年了","它的表情太有戏了","想给它买同款玩具","这个耳朵也太可爱了","掉毛严重吗","它好像知道你被拍了","好想听它叫一声","多久洗一次澡呀","它的爪子好小","这张我能当头像吗","它喜欢吃什么呀","眼神好温柔","想隔空摸摸它","谢谢你把快乐分享出来","这也太乖了吧","它怕生吗","它打呼噜吗哈哈","羡慕你天天陪它","在哪儿领养的呀","它今天心情看起来很好","要做绝育吗","看它一眼心情就好了","它跑起来的姿势好好笑","它是几岁开始这么乖的","太治愈了，谢谢","它表情跟人一样","养起来麻烦吗","想再要一只","看完想养宠物了"],
+日常:["这种生活我太向往了","你是怎么保持规律的呀","看完想给自己做顿饭","你的文字很稳","你几点睡几点起呀","这条让我安静下来了","谢谢你没有假装过得很好","怎么戒掉熬夜呀","这种小日子太舒服了","看完想整理一下房间","你平时看书吗","喜欢你写的这些小事","下班看到这条很放松","想学着记录一点什么","这种松弛感很难得","你焦虑的时候怎么办","看完决定今天不加班了","你的生活有自己的节奏","谢谢你分享了普通的一天","你会不会也觉得累","这条让我想起我家的阳台","很喜欢你把琐事写温柔","你养花吗","看完想去楼下走走","你的文字像朋友在讲话","你会不会也迷茫","这种平淡里有光","看完想早点睡觉","谢谢你提醒我好好生活","你是怎么安排周末的呀","这条我读了两遍","喜欢你不着急的样子","看完想给妈妈打个电话","你的记录让我也敢开始了","你几点下班呀","这种日子值得被写下来","看完想把手机放下了","谢谢你没有把生活写成鸡汤","很平凡，但很打动我","想问问你明天也会更新吗"]};
+const GENERAL_EXTRA4=["看完很舒服","谢谢你写下来","很有温度的一条","收藏起来慢慢看","这种记录很打动人","喜欢你的表达方式","看完心情平了一点","很真实，不浮夸","这条值得被更多人看到","谢谢你的分享，很受用","看完有种被理解的感觉","很治愈，谢谢","喜欢你简简单单的写法","这条我看了两遍","你的内容很干净","看完想做点小事","谢谢你没有迎合任何人","这种分享越来越少了","看完心里松了一点","很喜欢这种不吵的内容","你的文字读起来很稳","这条我存起来了","谢谢你认真生活","看完想去阳台上站一会儿","很实在的一篇","喜欢你的节奏","看完觉得今天还不错","谢谢你把普通日子写好看了","这条给了我一点力气","看完也想记录了","很喜欢你的视角","你的分享很有分寸","看完心情变好了","谢谢你，今天刚好需要","很舒服的一条","这种内容我愿意看很多遍","看完想起家里的事","谢谢你没有敷衍","你的日常很好看","看完想慢一点生活","这条像一杯热水","被你的句子安顿到了","很喜欢你写的细节","看完想给朋友点个赞","你的内容让我放松下来","谢谢你还愿意认真写","这条我会反复看","很喜欢这种安静的记录","看完觉得日子还可以","谢谢你陪我过完这个下午"];
+const GENERAL_EXTRA5=["看完整个人静下来了","谢谢你分享这些瞬间","这条很有生活气息","收藏了，等需要的时候翻","喜欢你不加滤镜的记录","看完想给自己放个假","你的文字很轻盈","谢谢你把话说得这么温柔","这条看完眼睛有点酸","很踏实的一篇","喜欢你的表达，不装","看完想把窗打开","谢谢你认真对待普通的一天","这种真实很珍贵","看完想早点回家","你的内容有种安定的力量","这条我发给对象看了","谢谢你愿意说心里话","看完想给自己煮碗面","很喜欢你写下的这些","你的分享让人放松","看完不想刷手机了","谢谢你让我慢下来","这条我会存很久","很喜欢你这种不刻意的温和","看完觉得被照顾到了","谢谢你，今天心里有点暖","你的日常很治愈","看完想认真吃个饭","这条值得反复阅读","喜欢你把生活写得这么细","看完想给家里打个电话","谢谢你没有贩卖焦虑","很平静的一条","看完想学你做一件小事","你的内容像安静的陪伴","这条让我想起某个下午","谢谢你分享真实的自己","看完整个人都软下来了","很喜欢你写字的语气","这条我看了很久","谢谢你今天的更新","你的记录很认真","看完想给自己说声辛苦","很喜欢你不急不慢的样子","这条是今天最好的一条","谢谢你让我有一点点放松","看完想出门散散步","你的内容很有安全感","谢谢你，明天也想看到你"];
+const GENERAL_EXTRA6=["这条真好看","谢谢你记录","看完很安静","很舒服，收藏了","喜欢这种真诚","谢谢你分享","看完心软了一下","你的文字很干净","喜欢这条的氛围","看完想歇一会儿","谢谢你，很治愈","这条很打动人","喜欢你的生活态度","看完心情不错","谢谢你把美好留住","这条值得一看","很喜欢这种表达","看完想认真睡一觉","谢谢你的用心","很喜欢你的分享","看完有点想哭","谢谢你陪我","这条很暖","喜欢你的节奏感","看完松了口气","谢谢你提醒我生活本来的样子","忍不住点了收藏","你写得真好","看完想给自己买点东西","谢谢你认真记录","很喜欢这条","看完想给你留言","谢谢你，很受用","这条我记住了","喜欢你不累人的表达","看完想安静一会儿","谢谢你还在这里更新","很喜欢你写的东西","看完想和朋友分享","谢谢你，今天很好","这条像午后的光","很喜欢，说不出原因","看完想散散步","谢谢你把日常写得有意思","这条让我放松","很喜欢你的生活气息","看完想认真过今天","谢谢你，愿你顺利","很想一直看下去","谢谢你的陪伴"];
+const GENERAL_EXTRA7=["看完眼眶有点热，谢谢","你的分享真的帮到我了","这种真诚值得更好的数据","谢谢你没有把生活演出来","看完我想好好吃一顿饭","你写得像在跟我说话","谢谢你让我不那么孤单","这条我想留着慢慢消化","很喜欢你对待生活的方式","看完我安静地坐了一会儿","谢谢你，今天的情绪被接住了","你的内容像一双旧拖鞋，舒服","看完我给阳台的花浇了水","谢谢你分享的不是完美","这条我想推荐给很多人","很喜欢你把辛苦写得很轻","看完我不那么急了","谢谢你，像朋友一样","你的记录让我想起外婆家","看完想给明天留一点期待","谢谢你，我会常来看看","这条看完心里踏实","很喜欢你写字的温度","看完想把日子过得简单点","谢谢你没有讨好谁","你的内容让我愿意慢下来","看完想抱抱自己","谢谢你，今天很有意义","这条我读的时候笑了","很喜欢这种朴素的好看","看完想去楼下买份早餐","谢谢你认真对待每一天","你的分享让我少想很多","看完决定对自己宽容一点","谢谢你，这句话我记住了","这条很安静，但很有力","很喜欢你留下的这些小痕迹","看完我想重新开始记录","谢谢你，愿你被温柔包围","你的内容我一条都不跳","看完想给猫添点水","谢谢你，我今天没那么丧了","这条像有人递来一杯热茶","很喜欢你不吵不闹的分享","看完我想大声说声谢谢","谢谢你，让我觉得人间还不错","你的文字我会一直读","看完想去做件小事","谢谢你，我愿意一直关注","这条我留给自己"];
+function mergeExtraPools4(){
+  Object.entries(CATEGORY_EXTRA).forEach(([k,v])=>addUnique(replyPool[k],v));
+  [GENERAL_EXTRA4,GENERAL_EXTRA5,GENERAL_EXTRA6,GENERAL_EXTRA7].forEach(v=>addUnique(generalCommentPool,v));
+}
+mergeExtraPools4();
+/* ===== 扩展文案库（评论第二轮：通用 +60、性别专属 +75）===== */
+const GENERAL_EXTRA8=["这条看完很安心","谢谢你分享这一刻","喜欢这种慢慢的感觉","看完想多了解你一点","很有生活味的一条","谢谢你，今天被治愈了","看完我把手机放下了","喜欢你的真诚","这条值得收藏","谢谢你把日常写好看","看完想好好睡一觉","你的内容很稳","喜欢这种安静的分享","看完心里亮了一点","谢谢你，今天很需要","这条很有质感","看完想给自己煮点热的","喜欢你的表达，很轻","谢谢你没有写得用力","看完想跟人说说话","这条我看了三遍","你的记录很珍贵","看完觉得被安慰了","喜欢这种不刻意的好","谢谢你愿意分享生活","看完想给自己留点时间","这条很温柔","你的文字像老朋友","看完想去阳台吹吹风","谢谢你，今天舒服了","很喜欢你写的生活","看完不想着急了","这条很有烟火气","谢谢你把小事写得很暖","看完心里有点软","喜欢你不讨好任何人的样子","这条值得慢慢看","谢谢你分享这些琐碎","看完想重新开始","你的内容让人踏实","很喜欢，谢谢","看完想给自己泡杯茶","这条像家里的灯","谢谢你还愿意说真话","看完想记录今天","喜欢你的视角和分寸","这条我收下了","谢谢你，今天有被照顾到","看完想和朋友聊两句","你的内容有安静的力量","很喜欢这种日常感","看完想早点回家吃饭","这条让我笑了一下","谢谢你把日子过得这么暖","看完想给自己放假","很喜欢你分享的方式","这条我看得很慢","谢谢你，愿你也被人温柔以待","看完想认真生活了","谢谢你出现在我的首页"];
+const GENDER_COMMENT_EXTRA={
+女:["姐妹，你这条我发到我们群里了","宝子你的照片也太好看了","姐姐你最近状态真好","同为女生，你写的我全懂","姐妹这条我一字一句看完了","你的审美真的很稳","女孩子能活成这样很了不起","姐妹，谢谢你替我说了心里话","这条我要存下来给自己打气","你可以再自信一点，真的好看","姐妹，我好喜欢你这种松弛","宝，你的文字让我想哭","同为女生，愿我们都被温柔对待","你身上有一种安静的好看","姐妹，你的搭配我照抄了","你今天这句特别戳我","宝，请不要怀疑自己","姐妹，这条看完我心情好多了","你的生活有一种被认真对待的美","姐妹，你要一直这样自在下去","宝子你更新我就高兴","同为女生，看到你活得清楚真好","姐妹，谢谢你这么真诚","这条我要发给我好朋友","女孩子之间的共鸣最珍贵"],
+男:["哥们这条我服","兄弟你的状态挺稳","老哥，看完想去运动了","男人也可以这样记录，支持","哥们，别管流量，坚持就好","兄弟写得很实在","老哥这句说到我心里了","你这种不急的劲儿值得学","哥们，看完我心里舒服多了","兄弟，你这才是生活","老哥，稳住，你行的","这条我给兄弟们都看了，都说好","哥们不多说，就是支持","兄弟，我看完没那么烦躁了","老哥，你这个周末安排不错","哥们，你这日子过得有味道","男人之间说句实话：你写得真好","兄弟，下次带我云体验一下","老哥，你这条挺解压","哥们，看完想去跑两圈","兄弟，你拍得比我强多了","老哥，你继续发我就继续看","哥们，你这个主意我记下了","男人不用回我，你发就好","兄弟，挺你"],
+保密:["这条看完很舒服","谢谢你让我安静一会儿","很喜欢这种淡淡的记录","看完心里稳一点了","你的分享很诚恳","这条我收藏了","看完不着急了","喜欢你不喧哗的表达","谢谢你愿意分享","这条很有生活的味道","看完想歇一歇","你的内容让人放心","很喜欢这种真实","看完轻松了一点","谢谢你，今天看到你挺好","这条值得读两遍","喜欢你的语气","看完想给自己留点空间","你的记录很温柔","谢谢你把普通日子留下来","这条很安静","看完心情平了","喜欢这种简单的好","谢谢你陪我一会儿","看完想慢慢过日子"]};
+function mergeExtraPools5(){
+  addUnique(generalCommentPool,GENERAL_EXTRA8);
+  Object.entries(GENDER_COMMENT_EXTRA).forEach(([g,v])=>addUnique(GENDER_PACKS[g].comment,v));
+}
+mergeExtraPools5();
+/* 按「笔记」维度去重：同一条笔记下不出现重复评论（全局去重池会被其它来源挤满而失效） */
+const recentCommentsByPost=new Map();
+function makeComment(p){let pool=(replyPool[p.cat]||replyPool.日常).concat(generalCommentPool,gPack("comment")),key=String(p.id),used=recentCommentsByPost.get(key)||[],available=pool.filter(text=>!used.includes(text));if(!available.length){used=[];available=pool.slice()}let text=available[Math.floor(Math.random()*available.length)];used.push(text);recentCommentsByPost.set(key,used);return text}
+/* 从一个池里挑一句没用过的话；整池用完就把该池的历史清掉重新轮换 */
+function pickText(pool,recentList,cap){let available=pool.filter(text=>!recentList.includes(text));if(!available.length){for(let i=recentList.length-1;i>=0;i--)if(pool.includes(recentList[i]))recentList.splice(i,1);available=pool.slice()}let text=available[Math.floor(Math.random()*available.length)];recentList.push(text);if(recentList.length>cap)recentList.shift();return text}
+function makeDmText(p,isFan){
+  /* 粉丝来信 / 欢迎 / 关心 / 日常聊天，四类都叠一层当前性别的专属文案 */
+  let pool=isFan?fanDmPool.concat(gPack("fan")):(Math.random()<.08?welcomeDmPool:(Math.random()<.5?careDmPool.concat(gPack("care")):dmPool.concat(dmPersonaPool,gPack("dm"))));
+  return pickText(pool,recentDms,240);
+}
+function makeUnseenDm(){return pickText(unseenDmPool.concat(gPack("unseen")),recentDms,240)}
+/* ===== 粉丝自动回复：先按情绪挑一组，再在组内去重；
+   同一个人不重复、全局最近用过的也不再用，所以不容易撞话 ===== */
+const recentReplies=[],recentRepliesByConv=new Map();
+function makeReply(name,kind){
+  let isBiz=BIZ_USERS.some(b=>b.name===name);
+  let all=replyShocked.concat(replyHappy,replyShy,replyThanks,replyTopic,replyUnseenSeen,replyBiz);
+  let groups=isBiz?[replyBiz]:(kind==="unseen"?[replyUnseenSeen,replyShocked]:[replyShocked,replyHappy,replyShy,replyThanks,replyTopic]);
+  let preferred=groups[Math.floor(Math.random()*groups.length)];
+  let used=recentRepliesByConv.get(name)||[];
+  let isFree=t=>!used.includes(t)&&!recentReplies.includes(t);
+  let available=preferred.filter(isFree);
+  if(!available.length){
+    /* 先只清掉「这一组」的历史，优先保证情绪/场景对得上，实在没有再退到全量池 */
+    for(let i=recentReplies.length-1;i>=0;i--)if(preferred.includes(recentReplies[i]))recentReplies.splice(i,1);
+    available=preferred.filter(t=>!used.includes(t));
+  }
+  if(!available.length)available=all.filter(isFree);
+  if(!available.length){recentReplies.length=0;available=all.filter(t=>!used.includes(t))}
+  if(!available.length){used=[];available=all.slice()}
+  let text=available[Math.floor(Math.random()*available.length)];
+  used.push(text);recentRepliesByConv.set(name,used);
+  recentReplies.push(text);if(recentReplies.length>70)recentReplies.shift();
+  return text;
+}
+function makeLiveMessage(p){let name=randomName(),avatar=avatars[Math.floor(Math.random()*avatars.length)],isPrivate=Math.random()<.2;if(isPrivate&&Math.random()<.12){let fan=fanUsers[Math.floor(Math.random()*fanUsers.length)];name=fan.name;avatar=fan.avatar}let events=[["🌷",name,`点赞了你的笔记《${p.title}》`,"点赞和收藏","unread"],["🐶",name,"关注了你，想和你成为朋友","新增关注","unread"],["☕",name,`评论了你的笔记：${makeComment(p)}`,"评论","unread"],[avatar,name,makeDmText(p,fanUsers.some(user=>user.name===name)),"私信","unread"],[avatar,name,makeDmText(p,fanUsers.some(user=>user.name===name)),"私信","unread"],["🍓",name,"收藏了你的笔记，准备以后慢慢看","收藏","unread"]];let message=events[Math.floor(Math.random()*events.length)];message.push(Math.floor(Math.random()*9)+1);return message}
+function enrichPosts(){posts.forEach(p=>{p.comments||=[];if(p.author==="我"&&!p.zeroStats){p.likes=0;p.collects=0;p.views=0;p.commentCount=0;p.zeroStats=true}if(typeof p.collects!=="number")p.collects=Math.floor(p.likes*.18)+Math.floor(Math.random()*30);if(typeof p.commentCount!=="number")p.commentCount=p.comments.length;if(typeof p.liked!=="boolean")p.liked=false;if(typeof p.collected!=="boolean")p.collected=false})}
+enrichPosts();
+unread=liveMessages.reduce((sum,m)=>sum+(m[4]?(m[5]||1):0),0);
+function save(){localStorage.setItem("baohongshu-posts",JSON.stringify(posts))}
+function escapeHtml(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;")}
+function esc(s){return escapeHtml(s)}
+function appendChatRow(box,opts){
+  if(!box)return;
+  let empty=box.querySelector(".empty");
+  if(empty)empty.remove();
+  if(opts.timeText){
+    let time=document.createElement("div");
+    time.className="chat-time";
+    time.textContent=String(opts.timeText);
+    box.appendChild(time);
+  }
+  let row=document.createElement("div");
+  row.className=opts.me?"chat-row me":"chat-row";
+  if(!opts.me){
+    let av=document.createElement("i");
+    av.className="avatar";
+    av.textContent=String(opts.avatar||"");
+    row.appendChild(av);
+  }
+  let bubble=document.createElement("div");
+  bubble.className="bubble";
+  bubble.textContent=String(opts.text||"");
+  row.appendChild(bubble);
+  box.appendChild(row);
+}
+function detect(title){for(const [cat,words] of Object.entries(keywords))if(words.some(w=>title.toLowerCase().includes(w)))return cat;return "日常"}
+/* 自己的笔记一律显示资料里的昵称，不显示「我」 */
+function authorName(p){return p&&p.author==="我"?(((myProfile&&myProfile.name)||"").trim()||PROFILE_DEFAULTS.name):(p?p.author:"")}
+function myAvatarHTML(cls,pick){
+  let photo=myProfile&&myProfile.avatar;
+  let tag=pick?"button":"i",extra=pick?` type="button" data-pick-avatar`:"";
+  if(photo)return `<${tag} class="${cls} has-photo"${extra} style="background-image:url('${photo}')"></${tag}>`;
+  return `<${tag} class="${cls}"${extra}>${genderEmoji(myProfile&&myProfile.gender)}</${tag}>`;
+}
+function authorAvatarHTML(p){return p&&p.author==="我"?myAvatarHTML("avatar"):`<i class="avatar">${p?p.avatar:""}</i>`}
+const users=new Map();
+const followedUsers=new Set();
+const CREATOR_BIOS={"小鹿不迷路":"把周末交给风，走到腿酸再回头。","手作间":"一颗一颗拼完，也算认真生活。","下班去逛街":"衣服不用多，舒服就好。","奶油小狗":"家里那位才是主角。","认真生活的人":"普通的一天也值得被记下。","今天也要吃饱":"热气腾腾的一碗，比什么都实在。","日和小":"把灯调暗一点，也把心放慢一点。","慢慢煮饭人":"汤很清，葱花很香。","小阳台":"两盆绿植，一把旧椅子。","趁早":"一件旧白衬衫也很好看。","木木记事本":"小猫踩键盘的日子，也要写下来。","听风":"伞也不打太开，听听雨落在树叶上。","泡茶铺":"没有仪式感，就是想喝点热的。","慢慢走":"这条小路没有导航。","好好吃饭":"米饭、青菜、一个蛋，已经很满足。"};
+function rememberUser(name,avatar){if(!name||name==="我")return null;let u=users.get(name);if(!u){u={name,avatar:avatar||"🌷",likedIds:[],collectedIds:[],commentedIds:[]};users.set(name,u)}else if(avatar)u.avatar=avatar;return u}
+function markUserLiked(name,id){let u=rememberUser(name);if(u&&u.likedIds.indexOf(id)<0)u.likedIds.push(id)}
+function markUserCollected(name,id){let u=rememberUser(name);if(u&&u.collectedIds.indexOf(id)<0)u.collectedIds.push(id)}
+function markUserCommented(name,id,avatar){let u=rememberUser(name,avatar);if(u&&u.commentedIds.indexOf(id)<0)u.commentedIds.push(id)}
+function isMeName(name){if(!name||name==="我")return true;let n=(myProfile&&myProfile.name||"").trim();return!!(n&&name===n)}
+function userFollowed(name){return followedUsers.has(name)}
+function setUserFollow(name,on){if(!name||isMeName(name))return;if(on)followedUsers.add(name);else followedUsers.delete(name);posts.forEach(p=>{if(p.author===name)p.followed=on})}
+(function seedCreators(){let first={};posts.forEach(p=>{if(p.author==="我")return;if(first[p.author])p.avatar=first[p.author];else first[p.author]=p.avatar||"🌷";rememberUser(p.author,p.avatar)});let names=[...new Set(posts.map(p=>p.author).filter(n=>n&&n!=="我"))];names.forEach(name=>{let pool=posts.filter(p=>p.author!==name);if(!pool.length)return;let h=0;for(let i=0;i<name.length;i++)h=((h<<5)-h)+name.charCodeAt(i)|0;h=Math.abs(h);markUserLiked(name,pool[h%pool.length].id);if(pool.length>1)markUserLiked(name,pool[(h+3)%pool.length].id);markUserCollected(name,pool[(h+1)%pool.length].id)})})();
+/* ===== 热门笔记榜单 =====
+   热度 = 浏览 + 点赞×10 + 收藏×10（浏览是爆红的主指标，互动做加权）。
+   自己的笔记数据涨起来同样会挤进榜单，所以在发现页也要每帧跟着刷新。 */
+const HOT_NOTE_N=4;
+function hotScore(p){return (p.views||0)+(p.likes||0)*10+(p.collects||0)*10}
+/* 「换一换」= 在真实热度排序上整批轮转（每次挪 HOT_NOTE_N 位），
+   所以换出来的是「下一批」而不是随机重排，翻到底再回到第一批 */
+let hotRotate=0;
+function hotRanked(){
+  let sorted=posts.slice().sort((a,b)=>hotScore(b)-hotScore(a)),len=sorted.length;
+  if(!len)return sorted;
+  let k=((hotRotate%len)+len)%len;
+  return k?sorted.slice(k).concat(sorted.slice(0,k)):sorted;
+}
+function hotPosts(n){return hotRanked().slice(0,n||HOT_NOTE_N)}
+/* ===== 发现页话题（正在热议）=====
+   旧版本这里是写死的「1.2亿次浏览」，跟真实笔记数据差了四个数量级。
+   现在话题只声明「命中哪些类目/关键词」，浏览、笔记数、讨论数全部由该话题下的真实笔记汇总派生，
+   所以数字会跟着爆红引擎一起涨，和首页、消息页永远对得上。 */
+const TOPICS=[
+ {name:"周末去哪儿",emoji:"🏞️",desc:"把周末交给风，走远一点",cats:["旅行","美食"],keywords:["周末","出游","散步","海边","路线","风景"]},
+ {name:"我的松弛感生活",emoji:"🪴",desc:"慢一点，也没关系",cats:["日常"],keywords:["生活","松弛","记录","下班","日常","治愈"]},
+ {name:"今日穿搭分享",emoji:"👗",desc:"今天也要好好打扮自己",cats:["穿搭"],keywords:["穿搭","搭配","裙子","ootd","风格"]}
+];
+function topicMatch(t,p){
+  if(t.cats.indexOf(p.cat)>=0)return true;
+  let hay=(p.title+" "+p.desc+" "+((p.tags||[]).join(" "))).toLowerCase();
+  return t.keywords.some(k=>hay.indexOf(k)>=0);
+}
+function topicNotes(t){return posts.filter(p=>topicMatch(t,p))}
+function topicStats(t){
+  let list=topicNotes(t);
+  return{views:list.reduce((a,p)=>a+(p.views||0),0),notes:list.length,comments:list.reduce((a,p)=>a+(p.commentCount||0),0),likes:list.reduce((a,p)=>a+(p.likes||0),0)};
+}
+/* 话题聚合页：先列该话题下的笔记；不足一屏时补「相关推荐」（全站最热里剩下的），
+   保证任何话题点进去都是一页有内容的列表，而不是孤零零一条 */
+let topicOpenName=null;
+function topicHeroHTML(t){
+  let s=topicStats(t);
+  return `<div class="topic-hero"><div class="topic-emoji">${t.emoji}</div><h1>${esc(t.name)}</h1><p>${esc(t.desc)}</p><div class="topic-meta"><b data-topic-views>${format(s.views)}</b>次浏览<span>·</span><b data-topic-notes>${s.notes}</b>篇笔记<span>·</span><b data-topic-comments>${format(s.comments)}</b>条讨论</div><button class="topic-join" data-topic-join="${esc(t.name)}">参与讨论</button></div>`;
+}
+function renderTopic(name){
+  let t=TOPICS.find(x=>x.name===name);if(!t)return;
+  topicOpenName=name;
+  let matched=topicNotes(t).sort((a,b)=>hotScore(b)-hotScore(a));
+  let extra=posts.filter(p=>matched.indexOf(p)<0).sort((a,b)=>hotScore(b)-hotScore(a)).slice(0,Math.max(0,6-matched.length));
+  let layer=document.querySelector("#topic");
+  layer.innerHTML=`<section class="activity-page topic-page"><section class="inbox-head nav-head"><button class="nav-back" data-topic-back>‹</button><span class="nav-title inbox-title">话题</span><span class="nav-spacer"></span></section>${topicHeroHTML(t)}<div class="topic-notes">${matched.map(card).join("")}</div>${extra.length?`<div class="topic-more">相关推荐</div><div class="topic-notes">${extra.map(card).join("")}</div>`:""}</section>`;
+  bumpLayer(layer);
+}
+/* 话题页里点了♥/收藏之后重新渲染：保留滚动位置，避免把用户甩回顶部 */
+function refreshTopic(){
+  if(!topicOpenName)return;
+  let layer=document.querySelector("#topic");
+  if(!layer.classList.contains("open"))return;
+  let top=layer.scrollTop;
+  renderTopic(topicOpenName);
+  layer.scrollTop=top;
+}
+/* 话题页开着的时候，头部三项数字跟着引擎走 */
+function syncTopicLive(){
+  if(!topicOpenName)return;
+  let layer=document.querySelector("#topic");
+  if(!layer.classList.contains("open"))return;
+  let t=TOPICS.find(x=>x.name===topicOpenName);if(!t)return;
+  let s=topicStats(t);
+  setText(layer.querySelector("[data-topic-views]"),format(s.views));
+  setText(layer.querySelector("[data-topic-notes]"),String(s.notes));
+  setText(layer.querySelector("[data-topic-comments]"),format(s.comments));
+}
+function card(p){let image=imageMap[p.id],who=authorName(p);return `<article class="card" data-id="${p.id}"><div class="cover ${p.cover} ${coverRatioClass(p,image)}${image?" has-image":""}"${coverBoxStyle(p,image)}><span>${image?"":p.emoji}</span><span class="cover-stats"><i class="eye-icon"></i>${format(p.views||0)}</span></div><div class="title">${esc(p.title)}</div><div class="author"><span class="author-hit" data-user="${esc(who)}">${authorAvatarHTML(p)}${esc(who)}</span><button class="likes ${p.liked?'liked':''}" data-like="${p.id}">${p.liked?'♥':'♡'} ${format(p.likes)}</button></div></article>`}
+/* 计数一律取整：热度引擎会算出小数，直接显示会出现 186.00000000000003 这种长小数 */
+function format(n){n=Math.max(0,Math.floor(Number(n)||0));return n>9999?(n/10000).toFixed(1)+"万":n>999?(n/1000).toFixed(1)+"k":n}
+/* 真实时间戳 → 展示文案，全部由 ts 推导，不再写死「昨天 / 周四」 */
+function pad2(n){return n<10?"0"+n:""+n}
+function sameDay(a,b){return a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate()}
+function timeLabel(ts){if(!ts)return"";let d=new Date(ts),now=new Date(),diff=Date.now()-ts;if(diff<60000)return"刚刚";if(diff<3600000)return Math.floor(diff/60000)+"分钟前";if(sameDay(d,now))return pad2(d.getHours())+":"+pad2(d.getMinutes());let y=new Date(now.getTime()-86400000);if(sameDay(d,y))return"昨天";if(d.getFullYear()===now.getFullYear())return(d.getMonth()+1)+"月"+d.getDate()+"日";return d.getFullYear()+"/"+(d.getMonth()+1)+"/"+d.getDate()}
+/* 会话气泡用的完整时间：今天只显示时分，跨天带上日期 */
+function fullTimeLabel(ts){if(!ts)return"";let d=new Date(ts),now=new Date(),s=pad2(d.getHours())+":"+pad2(d.getMinutes());if(sameDay(d,now))return s;let y=new Date(now.getTime()-86400000);if(sameDay(d,y))return"昨天 "+s;return(d.getMonth()+1)+"月"+d.getDate()+"日 "+s}
+function header(active="推荐"){return `<header class="top"><div class="logo">爆红书<span style="color:var(--red)">·</span></div><div class="search"><span>⌕</span>搜索你感兴趣的内容</div><button class="top-icon">♡<i class="badge" id="top-badge">${unread>99?"99+":unread}</i></button></header><nav class="tabs">${["推荐","关注","附近"].map(x=>`<button class="${x===active?"active":""}">${x}</button>`).join("")}</nav>`}
+function homeHeader(){return `<header class="top"><div class="logo">爆红书</div></header>`}
+function renderHome(){document.querySelector("#page").innerHTML=homeHeader()+`<section class="feed">${posts.slice().reverse().map(card).join("")}</section>`}
+/* 发现页：话题热度榜 + 热门笔记，两块都是活的
+   话题卡可点进聚合页；「换一换」真的换一批；不再有「全部话题 ›」这种点了没反应的装饰 */
+function renderExplore(){let hotCards=TOPICS.map((t,i)=>{let s=topicStats(t);return `<button class="hot" data-topic="${esc(t.name)}"><span class="hot-rank">${String(i+1).padStart(2,"0")}</span><b>${esc(t.name)}</b><span class="hot-meta">${format(s.views)}次浏览 · ${s.notes}篇</span></button>`}).join("");document.querySelector("#page").innerHTML=`<header class="top"><div class="logo">发现</div></header><section class="section"><div class="section-head"><h2>正在热议</h2></div><div class="hot-list">${hotCards}</div></section><section class="section"><div class="section-head"><h2>热门笔记</h2><small><button class="shuffle" data-shuffle>换一换</button></small></div><div class="feed hot-notes" style="padding:0">${hotPosts().map(card).join("")}</div></section>`}
+/* ===== 私信会话存储：私信不会再随 liveMessages 被裁掉，每个对话保留完整与未读状态 ===== */
+const conversations=new Map();
+const CONV_CAP=1000,CONV_MSG_CAP=500;
+function conversationOf(name,avatar){let c=conversations.get(name);if(!c){c={name,avatar:avatar||"🌷",unread:0,msgs:[],ts:Date.now()};conversations.set(name,c)}if(avatar)c.avatar=avatar;rememberUser(name,c.avatar);return c}
+/* dmVersion 每次有私信进来 +1：消息列表靠它判断「要不要重排」，不用每帧全量比对 */
+let dmVersion=0;
+function pushConversation(name,avatar,text,unread=1,kind=""){let c=conversationOf(name,avatar);c.msgs.push({text,me:false,ts:Date.now(),kind});if(c.msgs.length>CONV_MSG_CAP)c.msgs.splice(0,c.msgs.length-CONV_MSG_CAP);c.unread+=unread;c.ts=Date.now();dmVersion++;while(conversations.size>CONV_CAP){let oldest=null;for(const c2 of conversations.values()){if(c2.unread)continue;if(!oldest||c2.ts<oldest.ts)oldest=c2}if(!oldest)break;conversations.delete(oldest.name)}return c}
+function conversationRows(){return[...conversations.values()].filter(c=>c.msgs.length).sort((a,b)=>b.ts-a.ts).map(c=>({name:c.name,avatar:c.avatar,preview:c.msgs[c.msgs.length-1].text,unread:c.unread,ts:c.ts}))}
+function conversationUnreadTotal(){let n=0;for(const c of conversations.values())n+=c.unread;return n}
+function liveUnreadTotal(){return liveMessages.reduce((sum,m)=>sum+(m[4]?(m[5]||1):0),0)}
+/* 消息页三类未读数：全部来自 interactions 这一个数据源 */
+function activityTotals(){return{likes:(interactions.like||0)+(interactions.collect||0),follows:interactions.follow||0,comments:interactions.comment||0}}
+function activityUnread(type){return Math.max(0,(activityTotals()[type]||0)-(seen[type]||0))}
+function activityUnreadTotal(){return activityUnread("likes")+activityUnread("follows")+activityUnread("comments")}
+/* 角标 = 互动未读 + 私信未读，全部来自同一份数据 */
+function refreshUnread(){unread=activityUnreadTotal()+conversationUnreadTotal();return unread}
+function markConversationRead(name){let c=conversations.get(name);if(!c)return 0;let n=c.unread;c.unread=0;return n}
+const ACTIVITY_MATCH={likes:m=>m[3]==="点赞和收藏"||m[3]==="收藏",follows:m=>m[3]==="新增关注",comments:m=>m[3]==="评论"};
+function activityItems(type){let match=ACTIVITY_MATCH[type];return match?liveMessages.filter(match):[]}
+/* 每条互动的稳定标识：昵称+时间戳。列表增量插入靠它判断「这条是不是已经在了」 */
+function activityKey(m){return m[1]+"|"+m[6]}
+function activityRowHTML(m){rememberUser(m[1],m[0]);return `<div class="message ${m[4]?"unread":""}" data-act="${esc(activityKey(m))}" data-name="${esc(m[1])}"><i class="avatar" data-user="${esc(m[1])}">${m[0]}</i><div class="message-body"><b>${esc(m[1])}</b><small>${esc(m[2])}</small></div><div class="message-meta"><span>${timeLabel(m[6])}</span></div></div>`}
+function clearActivity(type){let match=ACTIVITY_MATCH[type];if(!match)return;liveMessages.forEach(m=>{if(match(m))m[4]=""});seen[type]=activityTotals()[type]||0;updateBadges()}
+function updateMessageCounters(){let counts=[activityUnread("likes"),activityUnread("follows"),activityUnread("comments")],nodes=document.querySelectorAll(".cat-count");counts.forEach((count,i)=>{if(nodes[i])nodes[i].textContent=count});normalizeBadges()}
+function renderActivity(type){let title={likes:"赞和收藏",follows:"新增关注",comments:"评论和 @"}[type],items=activityItems(type);document.querySelector("#activity").innerHTML=`<section class="activity-page"><section class="inbox-head nav-head"><button class="nav-back" data-inbox-back>‹</button><span class="nav-title inbox-title">${title}</span><span class="nav-spacer"></span></section><div class="message-group">${items.map(activityRowHTML).join("")||`<div class="empty"><b>✉</b>暂时没有新的互动</div>`}</div></section>`;bumpLayer(document.querySelector("#activity"))}
+/* 互动列表增量插入：新互动直接补在最上面，并且把滚动位置补偿掉，
+   这样一边看一边来新的也不会被顶走（原来每 2 秒整页重渲染，滚动位置会被重置到顶部） */
+function patchActivityList(){
+  let box=document.querySelector("#activity .message-group");if(!box)return;
+  let items=activityItems(messageFilter);
+  let have=new Set([...box.querySelectorAll(".message")].map(el=>el.dataset.act));
+  let fresh=items.filter(m=>!have.has(activityKey(m)));
+  if(!fresh.length)return;
+  box.querySelector(".empty")?.remove();
+  let before=box.scrollHeight;
+  for(let i=fresh.length-1;i>=0;i--)box.insertAdjacentHTML("afterbegin",activityRowHTML(fresh[i]));
+  let scroller=document.querySelector("#activity"),grew=box.scrollHeight-before;
+  if(scroller&&scroller.scrollTop>0)scroller.scrollTop+=grew;
+}
+function renderMessages(){if(messageFilter!=="all"){renderActivity(messageFilter);return}let likeCount=activityUnread("likes"),followCount=activityUnread("follows"),commentCount=activityUnread("comments");document.querySelector("#page").innerHTML=`<section class="inbox-head"><div class="inbox-title">消息</div></section><section class="inbox-cats"><button class="inbox-cat" data-inbox="likes"><div class="cat-icon like">♥<span class="cat-count">${likeCount}</span></div>赞和收藏</button><button class="inbox-cat" data-inbox="follows"><div class="cat-icon follow"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12.5a5 5 0 1 0 0-10 5 5 0 0 0 0 10Zm0 1.8c-4.3 0-7.8 2.3-7.8 5.2V21c0 .6.5 1 1 1h13.6c.6 0 1-.4 1-1v-1.5c0-2.9-3.5-5.2-7.8-5.2Z"/></svg><span class="cat-count">${followCount}</span></div>新增关注</button><button class="inbox-cat" data-inbox="comments"><div class="cat-icon comment"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M4 2h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6l-4 4V4a2 2 0 0 1 2-2Zm4.5 5.5a1.6 1.6 0 1 0 0 3.2 1.6 1.6 0 0 0 0-3.2Zm7 0a1.6 1.6 0 1 0 0 3.2 1.6 1.6 0 0 0 0-3.2Z"/></svg><span class="cat-count">${commentCount}</span></div>评论和 @</button></section><div class="message-group">${conversationRows().map((row,i)=>`<div class="message ${row.unread?"unread":""}" data-name="${esc(row.name)}" data-unread="${row.unread||1}" data-chat="1"><i class="avatar" data-user="${esc(row.name)}">${row.avatar}</i><div class="message-body"><b>${esc(row.name)}</b><small>${esc(row.preview)}</small></div><div class="message-meta"><span>${timeLabel(row.ts)}</span>${row.unread?`<span class="chat-badge">${row.unread>99?"99+":row.unread}</span>`:""}</div></div>`).join("")||`<div class="empty"><b>✉</b>还没有私信</div>`}</div>`;updateMessageCounters()}
+function renderMe(){let mine=posts.filter(p=>p.author==="我");if(!mine.length)mine=[{...posts[0],id:"me-demo",title:"没想到这条笔记突然被看见了",author:"我",likes:18600,cover:"c6",emoji:"✨",cat:"日常"}];let shown=profileSection==="posts"?mine:profileSection==="favorites"?posts.filter(p=>p.collected):posts.filter(p=>p.liked);if(!shown.length)shown=[{...posts[0],id:"me-demo-"+profileSection,title:profileSection==="favorites"?"收藏的内容会出现在这里":"点过赞的内容会出现在这里",author:"爆红书",likes:0,cover:"c3",emoji:"♡",cat:"日常",comments:[]}];document.querySelector("#page").innerHTML=`<section class="profile-head"><div class="profile-row"><div class="big-avatar">👤</div><div><div class="profile-name">正在变红的小林</div><div class="profile-id">账号：red_2026</div></div></div><div class="stats"><div><b>${format(1280+posts.filter(p=>p.author==="我").length*8)}</b><span>粉丝</span></div><div><b>${format(3560+posts.reduce((a,p)=>a+(p.author==="我"?p.likes:0),0))}</b><span>获赞与收藏</span></div><div><b>${mine.length}</b><span>笔记</span></div></div></section><div class="profile-tabs"><button data-profile="posts" class="${profileSection==="posts"?"active":""}">笔记</button><button data-profile="favorites" class="${profileSection==="favorites"?"active":""}">收藏</button><button data-profile="liked" class="${profileSection==="liked"?"active":""}">赞过</button></div><section class="my-posts">${shown.map(card).join("")}</section>`}
+function updateBadges(){document.querySelector("#nav-badge").textContent=unread>99?"99+":unread;let b=document.querySelector("#top-badge");if(b)b.textContent=unread>99?"99+":unread}
+function renderMe(){let mine=posts.filter(p=>p.author==="我");if(!mine.length)mine=[{...posts[0],id:"me-demo",title:"你的第一篇笔记",author:"我",likes:0,collects:0,views:0,cover:"c6",emoji:"✨",cat:"日常"}];let shown=profileSection==="posts"?mine:profileSection==="favorites"?posts.filter(p=>p.collected):posts.filter(p=>p.liked);if(!shown.length)shown=[{...posts[0],id:"me-demo-"+profileSection,title:profileSection==="favorites"?"收藏的内容会出现在这里":"点过赞的内容会出现在这里",author:"爆红书",likes:0,cover:"c3",emoji:"♡",cat:"日常",comments:[]}];document.querySelector("#page").innerHTML=`<section class="profile-head"><div class="profile-row"><div class="big-avatar">👤</div><div><div class="profile-name">正在变红的小林</div><div class="profile-id">账号：red_2026</div></div></div><div class="stats"><div><b>${format(profileStats.followers)}</b><span>粉丝</span></div><div><b>${format(profileStats.likes+(profileStats.collects||0))}</b><span>获赞与收藏</span></div><div><b>${mine.length}</b><span>笔记</span></div></div></section><div class="profile-tabs"><button data-profile="posts" class="${profileSection==="posts"?"active":""}">笔记</button><button data-profile="favorites" class="${profileSection==="favorites"?"active":""}">收藏</button><button data-profile="liked" class="${profileSection==="liked"?"active":""}">赞过</button></div><section class="my-posts">${shown.map(card).join("")}</section>`}
+function updateBadges(){document.querySelector("#nav-badge").textContent=unread;let b=document.querySelector("#top-badge");if(b)b.textContent=unread}
+function renderMeLatest(){let mine=posts.filter(p=>p.author==="我").reverse();if(!mine.length)mine=[{...posts[0],id:"me-demo",title:"你的第一篇笔记",author:"我",likes:0,collects:0,views:0,cover:"c6",emoji:"✨",cat:"日常"}];let shown=profileSection==="posts"?mine:profileSection==="favorites"?posts.filter(p=>p.collected):posts.filter(p=>p.liked);if(!shown.length)shown=[{...posts[0],id:"me-demo-"+profileSection,title:profileSection==="favorites"?"收藏的内容会出现在这里":"点过赞的内容会出现在这里",author:"爆红书",likes:0,cover:"c3",emoji:"♡",cat:"日常",comments:[]}];document.querySelector("#page").innerHTML=`<section class="profile-head"><div class="profile-row"><div class="big-avatar">👤</div><div><div class="profile-name">正在变红的小林</div><div class="profile-id">账号：red_2026</div></div></div><div class="stats"><div><b>${format(profileStats.followers)}</b><span>粉丝</span></div><div><b>${format(profileStats.likes+(profileStats.collects||0))}</b><span>获赞与收藏</span></div><div><b>${mine.length}</b><span>笔记</span></div></div></section><div class="profile-tabs"><button data-profile="posts" class="${profileSection==="posts"?"active":""}">笔记</button><button data-profile="favorites" class="${profileSection==="favorites"?"active":""}">收藏</button><button data-profile="liked" class="${profileSection==="liked"?"active":""}">赞过</button></div><section class="my-posts">${shown.map(card).join("")}</section>`}
+function renderMeEmptyAware(){let mine=posts.filter(p=>p.author==="我").reverse(),shown=profileSection==="posts"?mine:profileSection==="favorites"?posts.filter(p=>p.collected):posts.filter(p=>p.liked),content=shown.length?shown.map(card).join(""):`<div class="empty"><b>${profileSection==="favorites"?"☆":"♡"}</b>${profileSection==="favorites"?"还没有收藏的笔记":"还没有点赞的笔记"}</div>`;document.querySelector("#page").innerHTML=`<section class="profile-head"><div class="profile-row"><div class="big-avatar">👤</div><div><div class="profile-name">正在变红的小林</div><div class="profile-id">账号：red_2026</div></div></div><div class="stats"><div><b>${format(profileStats.followers)}</b><span>粉丝</span></div><div><b>${format(profileStats.likes+(profileStats.collects||0))}</b><span>获赞与收藏</span></div><div><b>${mine.length}</b><span>笔记</span></div></div></section><div class="profile-tabs"><button data-profile="posts" class="${profileSection==="posts"?"active":""}">笔记</button><button data-profile="favorites" class="${profileSection==="favorites"?"active":""}">收藏</button><button data-profile="liked" class="${profileSection==="liked"?"active":""}">赞过</button></div><section class="my-posts">${content}</section>`}
+renderMe=renderMeEmptyAware;
+function normalizeBadges(){document.querySelectorAll(".cat-count").forEach(el=>{let value=Number(el.textContent)||0;el.style.setProperty("display",value===0?"none":"inline-flex","important");el.classList.toggle("wide",value>9)});let total=refreshUnread();document.querySelectorAll("#nav-badge,#top-badge").forEach(el=>el.style.setProperty("display",total===0?"none":"inline-flex","important"))}
+function updateBadges(){refreshUnread();let nav=document.querySelector("#nav-badge"),b=document.querySelector("#top-badge");if(nav)nav.textContent=unread;if(b)b.textContent=unread;normalizeBadges();setTimeout(normalizeBadges,0)}
+/* 定时刷新时保留当前滚动位置，避免数字跳动把用户甩回顶部 */
+function rerenderKeepScroll(fn){let box=document.querySelector(".scroll"),top=box?box.scrollTop:0;fn();if(box)box.scrollTop=top}
+/* 简介 / 标签：空的时候不留白，直接放一个能点的引导，用户一眼知道去哪填 */
+function profileBioHTML(){let t=(myProfile.bio||"").trim();if(!t)return `<p class="profile-bio is-empty" data-edit-profile>还没有简介，点这里写一句吧</p>`;return `<p class="profile-bio">${esc(t).replace(/\n/g,"<br>")}</p>`}
+function profileTagsHTML(){let chips=myProfile.tags.map(t=>`<span>${esc(t)}</span>`).join("");return `<div class="profile-tags">${chips}</div>`}
+function renderMeProfile(){let mine=posts.filter(p=>p.author==="我").reverse(),shown=profileSection==="posts"?mine:profileSection==="favorites"?posts.filter(p=>p.collected):posts.filter(p=>p.liked),content=shown.length?shown.map(card).join(""):`<div class="empty"><b>${profileSection==="favorites"?"☆":"♡"}</b>${profileSection==="favorites"?"还没有收藏的笔记":"还没有点赞的笔记"}`;document.querySelector("#page").innerHTML=`<section class="profile-head profile-page"><div class="profile-hero"><div class="profile-row profile-user">${myAvatarHTML("big-avatar",true)}<div><div class="profile-name${(myProfile.name||"").trim()?"":" is-empty"}">${(myProfile.name||"").trim()?esc(myProfile.name.trim()):"还没有昵称"}<span class="profile-gender" title="${genderText(myProfile.gender)}">${genderEmoji(myProfile.gender)}</span></div><div class="profile-id">账号：red_2026</div></div></div>${profileBioHTML()}${profileTagsHTML()}<div class="profile-stats-row"><div class="stats"><div><b>${format(profileStats.followers)}</b><span>粉丝</span></div><div><b>${format(profileStats.likes+(profileStats.collects||0))}</b><span>获赞与收藏</span></div><div><b>${mine.length}</b><span>笔记</span></div></div><button type="button" class="profile-edit-btn" data-edit-profile>编辑资料</button></div></div><div class="profile-tabs"><button data-profile="posts" class="${profileSection==="posts"?"active":""}">笔记</button><button data-profile="favorites" class="${profileSection==="favorites"?"active":""}">收藏</button><button data-profile="liked" class="${profileSection==="liked"?"active":""}">赞过</button></div><section class="my-posts">${content}</section></section>`}
+renderMe=renderMeProfile;
+function render(){refreshUnread();({home:renderHome,explore:renderExplore,messages:renderMessages,me:renderMe}[currentTab]());document.body.classList.toggle("tab-messages",currentTab==="messages");["home","explore","messages","me"].forEach(t=>document.body.classList.toggle("tab-"+t,currentTab===t));document.querySelectorAll(".bottom button[data-tab]").forEach(b=>b.classList.toggle("active",b.dataset.tab===currentTab));updateBadges();if(currentTab==="messages")clearDmNotifies();if(currentTab==="me"){let head=document.querySelector(".profile-head"),button=document.createElement("button");button.className="theme-toggle";button.dataset.themeToggle="1";button.textContent=document.body.classList.contains("dark")?"☀":"☾";head?.append(button)}}
+function toast(text){let el=document.querySelector("#toast");el.textContent=text;el.classList.add("show");clearTimeout(window.tt);window.tt=setTimeout(()=>el.classList.remove("show"),1900)}
+/* ===== 全局私信通知：不在消息页时从顶部弹出，最多 1 条，新消息顶掉旧消息 ===== */
+function dmLayer(){return document.querySelector("#dm-layer")}
+let dmToastEl=null,dmHideTimer=null,dmSwapTimer=null,dmVisible=false,dmSwiped=false;
+const DM_ENTER="transform .34s cubic-bezier(.22,1,.36,1),opacity .34s ease";
+const DM_RESTING="translateY(0) scale(1)";
+function clearDmNotifies(){clearTimeout(dmHideTimer);clearTimeout(dmSwapTimer);let layer=dmLayer();if(layer)layer.innerHTML="";dmToastEl=null;dmVisible=false}
+function hideDmToast(){
+  clearTimeout(dmHideTimer);clearTimeout(dmSwapTimer);
+  let el=dmToastEl;if(!el)return;
+  dmVisible=false;
+  el.style.transition="transform .22s ease,opacity .22s ease";
+  el.style.transform="translateY(-160%) scale(.97)";el.style.opacity="0";el.style.pointerEvents="none";
+}
+function paintDmToast(m){dmToastEl.dataset.name=m[1];dmToastEl.innerHTML=`<i class="avatar">${m[0]}</i><div class="dm-body"><b>${esc(m[1])}</b><small>${esc(m[2])}</small></div><span class="dm-time">${timeLabel(m[6]||Date.now())}</span>`}
+function showDmToast(){
+  let el=dmToastEl;if(!el)return;
+  clearTimeout(dmHideTimer);
+  el.style.transition="none";
+  el.style.transform="translateY(-160%) scale(.97)";el.style.opacity="0";
+  void el.offsetWidth;
+  el.style.transition=DM_ENTER;
+  el.style.transform=DM_RESTING;el.style.opacity="1";el.style.pointerEvents="";
+  dmVisible=true;
+  dmHideTimer=setTimeout(hideDmToast,4200);
+}
+/* 手势：按住这条通知往上推，推过阈值（或甩得够快）就飞走消失；没推够松手回弹；轻点仍然打开会话 */
+function bindDmSwipe(el){
+  let active=false,pid=null,sy=0,dy=0,baseTy=0,baseScale=1,lastY=0,lastT=0,vy=0;
+  const start=e=>{
+    if(!dmVisible)return;
+    active=true;dmSwiped=false;pid=e.pointerId;sy=e.clientY;dy=0;vy=0;lastY=sy;lastT=e.timeStamp;
+    clearTimeout(dmHideTimer);clearTimeout(dmSwapTimer);
+    /* 抓住当前实际位置当基准，避免在入场动画途中接管时跳一下 */
+    let cs=getComputedStyle(el),m=cs.transform;
+    baseTy=0;baseScale=1;
+    if(m&&m.indexOf("matrix")===0){let p=m.slice(m.indexOf("(")+1,-1).split(",").map(Number);baseScale=p[0]||1;baseTy=p[5]||0}
+    el.style.transition="none";
+    el.style.transform=`translateY(${baseTy}px) scale(${baseScale})`;
+    el.style.opacity=cs.opacity;
+    try{el.setPointerCapture(pid)}catch(_){}
+  };
+  const move=e=>{
+    if(!active||e.pointerId!==pid)return;
+    dy=e.clientY-sy;
+    if(e.timeStamp>lastT){vy=(e.clientY-lastY)/Math.max(1,e.timeStamp-lastT);lastY=e.clientY;lastT=e.timeStamp}
+    let ty=baseTy+dy,up=-ty;
+    if(up>6)dmSwiped=true;
+    if(up>0){
+      el.style.transform=`translateY(${ty}px) scale(${Math.max(.9,baseScale-up/900)}) rotate(${Math.max(-7,-up/18)}deg)`;
+      el.style.opacity=String(Math.max(0,1-up/150));
+    }else{
+      el.style.transform=`translateY(${baseTy+dy*.28}px) scale(${baseScale})`;
+      el.style.opacity="1";
+    }
+  };
+  const end=e=>{
+    if(!active||(e.pointerId!==undefined&&e.pointerId!==pid))return;
+    active=false;
+    let up=-(baseTy+dy),fastUp=vy<-0.35;
+    if(up>44||(fastUp&&up>14))flingDmToast(el);else springBackDmToast(el);
+  };
+  el.addEventListener("pointerdown",start);
+  el.addEventListener("pointermove",move);
+  el.addEventListener("pointerup",end);
+  el.addEventListener("pointercancel",end);
+  el.addEventListener("lostpointercapture",()=>{if(active){active=false;springBackDmToast(el)}});
+  /* 拖动过就不算点击，避免一甩就误开聊天 */
+  el.addEventListener("click",e=>{if(dmSwiped){e.preventDefault();e.stopPropagation();dmSwiped=false}},true);
+}
+function springBackDmToast(el){
+  el.style.transition="transform .26s cubic-bezier(.22,1,.36,1),opacity .26s ease";
+  el.style.transform=DM_RESTING;el.style.opacity="1";el.style.pointerEvents="";
+  dmVisible=true;
+  clearTimeout(dmHideTimer);
+  dmHideTimer=setTimeout(hideDmToast,3200);
+}
+function flingDmToast(el){
+  clearTimeout(dmHideTimer);clearTimeout(dmSwapTimer);
+  dmVisible=false;
+  el.style.transition="transform .26s cubic-bezier(.4,0,.9,.5),opacity .26s ease-in";
+  el.style.transform="translateY(-160%) scale(.94) rotate(-4deg)";
+  el.style.opacity="0";el.style.pointerEvents="none";
+  if(dmToastEl===el)dmToastEl=null;
+  setTimeout(()=>{if(el.isConnected)el.remove()},270);
+}
+function notifyDm(m){
+  if(!engineOn)return;
+  if(!m||m[3]!=="私信")return;
+  if(currentTab==="messages")return;
+  if(document.querySelector("#chat")?.classList.contains("open"))return;
+  if(document.querySelector("#detail")?.classList.contains("open"))return;
+  let layer=dmLayer();if(!layer)return;
+  /* 整个页面只维护 1 个 toast 节点：新消息先把旧消息向上顶走，再自己从顶部推入 */
+  if(!dmToastEl||!dmToastEl.isConnected){
+    dmToastEl=document.createElement("button");dmToastEl.type="button";dmToastEl.className="dm-toast";
+    dmToastEl.style.transform="translateY(-160%) scale(.97)";dmToastEl.style.opacity="0";dmToastEl.style.pointerEvents="none";
+    dmToastEl.addEventListener("click",()=>{if(dmSwiped)return;let name=dmToastEl.dataset.name;hideDmToast();openChat(name)});
+    bindDmSwipe(dmToastEl);
+    layer.appendChild(dmToastEl);
+  }
+  clearTimeout(dmHideTimer);clearTimeout(dmSwapTimer);
+  if(dmVisible){
+    dmVisible=false;
+    dmToastEl.style.transition="transform .19s ease,opacity .19s ease";
+    dmToastEl.style.transform="translateY(-160%) scale(.97)";dmToastEl.style.opacity="0";
+    dmSwapTimer=setTimeout(()=>{if(dmToastEl){paintDmToast(m);showDmToast()}},195);
+  }else{
+    paintDmToast(m);showDmToast();
+  }
+}
+function openDetail(id){let p=posts.find(x=>String(x.id)===String(id));if(!p||String(id).startsWith("me-demo"))return;p.views=(p.views||0)+1;profileStats.views++;let image=imageMap[p.id],comments=p.comments||[],commentCount=p.commentCount||comments.length;document.querySelector("#detail").innerHTML=`<div class="detail"><div class="detail-top"><button id="close-detail">‹</button><h3>笔记详情</h3><button>⋯</button></div><div class="detail-cover ${p.cover}${image?" has-image":""}" ${image?`style="background-image:url('${image}')"`:""}>${image?"":p.emoji}</div><div class="detail-content"><div class="detail-author"><i class="avatar">${p.avatar}</i><b>${esc(p.author)}</b><button style="margin-left:auto;color:var(--red)">＋ 关注</button></div><h1>${esc(p.title)}</h1><p>${esc(p.desc||"分享生活里的小小发现。")}</p><div>${(p.tags||[p.cat]).map(t=>`<span class="tag">#${t}</span>`).join("")}</div><div class="detail-actions"><span>♡ <b>${format(p.likes)}</b></span><span>☆ <b>${format(p.collects||0)}</b></span><span>💬 <b>${format(commentCount)}</b></span><span>◉ <b>${format(p.views||0)}</b></span><span style="margin-left:auto">↗ 分享</span></div><div class="comment-head">评论 ${format(commentCount)}</div>${comments.slice(0,12).map((c,i)=>`<div class="comment"><i class="avatar">${avatars[i%avatars.length]}</i><b>${randomName()}</b><br>${esc(c)}</div>`).join("")}</div></div>`;document.querySelector("#detail").classList.add("open");document.querySelector("#close-detail").onclick=()=>document.querySelector("#detail").classList.remove("open")}
+function closeLayer(id){let layer=document.querySelector("#"+id);if(!layer)return;layer.classList.add("closing");setTimeout(()=>layer.classList.remove("open","closing"),280)}
+let layerZ=20;
+function bumpLayer(el){if(!el)return;el.classList.remove("closing");el.classList.add("open");el.style.setProperty("z-index",String(++layerZ),"important")}
+/* 打开私信会话：显示该会话的全部历史消息（不再用占位文本拼凑） */
+/* ===== 粉丝自动回复：延迟 1~3 秒，像真人打完字才发出来 ===== */
+const pendingReplies=new Map();
+function deliverReply(c,text){
+  let layer=document.querySelector("#chat");
+  let viewing=layer&&layer.classList.contains("open")&&chatOpenName===c.name;
+  c.msgs.push({text,me:false,ts:Date.now()});c.ts=Date.now();
+  if(viewing){
+    let body=document.querySelector("#chat-body");
+    if(body){appendChatRow(body,{me:false,text:text,avatar:c.avatar});body.scrollTop=body.scrollHeight}
+  }else{
+    c.unread+=1;refreshUnread();updateBadges();
+  }
+}
+function scheduleAutoReply(c){
+  /* 连着发好几条时只回一次，否则像机器人应答 */
+  if(pendingReplies.has(c.name))return;
+  let lastInbound=[...c.msgs].reverse().find(m=>!m.me);
+  let kind=lastInbound&&lastInbound.kind==="unseen"?"unseen":"";
+  /* 大多数粉丝会回，少部分「忙着去了」，这样不至于每条都秒回 */
+  if(Math.random()<.08)return;
+  let timer=setTimeout(()=>{
+    pendingReplies.delete(c.name);
+    deliverReply(c,makeReply(c.name,kind));
+  },900+Math.random()*2100);
+  pendingReplies.set(c.name,timer);
+}
+let chatOpenName=null;
+function openChat(name){
+  let c=conversations.get(name);if(!c)return;
+  chatOpenName=name;
+  hideNewComments();/* 立刻收起详情页的新评论提示条，不必等下一次 syncDetailLive */
+  markConversationRead(name);refreshUnread();updateBadges();
+  let messages=c.msgs.slice(-CONV_MSG_CAP);
+  document.querySelector("#chat").innerHTML=`<section class="chat-page"><header class="chat-head nav-head"><button id="close-chat" class="nav-back">‹</button><h3 class="nav-title"></h3><span class="nav-spacer"></span></header><div class="chat-body" id="chat-body"></div><form class="chat-compose" id="chat-form"><input id="chat-input" placeholder="说点什么…"><button>发送</button></form></section>`;
+  document.querySelector(".chat-head h3").textContent=String(name);
+  let box=document.querySelector("#chat-body");
+  if(!messages.length){let empty=document.createElement("div");empty.className="empty";empty.innerHTML="<b>✉</b>还没有消息";box.appendChild(empty)}
+  else{let lastTs=0;messages.forEach(m=>{appendChatRow(box,{me:m.me,text:m.text,avatar:c.avatar,timeText:(!lastTs||m.ts-lastTs>300000)?fullTimeLabel(m.ts):""});lastTs=m.ts})}
+  let layer=document.querySelector("#chat");bumpLayer(layer);
+  requestAnimationFrame(()=>{if(box)box.scrollTop=box.scrollHeight});
+  document.querySelector("#close-chat").onclick=()=>{chatOpenName=null;closeLayer("chat")};
+  document.querySelector("#chat-form").onsubmit=e=>{e.preventDefault();let input=document.querySelector("#chat-input"),text=input.value.trim();if(!text)return;let now=Date.now(),prev=c.msgs[c.msgs.length-1];c.msgs.push({text,me:true,ts:now});c.ts=now;input.value="";appendChatRow(box,{me:true,text:text,timeText:(!prev||now-prev.ts>300000)?fullTimeLabel(now):""});box.scrollTop=box.scrollHeight;scheduleAutoReply(c)};
+}
+function openDetailInteractive(id){let p=posts.find(x=>String(x.id)===String(id));if(!p||String(id).startsWith("me-demo"))return;p.views=(p.views||0)+1;let image=imageMap[p.id],comments=p.comments||[],commentCount=p.commentCount||comments.length;document.querySelector("#detail").innerHTML=`<div class="detail"><div class="detail-top"><button id="close-detail">‹</button><h3>笔记详情</h3><button>⋯</button></div><div class="detail-cover ${p.cover}${image?" has-image":""}" ${image?`style="background-image:url('${image}')"`:""}>${image?"":p.emoji}</div><div class="detail-content"><div class="detail-author"><i class="avatar">${p.avatar}</i><b>${esc(p.author)}</b><button data-note-action="follow" data-note="${p.id}" style="margin-left:auto;color:var(--red)">＋ 关注</button></div><h1>${esc(p.title)}</h1><p>${esc(p.desc||"分享生活里的小小发现。")}</p><div>${(p.tags||[p.cat]).map(t=>`<span class="tag">#${t}</span>`).join("")}</div><div class="detail-actions"><button class="detail-action ${p.liked?"on":""}" data-note-action="like" data-note="${p.id}">♡ ${format(p.likes)}</button><button class="detail-action ${p.collected?"on":""}" data-note-action="collect" data-note="${p.id}">☆ ${format(p.collects||0)}</button><span class="detail-action">💬 ${format(commentCount)}</span><span class="detail-action">◉ ${format(p.views||0)}</span></div><div class="comment-head">评论 ${format(commentCount)}</div><form class="comment-form" data-comment-form="${p.id}"><input name="comment" placeholder="说点友善的话…"><button>发送</button></form>${comments.slice(0,12).map((c,i)=>`<div class="comment"><i class="avatar">${avatars[i%avatars.length]}</i><b>${randomName()}</b><br>${esc(c)}</div>`).join("")}</div></div>`;document.querySelector("#detail").classList.add("open");document.querySelector("#close-detail").onclick=()=>document.querySelector("#detail").classList.remove("open")}
+function commentItem(p,i,text){let name=commentAuthor(p,i);let av=commentAvatar(p,i);let key=`${p.id}:${i}`;let liked=!!(p.cLikes&&p.cLikes[i]);let meta=`${["刚刚","2分钟前","半小时前","1小时前"][i%4]} · ${["广东","北京","浙江","四川","江苏"][i%5]}`;return `<div class="comment" data-c="${key}"><i class="avatar" data-user="${esc(name)}">${av}</i><div class="c-main"><div class="c-top"><b data-user="${esc(name)}">${escapeHtml(name)}</b><span class="c-meta">${meta}</span></div><p class="c-text">${escapeHtml(text)}</p><div class="c-acts"><button class="c-act ${liked?"on":""}" data-c-like="${key}">${liked?"♥ 已赞":"♡ 赞"}</button><button class="c-act" data-c-reply="${escapeHtml(name)}">回复</button></div></div></div>`}
+function commentAuthor(p,i){p.commentAuthors||(p.commentAuthors=[]);if(!p.commentAuthors[i])p.commentAuthors[i]=randomName();markUserCommented(p.commentAuthors[i],p.id);return p.commentAuthors[i]}
+function commentAvatar(p,i){p.commentAvatars||(p.commentAvatars=[]);if(!p.commentAvatars[i]){let u=users.get(p.commentAuthors&&p.commentAuthors[i]);p.commentAvatars[i]=(u&&u.avatar)||avatars[i%avatars.length];rememberUser(p.commentAuthors[i],p.commentAvatars[i])}return p.commentAvatars[i]}
+posts.forEach(p=>(p.comments||[]).forEach((_,i)=>commentAuthor(p,i)));
+function openDetailInteractive2(id,countView=true){let p=posts.find(x=>String(x.id)===String(id));if(!p||String(id).startsWith("me-demo"))return;if(countView)p.views=(p.views||0)+1;let image=imageMap[p.id],comments=p.comments||[],commentCount=p.commentCount||comments.length;document.querySelector("#detail").innerHTML=`<div class="detail"><div class="detail-top"><button id="close-detail">‹</button><h3>笔记详情</h3><button>⋯</button></div><div class="detail-cover ${p.cover}${image?" has-image":""}" ${image?`style="background-image:url('${image}')"`:""}>${image?"":p.emoji}</div><div class="detail-content"><div class="detail-author"><i class="avatar">${p.avatar}</i><b>${esc(p.author)}</b><button class="follow-btn ${p.followed?"followed":""}" data-note-action="follow" data-note="${p.id}">${p.followed?"已关注":"＋ 关注"}</button></div><h1>${esc(p.title)}</h1><p>${esc(p.desc||"分享生活里的小小发现。")}</p><div>${(p.tags||[p.cat]).map(t=>`<span class="tag">#${t}</span>`).join("")}</div><div class="detail-actions"><button class="detail-action ${p.liked?"on":""}" data-note-action="like" data-note="${p.id}">${p.liked?"♥":"♡"} ${format(p.likes)}</button><button class="detail-action ${p.collected?"on":""}" data-note-action="collect" data-note="${p.id}">${p.collected?"★":"☆"} ${format(p.collects||0)}</button><span class="detail-action">💬 ${format(commentCount)}</span><span class="detail-action"><i class="eye-icon"></i>${format(p.views||0)}</span></div><div class="comment-head">评论 ${format(commentCount)}</div><form class="comment-form" data-comment-form="${p.id}"><input name="comment" placeholder="说点友善的话…"><button>发送</button></form>${comments.slice(0,12).map((c,i)=>commentItem(p,i,c)).join("")}</div></div>`;document.querySelector("#detail").classList.add("open");document.querySelector("#close-detail").onclick=()=>closeLayer("detail")}
+openDetail=openDetailInteractive2;
+function ensureComments(p){p.comments||(p.comments=[]);let total=p.commentCount||p.comments.length;while(p.comments.length<total)p.comments.push(makeComment(p));return p.comments}
+let detailRenderer=openDetail;
+openDetail=function(id,countView=true){let p=posts.find(x=>String(x.id)===String(id));if(!p)return;let before=ensureComments(p).length;detailRenderer(id,countView);let list=document.querySelector(".comment-list");if(list&&before>12){list.insertAdjacentHTML("beforeend",p.comments.slice(12).map((c,i)=>commentItem(p,i+12,c)).join(""))}}
+function renderDetailV2(id,countView=true){let p=posts.find(x=>String(x.id)===String(id));if(!p)return;if(countView)p.views=(p.views||0)+1;let comments=p.comments||[],commentCount=p.commentCount||comments.length,image=imageMap[p.id],who=authorName(p),on=userFollowed(p.author);document.querySelector("#detail").innerHTML=`<div class="detail"><div class="detail-top nav-head"><button id="close-detail" class="nav-back">‹</button><div class="detail-author" data-user="${esc(who)}"><i class="avatar">${p.author==="我"?"":p.avatar}</i><b>${esc(who)}</b></div>${p.author==="我"?`<span class="nav-spacer"></span>`:`<button class="follow-btn ${on?"followed":""}" data-note-action="follow" data-note="${p.id}">${on?"已关注":"关注"}</button>`}</div><div class="detail-scroll"><div class="detail-cover ${p.cover}${image?" has-image":""}" data-cover-id="${p.id}"${coverBoxStyle(p,image)}>${image?"":p.emoji}</div><div class="detail-content"><h1>${esc(p.title)}</h1><p>${esc(p.desc||"分享生活里的小小发现。")}</p><div>${(p.tags||[p.cat]).map(t=>`<span class="tag">#${t}</span>`).join("")}</div><div class="comment-head">评论 <span data-detail-stat="comment">${format(commentCount)}</span></div><div class="comment-list" data-detail-comments="${p.id}">${comments.slice(0,12).map((c,i)=>commentItem(p,i,c)).join("")}</div></div></div><div class="detail-bottom"><form class="comment-form" data-comment-form="${p.id}"><input name="comment" placeholder="说点什么…"><button>发送</button></form><button class="detail-action ${p.liked?"on":""}" data-note-action="like" data-note="${p.id}">${p.liked?"♥":"♡"} <span data-detail-stat="like">${format(p.likes)}</span></button><button class="detail-action ${p.collected?"on":""}" data-note-action="collect" data-note="${p.id}">${p.collected?"★":"☆"} <span data-detail-stat="collect">${format(p.collects||0)}</span></button><span class="detail-action">💬 <span data-detail-stat="comment-bar">${format(commentCount)}</span></span></div></div>`;document.querySelector("#detail").classList.remove("closing");bumpLayer(document.querySelector("#detail"));document.querySelector("#close-detail").onclick=()=>closeLayer("detail");detailPostId=p.id;detailShownTotal=(p.comments||[]).length;hideNewComments();if(p.author==="我"){let wrap=document.querySelector(".detail-top .detail-author");if(wrap){let av=wrap.querySelector(".avatar");if(av)av.outerHTML=myAvatarHTML("avatar")}}}
+detailRenderer=renderDetailV2;
+/* ===== 详情页实时刷新：只做增量更新，绝不整页重渲染（否则会重置滚动、清空正在输入的评论框） ===== */
+let detailPostId=null,detailShownTotal=0,detailSeq=1000000,detailExpandAt=0;
+function hideNewComments(){document.querySelector("#new-comments")?.classList.remove("show")}
+function showNewComments(n){let el=document.querySelector("#new-comments");if(!el||n<=0)return;let num=el.querySelector("#new-comments-n");if(num)num.textContent=n;el.style.setProperty("z-index",String((typeof layerZ==="number"?layerZ:20)+8),"important");el.classList.add("show")}
+function syncDetailLive(){
+  let layer=document.querySelector("#detail");
+  if(!layer||!layer.classList.contains("open")||detailPostId==null){detailPostId=null;hideNewComments();return}
+  /* 上面又叠了别的页面（私信页 / 消息列表页）时，详情页已经被盖住，
+     提示条挂在视口上不会自动消失，必须跟着藏起来；返回详情页后会自动重新出现 */
+  if(document.querySelector("#chat.open,#activity.open,#topic.open,#user.open")||layer.classList.contains("closing")){hideNewComments();return}
+  let p=posts.find(x=>String(x.id)===String(detailPostId));if(!p)return;
+  let set=(key,val)=>{let el=layer.querySelector(`[data-detail-stat="${key}"]`);if(el)el.textContent=val};
+  set("comment",format(p.commentCount||0));set("comment-bar",format(p.commentCount||0));
+  let likeBtn=layer.querySelector('[data-note-action="like"]');
+  if(likeBtn){likeBtn.classList.toggle("on",!!p.liked);likeBtn.innerHTML=`${p.liked?"♥":"♡"} <span data-detail-stat="like">${format(p.likes)}</span>`}
+  let collectBtn=layer.querySelector('[data-note-action="collect"]');
+  if(collectBtn){collectBtn.classList.toggle("on",!!p.collected);collectBtn.innerHTML=`${p.collected?"★":"☆"} <span data-detail-stat="collect">${format(p.collects||0)}</span>`}
+  let followBtn=layer.querySelector('[data-note-action="follow"]');
+  if(followBtn){followBtn.classList.toggle("followed",!!p.followed);followBtn.textContent=p.followed?"已关注":"关注"}
+  /* 新评论只累加提示条，用户点击后才会插入列表 —— 保证阅读位置零抖动 */
+  let pending=(p.comments||[]).length-detailShownTotal;
+  /* 刚展开过的 1.2 秒内不再弹提示，避免点了马上又冒出来 */
+  if(pending>0&&Date.now()-detailExpandAt>1200)showNewComments(pending);else hideNewComments();
+}
+function insertPendingComments(){
+  let layer=document.querySelector("#detail"),p=posts.find(x=>String(x.id)===String(detailPostId));
+  if(!layer||!p)return;
+  let box=layer.querySelector(`[data-detail-comments="${detailPostId}"]`),pending=(p.comments||[]).length-detailShownTotal;
+  if(box&&pending>0){
+    box.insertAdjacentHTML("afterbegin",p.comments.slice(0,pending).map(c=>commentItem(p,detailSeq++,c)).join(""));
+    [...box.children].slice(0,pending).forEach(el=>el.classList.add("comment-flash"));
+  }
+  detailShownTotal=(p.comments||[]).length;detailExpandAt=Date.now();hideNewComments();
+  let head=layer.querySelector(".comment-head");
+  if(head){
+    let box=layer.querySelector(".detail-scroll")||layer;
+    box.scrollTo({top:box.scrollTop+head.getBoundingClientRect().top-box.getBoundingClientRect().top-60,behavior:"smooth"});
+  }
+}
+document.addEventListener("click",e=>{if(e.target.closest("#new-comments"))insertPendingComments()});
+let detailOpenBase=openDetail;openDetail=function(id,countView=true){detailOpenBase(id,countView);let p=posts.find(x=>String(x.id)===String(id)),name=document.querySelector(".detail-top .detail-author b"),follow=document.querySelector(".detail-top [data-note-action='follow']");if(p&&p.author==="我"){if(name)name.textContent=authorName(p);follow?.remove();let wrap=document.querySelector(".detail-top .detail-author");if(wrap){let av=wrap.querySelector(".avatar");if(av)av.outerHTML=myAvatarHTML("avatar")}}}
+function openUser(name){
+  if(!name)return;
+  if(isMeName(name)){currentTab="me";render();return}
+  rememberUser(name);
+  userOpenName=name;userSection="posts";
+  paintUserPage(true);
+}
+function nameHash(s){let h=0;for(let i=0;i<String(s).length;i++)h=((h<<5)-h)+s.charCodeAt(i)|0;return Math.abs(h)}
+function userGenderOf(name){return ["女","男","保密"][nameHash(name)%3]}
+function userAccountOf(name){return "red_"+(10000+nameHash(name)%90000)}
+function userWorks(name){return posts.filter(p=>p.author===name)}
+function userStatsOf(name){
+  let works=userWorks(name);
+  return{
+    likes:works.reduce((a,p)=>a+(p.likes||0),0),
+    collects:works.reduce((a,p)=>a+(p.collects||0),0),
+    fans:works.reduce((a,p)=>a+(p.followers||0),0),
+    notes:works.length
+  };
+}
+function paintUserPage(animate){
+  let name=userOpenName;if(!name)return;
+  let u=rememberUser(name),works=userWorks(name),st=userStatsOf(name);
+  let g=userGenderOf(name),on=userFollowed(name);
+  let bio=(CREATOR_BIOS[name]||"").trim();
+  let tags=[];works.forEach(p=>{(p.tags||[p.cat]).forEach(t=>{if(t&&tags.indexOf(t)<0)tags.push(t)})});
+  tags=tags.slice(0,4);
+  let liked=posts.filter(p=>u.likedIds.indexOf(p.id)>=0);
+  let favs=posts.filter(p=>u.collectedIds.indexOf(p.id)>=0);
+  let shown=userSection==="posts"?works:userSection==="favorites"?favs:liked;
+  let empty=userSection==="posts"?`<div class="empty"><b>✎</b>还没有发布笔记</div>`:`<div class="empty"><b>${userSection==="favorites"?"☆":"♡"}</b>${userSection==="favorites"?"还没有收藏的笔记":"还没有点赞的笔记"}</div>`;
+  let content=shown.length?shown.map(card).join(""):empty;
+  let bioHTML=bio?`<p class="profile-bio">${esc(bio)}</p>`:`<p class="profile-bio is-empty">这个人很懒，还没有简介</p>`;
+  let tagsHTML=`<div class="profile-tags">${tags.map(t=>`<span>${esc(t)}</span>`).join("")}</div>`;
+  document.querySelector("#user").innerHTML=`<section class="activity-page profile-page user-page"><section class="inbox-head nav-head"><button class="nav-back" data-user-back>‹</button><span class="nav-title">${esc(name)}</span><span class="nav-spacer"></span></section><div class="user-scroll"><div class="profile-hero"><div class="profile-row profile-user"><i class="big-avatar">${u.avatar}</i><div><div class="profile-name">${esc(name)}<span class="profile-gender" title="${genderText(g)}">${genderEmoji(g)}</span></div><div class="profile-id">账号：${userAccountOf(name)}</div></div><button type="button" class="profile-edit-btn${on?" followed":""}" data-follow-user="${esc(name)}">${on?"已关注":"关注"}</button></div>${bioHTML}${tagsHTML}<div class="stats"><div><b data-user-stat="fans">${format(st.fans)}</b><span>粉丝</span></div><div><b data-user-stat="likes">${format(st.likes+st.collects)}</b><span>获赞与收藏</span></div><div><b data-user-stat="notes">${works.length}</b><span>笔记</span></div></div></div><div class="profile-tabs"><button data-user-tab="posts" class="${userSection==="posts"?"active":""}">笔记</button><button data-user-tab="favorites" class="${userSection==="favorites"?"active":""}">收藏</button><button data-user-tab="liked" class="${userSection==="liked"?"active":""}">赞过</button></div><section class="my-posts">${content}</section></div></section>`;
+  let layer=document.querySelector("#user");
+  if(animate)bumpLayer(layer);
+}
+let userOpenName=null,userSection="posts";
+document.addEventListener("click",e=>{
+  let hit=e.target.closest("[data-user]");if(!hit)return;
+  e.preventDefault();e.stopPropagation();
+  if(e.stopImmediatePropagation)e.stopImmediatePropagation();
+  let name=hit.dataset.user;if(name)openUser(name);
+},true);
+document.addEventListener("click",e=>{
+  let back=e.target.closest("[data-user-back]");if(back){userOpenName=null;closeLayer("user");return}
+  let tab=e.target.closest("[data-user-tab]");if(tab){userSection=tab.dataset.userTab;paintUserPage(false);return}
+  let fol=e.target.closest("[data-follow-user]");if(fol){let n=fol.dataset.followUser,on=!userFollowed(n);setUserFollow(n,on);fol.classList.toggle("followed",on);fol.textContent=on?"已关注":"关注";syncDetailLive()}
+});
+function setupCategories(){document.querySelector("#categories").innerHTML=categories.map(c=>`<button class="${c===selectedCat?"on":""}" data-cat="${c}">${c}</button>`).join("")}
+document.addEventListener("click",e=>{let tab=e.target.closest("[data-tab]");if(tab){currentTab=tab.dataset.tab;render()}let profile=e.target.closest("[data-profile]");if(profile){profileSection=profile.dataset.profile;renderMe()}let message=e.target.closest(".message");if(message&&message.dataset.chat){let pending=markConversationRead(message.dataset.name);if(pending){refreshUnread();updateBadges();renderMessages()}}let like=e.target.closest("[data-like]");if(like){let p=posts.find(x=>String(x.id)===like.dataset.like);if(p){p.liked=!p.liked;let d=p.liked?1:-1;p.likes+=d;p.userLike=p.liked?1:0;save();render();if(like.closest("#topic"))refreshTopic()}}let c=e.target.closest(".card");if(c&&!e.target.closest("button")&&!e.target.closest("[data-user]"))openDetail(c.dataset.id);let cat=e.target.closest("[data-cat]");if(cat){selectedCat=cat.dataset.cat;setupCategories()}});
+document.addEventListener("click",e=>{let topic=e.target.closest("[data-topic]");if(topic){renderTopic(topic.dataset.topic);return}let back=e.target.closest("[data-topic-back]");if(back){topicOpenName=null;closeLayer("topic");return}let shuffle=e.target.closest("[data-shuffle]");if(shuffle){hotRotate+=HOT_NOTE_N;render();return}let join=e.target.closest("[data-topic-join]");if(join){let t=TOPICS.find(x=>x.name===join.dataset.topicJoin);selectedCat=(t&&t.cats[0])||"日常";setupCategories();document.querySelector("#publish-modal").classList.add("open")}});
+document.addEventListener("click",e=>{let message=e.target.closest(".message");if(message&&message.dataset.chat){let name=message.dataset.name;if(conversations.has(name))openChat(name)}let inbox=e.target.closest("[data-inbox]");if(inbox){messageFilter=inbox.dataset.inbox;clearActivity(messageFilter);renderMessages()}let back=e.target.closest("[data-inbox-back]");if(back){messageFilter="all";let layer=document.querySelector("#activity");layer.classList.add("closing");setTimeout(()=>{layer.classList.remove("open","closing")},280);renderMessages()}});
+document.addEventListener("click",e=>{let action=e.target.closest("[data-note-action]");if(action){let p=posts.find(x=>String(x.id)===String(action.dataset.note));if(!p)return;if(action.dataset.noteAction==="like"){p.liked=!p.liked;let d=p.liked?1:-1;p.likes+=d;p.userLike=p.liked?1:0}if(action.dataset.noteAction==="collect"){p.collected=!p.collected;let d=p.collected?1:-1;p.collects=(p.collects||0)+d;p.userCollect=p.collected?1:0}if(action.dataset.noteAction==="follow"){let on=!userFollowed(p.author);setUserFollow(p.author,on);p.followed=on};save();if(String(detailPostId)===String(p.id)&&document.querySelector("#detail.open"))syncDetailLive();else openDetail(p.id,false)}});
+document.addEventListener("click",e=>{let menu=e.target.closest("[data-detail-menu]");if(menu)document.querySelector("#detail-menu")?.classList.toggle("open")});
+document.addEventListener("click",e=>{let like=e.target.closest("[data-c-like]");if(like){let key=like.dataset.cLike,id=key.slice(0,key.lastIndexOf(":")),idx=key.slice(key.lastIndexOf(":")+1),p=posts.find(x=>String(x.id)===id);if(p){p.cLikes||(p.cLikes={});let on=p.cLikes[idx]=!p.cLikes[idx];like.classList.toggle("on",on);like.textContent=on?"♥ 已赞":"♡ 赞"}return}let reply=e.target.closest("[data-c-reply]");if(reply){let form=document.querySelector("[data-comment-form]");if(!form)return;let input=form.querySelector("input");input.value="@"+reply.dataset.cReply+" ";input.focus();input.scrollIntoView({block:"center"})}});
+document.addEventListener("click",e=>{let theme=e.target.closest("[data-theme-toggle]");if(theme){document.body.classList.toggle("dark");localStorage.setItem("baohongshu-theme",document.body.classList.contains("dark")?"dark":"light");theme.textContent=document.body.classList.contains("dark")?"☀":"☾"}});
+document.addEventListener("submit",e=>{let form=e.target.closest("[data-comment-form]");if(!form)return;e.preventDefault();let p=posts.find(x=>String(x.id)===form.dataset.commentForm),input=form.querySelector("input"),text=input.value.trim();if(!p||!text)return;p.comments.unshift(text);p.commentCount=(p.commentCount||0)+1;save();openDetail(p.id,false)});
+document.querySelector("#open-publish").onclick=()=>{setupCategories();document.querySelector("#publish-modal").classList.add("open")};
+document.querySelector("#close-publish").onclick=()=>document.querySelector("#publish-modal").classList.remove("open");
+document.querySelector("#publish-modal").addEventListener("click",e=>{if(e.target.id==="publish-modal")e.currentTarget.classList.remove("open")});
+/* ===== 编辑资料弹窗：昵称 / 简介 / 标签（预设多选 + 自定义） ===== */
+function paintTagPicker(){
+  let picker=document.querySelector("#tag-picker"),selected=document.querySelector("#tag-selected"),count=document.querySelector("#tag-count");
+  if(!picker)return;
+  picker.innerHTML=TAG_PRESETS.map(t=>`<button type="button" class="tag-chip${editTags.includes(t)?" on":""}" data-tag="${esc(t)}">${esc(t)}</button>`).join("");
+  /* 主表单里展示所有已选标签（预设+自定义），每个可删；预设标签在 dialog 里勾选 */
+  selected.innerHTML=editTags.map(t=>`<span class="tag-custom">${esc(t)}<i data-remove-tag="${esc(t)}">×</i></span>`).join("");
+  count.textContent=editTags.length?`已选 ${editTags.length}/${TAG_MAX}`:`最多 ${TAG_MAX} 个`;
+}
+function openProfileEdit(){
+  editTags=[...myProfile.tags];
+  document.querySelector("#edit-name").value=myProfile.name||"";
+  document.querySelector("#edit-bio").value=myProfile.bio||"";
+  document.querySelector("#tag-input").value="";
+  paintTagPicker();
+  obGender=myProfile.gender||"保密";
+  paintGender();
+  paintEditAvatar();
+  bumpLayer(document.querySelector("#profile-modal"));
+}
+function paintEditAvatar(){
+  let el=document.querySelector("#edit-avatar");if(!el)return;
+  el.classList.toggle("has-photo",!!myProfile.avatar);
+  if(myProfile.avatar){el.style.backgroundImage=`url('${myProfile.avatar}')`;el.innerHTML=""}
+  else{el.style.backgroundImage="";el.innerHTML=genderEmoji(obGender||myProfile.gender)}
+}
+function toggleTag(t){
+  let i=editTags.indexOf(t);
+  if(i>=0)editTags.splice(i,1);
+  else if(editTags.length>=TAG_MAX){toast(`标签最多选 ${TAG_MAX} 个`);return}
+  else editTags.push(t);
+  paintTagPicker();
+}
+function addCustomTag(){
+  let input=document.querySelector("#tag-input"),v=input.value.trim().replace(/^#+/,"").slice(0,10);
+  if(!v)return;
+  if(editTags.includes(v)){input.value="";toast("这个标签已经加过了");return}
+  if(editTags.length>=TAG_MAX){toast(`标签最多选 ${TAG_MAX} 个`);return}
+  editTags.push(v);input.value="";paintTagPicker();input.focus();
+}
+document.addEventListener("click",e=>{
+  let pick=e.target.closest("[data-pick-avatar]");
+  if(pick){e.preventDefault();e.stopPropagation();document.querySelector("#avatar-input").click();return}
+  let entry=e.target.closest("[data-edit-profile]");if(entry)openProfileEdit()
+});
+function readSquareImage(file,done){
+  if(!file||!String(file.type||"").startsWith("image/"))return;
+  let url=URL.createObjectURL(file),img=new Image();
+  img.onload=()=>{
+    let size=256,c=document.createElement("canvas");c.width=size;c.height=size;
+    let ctx=c.getContext("2d"),s=Math.min(img.width,img.height),sx=(img.width-s)/2,sy=(img.height-s)/2;
+    ctx.drawImage(img,sx,sy,s,s,0,0,size,size);URL.revokeObjectURL(url);done(c.toDataURL("image/jpeg",.82));
+  };
+  img.onerror=()=>URL.revokeObjectURL(url);
+  img.src=url;
+}
+document.querySelector("#avatar-input").onchange=e=>{
+  let f=e.target.files&&e.target.files[0];e.target.value="";
+  readSquareImage(f,data=>{
+    myProfile.avatar=data;paintEditAvatar();
+    if(currentTab==="me")renderMe();
+    else if(currentTab==="home"||currentTab==="explore")render();
+    let d=document.querySelector("#detail.open .detail-top .detail-author .avatar");
+    if(d)d.outerHTML=myAvatarHTML("avatar");
+    toast("头像已更新");
+  });
+};
+document.querySelector("#profile-modal").addEventListener("click",e=>{
+  let chip=e.target.closest("[data-tag]");if(chip){toggleTag(chip.dataset.tag);return}
+  let g=e.target.closest("[data-egender]");if(g){obGender=g.dataset.egender;paintGender();paintEditAvatar();return}
+  let rm=e.target.closest("[data-remove-tag]");if(rm){editTags=editTags.filter(t=>t!==rm.dataset.removeTag);paintTagPicker()}
+  let back=e.target.closest("[data-edit-back]");if(back)closeLayer("profile-modal")
+});
+document.querySelector("#tag-add-btn").onclick=addCustomTag;
+document.querySelector("#tag-input").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();addCustomTag()}});
+document.querySelector("#save-profile").onclick=()=>{
+  myProfile={name:document.querySelector("#edit-name").value.trim().slice(0,12),bio:document.querySelector("#edit-bio").value.trim().slice(0,80),tags:[...editTags],gender:obGender||myProfile.gender||"保密",avatar:myProfile.avatar||""};
+  localStorage.setItem(PROFILE_KEY,JSON.stringify({name:myProfile.name,bio:myProfile.bio,tags:myProfile.tags,gender:myProfile.gender}));
+  localStorage.setItem(ONBOARD_KEY,JSON.stringify({name:myProfile.name,gender:myProfile.gender,ts:Date.now()}));
+  closeLayer("profile-modal");
+  if(currentTab==="me")renderMe();
+  toast("资料已更新");
+};
+document.querySelector("#upload").onclick=()=>document.querySelector("#file-input").click();
+document.querySelector("#file-input").onchange=e=>{let f=e.target.files[0];if(!f)return;let r=new FileReader();r.onload=ev=>{uploadedImage=ev.target.result;document.querySelector("#upload-img").src=uploadedImage;document.querySelector("#upload").classList.add("has");document.querySelector("#upload").classList.remove("missing")};r.readAsDataURL(f)};
+document.querySelector("#publish-post").onclick=()=>{let title=document.querySelector("#post-title").value.trim()||"记录一下今天的生活";let cat=selectedCat==="日常"&&detect(title)!=="日常"?detect(title):selectedCat;let p={id:"me-"+Date.now(),title,desc:document.querySelector("#post-desc").value.trim()||"分享生活里的小小发现。",cat,author:"我",avatar:"🌷",cover:coverClasses[Math.floor(Math.random()*coverClasses.length)],emoji:{旅行:"🌸",美食:"🍰",穿搭:"👗",宠物:"🐶",日常:"✨"}[cat],likes:0,collects:0,views:0,commentCount:0,comments:replyPool[cat].slice(0,2),zeroStats:true,tags:[cat],startTs:Date.now()};if(uploadedImage){imageMap[p.id]=uploadedImage;probeCoverAR(p.id,uploadedImage)}posts.push(p);save();document.querySelector("#publish-modal").classList.remove("open");document.querySelector("#post-title").value="";document.querySelector("#post-desc").value="";document.querySelector("#upload").classList.remove("has");uploadedImage="";currentTab="me";render();toast("发布成功，开始等待互动吧！")};
+const publishOriginal=document.querySelector("#publish-post").onclick;document.querySelector("#publish-post").onclick=function(event){let title=document.querySelector("#post-title").value.trim();if(!uploadedImage){toast("图片是必填的，请先添加作品图片");let box=document.querySelector("#upload");if(box){box.classList.add("missing");box.scrollIntoView({block:"center",behavior:"smooth"});setTimeout(()=>box.classList.remove("missing"),900)}return}if(!title){toast("请填写作品标题");document.querySelector("#post-title").focus();return}if(!selectedCat){toast("请选择内容类型");return}let result=publishOriginal.call(this,event);selectedCat="";return result};
+/* 别人的笔记不走爆红曲线，只偶尔 +1 浏览/赞/藏/粉 */
+function dripOthers(){
+  if(Math.random()>0.22)return;
+  let others=posts.filter(p=>p.author!=="我");if(!others.length)return;
+  let p=others[Math.floor(Math.random()*others.length)];
+  p.views=(p.views||0)+1;
+  let r=Math.random();
+  if(r<0.07)p.likes=(p.likes||0)+1;
+  else if(r<0.1)p.collects=(p.collects||0)+1;
+  else if(r<0.13)p.followers=(p.followers||0)+1;
+}
+document.body.classList.add("dark");
+/* ===== 爆红引擎 =====
+   设计原则：views 是唯一主动增长的量，其余指标全部由 views 按比率派生，
+   所以比率天然自洽，不会出现「点赞占浏览 10%+」这种脏数据。
+    views：按 S 曲线逼近目标值（快启动 + 饱和），容量上限只随时间线性缓慢抬高
+     点赞 ≈ 5.0% × views    收藏 ≈ 1.5% × views
+     关注 ≈ 1.4% × views    评论 ≈ 0.45% × views   私信 ≈ 0.05% × views
+   heat 随开播时长升到 1；转化率从 0.7x 逼近 1.0x，私信占比最低。
+   数字按完整速率增长，通知按类型节流，避免刷屏、也保证私信最不频繁。 */
+let startTime=Date.now();
+let engineOn=false;
+function startEngine(){
+  if(engineOn)return;
+  startTime=Date.now();
+  posts.forEach(p=>{if(p.author==="我")p.startTs=startTime});
+  engineOn=true;
+}
+/* 转化率 = 各指标 / 浏览量，参考真实爆款内容的比例区间：
+   点赞 5.0%（真实区间 3%~8%，所以不会再出现「点赞占浏览 10%+」的脏数据）
+   收藏 1.5%   关注 1.4%   评论 0.45%
+   私信强度按类目区分：种草类（美食/穿搭）高于日常/宠物，约 1.5%~6% 点赞量 */
+const HOT={like:.05,collect:.015,follow:.014,comment:.0045};
+const DM_RATE={美食:.005,穿搭:.005,旅行:.0045,日常:.0025,宠物:.003};
+const DM_RATE_DEFAULT=.0035;
+/* 私信三原则：总量对（欠账会累积直到发完）、每 tick 限速渗出、略滞后于点赞（目标取 DM_LAG 前的热度） */
+const DM_TICK_MAX=1;      /* 每 tick 只渗出 1 条：私信也一条一条来，不齐刷刷涌入 */
+const DM_LAG=3000;        /* 私信只比点赞慢 3 秒：刷新后几秒内就开始有人私信，不必干等 */
+/* 爆款后期才会出现的商务合作私信：笔记赞数过线后才开始混入 */
+const BIZ_MIN_LIKES=2000,BIZ_RATIO=.1;
+/* 「你可能看不到这条」式留言：只在爆火之后出现，占比约 1/5 */
+const UNSEEN_RATIO=.2;
+const BIZ_USERS=[{name:"橘子好物·商务",avatar:"🍊"},{name:"小宇宙品牌合作",avatar:"📦"},{name:"山野茶饮官方",avatar:"🍵"},{name:"幕星MCN商务",avatar:"🎬"},{name:"蓝盒子生活馆",avatar:"🏷"}];
+const BIZ_OPEN=["你好，在吗？","打扰一下，冒昧私信～","hi～方便聊两句吗？"];
+const BIZ_PITCH=["看到你的笔记数据很好，我们想聊聊内容合作。","我们的产品和你的人设很契合，想寄样给你试试。","想问一下你的图文可以授权我们转载吗？","有长期合作的需求，方便的话加个联系方式聊。","这条笔记我们想投一下薯条，聊聊分成？","我们品牌在找达人合作，报价可以谈。"];
+/* 各类通知的最小间隔（毫秒）：数字照常增长，通知按类型节流，
+   私信间隔最长（且生成速率最低）→ 私信永远是最不频繁的互动 */
+const NOTIFY_GAP={like:800,collect:1000,follow:900,comment:1100,dm:3600};
+let lastNotifyAt={};
+/* 热度曲线：起步快、后续饱和。开播几秒内就能有明显的浏览与互动，
+   之后自然放缓，绝不会像复利那样越滚越爆炸 */
+function heatAt(elapsed){return 1-Math.exp(-elapsed/45000)}
+/* 转化率随热度从 0.7x 升到 1.0x，只从下方逼近目标值，永远不超过上限 */
+function rateMultiplier(elapsed){return .7+heatAt(elapsed)*.3}
+/* 单篇笔记的浏览目标：S 曲线（快启动 + 饱和），容量上限只随时间线性缓慢抬高 */
+const VIEW_BASE_CAP=260000,VIEW_CAP_GROWTH=.4,VIEW_TAU=180000;
+function viewsTarget(lifetime){return(VIEW_BASE_CAP+lifetime*VIEW_CAP_GROWTH)*(1-Math.exp(-lifetime/VIEW_TAU))}
+function targetsFor(p,elapsed){
+  let m=rateMultiplier(elapsed);
+  return{like:Math.round(p.views*HOT.like*m),collect:Math.round(p.views*HOT.collect*m),follow:Math.round(p.views*HOT.follow*m),comment:Math.round(p.views*HOT.comment*m)};
+}
+/* 私信目标量：用「DM_LAG 之前的浏览水平」× 类目强度，因此私信天然滞后于点赞；
+   这个值是累计上限，发不完的额度会一直留着（不再被丢弃） */
+function dmTargetFor(p,lifetime){
+  let lagged=viewsTarget(Math.max(0,lifetime-DM_LAG));
+  let rate=DM_RATE[p.cat]||DM_RATE_DEFAULT;
+  return Math.round(lagged*rate*rateMultiplier(lifetime));
+}
+/* 爆红时流量会集中砸在最火的那条笔记上 */
+function pickHotPost(minePosts){
+  if(minePosts.length===1||Math.random()<.72)return minePosts.slice().sort((a,b)=>(b.views||0)-(a.views||0))[0];
+  return minePosts[Math.floor(Math.random()*minePosts.length)];
+}
+/* 私信来路：绝大多数是新面孔只打一声招呼；约 8% 会回访一次（每人最多 2 条），不再轮询叠消息 */
+const DM_USER_CAP=900;
+const dmUsers=[];
+function newDmUser(){
+  let used=new Set(dmUsers.map(u=>u.name));
+  for(const n of conversations.keys())used.add(n);
+  let name,guard=0;
+  do{name=randomName();guard++}while(used.has(name)&&guard<50);
+  if(used.has(name))name=randomName()+(Math.floor(Math.random()*90)+10);
+  return{name,avatar:avatars[Math.floor(Math.random()*avatars.length)]};
+}
+const DM_REVISIT=.08;
+const DM_PER_PERSON_MAX=2;
+function inboundCount(c){return c.msgs.reduce((n,m)=>n+(m.me?0:1),0)}
+function pickDmUser(){
+  if(Math.random()<DM_REVISIT){
+    let back=[...conversations.values()].filter(c=>inboundCount(c)>0&&inboundCount(c)<DM_PER_PERSON_MAX);
+    if(back.length){let c=back[Math.floor(Math.random()*back.length)];return{name:c.name,avatar:c.avatar}}
+  }
+  let u=newDmUser();
+  if(dmUsers.length<DM_USER_CAP&&!dmUsers.some(x=>x.name===u.name))dmUsers.push(u);
+  return u;
+}
+/* 爆款后期混入商务合作私信：通常连发两条（先打招呼，再谈合作） */
+function pushBizDm(){
+  /* 一个品牌只会来谈一次；谈过就换下一个，全都来过了就不再产生商务私信 */
+  let unused=BIZ_USERS.filter(b=>!conversations.has(b.name));
+  if(!unused.length)return null;
+  let b=unused[Math.floor(Math.random()*unused.length)],c=conversationOf(b.name,b.avatar);
+  c.msgs.push({text:BIZ_OPEN[Math.floor(Math.random()*BIZ_OPEN.length)],me:false,ts:Date.now()});
+  c.msgs.push({text:BIZ_PITCH[Math.floor(Math.random()*BIZ_PITCH.length)],me:false,ts:Date.now()});
+  if(c.msgs.length>CONV_MSG_CAP)c.msgs.splice(0,c.msgs.length-CONV_MSG_CAP);
+  c.unread+=2;c.ts=Date.now();
+  return c;
+}
+/* 个人主页数据统一由「我的笔记」汇总，粉丝/获赞/收藏/浏览一起涨，不会各自漂移 */
+function syncProfileStats(){let likes=0,collects=0,views=0,followers=0,comments=0;posts.forEach(p=>{if(p.author!=="我")return;likes+=p.likes||0;collects+=p.collects||0;views+=p.views||0;followers+=p.followers||0;comments+=p.commentCount||0});profileStats.likes=likes;profileStats.collects=collects;profileStats.views=views;profileStats.followers=followers;interactions.like=likes;interactions.collect=collects;interactions.follow=followers;interactions.comment=comments}
+const LEAK_KEYS=["like","collect","follow","comment"];
+/* 原来「每 300ms 补 12% 差距」换成连续时间常数，每帧按真实 dt 推进，帧率高低都不影响速度 */
+const VIEW_TAU_MS=300/Math.log(1/(1-.12));
+/* ===== 每帧推进：数字「长」和「逐个递增」都在这里 =====
+   以前这些事在 300ms 的定时器里做：目标值一次跳一大截，再靠「每帧放行 1」慢慢抽干，
+   于是变成「抽 150ms、停 150ms」的阵发感。现在目标每帧重算，欠账始终很小，
+   数字就均匀地一个一个往上走。 */
+function simStep(dt){
+  if(!engineOn)return;
+  posts.forEach(p=>{
+    if(p.author!=="我")return;
+    let lifetime=Date.now()-(p.startTs||startTime),target=viewsTarget(lifetime),cur=p.views||0;
+    let next=cur+(target-cur)*(1-Math.exp(-dt/VIEW_TAU_MS));
+    if(next<=cur&&target>cur)next=cur+1;      /* 永远在动，不会卡住 */
+    p.views=Math.floor(next>target?target:next);
+    p.aMetric=p.aMetric||{like:0,collect:0,follow:0,comment:0,dm:0};
+    p.tMetric=targetsFor(p,lifetime);
+    /* 每帧每个指标最多放行 +1：界面上的数字永远是一格一格跳，不会一次跳一大截 */
+    for(const k of LEAK_KEYS)if(p.aMetric[k]<p.tMetric[k])p.aMetric[k]+=1;
+    p.likes=p.aMetric.like+(p.userLike||0);p.collects=p.aMetric.collect+(p.userCollect||0);p.followers=p.aMetric.follow;
+    p.commentCount=p.aMetric.comment;
+    /* 评论数也是 +1 地长，文本跟着一条条补上（最新的放最前），详情页才有最新内容可插入 */
+    p.comments=p.comments||[];
+    for(let i=0;i<p.commentCount-p.comments.length;i++)p.comments.unshift(makeComment(p));
+  });
+  syncProfileStats();
+  patchLiveNumbers();
+  syncBadgesLive();
+}
+/* 未读角标同样每帧同步一次：原来只在 300ms 的定时器里更新，
+   于是攒够一批才跳一次，看起来是「呼啦一下多了一堆」 */
+let lastBadgeValue=-1;
+function syncBadgesLive(){
+  let v=refreshUnread();
+  if(v===lastBadgeValue)return;
+  lastBadgeValue=v;
+  updateBadges();
+  if(currentTab==="messages")updateMessageCounters();
+}
+let lastFrameAt=performance.now();
+function frameLoop(now){
+  /* 卡顿/切后台回来时 dt 会很大，夹一下，避免浏览数一口气补到位 */
+  let dt=Math.min(120,now-lastFrameAt);
+  lastFrameAt=now;
+  simStep(dt>0?dt:16.7);
+  requestAnimationFrame(frameLoop);
+}
+requestAnimationFrame(frameLoop);
+/* 定时器只负责私信投递和通知：数字本身已经交给每帧的 simStep 了 */
+function engineTick(){
+  let elapsed=Date.now()-startTime,heat=heatAt(elapsed),minePosts=posts.filter(p=>p.author==="我");
+  if(!minePosts.length)return null;
+  let hot=pickHotPost(minePosts),grew=[],dms=0;
+  minePosts.forEach(p=>{
+    p.aMetric=p.aMetric||{like:0,collect:0,follow:0,comment:0,dm:0};
+    /* 数字增长不在这里做；这里只对比「上个 tick 的快照」看哪个指标长过，用来发通知 */
+    p.snap=p.snap||{like:0,collect:0,follow:0,comment:0};
+    if(p===hot)for(const k of LEAK_KEYS)if(p.aMetric[k]>p.snap[k]&&!grew.includes(k))grew.push(k);
+    p.snap={like:p.aMetric.like,collect:p.aMetric.collect,follow:p.aMetric.follow,comment:p.aMetric.comment};
+    /* 私信：欠账累积（不丢额度）+ 每 tick 限速渗出，慢慢渗出来而不是齐刷刷涌入 */
+    let lifetime=Date.now()-(p.startTs||startTime);
+    let dmTarget=dmTargetFor(p,lifetime);
+    if(dmTarget>p.aMetric.dm){
+      let add=Math.min(DM_TICK_MAX,dmTarget-p.aMetric.dm);
+      p.aMetric.dm+=add;
+      let biz=p.likes>=BIZ_MIN_LIKES;
+      for(let i=0;i<add;i++){
+        if(biz&&Math.random()<BIZ_RATIO){pushBizDm();continue}
+        let u=pickDmUser();
+        /* 爆火之后消息回不过来，会有一部分人写「你可能看不到这条」式的留言 */
+        let unseen=!!biz&&Math.random()<UNSEEN_RATIO;
+        pushConversation(u.name,u.avatar,unseen?makeUnseenDm():makeDmText(p,false),1,unseen?"unseen":"")
+      }
+      if(p===hot)dms+=add;
+    }
+  });
+  syncProfileStats();
+  return{piece:hot,heat,grew,dms};
+}
+/* 只改数字、不换节点：整页重渲染或换 innerHTML 都会在按下和抬起之间把元素换掉，
+   可能导致点击丢失，所以这里一律只改文本节点 */
+function setText(el,text){if(!el)return;let last=el.lastChild;if(last&&last.nodeType===3){if(last.nodeValue!==text)last.nodeValue=text}else el.textContent=text}
+function patchLiveNumbers(){
+  document.querySelectorAll("#page .card, #topic .card, #user .card").forEach(el=>{
+    let p=posts.find(x=>String(x.id)===el.dataset.id);if(!p)return;
+    let like=el.querySelector("[data-like]");
+    if(like)setText(like,`${p.liked?'♥':'♡'} ${format(p.likes)}`);
+    setText(el.querySelector(".cover-stats"),format(p.views||0));
+  });
+  /* 个人页的统计按固定顺序渲染：粉丝 / 获赞与收藏 / 笔记数 */
+  if(currentTab==="me"){
+    let stats=document.querySelectorAll("#page .profile-page .stats b");
+    if(stats.length>=2){setText(stats[0],format(profileStats.followers));setText(stats[1],format(profileStats.likes+(profileStats.collects||0)))}
+  }
+  if(userOpenName&&document.querySelector("#user.open")){
+    let st=userStatsOf(userOpenName);
+    setText(document.querySelector('#user [data-user-stat="fans"]'),format(st.fans));
+    setText(document.querySelector('#user [data-user-stat="likes"]'),format(st.likes+st.collects));
+  }
+  /* 发现页热门笔记：排名变化时按最小移动量重排，缺的补上、掉的删掉 */
+  patchHotNotes();
+  /* 发现页的话题榜数字、以及点开的话题页头部数字，都跟着真实数据走 */
+  if(currentTab==="explore")document.querySelectorAll("#page .hot[data-topic]").forEach(el=>{
+    let t=TOPICS.find(x=>x.name===el.dataset.topic);if(!t)return;
+    let s=topicStats(t);
+    setText(el.querySelector(".hot-meta"),`${format(s.views)}次浏览 · ${s.notes}篇`);
+  });
+  syncTopicLive();
+  /* 详情页只改数字，不碰按钮结构，避免点♥/收藏的时候元素被换掉 */
+  let layer=document.querySelector("#detail");
+  if(layer&&layer.classList.contains("open")){
+    let p=posts.find(x=>String(x.id)===String(detailPostId));
+    if(p){setText(layer.querySelector('[data-detail-stat="comment"]'),format(p.commentCount||0));setText(layer.querySelector('[data-detail-stat="comment-bar"]'),format(p.commentCount||0));setText(layer.querySelector('[data-detail-stat="like"]'),format(p.likes));setText(layer.querySelector('[data-detail-stat="collect"]'),format(p.collects||0))}
+  }
+}
+/* ===== 发现页「热门笔记」增量刷新 =====
+   榜单排序每帧都在变（自己的笔记爆红时会一路往上挤），但整段 innerHTML 重写会
+   ①数字闪一下 ②点♥刚好卡在重写瞬间就丢点击，所以这里只做「最小移动量重排」：
+   已存在的卡片换位置，缺的用 card() 补一个新节点，掉出榜单的删掉。 */
+let hotRankKey="";
+function patchHotNotes(){
+  let box=document.querySelector("#page .hot-notes");
+  if(!box)return;
+  let ranked=hotPosts();
+  let key=ranked.map(p=>String(p.id)).join(",");
+  if(key===hotRankKey)return;
+  hotRankKey=key;
+  let have=new Map();
+  [...box.children].forEach(el=>have.set(el.dataset.id,el));
+  let cursor=box.firstElementChild;
+  ranked.forEach(p=>{
+    let id=String(p.id),el=have.get(id);
+    if(!el){
+      let shell=document.createElement("div");shell.innerHTML=card(p);el=shell.firstElementChild;have.set(id,el);
+    }
+    if(el!==cursor)box.insertBefore(el,cursor);
+    cursor=el.nextElementSibling;
+  });
+  /* cursor 之后剩下的都是被挤出榜单的旧卡片 */
+  while(cursor){let next=cursor.nextElementSibling;cursor.remove();cursor=next}
+}
+/* ===== 消息列表增量刷新：只改每行的未读数/时间/预览，并按新消息把行挪到顶部 =====
+   以前整页重渲染要等 2 秒一次，中间新来的私信攒着一块儿冒出来，未读数就是「一批批」跳的；
+   现在每条私信进来就地 +1，行顺序用最小移动量重排（不会打断正在按的点击） */
+let lastMsgVersion=-1;
+function rowRefs(el){
+  if(!el._refs||!el._refs.b.isConnected)el._refs={b:el.querySelector("b"),small:el.querySelector("small"),meta:el.querySelector(".message-meta"),time:el.querySelector(".message-meta>span")};
+  return el._refs;
+}
+function patchMessageList(){
+  let box=document.querySelector("#page .message-group");if(!box)return;
+  let rows=conversationRows();
+  let have=new Map();box.querySelectorAll(".message").forEach(el=>have.set(el.dataset.name,el));
+  if(rows.length)box.querySelector(".empty")?.remove();
+  let cursor=box.firstElementChild;
+  for(const row of rows){
+    let el=have.get(row.name);
+    if(!el){
+      el=document.createElement("div");el.className="message";el.dataset.name=row.name;el.dataset.chat="1";
+      el.innerHTML=`<i class="avatar"></i><div class="message-body"><b></b><small></small></div><div class="message-meta"><span></span></div>`;
+    }
+    let r=rowRefs(el);
+    el.classList.toggle("unread",!!row.unread);
+    el.dataset.unread=row.unread||1;
+    setText(el.querySelector(".avatar"),row.avatar);
+    let av=el.querySelector(".avatar");if(av)av.dataset.user=row.name;
+    setText(r.b,row.name);setText(r.small,row.preview);setText(r.time,timeLabel(row.ts));
+    let badge=r.meta.querySelector(".chat-badge");
+    if(row.unread>0){
+      if(!badge){badge=document.createElement("span");badge.className="chat-badge";r.meta.appendChild(badge)}
+      setText(badge,row.unread>99?"99+":row.unread);
+    }else badge?.remove();
+    if(el!==cursor)box.insertBefore(el,cursor);
+    cursor=el.nextElementSibling;
+  }
+  /* 剩下的都是已经被挤掉的旧会话 */
+  while(cursor){let next=cursor.nextElementSibling;if(cursor.classList.contains("message"))cursor.remove();cursor=next}
+}
+function makeActivity(kind,piece){
+  let name=randomName(),avatar=avatars[Math.floor(Math.random()*avatars.length)];
+  rememberUser(name,avatar);
+  if(kind==="like"){markUserLiked(name,piece.id);return[avatar,name,`点赞了你的笔记《${piece.title}》`,"点赞和收藏","unread",1]}
+  if(kind==="collect"){markUserCollected(name,piece.id);return[avatar,name,"收藏了你的笔记，准备以后慢慢看","收藏","unread",1]}
+  if(kind==="follow")return[avatar,name,"关注了你，想和你成为朋友","新增关注","unread",1];
+  if(kind==="comment"){markUserCommented(name,piece.id,avatar);return[avatar,name,`评论了你的笔记：${makeComment(piece)}`,"评论","unread",1]}
+  return null;
+}
+let lastDMNotifyAt=0;
+/* 填写昵称和性别（引导页）之前，引擎完全不跑：不会长数字、不会弹私信通知 */
+/* 私信列表从 0 条开始，全靠引擎一条条投递进来，刷新后能看到它自己长起来 */
+setInterval(()=>{
+  if(!engineOn)return;
+  dripOthers();
+  let r=engineTick();if(!r)return;let{piece,grew,dms}=r;
+  let now=Date.now();
+  /* 数字照常增长，通知按类型节流；私信弹窗间隔最长，所以私信不会比点赞/关注/收藏/评论更频繁 */
+  for(const k of grew){
+    if(now-(lastNotifyAt[k]||0)<(NOTIFY_GAP[k]||1000))continue;
+    lastNotifyAt[k]=now;
+    let m=makeActivity(k,piece);if(m){m[6]=now;liveMessages.unshift(m);liveVersion++};
+  }
+  if(dms>0&&now-lastDMNotifyAt>=(NOTIFY_GAP.dm||4000)){
+    lastDMNotifyAt=now;let c=conversationRows()[0];
+    if(c)notifyDm([c.avatar,c.name,c.preview,"私信","",c.unread,c.ts]);
+  }
+  liveMessages=liveMessages.slice(0,150);save();updateBadges();
+  /* 首页/个人页不再整页重渲染：数字由每帧的 patchLiveNumbers 贴着 DOM 改，
+     整页换 innerHTML 会带来一次重排 → 数字会「顿一下」。
+     消息列表改成有私信进来就地打补丁，未读数跟着 +1，而不是等整页重渲染。 */
+  if(currentTab==="messages"){
+    if(messageFilter==="all"){if(dmVersion!==lastMsgVersion){lastMsgVersion=dmVersion;patchMessageList()}}
+    else if(liveVersion!==lastLiveVersion){lastLiveVersion=liveVersion;patchActivityList()}
+  }
+  syncDetailLive();
+},300);
+/* ===== 首页其他笔记的模拟数据 =====
+   浏览量由点赞反推（点赞率 5%），收藏、评论再由浏览量派生，四个数字互相自洽。
+   注意：爆红曲线只跑 author==="我"；别人只偶尔 drip +1，不会暴涨。 */
+function seedOtherStats(){
+  posts.forEach(p=>{
+    if(p.author==="我")return;
+    /* 无条件覆盖：enrichPosts() 之前已经用随机数填过 collects / commentCount，
+       这里按真实转化率重算，四个数字才互相对得上（点赞率 5%、收藏 1.5%、评论 0.45%） */
+    p.views=Math.round((p.likes||0)/HOT.like);
+    p.collects=Math.round(p.views*HOT.collect);
+    p.commentCount=Math.max(p.comments.length,Math.round(p.views*HOT.comment));
+    p.followers=Math.round((p.likes||0)*HOT.follow/HOT.like);
+    p.tags=p.tags||[p.cat];
+  });
+}
+seedOtherStats();
+render();
+/* ===== 首次进入：必须先填昵称 + 性别，填完才放行 =====
+   校验失败的提示走卡片里的文案（不是 alert，不会被浏览器拦、也不需要关按钮），
+   昵称和性别都会写进本地资料，下次进来直接跳过这一步。 */
+const ONBOARD_KEY="baohongshu-onboard";
+let obGender="";
+/* 性别用符号表示：女 ♀ 红色、男 ♂ 蓝色；没填性别时用简单的人形图标 */
+function genderEmoji(g){
+  if(g==="女")return `<span class="g-sym female"><svg viewBox="0 0 24 24"><circle cx="12" cy="9" r="6" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M12 15v7M8 19h8" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></span>`;
+  if(g==="男")return `<span class="g-sym male"><svg viewBox="0 0 24 24"><circle cx="9" cy="15" r="6" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M14 10L20 4M16.5 4H20v3.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span>`;
+  return `<span class="g-sym other"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="7.5" r="4.2" fill="currentColor"/><path d="M3.8 21c0-4.5 3.7-7.2 8.2-7.2s8.2 2.7 8.2 7.2z" fill="currentColor"/></svg></span>`;
+}
+function genderText(g){return g==="女"||g==="男"?g:"保密"}
+function onboardSaved(){try{return JSON.parse(localStorage.getItem(ONBOARD_KEY)||"null")}catch(e){return null}}
+function obErr(text){document.querySelector("#ob-err").textContent=text||""}
+function paintGender(){
+  document.querySelectorAll("#ob-gender button").forEach(b=>b.classList.toggle("on",b.dataset.gender===obGender));
+  document.querySelectorAll("#edit-gender button").forEach(b=>b.classList.toggle("on",b.dataset.egender===obGender));
+}
+function openOnboard(){
+  let saved=onboardSaved()||{};
+  obGender=saved.gender||myProfile.gender||"";
+  let name=(myProfile.name&&myProfile.name!==PROFILE_DEFAULTS.name)?myProfile.name:(saved.name||"");
+  document.querySelector("#ob-name").value=name;
+  obErr("");
+  paintGender();
+  document.querySelector("#onboard").classList.add("open");
+  document.body.classList.add("onboarding");
+  setTimeout(()=>document.querySelector("#ob-name").focus(),260);
+}
+function closeOnboard(){
+  document.querySelector("#onboard").classList.remove("open");
+  document.body.classList.remove("onboarding");
+}
+document.querySelector("#ob-gender").addEventListener("click",e=>{let b=e.target.closest("[data-gender]");if(!b)return;obGender=b.dataset.gender;obErr("");paintGender()});
+document.querySelector("#ob-name").addEventListener("input",()=>obErr(""));
+document.querySelector("#ob-name").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();document.querySelector("#ob-start").click()}});
+document.querySelector("#ob-start").onclick=()=>{
+  let input=document.querySelector("#ob-name"),name=input.value.trim().slice(0,12);
+  if(!name){obErr("请先填写昵称");input.focus();return}
+  if(!obGender){obErr("请选择性别");return}
+  myProfile={...myProfile,name,gender:obGender};
+  localStorage.setItem(PROFILE_KEY,JSON.stringify(myProfile));
+  localStorage.setItem(ONBOARD_KEY,JSON.stringify({name,gender:obGender,ts:Date.now()}));
+  closeOnboard();
+  startEngine();
+  if(currentTab==="me")renderMe();
+  toast(`欢迎你，${name}`);
+};
+/* 老用户（已填过昵称和性别）直接进，不闪引导页 */
+if(onboardSaved()){startEngine();closeOnboard()}else openOnboard();
+</script>
+</body>
+</html>

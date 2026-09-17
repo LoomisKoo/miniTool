@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>身体小账本</title>
+  <link rel="stylesheet" href="style.css?v=11">
+</head>
+<body>
+  <main class="app">
+    <!-- 首页：记一笔 -->
+    <section class="page" data-page="home">
+      <header class="topbar">
+        <h1>记一笔</h1>
+        <span class="topbar-date" id="todayDate">今天</span>
+      </header>
+      <p class="page-sub" id="homeHint">点一下，给身体发个信号</p>
+
+      <section class="card add-card">
+        <div class="switcher">
+          <button class="switch active" data-tab="food">🍜 吃了什么</button>
+          <button class="switch" data-tab="exercise">🏃 做了什么</button>
+        </div>
+        <div class="cat-row">
+          <div class="food-categories" id="foodCategories"></div>
+          <button class="cat-add" id="customTrigger" aria-label="记一项自定义内容">＋</button>
+        </div>
+        <div class="quick-grid" id="quickGrid"></div>
+      </section>
+
+      <p class="disclaimer">轻量的能量平衡模拟，不替代专业健康建议。</p>
+    </section>
+
+    <!-- 我的页：数据 + 资料 -->
+    <section class="page" data-page="mine" hidden>
+      <header class="topbar">
+        <h1>今天</h1>
+        <button class="hero-settings" id="editProfileBtn" aria-label="编辑资料">⚙</button>
+      </header>
+
+      <section class="hero">
+        <div class="hero-art">
+          <div class="sun"></div>
+          <svg class="person" id="person" viewBox="0 0 120 200" role="img" aria-label="人物形象">
+            <ellipse class="shadow" cx="60" cy="184" rx="23" ry="3.5"/>
+            <path class="pants" d="M47 116 q-3 28 -2 51 q0 6 7 6 q6 0 6 -6 l1 -51 z"/>
+            <path class="pants" d="M73 116 q3 28 2 51 q0 6 -7 6 q-6 0 -6 -6 l-1 -51 z"/>
+            <ellipse class="shoe" cx="51" cy="180" rx="9" ry="4"/>
+            <ellipse class="shoe" cx="69" cy="180" rx="9" ry="4"/>
+            <path class="shirt" d="M43 78 q17 -9 34 0 q5 2 6 8 l5 33 q-28 8 -56 0 l5 -33 q1 -6 6 -8 z"/>
+            <path class="skin" d="M43 82 q-9 7 -11 20 l-4 27 q-1 6 5 7 q6 1 7 -5 l6 -25 z"/>
+            <path class="skin" d="M77 82 q9 7 11 20 l4 27 q1 6 -5 7 q-6 1 -7 -5 l-6 -25 z"/>
+            <rect class="skin" x="55" y="63" width="10" height="15" rx="5"/>
+            <circle class="skin" cx="60" cy="46" r="25"/>
+            <path class="hair" d="M35 46 q-1 -24 25 -24 q26 0 25 24 q-4 -13 -25 -13 q-21 0 -25 13 z"/>
+            <circle class="blush" cx="44" cy="55" r="5"/>
+            <circle class="blush" cx="76" cy="55" r="5"/>
+            <g id="eyeL" transform="translate(51 47)"><path class="stroke" d="M-4 0 q4 -3.5 8 0"/></g>
+            <g id="eyeR" transform="translate(69 47)"><path class="stroke" d="M-4 0 q4 -3.5 8 0"/></g>
+            <g id="mouth" transform="translate(60 57)"><path class="stroke" d="M-6 0 q6 4 12 0"/></g>
+          </svg>
+          <span class="art-caption" id="artCaption">今天也要好好照顾自己</span>
+        </div>
+        <div class="hero-copy">
+          <span class="mood" id="mood">刚刚开始</span>
+          <h2 id="heroTitle">今天想怎么照顾自己？</h2>
+          <p id="heroDesc">记录一口吃的、一次运动，看看身体今天收到了什么。</p>
+          <div class="stats">
+            <div><b id="weightValue">—</b><small>当前体重</small></div>
+            <div><b id="changeValue">—</b><small>今日变化</small></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card balance-card">
+        <div class="section-head"><h2>今天的状态</h2></div>
+        <div class="balance-main">
+          <div class="balance-ring" id="balanceRing"><strong id="netValue">0</strong><span>kcal</span></div>
+          <div class="balance-copy">
+            <b id="balanceTitle">还没有开始记录</b>
+            <p id="balanceHint">吃东西和活动都会让这个数字变化。</p>
+          </div>
+        </div>
+        <div class="numbers">
+          <div><span>已摄入</span><b id="eatValue">0</b></div>
+          <div><span>活动消耗</span><b id="exerciseValue">0</b></div>
+          <div><span>蛋白质</span><b id="proteinValue">0g</b></div>
+        </div>
+      </section>
+
+      <section class="card profile-card">
+        <div class="profile-avatar">
+          <svg class="person-mini" viewBox="0 0 120 200">
+            <path class="pants" d="M47 116 q-3 28 -2 51 q0 6 7 6 q6 0 6 -6 l1 -51 z"/>
+            <path class="pants" d="M73 116 q3 28 2 51 q0 6 -7 6 q-6 0 -6 -6 l-1 -51 z"/>
+            <path class="shirt" d="M43 78 q17 -9 34 0 q5 2 6 8 l5 33 q-28 8 -56 0 l5 -33 q1 -6 6 -8 z"/>
+            <rect class="skin" x="55" y="63" width="10" height="15" rx="5"/>
+            <circle class="skin" cx="60" cy="46" r="25"/>
+            <path class="hair" d="M35 46 q-1 -24 25 -24 q26 0 25 24 q-4 -13 -25 -13 q-21 0 -25 13 z"/>
+          </svg>
+        </div>
+        <div class="profile-info">
+          <b id="profileGender">—</b>
+          <div class="profile-stats">
+            <span><b id="profileHeight">—</b><small>身高</small></span>
+            <span><b id="profileAge">—</b><small>年龄</small></span>
+            <span><b id="profileWeight">—</b><small>体重</small></span>
+          </div>
+          <span class="profile-activity" id="profileActivity">—</span>
+        </div>
+        <button class="text-btn" id="editProfileBtn2">编辑</button>
+      </section>
+
+      <section class="card">
+        <div class="section-head">
+          <h2>今天的记录</h2>
+          <button class="text-btn" id="clearLog">清空</button>
+        </div>
+        <div class="stats-sheet-head"><span id="statsSummary">0 条记录</span></div>
+        <div id="logList"><p class="empty">还没有记录，给身体发个信号吧</p></div>
+      </section>
+
+      <section class="card about-card">
+        <h2>关于身体小账本</h2>
+        <p>一个轻量的能量平衡模拟工具，把每一口吃的、每一次活动，变成身体的小反馈。</p>
+      </section>
+    </section>
+
+    <!-- 底部 tab -->
+    <nav class="tabbar">
+      <button class="tab active" data-page="home"><span class="tab-icon">✏️</span><span>记一笔</span></button>
+      <button class="tab" data-page="mine"><span class="tab-icon">📊</span><span>今天</span></button>
+    </nav>
+
+    <!-- 引导 -->
+    <section class="onboarding" id="onboarding" aria-hidden="false">
+      <div class="onboarding-inner">
+        <p class="eyebrow">BODY NOTE</p>
+        <h1>先认识一下<br>你的身体</h1>
+        <p class="intro">填好基础资料，之后每一次记录都会变成一条有趣的身体反馈。</p>
+        <div class="setup-step" data-step="gender">
+          <span class="step-no">01 / 04</span>
+          <h2>你的性别是？</h2>
+          <div class="choice-grid">
+            <button class="setup-choice" data-gender="female"><span>♀</span><b>女性</b></button>
+            <button class="setup-choice" data-gender="male"><span>♂</span><b>男性</b></button>
+          </div>
+        </div>
+        <div class="setup-step" data-step="height" hidden>
+          <span class="step-no">02 / 04</span>
+          <h2>你的身高是？</h2>
+          <div class="big-value"><b id="setupHeightValue">167</b><span>cm</span></div>
+          <input class="range" id="setupHeight" type="range" min="140" max="210" value="167">
+        </div>
+        <div class="setup-step" data-step="age" hidden>
+          <span class="step-no">03 / 04</span>
+          <h2>你的年龄是？</h2>
+          <div class="big-value"><b id="setupAgeValue">28</b><span>岁</span></div>
+          <input class="range" id="setupAge" type="range" min="12" max="80" value="28">
+        </div>
+        <div class="setup-step" data-step="weight" hidden>
+          <span class="step-no">04 / 04</span>
+          <h2>现在的体重是？</h2>
+          <div class="big-value"><b id="setupWeightValue">60.0</b><span>kg</span></div>
+          <input class="range" id="setupWeight" type="range" min="35" max="180" step=".1" value="60">
+        </div>
+        <div class="setup-footer">
+          <div class="setup-progress"><i></i><i></i><i></i><i></i></div>
+          <div class="setup-buttons">
+            <button class="back-btn" id="setupBack" hidden>上一步</button>
+            <button class="primary-btn" id="setupNext" disabled>下一步</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 资料编辑 sheet -->
+    <section class="sheet-backdrop" id="profileSheet" hidden>
+      <div class="sheet">
+        <div class="grab"></div>
+        <div class="sheet-title"><h2>我的资料</h2><button class="close-btn" data-close="profileSheet">×</button></div>
+        <p class="sheet-tip">修改后会清空今天的记录，重新开始计算。</p>
+        <div class="edit-gender">
+          <button class="edit-choice" data-gender="female">♀ 女性</button>
+          <button class="edit-choice" data-gender="male">♂ 男性</button>
+        </div>
+        <div class="edit-row"><label>身高 <b id="editHeightValue">167 cm</b></label><input class="range" id="editHeight" type="range" min="140" max="210" value="167"></div>
+        <div class="edit-row"><label>年龄 <b id="editAgeValue">28 岁</b></label><input class="range" id="editAge" type="range" min="12" max="80" value="28"></div>
+        <div class="edit-row"><label>体重 <b id="editWeightValue">60.0 kg</b></label><input class="range" id="editWeight" type="range" min="35" max="180" step=".1" value="60"></div>
+        <div class="activity-title">平时的活动量</div>
+        <div class="activity-grid" id="activityGrid"></div>
+        <button class="primary-btn" id="saveProfile">保存资料</button>
+      </div>
+    </section>
+
+    <!-- 自定义记录 sheet -->
+    <section class="sheet-backdrop" id="customSheet" hidden>
+      <div class="sheet small-sheet">
+        <div class="grab"></div>
+        <div class="sheet-title"><h2 id="customTitle">记一项</h2><button class="close-btn" data-close="customSheet">×</button></div>
+        <div class="custom-fields">
+          <input id="customName" placeholder="比如：一杯豆浆">
+          <div><input id="customCalories" type="number" min="1" max="5000" placeholder="热量"><span>kcal</span></div>
+        </div>
+        <button class="primary-btn" id="addCustom">加入今天</button>
+      </div>
+    </section>
+
+    <!-- 确认弹窗 -->
+    <section class="confirm-backdrop" id="confirmDialog" hidden>
+      <div class="confirm-box">
+        <div class="confirm-mark">↻</div>
+        <h2>要重新开始吗？</h2>
+        <p>修改基础资料会清空今天已经记录的内容。</p>
+        <div class="confirm-actions">
+          <button data-close="confirmDialog">先不改</button>
+          <button class="danger-btn" id="confirmProfile">确认重置</button>
+        </div>
+      </div>
+    </section>
+
+    <div class="toast" id="toast"></div>
+    <div class="celebration" id="celebration" aria-hidden="true"></div>
+    <script src="app.js?v=6"></script>
+  </main>
+</body>
+</html>

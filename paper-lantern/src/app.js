@@ -23,7 +23,6 @@
   let W = 0, H = 0, dpr = 1;
   let muted = false;
   let audioCtx = null;
-  let musicGain = null, musicTimer = null, musicPlaying = false;
 
   // 固定星点，避免每帧随机闪烁
   const starField = [];
@@ -170,58 +169,34 @@
   }
 
   function ensureAudio() {
-    if (!audioCtx) {
-      const AC = window.AudioContext || window.webkitAudioContext;
-      if (AC) audioCtx = new AC();
+    try {
+      if (!audioCtx) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (AC) audioCtx = new AC();
+      }
+      if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+    } catch (_) {
+      audioCtx = null;
     }
-    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
-  }
-
-  function musicTick() {
-    if (!musicPlaying || muted || !audioCtx) return;
-    const scale = [220, 261.63, 293.66, 329.63, 392, 440];
-    const now = audioCtx.currentTime;
-    const o = audioCtx.createOscillator();
-    const g = audioCtx.createGain();
-    o.type = 'triangle';
-    o.frequency.value = scale[(Math.random() * scale.length) | 0];
-    g.gain.setValueAtTime(0.0001, now);
-    g.gain.exponentialRampToValueAtTime(0.035, now + 0.03);
-    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.72);
-    o.connect(g); g.connect(musicGain || audioCtx.destination);
-    o.start(now); o.stop(now + 0.76);
-    musicTimer = setTimeout(musicTick, 360 + Math.random() * 260);
-  }
-
-  function startMusic() {
-    ensureAudio();
-    if (!audioCtx || musicPlaying) return;
-    musicGain = audioCtx.createGain();
-    musicGain.gain.value = 0.7;
-    musicGain.connect(audioCtx.destination);
-    musicPlaying = true;
-    musicTick();
-  }
-
-  function stopMusic() {
-    musicPlaying = false;
-    if (musicTimer) clearTimeout(musicTimer);
-    musicTimer = null;
   }
 
   function beep(freq, dur, type, vol) {
     if (muted || !audioCtx) return;
-    const t0 = audioCtx.currentTime;
-    const o = audioCtx.createOscillator();
-    const g = audioCtx.createGain();
-    o.type = type || 'square';
-    o.frequency.value = freq;
-    g.gain.setValueAtTime(vol || 0.08, t0);
-    g.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
-    o.connect(g);
-    g.connect(audioCtx.destination);
-    o.start(t0);
-    o.stop(t0 + dur);
+    try {
+      const t0 = audioCtx.currentTime;
+      const o = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      o.type = type || 'square';
+      o.frequency.value = freq;
+      g.gain.setValueAtTime(vol || 0.08, t0);
+      g.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+      o.connect(g);
+      g.connect(audioCtx.destination);
+      o.start(t0);
+      o.stop(t0 + dur);
+    } catch (_) {
+      audioCtx = null;
+    }
   }
 
   function flap() {
@@ -242,13 +217,11 @@
     endOv.classList.remove('show');
     expOv.classList.remove('show');
     state.lastTs = performance.now();
-    startMusic();
   }
 
   function die() {
     if (state.mode !== 'play') return;
     state.mode = 'dead';
-    stopMusic();
     state.sparkCombo = 0;
     beep(180, 0.22, 'sawtooth', 0.09);
     setTimeout(() => beep(120, 0.28, 'sawtooth', 0.07), 90);
@@ -869,16 +842,23 @@
   });
   saveBtn.addEventListener('click', (e) => {
     e.stopPropagation();
-    const ec = buildExport();
-    const a = document.createElement('a');
-    a.href = ec.toDataURL('image/png');
-    a.download = '纸灯夜航-灯火贺卡.png';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
+    const bridge = window.xhs && window.xhs.miniTool;
+    if (!bridge) {
+      alert('请在小红书 App 内使用「保存图片」');
+      return;
+    }
+    const data = buildExport().toDataURL('image/png');
+    bridge.writeTempFile({ data: data })
+      .then(function (result) {
+        return bridge.saveImageToPhotosAlbum({ filePath: result.filePath });
+      })
+      .catch(function () {
+        alert('保存失败，请检查相册权限后重试');
+      });
   });
 
   window.addEventListener('pointerdown', onTap);
+  window.addEventListener('touchstart', onTap, { passive: false });
   window.addEventListener('keydown', (e) => {
     if (e.code === 'Space' || e.code === 'ArrowUp') {
       e.preventDefault();

@@ -17,10 +17,15 @@ import SwiftUI
 /// 照抄即可；译文没有法律效力，翻译反而容易改变含义。只给中文用户加一句说明。
 struct BeadAboutView: View {
     /// 外链地址。隐私政策 / 支持页与 App Store Connect 里填的是同一组 URL。
+    ///
+    /// ⚠️ **Pages 仓库改过名**：源仓库现在是 `LoomisKoo/BeadPattern-pages`。GitHub 对
+    /// 仓库网页地址会做跳转，但 `*.github.io/<repo>/` 这条 Pages 地址**不会** ——
+    /// 仓库一改名，旧地址直接 404。之前这里还写着 `RabbitBead-pages`，两个链接因此
+    /// 都打不开（App Store 那边填的也是同一组，改这里要同步 `ios/APPSTORE.md`）。
     private enum URLs {
         static let dataset = URL(string: "https://github.com/HansBug/pindou-color-data")!
-        static let privacy = URL(string: "https://loomiskoo.github.io/RabbitBead-pages/privacy.html")!
-        static let support = URL(string: "https://loomiskoo.github.io/RabbitBead-pages/support.html")!
+        static let privacy = URL(string: "https://loomiskoo.github.io/BeadPattern-pages/privacy.html")!
+        static let support = URL(string: "https://loomiskoo.github.io/BeadPattern-pages/support.html")!
     }
 
     var body: some View {
@@ -35,7 +40,9 @@ struct BeadAboutView: View {
             .padding(.top, BeadSpace.sm)
             .padding(.bottom, BeadSpace.lg)
         }
-        .background(BeadTheme.parchment)
+        .background {
+            BeadTheme.parchmentGradient.ignoresSafeArea()
+        }
         .navigationTitle("关于".loc)
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.visible, for: .navigationBar)
@@ -125,14 +132,35 @@ struct BeadAboutView: View {
 
     private var linksCard: some View {
         BeadCard(padding: BeadSpace.md) {
-            linkRow("隐私政策".loc, url: URLs.privacy)
+            webRow("隐私政策".loc, page: BeadWebPage(title: "隐私政策".loc, url: URLs.privacy))
             // 卡内通栏，所以不要把 `BeadRowDivider` 默认给列表行的 16pt 缩进带进来。
             BeadRowDivider(inset: 0)
-            linkRow("支持与反馈".loc, url: URLs.support)
+            webRow("支持与反馈".loc, page: BeadWebPage(title: "支持与反馈".loc, url: URLs.support))
         }
     }
 
-    /// 整行可点的外链：文字 + `arrow.up.right`。
+    /// 整行可点、推内嵌网页（不是甩到 Safari）：文字 + `chevron.right`。
+    ///
+    /// 这两页是审核材料，留在 App 内看；真要跳浏览器，内嵌页右上角有个 safari 出口。
+    private func webRow(_ title: String, page: BeadWebPage) -> some View {
+        NavigationLink(value: BeadRoute.web(page)) {
+            HStack(spacing: BeadSpace.xs) {
+                Text(title)
+                    .beadBody()
+                    .foregroundStyle(BeadTheme.primary)
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(BeadTheme.inkMuted48)
+            }
+            // 44pt 是最小可点高度，别为了紧凑压下去。
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// 整行可点的**外部**链接：文字 + `arrow.up.right`。
     /// 外链用右上箭头，跟页内跳转的 `chevron.right` 区分开。
     ///
     /// `title` 取 `String`（不是 `LocalizedStringKey`），跟 `BeadButton(title:)` 同一套约定：

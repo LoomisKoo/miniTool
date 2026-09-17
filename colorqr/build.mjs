@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 打包彩码 — 各平台产物（单 html 或多文件）+ zip
+ * 打包彩码 — 各平台产物 + zip
  * 用法:
  *   node build.mjs              # 打包全部平台
  *   node build.mjs douyin       # 仅抖音
@@ -22,6 +22,8 @@ const style = fs.readFileSync(path.join(__dirname, 'src/style.css'), 'utf8');
 const body = fs.readFileSync(path.join(__dirname, 'src/body.html'), 'utf8');
 const app = fs.readFileSync(path.join(__dirname, 'src/app.js'), 'utf8');
 const vendor = fs.readFileSync(path.join(__dirname, 'src/vendor/qrcode.js'), 'utf8');
+const three = fs.readFileSync(path.join(__dirname, 'src/vendor/three.min.js'), 'utf8');
+const bloom = fs.readFileSync(path.join(__dirname, 'src/bloom.js'), 'utf8');
 
 function readExtraCss(platformId) {
   const p = path.join(__dirname, 'platforms', platformId, 'extra.css');
@@ -41,9 +43,9 @@ function assertXhs(html) {
   if (/\son\w+\s*=/i.test(html)) throw new Error('小红书产物含 HTML 内联事件');
 }
 
-function zipFiles(zipPath, files) {
-  const list = files.map(f => `"${f}"`).join(' ');
-  execSync(`zip -q -j "${zipPath}" ${list}`, { stdio: 'pipe' });
+function zipOutDir(zipPath, outDir) {
+  if (fs.existsSync(zipPath)) fs.unlinkSync(zipPath);
+  execSync(`zip -q -r "${zipPath}" . -x '*.DS_Store'`, { cwd: outDir, stdio: 'pipe' });
 }
 
 function reportBuild(cfg, platformId, sizes, zipBytes) {
@@ -55,7 +57,7 @@ function reportBuild(cfg, platformId, sizes, zipBytes) {
   if (!ok) console.error(`  超过 8MB 限制，请精简资源`);
 }
 
-/** 小红书：多文件，js 为 vendor + app 拼接（构建期校验禁内联 script / 事件） */
+/** 小红书：多文件 */
 function buildOneXhs(cfg, extraCss, platformId) {
   const platformJson = JSON.stringify(cfg, null, 0);
   const html = `<!DOCTYPE html>
@@ -69,6 +71,8 @@ function buildOneXhs(cfg, extraCss, platformId) {
 </head>
 <body>
 ${body}
+<script src="three.min.js"></script>
+<script src="bloom.js"></script>
 <script src="qrcode.js"></script>
 <script src="app.js"></script>
 </body>
@@ -85,27 +89,27 @@ ${app}
 
   const outDir = path.join(__dirname, 'dist', platformId);
   fs.mkdirSync(outDir, { recursive: true });
-  const htmlPath = path.join(outDir, 'index.html');
-  const cssPath = path.join(outDir, 'style.css');
-  const jsPath = path.join(outDir, 'app.js');
-  const vendorPath = path.join(outDir, 'qrcode.js');
-  fs.writeFileSync(htmlPath, html);
-  fs.writeFileSync(cssPath, css);
-  fs.writeFileSync(jsPath, js);
-  fs.writeFileSync(vendorPath, vendor);
+  fs.writeFileSync(path.join(outDir, 'index.html'), html);
+  fs.writeFileSync(path.join(outDir, 'style.css'), css);
+  fs.writeFileSync(path.join(outDir, 'app.js'), js);
+  fs.writeFileSync(path.join(outDir, 'qrcode.js'), vendor);
+  fs.writeFileSync(path.join(outDir, 'three.min.js'), three);
+  fs.writeFileSync(path.join(outDir, 'bloom.js'), bloom);
 
   const sizes = {
-    'index.html': fs.statSync(htmlPath).size,
-    'style.css': fs.statSync(cssPath).size,
-    'app.js': fs.statSync(jsPath).size,
-    'qrcode.js': fs.statSync(vendorPath).size,
+    'index.html': fs.statSync(path.join(outDir, 'index.html')).size,
+    'style.css': fs.statSync(path.join(outDir, 'style.css')).size,
+    'app.js': fs.statSync(path.join(outDir, 'app.js')).size,
+    'qrcode.js': fs.statSync(path.join(outDir, 'qrcode.js')).size,
+    'three.min.js': fs.statSync(path.join(outDir, 'three.min.js')).size,
+    'bloom.js': fs.statSync(path.join(outDir, 'bloom.js')).size,
   };
   const zipPath = path.join(__dirname, 'dist', `${platformId}-colorqr.zip`);
-  zipFiles(zipPath, [htmlPath, cssPath, jsPath, vendorPath]);
+  zipOutDir(zipPath, outDir);
   reportBuild(cfg, platformId, sizes, fs.statSync(zipPath).size);
 }
 
-/** 抖音 / 快手：单 html 内联（css + vendor + app） */
+/** 抖音 / 快手：单 html */
 function buildOne(platformId) {
   const cfgPath = path.join(__dirname, 'platforms', platformId, 'config.json');
   if (!fs.existsSync(cfgPath)) {
@@ -135,6 +139,12 @@ ${body}
 window.PLATFORM=${platformJson};
 </script>
 <script>
+${three}
+</script>
+<script>
+${bloom}
+</script>
+<script>
 ${vendor}
 </script>
 <script>
@@ -152,8 +162,10 @@ ${app}
   fs.writeFileSync(htmlPath, html);
 
   const zipPath = path.join(__dirname, 'dist', `${platformId}-colorqr.zip`);
-  zipFiles(zipPath, [htmlPath]);
-  reportBuild(cfg, platformId, { 'index.html': fs.statSync(htmlPath).size }, fs.statSync(zipPath).size);
+  zipOutDir(zipPath, outDir);
+  reportBuild(cfg, platformId, {
+    'index.html': fs.statSync(htmlPath).size,
+  }, fs.statSync(zipPath).size);
 }
 
 fs.mkdirSync(path.join(__dirname, 'dist'), { recursive: true });

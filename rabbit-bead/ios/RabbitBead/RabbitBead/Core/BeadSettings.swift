@@ -19,7 +19,7 @@ enum SampleMode: String, CaseIterable, Identifiable, Codable {
 
 /// 图纸导出内容选项。
 struct ExportOptions: Codable, Hashable {
-    /// 行列坐标（顶行列号 + 左侧行号）
+    /// 行列坐标（上下左右四边）
     var coordinates = false
     /// 格内色号
     var codes = true

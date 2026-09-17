@@ -19,7 +19,6 @@ struct BeadEditorView: View {
     /// 相册选择器：由 `uploadArea` / 「重选」把 Bool 置 true 来弹出。
     @State private var showLibraryPicker = false
 
-    @State private var showPalette = false
     @State private var showBoardSize = false
     @State private var showColors = false
     @State private var showExport = false
@@ -47,11 +46,6 @@ struct BeadEditorView: View {
     /// （`BeadRootView` 里那条包在 `TabView` 外层的栈）。
     var body: some View {
         editorContent
-        .sheet(isPresented: $showPalette) {
-            BeadPaletteSheet(selectedId: model.settings.paletteId) { id in
-                model.selectPalette(id)
-            }
-        }
         .sheet(isPresented: $showBoardSize) {
             BeadBoardSizeSheet(selectedSize: model.settings.boardSize) { size in
                 model.setBoardSize(size)
@@ -74,16 +68,6 @@ struct BeadEditorView: View {
             }
         }
         .overlay { exportBusyOverlay }
-        .fullScreenCover(isPresented: $model.showingCrop) {
-            if let original = model.originalSourceImage {
-                BeadCropView(
-                    sourceImage: UIImage(cgImage: original),
-                    existingCrop: model.cropRect
-                ) { output in
-                    model.applyCrop(output)
-                }
-            }
-        }
         .alert("提示", isPresented: messageBinding) {
             Button("好") { model.message = nil }
             if model.messageOffersPro {
@@ -135,7 +119,7 @@ struct BeadEditorView: View {
 
                 settingsBlock
                     .padding(.horizontal, 16)
-                    .padding(.top, BeadSpace.sm)
+                    .padding(.top, BeadSpace.xs)
                     .padding(.bottom, BeadSpace.md)
             } else if model.isOpeningContent {
                 openingPlaceholder
@@ -165,22 +149,23 @@ struct BeadEditorView: View {
         .frame(maxWidth: .infinity)
     }
 
-    /// 空状态：一块**正方形**卡面就是入口。
+    /// 空状态：控制高度的入口卡，避免在大屏上占满首屏。
     ///
     /// 只置 `showLibraryPicker`，真正的相册由根上的 `.photosPicker(isPresented:)` 弹出。
     /// 不要在这里再嵌一层 `PhotosPicker`：和根上的共用 `$photoItem` 时，真机常出现
     /// 「看得见卡、点了没反应」。
     private var uploadArea: some View {
         GeometryReader { geo in
-            let side = min(geo.size.width, geo.size.height)
+            let cardWidth = min(geo.size.width, 520)
+            let cardHeight = min(300, max(220, geo.size.height * 0.42))
             Button {
                 showLibraryPicker = true
             } label: {
                 uploadCardLabel
-                    .frame(width: side, height: side)
+                    .frame(width: cardWidth, height: cardHeight)
             }
-            .buttonStyle(BeadPressStyle(pressedScale: 0.98))
-            .frame(width: side, height: side)
+            .buttonStyle(.automatic)
+            .frame(width: cardWidth, height: cardHeight)
             .beadCardShadow()
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         }
@@ -290,7 +275,9 @@ struct BeadEditorView: View {
                 .font(.system(size: 12, weight: .regular))
                 .foregroundStyle(BeadTheme.inkMuted80)
                 .monospacedDigit()
-                .frame(width: 32, height: 36)
+                .frame(minWidth: 48, minHeight: 36, maxHeight: 36)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
                 .multilineTextAlignment(.center)
             segmentChevron(systemName: "chevron.right") { model.nextBoard() }
             if model.boardIndex >= 0 {
@@ -304,17 +291,14 @@ struct BeadEditorView: View {
                         .padding(.horizontal, 10)
                         .frame(height: 36)
                 }
-                .buttonStyle(BeadPressStyle(pressedScale: 0.96))
+                .buttonStyle(.automatic)
             }
         }
         .background(
             BeadTheme.canvas,
             in: RoundedRectangle(cornerRadius: BeadRadius.sm, style: .continuous)
         )
-        .overlay {
-            RoundedRectangle(cornerRadius: BeadRadius.sm, style: .continuous)
-                .strokeBorder(BeadTheme.hairline, lineWidth: 1)
-        }
+        .beadGlassButton(cornerRadius: BeadRadius.sm)
         .animation(.easeInOut(duration: 0.28), value: model.boardIndex >= 0)
     }
     private var zoomSegment: some View {
@@ -328,7 +312,7 @@ struct BeadEditorView: View {
                     .padding(.horizontal, 10)
                     .frame(height: 36)
             }
-            .buttonStyle(BeadPressStyle(pressedScale: 0.96))
+            .buttonStyle(.automatic)
             .accessibilityLabel("复位")
             segmentDivider
             segmentGlyph("−") { stepZoom(1 / 1.28) }
@@ -337,10 +321,7 @@ struct BeadEditorView: View {
             BeadTheme.canvas,
             in: RoundedRectangle(cornerRadius: BeadRadius.sm, style: .continuous)
         )
-        .overlay {
-            RoundedRectangle(cornerRadius: BeadRadius.sm, style: .continuous)
-                .strokeBorder(BeadTheme.hairline, lineWidth: 1)
-        }
+        .beadGlassButton(cornerRadius: BeadRadius.sm)
     }
 
     private var threeDButton: some View {
@@ -356,15 +337,9 @@ struct BeadEditorView: View {
                     RoundedRectangle(cornerRadius: BeadRadius.sm, style: .continuous)
                         .fill(model.viewMode == .threeD ? AnyShapeStyle(BeadTheme.primaryGradient) : AnyShapeStyle(BeadTheme.canvas))
                 }
-                .overlay {
-                    RoundedRectangle(cornerRadius: BeadRadius.sm, style: .continuous)
-                        .strokeBorder(
-                            model.viewMode == .threeD ? Color.clear : BeadTheme.hairline,
-                            lineWidth: 1
-                        )
-                }
         }
-        .buttonStyle(BeadPressStyle(pressedScale: 0.96))
+        .buttonStyle(.automatic)
+        .beadGlassButton(cornerRadius: BeadRadius.sm)
         .accessibilityLabel("3D 预览")
     }
 
@@ -379,10 +354,10 @@ struct BeadEditorView: View {
             Image(systemName: systemName)
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(BeadTheme.inkMuted80)
-                .frame(width: 28, height: 36)
+                .frame(width: 36, height: 36)
                 .contentShape(Rectangle())
         }
-        .buttonStyle(BeadPressStyle(pressedScale: 0.96))
+        .buttonStyle(.automatic)
     }
 
     private func segmentGlyph(_ text: String, action: @escaping () -> Void) -> some View {
@@ -393,7 +368,7 @@ struct BeadEditorView: View {
                 .frame(width: 36, height: 36)
                 .contentShape(Rectangle())
         }
-        .buttonStyle(BeadPressStyle(pressedScale: 0.96))
+        .buttonStyle(.automatic)
     }
 
     private func stepZoom(_ factor: CGFloat) {
@@ -409,9 +384,12 @@ struct BeadEditorView: View {
             if showSettings {
                 ScrollView {
                     paramsGroup
+                        // 给卡片阴影预留空间，避免 ScrollView 边界裁掉四角。
+                        .padding(.vertical, 8)
                 }
+                .scrollClipDisabled()
                 .scrollBounceBehavior(.basedOnSize)
-                .frame(maxHeight: 280)
+                .fixedSize(horizontal: false, vertical: true)
                 .transition(.opacity.combined(with: .move(edge: .bottom)))
             }
 
@@ -432,9 +410,18 @@ struct BeadEditorView: View {
                 }
                 .accessibilityLabel("更多".loc)
 
-                iconBarButton(systemName: "crop", kind: .neutral) {
-                    model.openCrop()
+                NavigationLink(value: BeadRoute.crop) {
+                    Image(systemName: "crop")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundStyle(BeadTheme.inkMuted80)
+                        .frame(width: 36, height: 36)
+                        .background {
+                            RoundedRectangle(cornerRadius: BeadRadius.sm, style: .continuous)
+                                .fill(BeadTheme.canvas)
+                        }
                 }
+                .buttonStyle(.automatic)
+                .disabled(model.originalSourceImage == nil)
                 .accessibilityLabel("裁切".loc)
 
                 // 编辑按钮：推到 `BeadEditView`
@@ -447,12 +434,8 @@ struct BeadEditorView: View {
                             RoundedRectangle(cornerRadius: BeadRadius.sm, style: .continuous)
                                 .fill(BeadTheme.canvas)
                         }
-                        .overlay {
-                            RoundedRectangle(cornerRadius: BeadRadius.sm, style: .continuous)
-                                .strokeBorder(BeadTheme.hairline, lineWidth: 1)
-                        }
                 }
-                .buttonStyle(BeadPressStyle(pressedScale: 0.96))
+                .buttonStyle(.automatic)
                 .accessibilityLabel("编辑".loc)
 
                 iconBarButton(systemName: "photo", kind: .neutral) {
@@ -465,7 +448,7 @@ struct BeadEditorView: View {
 
             // 右侧文字按钮组
             HStack(spacing: 8) {
-                compactBarButton("导出".loc, kind: .primary, enabled: model.canExport) {
+                compactBarButton("导出".loc, kind: .ghost, enabled: model.canExport) {
                     showExport = true
                 }
 
@@ -499,14 +482,6 @@ struct BeadEditorView: View {
                     RoundedRectangle(cornerRadius: BeadRadius.sm, style: .continuous)
                         .fill(compactBackgroundStyle(kind: kind, isOn: isOn))
                 }
-                .overlay {
-                    // 始终显示边框，避免布局跳动
-                    RoundedRectangle(cornerRadius: BeadRadius.sm, style: .continuous)
-                        .strokeBorder(
-                            isOn ? Color.clear : BeadTheme.hairline,
-                            lineWidth: 1
-                        )
-                }
                 .shadow(
                     color: (kind == .primary || (kind == .neutral && isOn))
                         ? Color(hex: 0x3478E0).opacity(0.28)
@@ -515,7 +490,8 @@ struct BeadEditorView: View {
                     y: 3
                 )
         }
-        .buttonStyle(BeadPressStyle(pressedScale: 0.96))
+        .buttonStyle(.automatic)
+        .beadGlassButton(cornerRadius: BeadRadius.sm)
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.36)
     }
@@ -541,15 +517,6 @@ struct BeadEditorView: View {
                 RoundedRectangle(cornerRadius: BeadRadius.sm, style: .continuous)
                     .fill(compactBackgroundStyle(kind: kind, isOn: isOn))
             }
-            .overlay {
-                if kind == .ghost || (kind == .neutral && !isOn) {
-                    RoundedRectangle(cornerRadius: BeadRadius.sm, style: .continuous)
-                        .strokeBorder(
-                            kind == .ghost ? BeadTheme.primary.opacity(0.35) : BeadTheme.hairline,
-                            lineWidth: 1
-                        )
-                }
-            }
             .shadow(
                 color: (kind == .primary || (kind == .neutral && isOn))
                     ? Color(hex: 0x3478E0).opacity(0.28)
@@ -558,7 +525,8 @@ struct BeadEditorView: View {
                 y: 3
             )
         }
-        .buttonStyle(BeadPressStyle(pressedScale: 0.96))
+        .buttonStyle(.automatic)
+        .beadGlassButton(cornerRadius: BeadRadius.sm)
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.36)
     }
@@ -579,7 +547,8 @@ struct BeadEditorView: View {
         case .primary:
             return AnyShapeStyle(BeadTheme.primaryGradient)
         case .ghost:
-            return AnyShapeStyle(BeadTheme.accentSoft)
+            // 保存按钮必须使用不透明底色，避免预览内容从按钮后方穿出。
+            return AnyShapeStyle(BeadTheme.canvas)
         case .neutral:
             return isOn
                 ? AnyShapeStyle(BeadTheme.primaryGradient)
@@ -617,13 +586,29 @@ struct BeadEditorView: View {
         BeadGroup {
             VStack(alignment: .leading, spacing: BeadSpace.sm) {
                 HStack(spacing: BeadSpace.xs) {
-                    BeadChip(
-                        title: model.palette.name,
-                        selected: true,
-                        prominentWhenSelected: false,
-                        hugContent: true
-                    ) {
-                        showPalette = true
+                    Picker(selection: Binding(
+                        get: { model.settings.paletteId },
+                        set: { model.selectPalette($0) }
+                    )) {
+                        ForEach(PaletteLibrary.all) { palette in
+                            Text(palette.name)
+                                .tag(palette.id)
+                        }
+                    } label: {
+                        Text(model.palette.name)
+                            .foregroundStyle(BeadTheme.primaryDeep)
+                    }
+                    .pickerStyle(.menu)
+                    .tint(BeadTheme.primary)
+                    .padding(.horizontal, 2)
+                    .frame(height: 28)
+                    .background(
+                        BeadTheme.canvas,
+                        in: RoundedRectangle(cornerRadius: BeadRadius.sm, style: .continuous)
+                    )
+                    .overlay {
+                        RoundedRectangle(cornerRadius: BeadRadius.sm, style: .continuous)
+                            .strokeBorder(BeadTheme.primary, lineWidth: 1)
                     }
 
                     Button {
@@ -638,7 +623,7 @@ struct BeadEditorView: View {
                                     .monospacedDigit()
                             } else {
                                 Text("豆色")
-                                    .beadCaption()
+                                    .beadBody()
                             }
                         }
                         .foregroundStyle(BeadTheme.primary)
@@ -650,7 +635,7 @@ struct BeadEditorView: View {
                                 .strokeBorder(BeadTheme.primary, lineWidth: 1) 
                         }
                     }
-                    .buttonStyle(BeadPressStyle(pressedScale: 0.96))
+                    .buttonStyle(.automatic)
 
                     Spacer(minLength: 0)
                 }

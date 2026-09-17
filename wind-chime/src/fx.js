@@ -42,7 +42,7 @@
     const te = topEdge();
     const ySpan = Math.max(40, groundY - te - 20);
     stars = [];
-    const n = Math.round((W * ySpan) / 7000) + 90;
+    const n = Math.round((W * ySpan) / 11000) + 48;
     for (let i = 0; i < n; i++) {
       stars.push({
         x: Math.random() * W,
@@ -265,7 +265,7 @@
         y: lamp.y + 18 + Math.random() * dist * 0.85,
         vx: (Math.random() - 0.5) * 6,
         vy: 4 + Math.random() * 10,
-        r: kind === 'moon' ? (3.2 + Math.random() * 3.2) : (2.2 + Math.random() * 3.2),
+        r: kind === 'moon' ? (4.8 + Math.random() * 4.2) : (3.4 + Math.random() * 3.8),
         rot: Math.random() * 6.3,
         vrot: (Math.random() - 0.5) * 2.8,
         vrot2: (Math.random() - 0.5) * 1.6,
@@ -275,22 +275,18 @@
         t: 0,
         settled: false,
         stackH: 0,
-        col: Math.random() < 0.35
-          ? [255, 236, 190]
-          : (Math.random() < 0.5 ? [255, 248, 220] : [230, 236, 255])
+        col: Math.random() < 0.4
+          ? [255, 252, 245]
+          : (Math.random() < 0.5 ? [255, 255, 255] : [248, 250, 255])
       });
     }
   }
 
+  // 弱光晕：不画径向渐变，形状本体用近白高不透明
   function drawStarGlyph(ctx, x, y, r, col, a, rot, tilt) {
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate(rot || 0);
-    const g = ctx.createRadialGradient(0, 0, 0, 0, 0, r * 2.4);
-    g.addColorStop(0, col + (a * 0.28) + ')');
-    g.addColorStop(1, col + '0)');
-    ctx.fillStyle = g;
-    ctx.beginPath(); ctx.arc(0, 0, r * 2.4, 0, 6.2832); ctx.fill();
     ctx.beginPath();
     for (let i = 0; i < 5; i++) {
       const a0 = -Math.PI / 2 + i * Math.PI * 2 / 5;
@@ -301,7 +297,7 @@
       ctx.lineTo(x1, y1);
     }
     ctx.closePath();
-    ctx.fillStyle = col + (a * 0.92) + ')';
+    ctx.fillStyle = col + (Math.min(1, a * 0.92)) + ')';
     ctx.fill();
     ctx.restore();
   }
@@ -310,11 +306,6 @@
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate((rot || 0) - 0.45);
-    const g = ctx.createRadialGradient(0, 0, 0, 0, 0, r * 2.2);
-    g.addColorStop(0, col + (a * 0.18) + ')');
-    g.addColorStop(1, col + '0)');
-    ctx.fillStyle = g;
-    ctx.beginPath(); ctx.arc(0, 0, r * 2.2, 0, 6.2832); ctx.fill();
     const R = r;
     const rIn = r * 0.68;
     const ox = r * 0.42;
@@ -322,7 +313,7 @@
     ctx.arc(0, 0, R, 0.7, Math.PI * 2 - 0.7, false);
     ctx.arc(ox, -r * 0.05, rIn, Math.PI * 2 - 0.95, 0.95, true);
     ctx.closePath();
-    ctx.fillStyle = col + (a * 0.9) + ')';
+    ctx.fillStyle = col + (Math.min(1, a * 0.9)) + ')';
     ctx.fill();
     ctx.restore();
   }
@@ -419,7 +410,7 @@
 
   function drawLampDust() {
     if (!lampDust.length) return;
-    sky.globalCompositeOperation = 'lighter';
+    // source-over 比 lighter 便宜，配合弱透明度即可
     for (const p of lampDust) {
       const a = p._a || 0;
       if (a < 0.03) continue;
@@ -432,7 +423,6 @@
       if (p.kind === 'moon') drawMoonGlyph(sky, p.x, p.y, rr, col, a, p.rot, p.tilt);
       else drawStarGlyph(sky, p.x, p.y, rr, col, a, p.rot, p.tilt);
     }
-    sky.globalCompositeOperation = 'source-over';
   }
 
   let hitCool = 0;
@@ -447,9 +437,9 @@
       falls.push({
         kind: Math.random() < 0.2 ? 'moon' : 'star',
         x: x, y: y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 14,
-        r: 1.8 + Math.random() * 2.2, rot: Math.random() * 6.3, vrot: (Math.random() - 0.5) * 2,
+        r: 3.0 + Math.random() * 3.2, rot: Math.random() * 6.3, vrot: (Math.random() - 0.5) * 2,
         g: 18, life: 0.7 + Math.random() * 0.55, t: 0,
-        col: Math.random() < 0.3 ? [255, 244, 214] : (Math.random() < 0.5 ? [226, 236, 255] : [255, 226, 226])
+        col: Math.random() < 0.45 ? [255, 255, 255] : (Math.random() < 0.5 ? [255, 252, 245] : [248, 250, 255])
       });
     }
   }
@@ -458,7 +448,6 @@
     if (hitCool > 0) hitCool = Math.max(0, hitCool - dt);
     fx.clearRect(0, 0, W, H);
     if (!falls.length) return;
-    fx.globalCompositeOperation = 'lighter';
     for (let i = falls.length - 1; i >= 0; i--) {
       const p = falls[i];
       p.t += dt;
@@ -468,12 +457,11 @@
       p.x += p.vx * dt; p.y += p.vy * dt;
       p.vx *= 0.985; p.rot += p.vrot * dt;
       if (p.y > groundY - 4) { p.y = groundY - 4; p.life = p.t + 0.2; }
-      const alpha = Math.min(1, lifeK * 1.5) * 0.85;
+      const alpha = Math.min(1, lifeK * 1.5) * 0.9;
       const col = 'rgba(' + p.col[0] + ',' + p.col[1] + ',' + p.col[2] + ',';
-      if (p.kind === 'moon') drawMoonGlyph(fx, p.x, p.y, p.r, col, alpha * 0.85, p.rot);
-      else drawStarGlyph(fx, p.x, p.y, p.r * (0.7 + 0.3 * lifeK), col, alpha * 0.9, p.rot);
+      if (p.kind === 'moon') drawMoonGlyph(fx, p.x, p.y, p.r, col, alpha, p.rot);
+      else drawStarGlyph(fx, p.x, p.y, p.r * (0.7 + 0.3 * lifeK), col, alpha, p.rot);
     }
-    fx.globalCompositeOperation = 'source-over';
   }
 
   function feedAnchor(x, y) { anchorY = y; }
@@ -529,12 +517,24 @@
     resize();
   }
 
+  let skyAcc = 0;
+
   function update(dt) {
     t += dt;
+    skyAcc += dt;
+    // 夜空约 30fps，降低全屏 2D 发热；碰撞光点仍每帧
+    if (skyAcc >= 0.033) {
+      const sdt = Math.min(0.05, skyAcc);
+      skyAcc = 0;
+      paintSky(sdt);
+    }
+    drawFxLayer(dt);
+  }
+
+  function paintSky(dt) {
     const te = topEdge();
     const ch = Math.max(10, groundY - te);
 
-    // 全幅夜空，不再裁成「窗洞」
     const ng = grad(0, H,
       mode === 0 ? '#07091a' : '#0a1428',
       mode === 0 ? '#10143a' : '#0c1a30'
@@ -542,10 +542,10 @@
     sky.fillStyle = ng;
     sky.fillRect(0, 0, W, H);
 
-    // 月光：左上角月亮 + 大面积柔晕
     if (mode === 0) {
-      const mr = Math.min(W, H) * 0.055;
-      const mx = W * 0.14, my = Math.max(22, Math.min(te - 8, H * 0.07));
+      const mr = Math.min(W, H) * 0.1;
+      const mx = W * 0.16;
+      const my = Math.min(groundY - mr * 1.2, te + mr * 1.55);
       sky.globalCompositeOperation = 'lighter';
       const wash = sky.createRadialGradient(mx, my, mr * 0.3, mx, my, Math.max(W, H) * 0.75);
       wash.addColorStop(0, 'rgba(255,244,220,0.14)');
@@ -553,12 +553,12 @@
       wash.addColorStop(1, 'rgba(200,210,255,0)');
       sky.fillStyle = wash;
       sky.fillRect(0, 0, W, H);
-      const halo = sky.createRadialGradient(mx, my, 0, mx, my, mr * 3.4);
+      const halo = sky.createRadialGradient(mx, my, 0, mx, my, mr * 3.2);
       halo.addColorStop(0, 'rgba(255,248,230,0.55)');
       halo.addColorStop(0.35, 'rgba(255,240,210,0.16)');
       halo.addColorStop(1, 'rgba(255,240,210,0)');
       sky.fillStyle = halo;
-      sky.beginPath(); sky.arc(mx, my, mr * 3.4, 0, 6.2832); sky.fill();
+      sky.beginPath(); sky.arc(mx, my, mr * 3.2, 0, 6.2832); sky.fill();
       sky.globalCompositeOperation = 'source-over';
       sky.fillStyle = 'rgba(255,248,230,0.92)';
       sky.beginPath(); sky.arc(mx, my, mr, 0, 6.2832); sky.fill();
@@ -628,7 +628,6 @@
     stepLampDust(dt);
     drawLampDust();
     drawWindFx();
-    drawFxLayer(dt);
   }
 
   WC.fx = { init, update, feedAnchor, feedWind, setMode, hit, rainWish, W: () => W, H: () => H };

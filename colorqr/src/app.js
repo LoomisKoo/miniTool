@@ -14,6 +14,9 @@
 
   var state = {
     type: 'url',
+    mode: 'classic',          // classic | bloom
+    flower: 'peony',
+    palette: 'original',
     shape: 'square',          // square | dot | round
     finder: 'square',         // square | round | dot
     fg: '#111827',
@@ -24,6 +27,7 @@
     bgImageMode: false,
     titles: { url: '', text: '', wifi: '', card: '' }
   };
+  var bloomEng = null;
   var LOGO_MAX = 0.24;
   var MARGIN = 4;
 
@@ -304,6 +308,57 @@
     var cv = $('cv');
     cv.width = 1; cv.height = 1;
     cv.getContext('2d').clearRect(0, 0, 1, 1);
+    if (bloomEng) bloomEng.setQR(null);
+    var hint = $('bloom-hint');
+    if (hint) hint.hidden = true;
+  }
+
+  function ensureBloom() {
+    if (bloomEng) return bloomEng;
+    if (!window.ColorQRBloom || !window.THREE) {
+      toast('当前环境不支持花束 3D');
+      return null;
+    }
+    var host = $('bloom-host');
+    bloomEng = window.ColorQRBloom.create();
+    var ok = bloomEng.mount(host, $('bloom-hint'));
+    if (!ok) {
+      bloomEng = null;
+      toast('WebGL 不可用，已退回经典模式');
+      return null;
+    }
+    bloomEng.setFlower(state.flower);
+    bloomEng.setPalette(state.palette);
+    return bloomEng;
+  }
+
+  function setStyleMode(mode) {
+    if (mode !== 'bloom' && mode !== 'classic') return;
+    if (mode === 'bloom') {
+      var eng = ensureBloom();
+      if (!eng) mode = 'classic';
+    }
+    state.mode = mode;
+    var classic = $('classic-style-opts');
+    var bloom = $('bloom-style-opts');
+    var host = $('bloom-host');
+    var stage = $('stage');
+    var hint = $('bloom-hint');
+    if (classic) classic.hidden = mode === 'bloom';
+    if (bloom) bloom.hidden = mode !== 'bloom';
+    if (host) host.hidden = mode !== 'bloom';
+    if (stage) {
+      if (mode === 'bloom') stage.classList.add('bloom-on');
+      else stage.classList.remove('bloom-on');
+    }
+    if (hint) hint.hidden = mode !== 'bloom';
+    if (mode !== 'bloom' && bloomEng) bloomEng.stop();
+    var chips = document.querySelectorAll('#mode-chips .chip');
+    for (var i = 0; i < chips.length; i++) {
+      chips[i].className = 'chip' + (chips[i].getAttribute('data-mode') === mode ? ' on' : '');
+    }
+    persist();
+    scheduleRender();
   }
 
   function showHint(msg) {
@@ -314,14 +369,19 @@
     renderTimer = null;
     var payload = getPayload();
     if (!payload) {
-      // payload 可能为 null、对象（带 error）或字符串
       showHint(payload && typeof payload === 'object' ? payload.error : '');
       clearCanvas();
       renderPreviewTitle();
       return;
     }
+    if (typeof payload === 'object' && payload.error) {
+      showHint(payload.error);
+      clearCanvas();
+      renderPreviewTitle();
+      return;
+    }
     var qr;
-    try { qr = makeQR(payload, currentEC()); }
+    try { qr = makeQR(payload, state.mode === 'bloom' ? 'M' : currentEC()); }
     catch (e) {
       showHint('内容过长放不下了，请精简');
       clearCanvas();
@@ -329,8 +389,25 @@
       return;
     }
     var n = qr.getModuleCount();
-    var cv = $('cv');
     $('stage').classList.remove('empty');
+
+    if (state.mode === 'bloom') {
+      var eng = ensureBloom();
+      if (!eng) {
+        setStyleMode('classic');
+        return;
+      }
+      eng.setFlower(state.flower);
+      eng.setPalette(state.palette);
+      eng.setQR(qr);
+      eng.resize();
+      eng.start();
+      renderPreviewTitle();
+      return;
+    }
+
+    if (bloomEng) bloomEng.stop();
+    var cv = $('cv');
     var hostW = $('stage').clientWidth || 280;
     var dpr = window.devicePixelRatio || 1;
     var cell = Math.max(8, Math.round((hostW * dpr) / (n + MARGIN * 2)));
@@ -757,7 +834,8 @@
   function persist() {
     try {
       localStorage.setItem(PREFIX + 'pref', JSON.stringify({
-        type: state.type, shape: state.shape, finder: state.finder,
+        type: state.type, mode: state.mode, flower: state.flower, palette: state.palette,
+        shape: state.shape, finder: state.finder,
         fg: state.fg, bg: state.bg, veil: Math.round(state.veil * 100) / 100,
         titles: state.titles
       }));
@@ -769,6 +847,9 @@
       if (!raw) return;
       var d = JSON.parse(raw);
       if (d.type) state.type = d.type;
+      if (d.mode === 'classic' || d.mode === 'bloom') state.mode = d.mode;
+      if (d.flower) state.flower = d.flower === 'lotus' ? 'tulip' : d.flower;
+      if (d.palette) state.palette = d.palette;
       if (d.shape) state.shape = d.shape;
       if (d.finder) state.finder = d.finder;
       if (d.fg) state.fg = d.fg;
@@ -825,42 +906,87 @@
       return;
     }
     var qr;
-    try { qr = makeQR(payload, currentEC()); }
+    try { qr = makeQR(payload, state.mode === 'bloom' ? 'M' : currentEC()); }
     catch (e) { toast('内容过长放不下了'); return; }
 
-    var cv = document.createElement('canvas');
-    var px = renderCode(qr, {
-      canvas: cv, cell: 20,
-      shape: state.shape, finder: state.finder,
-      fg: state.fg, bg: state.bg,
-      bgImg: state.bgImg, veil: state.veil, logo: state.logo
-    });
+    var url;
+    var px;
+    if (state.mode === 'bloom') {
+      var eng = ensureBloom();
+      if (!eng) { toast('花束模式不可用'); return; }
+      eng.setQR(qr);
+      url = eng.captureDataURL(1024);
+      if (!url) { toast('导出失败'); return; }
+      px = 1024;
+    } else {
+      var cv = document.createElement('canvas');
+      px = renderCode(qr, {
+        canvas: cv, cell: 20,
+        shape: state.shape, finder: state.finder,
+        fg: state.fg, bg: state.bg,
+        bgImg: state.bgImg, veil: state.veil, logo: state.logo
+      });
+      // 底部标题栏
+      var cap = Math.max(64, Math.round(px * 0.1));
+      var out = document.createElement('canvas');
+      out.width = px;
+      out.height = px + cap;
+      var octx = out.getContext('2d');
+      octx.fillStyle = '#ffffff';
+      octx.fillRect(0, 0, px, px + cap);
+      octx.drawImage(cv, 0, 0);
 
-    // 底部标题栏
-    var cap = Math.max(64, Math.round(px * 0.1));
-    var out = document.createElement('canvas');
-    out.width = px;
-    out.height = px + cap;
-    var octx = out.getContext('2d');
-    octx.fillStyle = '#ffffff';
-    octx.fillRect(0, 0, px, px + cap);
-    octx.drawImage(cv, 0, 0);
+      var c0 = captionText();
+      var padL = Math.round(px * 0.06);
+      var maxW = px - padL * 2;
+      var fs = Math.round(cap * 0.34);
+      octx.font = '600 ' + fs + 'px -apple-system, "PingFang SC", sans-serif';
+      octx.textBaseline = 'middle';
+      var prefix = c0.type ? c0.type + '　' : '';
+      var body = fitText(octx, (c0.text || '').replace(/[\r\n]/g, ' '), maxW - octx.measureText(prefix).width);
+      var y = px + cap / 2;
+      octx.fillStyle = '#7c5cff';
+      octx.fillText(prefix, padL, y);
+      octx.fillStyle = '#1b1e28';
+      octx.fillText(body, padL + octx.measureText(prefix).width, y);
+      url = out.toDataURL('image/png');
+    }
 
-    var c = captionText();
-    var padL = Math.round(px * 0.06);
-    var maxW = px - padL * 2;
-    var fs = Math.round(cap * 0.34);
-    octx.font = '600 ' + fs + 'px -apple-system, "PingFang SC", sans-serif';
-    octx.textBaseline = 'middle';
-    var prefix = c.type ? c.type + '　' : '';
-    var body = fitText(octx, (c.text || '').replace(/[\r\n]/g, ' '), maxW - octx.measureText(prefix).width);
-    var y = px + cap / 2;
-    octx.fillStyle = '#7c5cff';
-    octx.fillText(prefix, padL, y);
-    octx.fillStyle = '#1b1e28';
-    octx.fillText(body, padL + octx.measureText(prefix).width, y);
+    // 花束导出：白底 + 可选标题条
+    if (state.mode === 'bloom') {
+      var imgBloom = new Image();
+      imgBloom.onload = function () {
+        var capB = Math.max(64, Math.round(px * 0.1));
+        var outB = document.createElement('canvas');
+        outB.width = px;
+        outB.height = px + capB;
+        var bx = outB.getContext('2d');
+        bx.fillStyle = '#f7f5f2';
+        bx.fillRect(0, 0, px, px + capB);
+        bx.drawImage(imgBloom, 0, 0, px, px);
+        var c1 = captionText();
+        var pad1 = Math.round(px * 0.06);
+        var max1 = px - pad1 * 2;
+        var fs1 = Math.round(capB * 0.34);
+        bx.font = '600 ' + fs1 + 'px -apple-system, "PingFang SC", sans-serif';
+        bx.textBaseline = 'middle';
+        var pre1 = c1.type ? c1.type + '　' : '';
+        var body1 = fitText(bx, (c1.text || '').replace(/[\r\n]/g, ' '), max1 - bx.measureText(pre1).width);
+        var y1 = px + capB / 2;
+        bx.fillStyle = '#7c5cff';
+        bx.fillText(pre1, pad1, y1);
+        bx.fillStyle = '#1b1e28';
+        bx.fillText(body1, pad1 + bx.measureText(pre1).width, y1);
+        finishExport(outB.toDataURL('image/png'), c1);
+      };
+      imgBloom.src = url;
+      return;
+    }
 
-    var url = out.toDataURL('image/png');
+    finishExport(url, captionText());
+  }
+
+  function finishExport(url, c) {
     var img = $('save-img');
     img.src = url;
     $('btn-download').href = url;
@@ -889,8 +1015,14 @@
         cs[i].className = 'chip' + (cs[i].getAttribute(attr) === val ? ' on' : '');
       }
     }
+    apply('mode-chips', 'data-mode', state.mode);
     apply('shape-chips', 'data-shape', state.shape);
     apply('finder-chips', 'data-finder', state.finder);
+    apply('flower-chips', 'data-flower', state.flower);
+    var pals = document.querySelectorAll('#palette-chips .pal-swatch');
+    for (var pi = 0; pi < pals.length; pi++) {
+      pals[pi].classList.toggle('on', pals[pi].getAttribute('data-palette') === state.palette);
+    }
   }
 
   function closeAllSelects(except) {
@@ -970,7 +1102,32 @@
 
     bindChips('shape-chips', 'data-shape', 'shape');
     bindChips('finder-chips', 'data-finder', 'finder');
+    bindChips('flower-chips', 'data-flower', 'flower', function () {
+      if (bloomEng) bloomEng.setFlower(state.flower);
+    });
+    (function bindPalettes() {
+      var chips = document.querySelectorAll('#palette-chips .pal-swatch');
+      for (var i = 0; i < chips.length; i++) {
+        chips[i].addEventListener('click', function () {
+          var val = this.getAttribute('data-palette');
+          state.palette = val;
+          for (var j = 0; j < chips.length; j++) {
+            chips[j].classList.toggle('on', chips[j].getAttribute('data-palette') === val);
+          }
+          persist();
+          if (bloomEng) bloomEng.setPalette(state.palette);
+          scheduleRender();
+        });
+      }
+    })();
+    var modeChips = document.querySelectorAll('#mode-chips .chip');
+    for (var mi = 0; mi < modeChips.length; mi++) {
+      modeChips[mi].addEventListener('click', function () {
+        setStyleMode(this.getAttribute('data-mode'));
+      });
+    }
     applyInitChips();
+    setStyleMode(state.mode);
 
     initColorSheet();
     initPicker();

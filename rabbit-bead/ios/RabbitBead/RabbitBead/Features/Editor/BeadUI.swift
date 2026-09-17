@@ -1,6 +1,26 @@
 import SwiftUI
 import UIKit
 
+/// iOS 26+ 的系统液态玻璃按钮效果；旧系统保持现有自绘样式。
+struct BeadGlassButtonModifier: ViewModifier {
+    let cornerRadius: CGFloat
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content.glassEffect(.regular, in: .rect(cornerRadius: cornerRadius))
+        } else {
+            content
+        }
+    }
+}
+
+extension View {
+    func beadGlassButton(cornerRadius: CGFloat = BeadRadius.sm) -> some View {
+        modifier(BeadGlassButtonModifier(cornerRadius: cornerRadius))
+    }
+}
+
 // MARK: - 颜色
 
 /// 设计令牌：对齐 H5 `style.css`（清爽蓝 + soft UI）。
@@ -315,19 +335,6 @@ extension View {
     }
 }
 
-// MARK: - 按压反馈
-
-/// 全系统统一的按压微交互：`scale(0.95)`。
-struct BeadPressStyle: ButtonStyle {
-    var pressedScale: CGFloat = 0.95
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .scaleEffect(configuration.isPressed ? pressedScale : 1)
-            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
-    }
-}
-
 // MARK: - 按钮
 
 /// 按钮语法只有四种。
@@ -363,7 +370,8 @@ struct BeadButton: View {
             }
             .modifier(BeadButtonLabelStyle(kind: kind, fullWidth: fullWidth))
         }
-        .buttonStyle(BeadPressStyle())
+        .buttonStyle(.automatic)
+        .beadGlassButton(cornerRadius: fullWidth ? BeadRadius.md : BeadRadius.sm)
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.36)
     }
@@ -472,7 +480,8 @@ struct BeadIconButton: View {
         Button(action: action) {
             BeadIconChip(systemName: systemName, isOn: isOn, size: size)
         }
-        .buttonStyle(BeadPressStyle())
+        .buttonStyle(.automatic)
+        .beadGlassButton(cornerRadius: BeadRadius.sm)
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.4)
     }
@@ -602,7 +611,7 @@ struct BeadChip: View {
                 shape.strokeBorder(border, lineWidth: 1)
             }
         }
-        .buttonStyle(BeadPressStyle(pressedScale: 0.96))
+        .buttonStyle(.automatic)
     }
 
     @ViewBuilder

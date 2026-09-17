@@ -20,6 +20,11 @@ final class ProjectStore {
     var message: String?
 
     private var hasLoaded = false
+    private var thumbnailCache: [UUID: UIImage] = [:]
+
+    private struct DraftMetadata: Codable {
+        let settings: BeadSettings
+    }
 
     private init() {}
 
@@ -37,6 +42,35 @@ final class ProjectStore {
         guard !hasLoaded else { return }
         hasLoaded = true
         load()
+    }
+
+    /// 提前解码作品缩略图，避免首次打开「我的」时由列表逐行同步解码。
+    func preloadThumbnails() {
+        for project in projects where thumbnailCache[project.id] == nil {
+            if let image = UIImage(contentsOfFile: ProjectPaths.thumbURL(project.id).path) {
+                thumbnailCache[project.id] = image
+            }
+        }
+    }
+
+    func saveDraft(sourceImage: CGImage, settings: BeadSettings) {
+        do {
+            try ProjectPaths.prepare()
+            try Self.writeJPEG(UIImage(cgImage: sourceImage), to: ProjectPaths.draftImage)
+            let metadata = try JSONEncoder().encode(DraftMetadata(settings: settings))
+            try metadata.write(to: ProjectPaths.draftSettings, options: .atomic)
+        } catch {
+            // 草稿保存失败不影响当前编辑。
+        }
+    }
+
+    func loadDraft() -> (image: CGImage, settings: BeadSettings)? {
+        guard let image = UIImage(contentsOfFile: ProjectPaths.draftImage.path)?.cgImage,
+              let data = try? Data(contentsOf: ProjectPaths.draftSettings),
+              let metadata = try? JSONDecoder().decode(DraftMetadata.self, from: data) else {
+            return nil
+        }
+        return (image, metadata.settings)
     }
 
     func load() {
@@ -89,7 +123,12 @@ final class ProjectStore {
     }
 
     func thumbnail(for project: BeadProject) -> UIImage? {
-        UIImage(contentsOfFile: ProjectPaths.thumbURL(project.id).path)
+        if let cached = thumbnailCache[project.id] {
+            return cached
+        }
+        let image = UIImage(contentsOfFile: ProjectPaths.thumbURL(project.id).path)
+        thumbnailCache[project.id] = image
+        return image
     }
 
     // MARK: - 写
@@ -104,6 +143,7 @@ final class ProjectStore {
             try Self.writeImage(sourceImage, to: ProjectPaths.imageURL(value.imageFile))
             if let thumbnail {
                 try Self.writeJPEG(thumbnail, to: ProjectPaths.thumbURL(value.id))
+                thumbnailCache[value.id] = thumbnail
             }
             if let index = projects.firstIndex(where: { $0.id == value.id }) {
                 projects[index] = value
@@ -130,6 +170,7 @@ final class ProjectStore {
 
     func delete(_ project: BeadProject) {
         projects.removeAll { $0.id == project.id }
+        thumbnailCache.removeValue(forKey: project.id)
         try? FileManager.default.removeItem(at: ProjectPaths.imageURL(project.imageFile))
         try? FileManager.default.removeItem(at: ProjectPaths.thumbURL(project.id))
         try? writeIndex()

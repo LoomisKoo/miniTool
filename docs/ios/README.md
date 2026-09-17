@@ -35,13 +35,13 @@ H5 小工具和 iOS App 是**同一个产品的两种实现**：
 
 | 工具目录 | 产品名 | Xcode 工程 / Bundle ID 后缀 |
 | --- | --- | --- |
-| `bead-pattern/` | 兔格拼豆 | `BeadPattern` |
+| `rabbit-bead/` | 兔格拼豆 | `RabbitBead` |
 | `tuqing/` | 图轻 | `Tuqing` |
 | `crop-grid/` | 轻映 | `Qingying` |
 | `live-photo/` | 灵光 | `LivePhoto` |
 | `body-balance/` | 身体小账本 | `BodyBalance` |
 | `colorqr/` | 彩码 | `ColorQR` |
-| `food-map/` | 寻味 | `Xunwei` |
+| `food-map/` | 美食地图 | `Xunwei` |
 | `wind-chime/` | 风铃物语 | `WindChime` |
 | `kongming-deng/` | 祈愿灯 | `KongmingDeng` |
 | `xingkong-jump/` | 星空跳一跳 | `XingkongJump` |
@@ -50,19 +50,19 @@ H5 小工具和 iOS App 是**同一个产品的两种实现**：
 | `cinema-seat/` | 观影座舱 | `CinemaSeat` |
 | `star-book/` | 星空翻页书 | `StarBook` |
 
-Bundle ID 形式：`com.<team>.<name 小写>`，例如 `com.loomiskoo.beadpattern`。**同一个 App 的 Bundle ID 一旦上架不可更改**，提交前先定好。
+Bundle ID 形式：`com.<team>.<name 小写>`，例如 `com.loomiskoo.rabbitbead`。**同一个 App 的 Bundle ID 一旦上架不可更改**，提交前先定好。
 
 ## 技术选型
 
 | 类型 | 工具 | 方案 |
 | --- | --- | --- |
 | 图片处理 | 图轻、轻映 | SwiftUI + PhotosUI + Core Image / Core Graphics |
-| 图形生成 | 兔格拼豆、彩码 | SwiftUI + Core Graphics（拼豆量化算法可移植自 `bead-pattern/app.js`） |
+| 图形生成 | 兔格拼豆、彩码 | SwiftUI + Core Graphics（拼豆量化算法可移植自 `rabbit-bead/app.js`） |
 | 动效创作 | 灵光 | SwiftUI + Core Animation / Metal |
 | 3D 氛围 | 风铃物语、祈愿灯 | SceneKit 或 Metal（Web 端为 Three.js，逻辑需重写） |
 | 小游戏 | 星空跳一跳、纸灯夜航 | SpriteKit |
 | 记录类 | 身体小账本 | SwiftUI + SwiftData / Core Data + HealthKit |
-| 图鉴类 | 寻味 | SwiftUI + SwiftData |
+| 图鉴类 | 美食地图 | SwiftUI + SwiftData |
 
 统一要求：
 

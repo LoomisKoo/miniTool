@@ -212,14 +212,19 @@
   function computeLandGap(globe, z) {
     if (globe) return 7.5;
     const gz = globeMaxZ();
-    const t = clamp((z - gz) / Math.max(28, gz * 5), 0, 1);
-    let gap = 10.5 - t * 2.5;
+    const z0 = Math.max(gz * 1.2, 12);           // 与 chinaZ 下限对齐
+    const z3 = z0 * 1.75 * 1.75 * 1.75;         // 加号前 3 次
     const zTop3 = MAXZ / (1.75 * 1.75);
+    if (z <= z3) {
+      const u = clamp((z - z0) / Math.max(1e-6, z3 - z0), 0, 1);
+      return 14.5 - u * 2;                       // 14.5 → 12.5，前三级保持疏
+    }
     if (z >= zTop3) {
       const u = clamp((z - zTop3) / Math.max(1e-6, MAXZ - zTop3), 0, 1);
-      gap = 5.6 - u * 1.8;
+      return 5.6 - u * 1.8;
     }
-    return gap;
+    const t = clamp((z - z3) / Math.max(1e-6, zTop3 - z3), 0, 1);
+    return 12.5 - t * 6.9;                       // 12.5 → 5.6
   }
   function liveDens() {
     const flat = isFlat();
@@ -746,7 +751,7 @@
     return computeLandGap(globe, densityZoom());
   }
   function landDotR(spacingPx) {
-    return Math.min(2.4, Math.max(1.05, spacingPx * 0.3));
+    return Math.min(2.15, Math.max(1.0, spacingPx * 0.24));
   }
   function landAt(r, c) {
     if (r < 0 || r >= ROWS) return false;
@@ -1017,15 +1022,32 @@
   }
 
   // 聚合格网：仅随缩放档位变化；拖动/旋转不重算
-  let aggDegHeld = 8;
+  let aggDegHeld = 18;
   function foodMinSepPx() {
-    return 58;
+    // 根据缩放层级动态调整最小分隔距离
+    const z = clusterDensityZoom();
+    const gz = globeMaxZ();
+    
+    // 在球体模式（地球视图）时，使用更大的间距
+    if (z < gz) {
+      // 初始缩放到接近平面模式：使用很大的间距
+      const t = z / Math.max(gz, 0.01);
+      // t 从 0 到 1，间距从 180px 减少到 100px
+      return 180 - t * 80;
+    }
+    
+    // 平面模式：根据缩放层级进一步调整
+    // gz 是进入平面的阈值，gz*2 是中等缩放
+    const flatProgress = clamp((z - gz) / Math.max(gz, 0.01), 0, 2);
+    // flatProgress 从 0 到 2+，间距从 100px 减少到 65px
+    return Math.max(65, 100 - flatProgress * 17.5);
   }
   function foodAggDeg() {
     const minSepPx = foodMinSepPx();
     const z = clusterDensityZoom();
     const raw = minSepPx / Math.max(z, 0.01);
-    const steps = [12, 8, 5, 3, 2, 1, 0.5, 0.35];
+    // 增加更大的步进值，用于低缩放层级
+    const steps = [24, 18, 12, 8, 5, 3, 2, 1, 0.5, 0.35];
     let desired = steps[0];
     for (let i = 0; i < steps.length; i++) {
       if (raw <= steps[i]) desired = steps[i];
@@ -1138,11 +1160,13 @@
     const zoom = cam.zoom, flat = viewIsFlat(), gz = globeMaxZ();
     const cluster = count > 1;
     if (!flat) {
+      // 球体模式：减小点的半径
       const t = clamp((zoom - minZoom) / Math.max(0.01, gz - minZoom), 0, 1);
-      return cluster ? (12 + t * 2) : (5.5 + t * 3.5);
+      return cluster ? (10 + t * 1.5) : (4.5 + t * 2.5);
     }
+    // 平面模式：减小点的半径
     const t = clamp((zoom - gz) / Math.max(8, gz * 3), 0, 1);
-    return cluster ? (14 + t * 2) : (9.5 + t * 5);
+    return cluster ? (12 + t * 1.5) : (8 + t * 4);
   }
 
   function screenPos(lat, lon) {

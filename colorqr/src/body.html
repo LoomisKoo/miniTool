@@ -29,7 +29,7 @@
       </span>
       <span class="brand-txt">
         <b>彩码</b>
-        <small>链接 · 文字 · WiFi · 名片 → 美化二维码</small>
+        <small>链接 · 文字 · WiFi · 名片 · 花束二维码</small>
       </span>
     </div>
   </header>
@@ -47,6 +47,7 @@
   <section class="preview-card">
     <div class="stage" id="stage">
       <canvas id="cv"></canvas>
+      <div class="bloom-host" id="bloom-host" hidden></div>
       <div class="stage-empty" id="stage-empty">
         <svg viewBox="0 0 48 48" width="44" height="44" fill="none" stroke="#c8ccd8" stroke-width="1.7" stroke-linecap="round">
           <rect x="7" y="7" width="14" height="14" rx="3.4"/>
@@ -61,6 +62,7 @@
         </svg>
         <p>选择类型并填写内容</p>
       </div>
+      <p class="bloom-hint" id="bloom-hint" hidden>轻点花束，绽放成可扫二维码</p>
     </div>
     <div class="qr-title" id="qr-title" hidden>
       <span class="qt-type"></span><span class="qt-text"></span>
@@ -183,50 +185,85 @@
 
     <!-- 美化 -->
     <section class="panel style-panel">
-      <button type="button" class="color-entry" id="btn-colors">
-        <span class="ce-swatches">
-          <i class="ce-bg" id="dot-bg"></i>
-          <i class="ce-fg" id="dot-fg"></i>
-        </span>
-        <span class="ce-text">
-          <b>配色</b>
-          <small id="ce-sub">码点 · 背景</small>
-        </span>
-        <svg class="ce-arrow" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#b6bcc9" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
-      </button>
-
       <div class="style-cell">
-        <span class="label">点的形状</span>
-        <div class="chips" id="shape-chips">
-          <button type="button" class="chip" data-shape="square">方形</button>
-          <button type="button" class="chip" data-shape="dot">圆点</button>
-          <button type="button" class="chip" data-shape="round">圆角</button>
+        <span class="label">样式模式</span>
+        <div class="chips" id="mode-chips">
+          <button type="button" class="chip on" data-mode="classic">经典</button>
+          <button type="button" class="chip" data-mode="bloom">花束</button>
         </div>
       </div>
 
-      <div class="style-cell">
-        <span class="label">定位角</span>
-        <div class="chips" id="finder-chips">
-          <button type="button" class="chip" data-finder="square">方形</button>
-          <button type="button" class="chip" data-finder="round">圆角</button>
-          <button type="button" class="chip" data-finder="dot">圆点</button>
-        </div>
-      </div>
+      <div id="classic-style-opts">
+        <button type="button" class="color-entry" id="btn-colors">
+          <span class="ce-swatches">
+            <i class="ce-bg" id="dot-bg"></i>
+            <i class="ce-fg" id="dot-fg"></i>
+          </span>
+          <span class="ce-text">
+            <b>配色</b>
+            <small id="ce-sub">码点 · 背景</small>
+          </span>
+          <svg class="ce-arrow" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#b6bcc9" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+        </button>
 
-      <div class="style-cell">
-        <span class="label">中心 Logo</span>
-        <div class="logo-ui" id="logo-ui">
-          <input type="file" id="in-logo" accept="image/*" hidden />
-          <button type="button" class="add-box sm" id="btn-logo" aria-label="添加 Logo">
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
-          </button>
-          <div class="logo-thumb" id="logo-thumb" hidden>
-            <img id="logo-thumb-img" alt="Logo 预览" />
-            <button type="button" class="thumb-x" id="btn-logo-clear" aria-label="移除 Logo">
-              <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
-            </button>
+        <div class="style-cell">
+          <span class="label">点的形状</span>
+          <div class="chips" id="shape-chips">
+            <button type="button" class="chip" data-shape="square">方形</button>
+            <button type="button" class="chip" data-shape="dot">圆点</button>
+            <button type="button" class="chip" data-shape="round">圆角</button>
           </div>
         </div>
+
+        <div class="style-cell">
+          <span class="label">定位角</span>
+          <div class="chips" id="finder-chips">
+            <button type="button" class="chip" data-finder="square">方形</button>
+            <button type="button" class="chip" data-finder="round">圆角</button>
+            <button type="button" class="chip" data-finder="dot">圆点</button>
+          </div>
+        </div>
+
+        <div class="style-cell">
+          <span class="label">中心 Logo</span>
+          <div class="logo-ui" id="logo-ui">
+            <input type="file" id="in-logo" accept="image/*" hidden />
+            <button type="button" class="add-box sm" id="btn-logo" aria-label="添加 Logo">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+            </button>
+            <div class="logo-thumb" id="logo-thumb" hidden>
+              <img id="logo-thumb-img" alt="Logo 预览" />
+              <button type="button" class="thumb-x" id="btn-logo-clear" aria-label="移除 Logo">
+                <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="bloom-style-opts" hidden>
+        <div class="style-cell">
+          <span class="label">花种</span>
+          <div class="chips wrap" id="flower-chips">
+            <button type="button" class="chip on" data-flower="peony">牡丹</button>
+            <button type="button" class="chip" data-flower="lily">百合</button>
+            <button type="button" class="chip" data-flower="rose">玫瑰</button>
+            <button type="button" class="chip" data-flower="tulip">郁金香</button>
+          </div>
+        </div>
+        <div class="style-cell">
+          <span class="label">花束配色</span>
+          <div class="pal-row" id="palette-chips">
+            <button type="button" class="pal-swatch on" data-palette="original" style="--c:#c45c6a" aria-label="原色"></button>
+            <button type="button" class="pal-swatch" data-palette="blush" style="--c:#e8a0b0" aria-label="腮红"></button>
+            <button type="button" class="pal-swatch" data-palette="marigold" style="--c:#e08a3c" aria-label="金盏"></button>
+            <button type="button" class="pal-swatch" data-palette="sunbeam" style="--c:#e6c35c" aria-label="日光"></button>
+            <button type="button" class="pal-swatch" data-palette="poppy" style="--c:#d63b3b" aria-label="罂粟"></button>
+            <button type="button" class="pal-swatch" data-palette="azure" style="--c:#5b8fd9" aria-label="晴空"></button>
+            <button type="button" class="pal-swatch" data-palette="dusk" style="--c:#7a5ea8" aria-label="暮色"></button>
+          </div>
+        </div>
+        <p class="field-note">左右拖动可旋转花束；轻点预览在花瓶与二维码间切换。</p>
       </div>
     </section>
   </main>

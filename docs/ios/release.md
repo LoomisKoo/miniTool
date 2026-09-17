@@ -52,11 +52,11 @@
 ## 买断（非消耗型内购）
 
 1. App Store Connect → 功能 → App 内购买项目 → 新建「非消耗型」
-2. 商品 ID：`<bundleid>.pro`，例如 `com.loomiskoo.beadpattern.pro`
+2. 商品 ID：`<bundleid>.pro`，例如 `com.loomiskoo.rabbitbead.pro`
 3. 代码用 **StoreKit 2**：
 
 ```swift
-let products = try await Product.products(for: ["com.loomiskoo.beadpattern.pro"])
+let products = try await Product.products(for: ["com.loomiskoo.rabbitbead.pro"])
 let result = try await product.purchase()
 await AppStore.sync()   // 恢复购买
 ```

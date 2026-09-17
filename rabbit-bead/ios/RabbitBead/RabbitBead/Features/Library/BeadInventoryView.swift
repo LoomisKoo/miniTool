@@ -61,9 +61,9 @@ struct BeadInventoryView: View {
                     .tag(item)
             }
         }
-        // 本页底部「全部 / 已有」TabView 需要显式可见，避免被导航栈影响。
-        .toolbar(.visible, for: .tabBar)
-        .background(BeadTheme.parchment)
+        .background {
+            BeadTheme.parchmentGradient.ignoresSafeArea()
+        }
         .navigationTitle("豆子库存")
         .navigationBarTitleDisplayMode(.inline)
         // 顶部导航：iOS 26+ 交给系统液态玻璃；更早版本用系统 `.bar` 毛玻璃
@@ -553,7 +553,7 @@ private struct BeadScanResultSheet: View {
                         Button { onPick(color) } label: {
                             scanCell(color)
                         }
-                        .buttonStyle(BeadPressStyle(pressedScale: 0.97))
+                        .buttonStyle(.automatic)
                     }
                 }
                 .padding(BeadSpace.md)
@@ -565,7 +565,9 @@ private struct BeadScanResultSheet: View {
                     .padding(.horizontal, BeadSpace.md)
                     .padding(.bottom, BeadSpace.md)
             }
-            .background(BeadTheme.parchment)
+            .background {
+            BeadTheme.parchmentGradient.ignoresSafeArea()
+        }
             .navigationTitle("识别到 %ld 个色号".loc(colors.count))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -660,7 +662,9 @@ private struct BeadCountSheet: View {
                 Spacer(minLength: 0)
             }
             .padding(BeadSpace.md)
-            .background(BeadTheme.parchment)
+            .background {
+            BeadTheme.parchmentGradient.ignoresSafeArea()
+        }
             .navigationTitle("登记颗数")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -722,7 +726,7 @@ private struct BeadCountSheet: View {
                         .background(BeadTheme.pearl, in: Capsule())
                         .overlay { Capsule().strokeBorder(BeadTheme.hairline, lineWidth: 1) }
                 }
-                .buttonStyle(BeadPressStyle(pressedScale: 0.95))
+                .buttonStyle(.automatic)
             }
 
             Button {
@@ -735,7 +739,7 @@ private struct BeadCountSheet: View {
                     .frame(maxWidth: .infinity)
                     .frame(height: 40)
             }
-            .buttonStyle(BeadPressStyle(pressedScale: 0.95))
+            .buttonStyle(.automatic)
             .disabled(initial <= 0)
         }
     }

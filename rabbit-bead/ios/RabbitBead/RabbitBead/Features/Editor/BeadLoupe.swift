@@ -1,6 +1,9 @@
 import SwiftUI
 
-/// 落笔放大镜：浮在手指上方，显示手指所在格 + 周围格子 + 该格的**图纸行列号**。
+/// 手指放大镜：浮在手指上方，显示手指所在格 + 周围格子 + 该格的**图纸行列号**。
+///
+/// 落笔（画笔 / 橡皮）和取色都用它：两者都是「手指按在格子上，得看清压在哪个格」，
+/// 光学放大 + 坐标读数就够了，区别只在取色会多显示一行**当前吸到的色号**。
 ///
 /// 行列号口径与导出图纸上的坐标轴完全一致（见 `BeadArtworkRenderer.drawAxis`）：
 /// **1 起算**、并且带上当前区域的原点（`rect.x0` / `rect.y0`）。所以放大镜读到的
@@ -8,7 +11,7 @@ import SwiftUI
 ///
 /// 位置放在手指上方一段距离，不挡落笔点；顶到画布上缘就翻到手指下方，
 /// 再放不下（画布很矮）就夹在画布内。
-struct BeadPaintLoupe: View {
+struct BeadLoupe: View {
     let grid: BeadGrid
     /// 当前可见区域（某块板或整幅）。
     let rect: GridRect
@@ -19,12 +22,19 @@ struct BeadPaintLoupe: View {
     let touch: CGPoint
     /// 预览框尺寸：用来把放大镜夹在画布里。
     let viewport: CGSize
+    /// 取色模式：底下多一行读数（色号 + 色块；空格显示占位）。
+    ///
+    /// 用独立开关而不是「色号非 nil」：读数行时有时无会让整块高度来回跳，
+    /// 放大镜跟着上下抖 —— 拖动取色时最明显。
+    var showsReadout = false
+    /// 手指下这一格的色号（空格 / 非取色工具为 nil）。
+    var pickedCode: String?
     var appearance: BeadAppearance = .light
 
     /// 圆窗直径。`span` 格分这个宽度，一格正好 30pt —— 正好够画出格内色号
     /// （`Bead2DRenderer` 的 `codeShowCell`）。
     private static let diameter: CGFloat = 150
-    /// 圆窗里铺几格。奇数，落笔那一格落在正中。
+    /// 圆窗里铺几格。奇数，手指那一格落在正中。
     private static let span = 5
     private static let labelGap: CGFloat = 6
     private static let labelHeight: CGFloat = 26
@@ -33,18 +43,30 @@ struct BeadPaintLoupe: View {
     /// 与画布边缘的间隙。
     private static let edgeInset: CGFloat = 8
 
-    /// 轮盘 + 坐标条的整块尺寸。
+    /// 轮盘 + 底下读数的整块尺寸。
     private var blockSize: CGSize {
         CGSize(
             width: Self.diameter,
-            height: Self.diameter + Self.labelGap + Self.labelHeight
+            height: Self.diameter + Self.labelGap + readoutsHeight
         )
+    }
+
+    /// 底下读数的总高：坐标一行，取色时再加一行色号。
+    private var readoutsHeight: CGFloat {
+        showsReadout
+            ? Self.labelHeight * 2 + Self.labelGap
+            : Self.labelHeight
     }
 
     var body: some View {
         VStack(spacing: Self.labelGap) {
             window
-            coordinateLabel
+            VStack(spacing: Self.labelGap) {
+                coordinateLabel
+                if showsReadout {
+                    readoutLabel
+                }
+            }
         }
         .position(anchor)
         .allowsHitTesting(false)
@@ -87,7 +109,7 @@ struct BeadPaintLoupe: View {
                 appearance: appearance
             )
 
-            // 落笔那一格：白圈打底再描主题色，压在任何豆色上都看得见。
+            // 手指那一格：白圈打底再描主题色，压在任何豆色上都看得见。
             let focus = CGRect(
                 x: CGFloat(col - originCol) * cell,
                 y: CGFloat(row - originRow) * cell,
@@ -112,6 +134,21 @@ struct BeadPaintLoupe: View {
             .padding(.horizontal, 12)
             .frame(height: Self.labelHeight)
             .background(BeadTheme.overlaySurface, in: Capsule())
+    }
+
+    /// 取色读数：手指下这一格的豆色 + 色号；空格显示占位（吸不到色，松手也不会改画笔色）。
+    private var readoutLabel: some View {
+        let cell = grid[col, row]
+        return HStack(spacing: 6) {
+            BeadSwatch(color: cell.isEmpty ? .clear : cell.rgb.swiftUIColor, size: 12)
+            Text(pickedCode ?? "空格".loc)
+                .font(.system(size: 12, weight: .semibold))
+                .monospacedDigit()
+                .foregroundStyle(BeadTheme.onDark)
+        }
+        .padding(.horizontal, 12)
+        .frame(height: Self.labelHeight)
+        .background(BeadTheme.overlaySurface, in: Capsule())
     }
 
     // MARK: - 定位

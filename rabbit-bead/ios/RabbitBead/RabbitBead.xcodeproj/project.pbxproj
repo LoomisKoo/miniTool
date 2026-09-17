@@ -249,7 +249,8 @@
 				DEVELOPMENT_TEAM = 3RF98S68VY;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "RabbitBead";
+				INFOPLIST_KEY_CFBundleDisplayName = RabbitBead;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.graphics-design";
 				INFOPLIST_KEY_NSCameraUsageDescription = "用于拍摄拼豆照片，或拍摄豆子包装上的色号以便登记库存。";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "用于把生成的拼豆图纸保存到相册。";
@@ -259,9 +260,6 @@
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
-				// 只用 HTTPS 都不涉及：App 不发起任何网络请求，也没有自研或第三方加密。
-				// 不声明的话每次上传都会被问一次出口合规。
-				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -269,16 +267,10 @@
 				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.loomiskoo.rabbitbead;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
-				// 1.0 只发 iPhone：没有为 iPad 做过尺寸类布局（全工程无 userInterfaceIdiom 分支），
-				// 硬上 iPad 就是一张拉宽的 iPhone 界面，审核会按「未优化」挑。
-				// `INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad` 先留着不动，
-				// 将来补 iPad 布局时把它和这里一起改回 "1,2" 即可。
 				TARGETED_DEVICE_FAMILY = 1;
-				// 显式写出来（默认就是 YES）：允许在 Apple Silicon Mac 上安装。
-				// 只在 Mac 上跑不需要 iPad 布局，两者互不影响。
-				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = YES;
 			};
 			name = Debug;
 		};
@@ -292,7 +284,8 @@
 				DEVELOPMENT_TEAM = 3RF98S68VY;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "RabbitBead";
+				INFOPLIST_KEY_CFBundleDisplayName = RabbitBead;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.graphics-design";
 				INFOPLIST_KEY_NSCameraUsageDescription = "用于拍摄拼豆照片，或拍摄豆子包装上的色号以便登记库存。";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "用于把生成的拼豆图纸保存到相册。";
@@ -302,9 +295,6 @@
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
-				// 只用 HTTPS 都不涉及：App 不发起任何网络请求，也没有自研或第三方加密。
-				// 不声明的话每次上传都会被问一次出口合规。
-				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -312,16 +302,10 @@
 				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.loomiskoo.rabbitbead;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
-				// 1.0 只发 iPhone：没有为 iPad 做过尺寸类布局（全工程无 userInterfaceIdiom 分支），
-				// 硬上 iPad 就是一张拉宽的 iPhone 界面，审核会按「未优化」挑。
-				// `INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad` 先留着不动，
-				// 将来补 iPad 布局时把它和这里一起改回 "1,2" 即可。
 				TARGETED_DEVICE_FAMILY = 1;
-				// 显式写出来（默认就是 YES）：允许在 Apple Silicon Mac 上安装。
-				// 只在 Mac 上跑不需要 iPad 布局，两者互不影响。
-				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = YES;
 			};
 			name = Release;
 		};

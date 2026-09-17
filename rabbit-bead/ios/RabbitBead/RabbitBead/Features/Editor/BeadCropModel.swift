@@ -12,7 +12,7 @@ final class BeadCropModel {
     var sourceImage: UIImage?
     
     /// 当前选中的比例。
-    var selectedRatio: CropRatio = .presets[0]
+    var selectedRatio: CropRatio = .original
     
     /// 裁切变换。
     var transform = CropTransform()
@@ -107,9 +107,13 @@ final class BeadCropModel {
             initRect = CGRect(origin: .zero, size: imageSize)
         }
         
-        // 匹配比例
-        let ratio = initRect.width / initRect.height
-        selectedRatio = matchRatio(ratio: ratio)
+        // 无裁切 / 全图 → 原始；否则匹配预设，对不上落自由
+        if existingCrop == nil || existingCrop?.isFull == true {
+            selectedRatio = .original
+        } else {
+            let ratio = initRect.width / max(initRect.height, 0.0001)
+            selectedRatio = matchRatio(ratio: ratio)
+        }
         initRatio = selectedRatio
         
         // 重置变换
@@ -139,7 +143,11 @@ final class BeadCropModel {
         viewportSize = size
 
         let frame: CGRect
-        if old.width > 1, old.height > 1, cropFrame.width > 1 {
+        if selectedRatio.id == "orig", let image = sourceImage {
+            // 原始比例始终铺满当前画布，避免导航栏/布局变化后留下旧边距。
+            let imageAspect = image.size.width / max(image.size.height, 0.0001)
+            frame = computeCropFrameForAspect(imageAspect, isFree: false)
+        } else if old.width > 1, old.height > 1, cropFrame.width > 1 {
             let relW = cropFrame.width / old.width
             let relH = cropFrame.height / old.height
             var w = min(size.width, size.width * relW)
@@ -176,8 +184,8 @@ final class BeadCropModel {
 
         // 框比例 = 原图比例，zoom=0 → 显示尺寸与裁切框一致。
         let aspect = imageSize.width / imageSize.height
-        let fitRatio = matchRatio(ratio: aspect)
-        let frame = computeCropFrameForAspect(aspect, isFree: fitRatio.id == "free")
+        let fitRatio = CropRatio.original
+        let frame = computeCropFrameForAspect(aspect, isFree: false)
         let cover = max(frame.width / imageSize.width, frame.height / imageSize.height)
         var fitted = CropTransform()
         fitted.scale = cover
@@ -281,9 +289,13 @@ final class BeadCropModel {
         zoomPercent = (target / minScale - 1) * 100
     }
     
-    /// 切换比例。
+    /// 切换比例。选「原始」等同重置：整图 + 原图比例。
     func selectRatio(_ ratio: CropRatio, animated: Bool = true) {
         settleOrientationNow()
+        if ratio.id == "orig" {
+            reset()
+            return
+        }
         guard ratio.id != selectedRatio.id else { return }
         selectedRatio = ratio
         
@@ -548,13 +560,19 @@ final class BeadCropModel {
     
     /// 匹配比例预设；对不上就落到「自由」。
     private func matchRatio(ratio: CGFloat) -> CropRatio {
+        if let image = sourceImage {
+            let orig = image.size.width / max(image.size.height, 0.0001)
+            if abs(orig - ratio) / max(ratio, 0.0001) < 0.004 {
+                return .original
+            }
+        }
         for preset in CropRatio.presets {
-            guard preset.id != "free", let ar = preset.aspectRatio else { continue }
-            if abs(ar - ratio) / ratio < 0.004 {
+            guard preset.id != "free", preset.id != "orig", let ar = preset.aspectRatio else { continue }
+            if abs(ar - ratio) / max(ratio, 0.0001) < 0.004 {
                 return preset
             }
         }
-        return CropRatio.presets.last! // free
+        return .free
     }
     
     /// 计算初始视图。
@@ -582,6 +600,9 @@ final class BeadCropModel {
         let frame: CGRect
         if selectedRatio.id == "free" {
             frame = computeCropFrameForAspect(initAspect, isFree: true)
+        } else if selectedRatio.id == "orig" {
+            let imageAspect = imageSize.width / max(imageSize.height, 0.0001)
+            frame = computeCropFrameForAspect(imageAspect, isFree: false)
         } else {
             frame = computeCropFrame(for: selectedRatio)
         }
@@ -614,10 +635,16 @@ final class BeadCropModel {
     /// 计算裁切框（给定比例）。
     private func computeCropFrame(for ratio: CropRatio) -> CGRect {
         let aspect: CGFloat
-        if let ar = ratio.aspectRatio {
+        if ratio.id == "orig", let image = sourceImage {
+            aspect = image.size.width / max(image.size.height, 0.0001)
+        } else if let ar = ratio.aspectRatio {
             aspect = ar
-        } else {
+        } else if cropFrame.width > 1 {
             aspect = cropFrame.width / max(cropFrame.height, 0.0001)
+        } else if let image = sourceImage {
+            aspect = image.size.width / max(image.size.height, 0.0001)
+        } else {
+            aspect = 1
         }
         
         return computeCropFrameForAspect(aspect, isFree: ratio.id == "free")

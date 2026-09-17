@@ -144,6 +144,42 @@ body {
   box-shadow: inset 0 0 0 1px rgba(21, 23, 31, 0.06), inset 0 2px 14px rgba(21, 23, 31, 0.05);
 }
 .stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.bloom-host {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.bloom-host canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+}
+.stage.bloom-on {
+  background-color: #f7f5f2;
+  background-image: none;
+}
+.stage.bloom-on #cv { display: none !important; }
+.bloom-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 10px;
+  transform: translateX(-50%);
+  margin: 0;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.82);
+  color: var(--ink-2);
+  font-size: 12px;
+  font-style: italic;
+  letter-spacing: 0.2px;
+  pointer-events: none;
+  box-shadow: 0 2px 10px rgba(21, 23, 31, 0.06);
+  white-space: nowrap;
+}
 .stage-empty {
   display: none;
   flex-direction: column;
@@ -152,10 +188,13 @@ body {
   color: var(--ink-3);
   font-size: 13px;
   pointer-events: none;
+  z-index: 2;
 }
 .stage-empty p { margin: 0; }
 .stage.empty .stage-empty { display: flex; }
 .stage.empty canvas { display: none; }
+.stage.empty .bloom-host { display: none !important; }
+.stage.empty .bloom-hint { display: none !important; }
 /* 导出标题预览（替换原来的“码型…字符”提示，跟 PNG 底部标题条同款配色） */
 .qr-title {
   margin: 12px 0 0;
@@ -377,6 +416,7 @@ textarea { resize: vertical; min-height: 96px; line-height: 1.5; }
 
 /* chips */
 .chips { display: flex; gap: 6px; }
+.chips.wrap { flex-wrap: wrap; }
 .chip {
   border: none;
   font-family: inherit;
@@ -388,6 +428,9 @@ textarea { resize: vertical; min-height: 96px; line-height: 1.5; }
   border-radius: 999px;
   min-width: 46px;
   transition: background 0.18s, color 0.18s, box-shadow 0.18s;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 .chip.on {
   background: var(--brand-grad);
@@ -395,6 +438,38 @@ textarea { resize: vertical; min-height: 96px; line-height: 1.5; }
   box-shadow: 0 2px 8px var(--brand-glow), inset 0 1px 0 rgba(255, 255, 255, 0.25);
 }
 .chip:active { opacity: 0.75; }
+.pal-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
+}
+.chip.on .pal-dot { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.45); }
+
+.pal-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+.pal-swatch {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--c, #ccc);
+  box-shadow: inset 0 0 0 1px rgba(21, 23, 31, 0.12);
+  cursor: pointer;
+  flex: none;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.pal-swatch.on {
+  box-shadow: 0 0 0 2px #fff, 0 0 0 3.5px var(--brand), inset 0 0 0 1px rgba(255,255,255,0.25);
+  transform: scale(1.08);
+}
+.pal-swatch:active { opacity: 0.85; }
 
 /* 加号方块：选图 / 选 Logo，本身就是点击入口 */
 .add-box {

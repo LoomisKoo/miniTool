@@ -41,7 +41,9 @@ enum BeadArtworkRenderer {
         let pad: CGFloat
         let padBottom: CGFloat
         let axisTop: CGFloat
+        let axisBottom: CGFloat
         let axisLeft: CGFloat
+        let axisRight: CGFloat
         let metaH: CGFloat
         let titleSize: CGFloat
         let subSize: CGFloat
@@ -142,7 +144,9 @@ enum BeadArtworkRenderer {
                     origin: CGPoint(x: originX, y: originY),
                     cell: metrics.cell,
                     axisTop: metrics.axisTop,
-                    axisLeft: metrics.axisLeft
+                    axisBottom: metrics.axisBottom,
+                    axisLeft: metrics.axisLeft,
+                    axisRight: metrics.axisRight
                 )
             }
             if options.legend, !usage.isEmpty {
@@ -180,27 +184,40 @@ enum BeadArtworkRenderer {
         showPromo: Bool
     ) -> Metrics {
         let c = CGFloat(cell)
-        let pad = max(36, round(c * 0.7))
-        let padBottom = max(pad + 24, round(c * 1.4)) + (showPromo ? CGFloat(promoHeight) : 0)
-        let axisTop = axes ? max(28, round(c * 0.85)) : 0
-        let axisLeft = axes ? max(40, round(c * 1.0)) : 0
-        let titleSize = max(28, round(c * 0.58))
-        let subSize = max(18, round(c * 0.4))
-        let tipSize = max(14, round(c * 0.3))
+        let pad = max(24, round(c * 0.7))
+        let padBottom = max(pad + 16, round(c * 1.2)) + (showPromo ? CGFloat(promoHeight) : 0)
+        // 坐标是一圈与豆格同大的格子，紧贴图案四边（含四角空格）。
+        let axisTop = axes ? c : 0
+        let axisBottom = axes ? c : 0
+        let axisLeft = axes ? c : 0
+        let axisRight = axes ? c : 0
+        let titleSize = max(18, round(c * 0.58))
+        let subSize = max(12, round(c * 0.4))
+        let tipSize = max(10, round(c * 0.3))
         let metaH = showMeta
-            ? round(titleSize * 1.05 + subSize * 1.25 + tipSize * 2.1 + 20)
+            ? round(titleSize * 1.05 + subSize * 1.25 + tipSize * 2.1 + 16)
             : 0
 
-        // 色块边长 = 2×2 格（四个像素格）
-        let sw = max(48, c * 2)
-        let itemGapX = max(16, round(sw * 0.22))
-        let itemGapY = max(18, round(sw * 0.28))
-        let countGap = max(8, round(sw * 0.12))
-        let countH = max(22, round(sw * 0.36))
+        // 图例色块随单豆缩放；不要卡 48px 下限——缩小导出时否则只剩 1～2 列，
+        // 图例变成细长条、图案被压成邮票。
+        let sw = max(16, round(c * 1.7))
+        let itemGapX = max(8, round(sw * 0.18))
+        let itemGapY = max(10, round(sw * 0.22))
+        let countGap = max(4, round(sw * 0.1))
+        let countH = max(12, round(sw * 0.34))
         let itemH = sw + countGap + countH
         let patternW = CGFloat(pw) * c
         let patternH = CGFloat(ph) * c
-        let outW = pad + axisLeft + patternW + pad
+        var outW = pad + axisLeft + patternW + axisRight + pad
+        if showLegend, legendCount > 0 {
+            // 按色数开足够的列，避免「两列细长条」。
+            let targetCols = min(
+                legendCount,
+                max(8, Int(ceil(sqrt(Double(legendCount) * 1.8))))
+            )
+            let neededInner = CGFloat(targetCols) * sw + CGFloat(max(0, targetCols - 1)) * itemGapX
+            outW = max(outW, neededInner + pad * 2)
+        }
         let innerW = outW - pad * 2
         let maxCols = showLegend && legendCount > 0
             ? max(1, Int(floor((innerW + itemGapX) / (sw + itemGapX))))
@@ -209,7 +226,7 @@ enum BeadArtworkRenderer {
         let legendRows = showLegend && legendCount > 0
             ? Int(ceil(Double(legendCount) / Double(legendCols)))
             : 0
-        let legendTop = pad + metaH + axisTop + patternH
+        let legendTop = pad + metaH + axisTop + patternH + axisBottom
             + (legendRows > 0 ? round(c * 0.55) : 0)
         let legendH = legendRows > 0
             ? CGFloat(legendRows) * (itemH + itemGapY) - itemGapY
@@ -218,20 +235,22 @@ enum BeadArtworkRenderer {
         if showLegend, legendCount > 0 {
             outH = legendTop + legendH + padBottom
         } else {
-            outH = pad + metaH + axisTop + patternH + padBottom
+            outH = pad + metaH + axisTop + patternH + axisBottom + padBottom
         }
 
         return Metrics(
             pad: pad,
             padBottom: padBottom,
             axisTop: axisTop,
+            axisBottom: axisBottom,
             axisLeft: axisLeft,
+            axisRight: axisRight,
             metaH: metaH,
             titleSize: titleSize,
             subSize: subSize,
             tipSize: tipSize,
             sw: sw,
-            swR: max(8, round(sw * 0.18)),
+            swR: max(4, round(sw * 0.18)),
             itemGapX: itemGapX,
             itemGapY: itemGapY,
             countGap: countGap,
@@ -361,15 +380,14 @@ enum BeadArtworkRenderer {
 
     // MARK: - 格子
 
-    /// 格内色号的样式，与 H5 `drawPattern` 一致：
-    /// `max(8, round(cell*0.32))px` 无衬线、不加描边；亮度 > 160 压深字，否则浅字。
+    /// 格内色号：字号随格宽缩放；缩小导出时也要能写下色号（不再卡 cell≥22）。
     private static func codeAttributes(for rgb: RGB8, cell: Int) -> [NSAttributedString.Key: Any] {
-        let size = CGFloat(max(8, (Double(cell) * 0.32).rounded(.down)))
+        let size = max(5 as CGFloat, (CGFloat(cell) * 0.36).rounded(.down))
         return [
-            .font: UIFont.systemFont(ofSize: size),
+            .font: UIFont.systemFont(ofSize: size, weight: .medium),
             .foregroundColor: rgb.wantsDarkOverlayText
-                ? UIColor(white: 0, alpha: 0.55)
-                : UIColor(white: 1, alpha: 0.75),
+                ? UIColor(white: 0, alpha: 0.72)
+                : UIColor(white: 1, alpha: 0.9),
         ]
     }
 
@@ -408,7 +426,8 @@ enum BeadArtworkRenderer {
                 ctx.setFillColor(cgColor)
                 ctx.fill(box.insetBy(dx: -0.25, dy: -0.25))
 
-                if showCodes, cell >= 22 {
+                // 开了格内色号就每格都写：免费预览缩小单豆后也不再整页没字。
+                if showCodes {
                     let attributes: [NSAttributedString.Key: Any]
                     if let cached = codeAttributesByColor[bead.rgb] {
                         attributes = cached
@@ -476,31 +495,16 @@ enum BeadArtworkRenderer {
 
     // MARK: - 坐标轴
 
-    /// 坐标标号的排版：字号 + **每隔几格标一次**。
-    ///
-    /// 字号先按 H5 的口径取（格宽的 42%，下限 16pt），再压到「一格装得下」。
-    /// 这一步不能少：格子被缩小导出时（`pickMetrics` 会把 `cell` 压到 20 以下）
-    /// 字号不跟着缩，相邻的标号就会叠在一起 —— 看起来就是「坐标文字比格子还大」。
-    ///
-    /// 压到看不清（< 11pt）就不再继续缩了：字号定在 11pt，改成跳格标号，刻度短线
-    /// 仍然每格都画。跳格从本区域第一格起算，所以每块板的起始行列永远有号。
-    private static func axisLabeling(cell: CGFloat, widest: String) -> (font: CGFloat, step: Int) {
-        /// 再小就不值得印了，宁少标几个（标号取每格中心，跳格不会错位）。
-        let readable: CGFloat = 11
-        let ideal = max(16, cell * 0.42)
+    /// 坐标格内字号：压到一格装得下，每格都标。
+    private static func axisFontSize(cell: CGFloat, widest: String) -> CGFloat {
+        let ideal = max(10, cell * 0.42)
         let idealWidth = labelWidth(widest, size: ideal)
         let fitting = min(
             ideal,
-            // 行高约 1.2×字号，留一点行距：一格 ≤ 0.72 格高
             cell * 0.72,
-            // 最宽的标号（位数列号 / 行号）不能顶到相邻格
             idealWidth > 0 ? ideal * cell * 0.88 / idealWidth : ideal
         )
-        guard fitting < readable else { return (fitting, 1) }
-
-        let byHeight = Int(ceil(readable * 1.25 / max(1, cell)))
-        let byWidth = Int(ceil(labelWidth(widest, size: readable) / max(1, cell * 0.9)))
-        return (readable, max(1, byHeight, byWidth))
+        return max(5, fitting)
     }
 
     private static func labelWidth(_ text: String, size: CGFloat) -> CGFloat {
@@ -509,6 +513,7 @@ enum BeadArtworkRenderer {
             .width
     }
 
+    /// 四边各画一圈与豆格同大的坐标格，紧贴图案；四角空格补齐边框。
     private static func drawAxis(
         grid: BeadGrid,
         rect: GridRect,
@@ -516,52 +521,82 @@ enum BeadArtworkRenderer {
         origin: CGPoint,
         cell: Int,
         axisTop: CGFloat,
-        axisLeft: CGFloat
+        axisBottom: CGFloat,
+        axisLeft: CGFloat,
+        axisRight: CGFloat
     ) {
         _ = grid
+        _ = axisTop
+        _ = axisBottom
         _ = axisLeft
+        _ = axisRight
         let cellSize = CGFloat(cell)
-        // 列号取位数列（最后一个），行号取位行号：它们的宽度决定字号能有多大。
-        let columns = axisLabeling(cell: cellSize, widest: "\(rect.x0 + rect.width)")
-        let rows = axisLabeling(cell: cellSize, widest: "\(rect.y0 + rect.height)")
+        let patternW = CGFloat(rect.width) * cellSize
+        let patternH = CGFloat(rect.height) * cellSize
+        let colFont = axisFontSize(cell: cellSize, widest: "\(rect.x0 + rect.width)")
+        let rowFont = axisFontSize(cell: cellSize, widest: "\(rect.y0 + rect.height)")
         let columnAttributes: [NSAttributedString.Key: Any] = [
-            .font: UIFont.systemFont(ofSize: columns.font, weight: .regular),
-            .foregroundColor: UIColor(white: 0.2, alpha: 1),
+            .font: UIFont.systemFont(ofSize: colFont, weight: .medium),
+            .foregroundColor: UIColor(white: 0.22, alpha: 1),
         ]
         let rowAttributes: [NSAttributedString.Key: Any] = [
-            .font: UIFont.systemFont(ofSize: rows.font, weight: .regular),
-            .foregroundColor: UIColor(white: 0.2, alpha: 1),
+            .font: UIFont.systemFont(ofSize: rowFont, weight: .medium),
+            .foregroundColor: UIColor(white: 0.22, alpha: 1),
         ]
-        // 刻度短线，与 H5 一致：列号下方 1×4、行号右侧 4×1，极浅灰。
-        // 短线**每格都画**（标号可以跳格，刻度不能跳，否则看不出格数）。
-        ctx.setFillColor(UIColor(white: 0, alpha: 0.08).cgColor)
 
-        for i in stride(from: 0, to: rect.width, by: columns.step) {
-            let text = "\(rect.x0 + i + 1)" as NSString
-            let size = text.size(withAttributes: columnAttributes)
-            let cx = origin.x + CGFloat(i) * cellSize + cellSize / 2
+        func strokeCell(_ box: CGRect) {
+            ctx.setStrokeColor(gridColor.cgColor)
+            ctx.setLineWidth(1)
+            ctx.stroke(box.insetBy(dx: 0.5, dy: 0.5))
+        }
+
+        func fillAxisCell(_ box: CGRect) {
+            ctx.setFillColor(UIColor(white: 0.97, alpha: 1).cgColor)
+            ctx.fill(box)
+            strokeCell(box)
+        }
+
+        func drawCentered(_ text: NSString, in box: CGRect, attributes: [NSAttributedString.Key: Any]) {
+            let size = text.size(withAttributes: attributes)
             text.draw(
-                at: CGPoint(x: cx - size.width / 2, y: origin.y - axisTop / 2 - size.height / 2 - 1),
-                withAttributes: columnAttributes
+                at: CGPoint(x: box.midX - size.width / 2, y: box.midY - size.height / 2),
+                withAttributes: attributes
             )
         }
+
+        // 上 / 下：与每一列对齐
         for i in 0..<rect.width {
-            let cx = origin.x + CGFloat(i) * cellSize + cellSize / 2
-            ctx.fill(CGRect(x: cx - 0.5, y: origin.y - 2, width: 1, height: 4))
+            let x = origin.x + CGFloat(i) * cellSize
+            let top = CGRect(x: x, y: origin.y - cellSize, width: cellSize, height: cellSize)
+            let bottom = CGRect(x: x, y: origin.y + patternH, width: cellSize, height: cellSize)
+            fillAxisCell(top)
+            fillAxisCell(bottom)
+            let label = "\(rect.x0 + i + 1)" as NSString
+            drawCentered(label, in: top, attributes: columnAttributes)
+            drawCentered(label, in: bottom, attributes: columnAttributes)
         }
 
-        for j in stride(from: 0, to: rect.height, by: rows.step) {
-            let text = "\(rect.y0 + j + 1)" as NSString
-            let size = text.size(withAttributes: rowAttributes)
-            let cy = origin.y + CGFloat(j) * cellSize + cellSize / 2
-            text.draw(
-                at: CGPoint(x: origin.x - 8 - size.width, y: cy - size.height / 2),
-                withAttributes: rowAttributes
-            )
-        }
+        // 左 / 右：与每一行对齐
         for j in 0..<rect.height {
-            let cy = origin.y + CGFloat(j) * cellSize + cellSize / 2
-            ctx.fill(CGRect(x: origin.x - 2, y: cy - 0.5, width: 4, height: 1))
+            let y = origin.y + CGFloat(j) * cellSize
+            let left = CGRect(x: origin.x - cellSize, y: y, width: cellSize, height: cellSize)
+            let right = CGRect(x: origin.x + patternW, y: y, width: cellSize, height: cellSize)
+            fillAxisCell(left)
+            fillAxisCell(right)
+            let label = "\(rect.y0 + j + 1)" as NSString
+            drawCentered(label, in: left, attributes: rowAttributes)
+            drawCentered(label, in: right, attributes: rowAttributes)
+        }
+
+        // 四角空格，把边框接成一圈
+        let corners = [
+            CGRect(x: origin.x - cellSize, y: origin.y - cellSize, width: cellSize, height: cellSize),
+            CGRect(x: origin.x + patternW, y: origin.y - cellSize, width: cellSize, height: cellSize),
+            CGRect(x: origin.x - cellSize, y: origin.y + patternH, width: cellSize, height: cellSize),
+            CGRect(x: origin.x + patternW, y: origin.y + patternH, width: cellSize, height: cellSize),
+        ]
+        for box in corners {
+            fillAxisCell(box)
         }
     }
 
@@ -575,8 +610,8 @@ enum BeadArtworkRenderer {
     ) {
         let sw = metrics.sw
         let swR = metrics.swR
-        let codeFont = UIFont.systemFont(ofSize: max(20, round(sw * 0.42)), weight: .bold)
-        let countFont = UIFont.systemFont(ofSize: max(16, round(sw * 0.32)), weight: .semibold)
+        let codeFont = UIFont.systemFont(ofSize: max(8, round(sw * 0.42)), weight: .bold)
+        let countFont = UIFont.systemFont(ofSize: max(7, round(sw * 0.32)), weight: .semibold)
         let strokeW = max(1, round(sw * 0.02))
 
         for (index, item) in usage.enumerated() {
