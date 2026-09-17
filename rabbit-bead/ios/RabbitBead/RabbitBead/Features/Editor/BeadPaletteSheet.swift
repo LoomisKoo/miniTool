@@ -3,7 +3,7 @@ import SwiftUI
 
 /// 选择类弹层的单行选项：标题在左、说明并在行尾，选中行用主色 + 勾。
 ///
-/// 说明不再单独占一行，行高固定 44pt，列表比系统默认样式紧凑不少。
+/// 说明不再单独占一行，行高固定 48pt，列表比系统默认样式紧凑不少。
 struct BeadSheetOptionRow: View {
     let title: String
     let detail: String
@@ -30,6 +30,17 @@ struct BeadSheetOptionRow: View {
             }
             .padding(.horizontal, 16)
             .frame(height: 48)
+            .background(
+                RoundedRectangle(cornerRadius: BeadRadius.md, style: .continuous)
+                    .fill(isSelected ? BeadTheme.accentSoft : BeadTheme.canvas)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: BeadRadius.md, style: .continuous)
+                    .strokeBorder(
+                        isSelected ? BeadTheme.primary.opacity(0.35) : BeadTheme.hairline,
+                        lineWidth: 1
+                    )
+            }
             .contentShape(Rectangle())
         }
         .buttonStyle(BeadPressStyle(pressedScale: 0.99))
@@ -53,12 +64,14 @@ struct BeadPickerSheet<Content: View>: View {
                     content()
                 }
             }
-            .background(BeadTheme.canvas)
+            .background {
+                BeadTheme.parchmentGradient.ignoresSafeArea()
+            }
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") { dismiss() }
+                    Button("完成") { dismiss() }
                 }
             }
             .toolbarBackground(.visible, for: .navigationBar)
@@ -71,9 +84,8 @@ struct BeadPickerSheet<Content: View>: View {
 struct BeadSheetRowDivider: View {
     var body: some View {
         Rectangle()
-            .fill(BeadTheme.hairline)
-            .frame(height: 0.5)
-            .padding(.leading, 16)
+            .fill(Color.clear)
+            .frame(height: 8)
     }
 }
 
@@ -99,13 +111,15 @@ struct BeadPaletteSheet: View {
                     BeadSheetRowDivider()
                 }
             }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
         }
         .presentationDetents([.medium])
         .presentationDragIndicator(.visible)
     }
 }
 
-/// 拼板规格选择：三列卡片网格，尺寸醒目、说明在下，选中描边高亮。
+/// 拼板规格选择：三列尺寸网格，点选即关。
 struct BeadBoardSizeSheet: View {
     let selectedSize: Int
     let onSelect: (Int) -> Void
@@ -128,12 +142,14 @@ struct BeadBoardSizeSheet: View {
                 }
                 .padding(16)
             }
-            .background(BeadTheme.parchment)
+            .background {
+                BeadTheme.parchmentGradient.ignoresSafeArea()
+            }
             .navigationTitle("拼板规格")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") { dismiss() }
+                    Button("完成") { dismiss() }
                 }
             }
             .toolbarBackground(.visible, for: .navigationBar)
@@ -149,32 +165,25 @@ struct BeadBoardSizeSheet: View {
             onSelect(option.size)
             dismiss()
         } label: {
-            VStack(spacing: BeadSpace.xxs) {
-                Text(option.title)
-                    .beadBodyStrong()
-                    .monospacedDigit()
-                    .foregroundStyle(selected ? BeadTheme.primary : BeadTheme.ink)
-                Text(option.detail)
-                    .beadFinePrint()
-                    .foregroundStyle(BeadTheme.inkMuted48)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, BeadSpace.md)
-            .padding(.horizontal, 6)
-            .background(
-                BeadTheme.canvas,
-                in: RoundedRectangle(cornerRadius: BeadRadius.lg, style: .continuous)
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: BeadRadius.lg, style: .continuous)
-                    .strokeBorder(
-                        selected ? BeadTheme.primaryFocus : BeadTheme.hairline,
-                        lineWidth: selected ? 1.5 : 1
-                    )
-            }
+            Text(option.title)
+                .beadBodyStrong()
+                .monospacedDigit()
+                .foregroundStyle(selected ? BeadTheme.primary : BeadTheme.ink)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, BeadSpace.md)
+                .background(
+                    selected ? BeadTheme.accentSoft : BeadTheme.canvas,
+                    in: RoundedRectangle(cornerRadius: BeadRadius.md, style: .continuous)
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: BeadRadius.md, style: .continuous)
+                        .strokeBorder(
+                            selected ? BeadTheme.primaryFocus : BeadTheme.hairline,
+                            lineWidth: selected ? 1.5 : 1
+                        )
+                }
         }
         .buttonStyle(BeadPressStyle(pressedScale: 0.97))
+        .accessibilityLabel(option.title)
     }
 }

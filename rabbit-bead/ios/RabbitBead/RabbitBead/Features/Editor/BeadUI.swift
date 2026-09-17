@@ -3,106 +3,109 @@ import UIKit
 
 // MARK: - 颜色
 
-/// 设计令牌，对齐 Apple 设计语言（getdesign · apple）。
+/// 设计令牌：对齐 H5 `style.css`（清爽蓝 + soft UI）。
 ///
-/// 三条硬规则：
-/// 1. **只有一个交互色**：`primary`（Action Blue）。所有可点的东西都是它，
-///    不再有第二种彩色（红色只留给「删除」这类破坏性动作）。
-/// 2. **层级靠「面」不靠「阴影」**：浅底 / 卡面 / 深色块之间直接切换，卡片不加投影。
-/// 3. 全系统只有一处投影（`beadProductShadow`），只给「作品本身」（预览画布）用。
+/// 硬规则：
+/// 1. **品牌主色柔亮蓝** `primary`：主 CTA、强选中、链接。红只留给破坏性 / 渠道色。
+/// 2. **选中优先「淡蓝底 + 蓝边」**；实心蓝留给主推进 / 强选中 chip。
+/// 3. **面有厚度**：淡蓝氛围底 → 白卡（轻阴影）→ 内容。
 ///
-/// 每个色都是「浅色 / 深色」两态，跟随系统外观（`Color.adaptive`）。深色态照
-/// Apple 的路子走：页面退成纯黑、卡面抬到 `#1C1C1E`，交互蓝换更亮的 `#0071E3`，
-/// 文字从近黑翻成近白。
+/// 每个色都是「浅色 / 深色」两态（`Color.adaptive`）。
 enum BeadTheme {
-    // MARK: 交互色
-    /// 主交互色 Action Blue。所有链接、药丸按钮、选中态、focus 环的根。
-    static let primary = Color.adaptive(light: 0x0066CC, dark: 0x0071E3)
-    /// 选中 / 聚焦的略亮蓝。
-    static let primaryFocus = Color.adaptive(light: 0x0071E3, dark: 0x2997FF)
-    /// 深色面上的链接蓝（Action Blue 在深色块上会糊掉）。
-    static let primaryOnDark = Color(hex: 0x2997FF)
-    /// 主色实底上的文字。
+    // MARK: 交互色（= H5 --primary / --primary-deep / --primary-focus）
+    static let primary = Color.adaptive(light: 0x4B8EF0, dark: 0x6BA4F7)
+    static let primaryDeep = Color.adaptive(light: 0x3478E0, dark: 0x4B8EF0)
+    static let primaryFocus = Color.adaptive(light: 0x2F6FD6, dark: 0x7EB0E0)
+    static let primaryOnDark = Color(hex: 0x7EB0E0)
     static let onPrimary = Color.white
 
+    /// 主 CTA 渐变（对齐 H5 --primary-grad）。
+    static var primaryGradient: LinearGradient {
+        LinearGradient(
+            colors: [Color(hex: 0x6AA4F7), Color(hex: 0x3D7EF0), Color(hex: 0x3478E0)],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
     // MARK: 文字
-    /// 唯一的正文色（浅色近黑、深色近白）。
-    static let ink = Color.adaptive(light: 0x1D1D1F, dark: 0xF5F5F7)
-    /// 次级面上的正文。
-    static let inkMuted80 = Color.adaptive(light: 0x333333, dark: 0xD2D2D7)
-    /// 次要说明、失效文字、法务小字。
-    static let inkMuted48 = Color.adaptive(light: 0x7A7A7A, dark: 0x8E8E93)
-    /// 深色块上的次要文字。
-    static let bodyMuted = Color.adaptive(light: 0xCCCCCC, dark: 0xA1A1A6)
-    /// 深色块上的正文。
+    static let ink = Color.adaptive(light: 0x1F2937, dark: 0xF5F5F7)
+    static let inkMuted80 = Color.adaptive(light: 0x4B5563, dark: 0xD2D2D7)
+    static let inkMuted48 = Color.adaptive(light: 0x8B95A5, dark: 0x8E8E93)
+    static let bodyMuted = Color.adaptive(light: 0xC8C4BE, dark: 0xA1A1A6)
     static let onDark = Color.white
 
     // MARK: 面
-    /// 卡面 / 列表底。
     static let canvas = Color.adaptive(light: 0xFFFFFF, dark: 0x1C1C1E)
-    /// 页面底色（浅色羊皮纸 / 深色纯黑）。
-    static let parchment = Color.adaptive(light: 0xF5F5F7, dark: 0x000000)
-    /// 珍珠面：次级「幽灵」按钮的底，比页面底再抬一档。
-    static let pearl = Color.adaptive(light: 0xFAFAFC, dark: 0x2C2C2E)
-    /// Pro 卡底：浅色是**淡蓝**（在白底页面上拎出一块彩色面，而不是贴一块近黑），
-    /// 深色退成抬升卡面。
-    static let proTile = Color.adaptive(light: 0xEAF2FD, dark: 0x1C1C1E)
-    /// Pro 卡描边：浅色给一圈淡蓝边，深色几乎看不见。
-    static let proTileBorder = Color.adaptive(light: 0xD3E3F8, dark: 0x2C2C2E)
-    /// 深色块 1（浅色模式下是近黑整幅；深色模式退成抬升卡面）。
+    /// 页面底（= H5 --parchment）。
+    static let parchment = Color.adaptive(light: 0xE8EEF8, dark: 0x000000)
+    /// 页面氛围渐变（对齐 H5 --parchment-grad）。
+    ///
+    /// 两态都要给：浅色是柔蓝往白走，深色是比 `parchment`（纯黑）略抬一点的黑，
+    /// 让页面底和卡片（`canvas` = 0x1C1C1E）之间还留一层可辨的「氛围」，
+    /// 而不是整屏一块死黑。
+    ///
+    /// 早先这里只有三个裸的浅色，深色下不跟随系统 —— 页面底会一直是浅蓝。
+    static var parchmentGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color.adaptive(light: 0xD9E7FC, dark: 0x15171C),
+                Color.adaptive(light: 0xE8EEF8, dark: 0x000000),
+                Color.adaptive(light: 0xF2F5FA, dark: 0x0C0D10)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+    static let pearl = Color.adaptive(light: 0xF3F6FB, dark: 0x2C2C2E)
+    /// Pro 入口面：比 parchment 更饱和的柔蓝，不当灰卡、也不靠描边抢眼。
+    static let proTile = Color.adaptive(light: 0xD6E8FF, dark: 0x1A2740)
+    static var proTileGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color.adaptive(light: 0xE8F3FF, dark: 0x243552),
+                Color.adaptive(light: 0xD0E4FF, dark: 0x152338)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
     static let tile1 = Color.adaptive(light: 0x272729, dark: 0x1C1C1E)
-    /// 深色块 2：相邻深块之间的微差。
     static let tile2 = Color.adaptive(light: 0x2A2A2C, dark: 0x232325)
-    /// 深色块 3：栈底 / 播放器框。
     static let tile3 = Color.adaptive(light: 0x252527, dark: 0x171719)
-    /// 浮在作品上的半透明控制片基色（配 `ink` 图标）。
-    static let chipTranslucent = Color.adaptive(light: 0xD2D2D7, dark: 0x48484A)
-    /// 浮层的实底（提示条）：两边都配白字，所以深色模式不能跟着 `ink` 变白。
-    static let overlaySurface = Color.adaptive(light: 0x1D1D1F, dark: 0x3A3A3C)
-    /// 3D 底板（豆插在上面的塑料板）。
+    static let chipTranslucent = Color.adaptive(light: 0xD8E0EC, dark: 0x48484A)
+    static let overlaySurface = Color.adaptive(light: 0x1F2937, dark: 0x3A3A3C)
     static let plate = Color.adaptive(light: 0x232329, dark: 0x3A3A3C)
 
     // MARK: 线
-    /// 次级按钮的「环」，几乎看不见的柔和边。
-    static let dividerSoft = Color.adaptive(light: 0xF0F0F0, dark: 0x2C2C2E)
-    /// 卡片 / 胶囊的 1px 细边。
-    static let hairline = Color.adaptive(light: 0xE0E0E0, dark: 0x38383A)
-    /// 色块描边：浅色压暗、深色提亮，否则深色下小色块的边缘会糊掉。
+    static let dividerSoft = Color.adaptive(light: 0xE8EEF7, dark: 0x2C2C2E)
+    static let hairline = Color.adaptive(light: 0xDCE3EE, dark: 0x38383A)
     static let swatchStroke = Color.adaptive(
-        light: 0x000000, dark: 0xFFFFFF,
+        light: 0x1F2937, dark: 0xFFFFFF,
         lightAlpha: 0.12, darkAlpha: 0.20
     )
-    /// 更淡的色块描边（叠色点、缩略图这类更小的块）。
     static let swatchStrokeSoft = Color.adaptive(
-        light: 0x000000, dark: 0xFFFFFF,
+        light: 0x1F2937, dark: 0xFFFFFF,
         lightAlpha: 0.08, darkAlpha: 0.16
     )
 
     // MARK: 语义别名
-    /// 页面底色。
     static let background = parchment
-    /// 卡片 / 弹层底色。
     static let surface = canvas
-    /// 预览框底 + 空格豆。比页面底略抬一档，让「图纸区域」自成一块。
-    static let viewport = Color.adaptive(light: 0xE5E5EA, dark: 0x1C1C1E)
-    /// 主色别名。
+    /// 预览框底（= H5 --viewport）。
+    static let viewport = Color.adaptive(light: 0xE4EAF3, dark: 0x1C1C1E)
+    /// 裁切视口底（= H5 #E5EAF2）。
+    static let cropSurface = Color.adaptive(light: 0xE5EAF2, dark: 0x1C1C1E)
     static let accent = primary
-    /// 主色淡底（选中行的浅底）。深色模式要更实一点才看得出来。
     static var accentSoft: Color {
-        Color.adaptive(light: 0x0066CC, dark: 0x0A84FF).opacity(0.14)
+        Color.adaptive(light: 0x4B8EF0, dark: 0x6BA4F7).opacity(0.12)
     }
-    /// 次要文字。
     static let muted = inkMuted48
-    /// 分割线。
     static let separator = hairline
-    /// 中性胶囊底（未选中 chip、输入框）。
-    static let fill = Color.adaptive(light: 0xF0F0F2, dark: 0x2C2C2E)
-    /// 更浅的中性底（空状态、占位图）。
-    static let subtleFill = Color.adaptive(light: 0xF5F5F7, dark: 0x1C1C1E)
-    /// 破坏性动作（删除 / 清零）。
-    static let danger = Color.adaptive(light: 0xD70015, dark: 0xFF453A)
-    /// 图纸格线。深色下压到中灰，压在浅色豆和深色底上都还能看见。
-    static let gridLine = Color.adaptive(light: 0xC7C7CC, dark: 0x8E8E93)
+    static let fill = Color.adaptive(light: 0xE8EEF7, dark: 0x2C2C2E)
+    static let subtleFill = Color.adaptive(light: 0xEEF2F8, dark: 0x1C1C1E)
+    static let danger = Color.adaptive(light: 0xE5484D, dark: 0xFF6B6B)
+    static let gridLine = Color.adaptive(light: 0xC9C4BC, dark: 0x8E8E93)
 }
 
 extension Color {
@@ -186,12 +189,13 @@ extension RGB8 {
 
 // MARK: - 尺度
 
-/// 圆角阶梯：8 给紧凑工具、18 给卡片、药丸给一切「动作」。
+/// 圆角阶梯：对齐 H5 —— 控件 10、内容块 14、卡片 20。
 enum BeadRadius {
-    static let xs: CGFloat = 5
-    static let sm: CGFloat = 8
-    static let md: CGFloat = 11
-    static let lg: CGFloat = 18
+    static let xs: CGFloat = 8
+    static let sm: CGFloat = 10
+    static let md: CGFloat = 14
+    static let lg: CGFloat = 20
+    static let xl: CGFloat = 24
     static let pill: CGFloat = 9999
 }
 
@@ -293,10 +297,21 @@ extension View {
         font(.system(size: size, weight: weight)).monospacedDigit()
     }
 
-    /// 全系统唯一投影：只给「作品本身」（预览画布里的图纸）压在台面上用。
-    /// 卡片、按钮、文字都不加。
+    /// 作品预览投影。
     func beadProductShadow() -> some View {
-        shadow(color: .black.opacity(0.22), radius: 15, x: 3, y: 5)
+        shadow(color: .black.opacity(0.12), radius: 14, x: 0, y: 6)
+            .shadow(color: Color(hex: 0x2F5A96).opacity(0.08), radius: 10, x: 0, y: 4)
+    }
+
+    /// 卡片轻阴影（对齐 H5 --shadow-card）。
+    func beadCardShadow() -> some View {
+        shadow(color: Color(hex: 0x2F5A96).opacity(0.06), radius: 2, x: 0, y: 2)
+            .shadow(color: Color(hex: 0x2F5A96).opacity(0.14), radius: 14, x: 0, y: 8)
+    }
+
+    /// 主按钮色影。
+    func beadPrimaryShadow() -> some View {
+        shadow(color: Color(hex: 0x3478E0).opacity(0.32), radius: 8, x: 0, y: 4)
     }
 }
 
@@ -315,15 +330,16 @@ struct BeadPressStyle: ButtonStyle {
 
 // MARK: - 按钮
 
-/// 按钮语法只有四种，别再造第五种。
+/// 按钮语法只有四种。
+/// 工具 / 辅助用圆角矩形；主 CTA 才用胶囊。
 enum BeadButtonKind {
-    /// 蓝实底药丸：一件事的主入口（导出、解锁、保存）。
+    /// 渐变蓝胶囊：本屏主推进。
     case primary
-    /// 蓝描边药丸：与主按钮并排的第二个动作。
+    /// 淡蓝底 + 蓝字圆角矩形：次要确认。
     case ghost
-    /// 深色小方块：导航级工具动作（返回、完成）。
+    /// 深色小方块：导航级工具。
     case utility
-    /// 浅灰胶囊：列表内次级动作、内联小按钮。
+    /// 浅底圆角矩形：取消 / 重置 / 辅助。
     case pearl
 }
 
@@ -340,7 +356,7 @@ struct BeadButton: View {
             HStack(spacing: 6) {
                 if let systemImage {
                     Image(systemName: systemImage)
-                        .font(.system(size: kind == .utility ? 12 : 15, weight: .semibold))
+                        .font(.system(size: kind == .utility ? 12 : 13, weight: .semibold))
                 }
                 Text(title)
                     .lineLimit(1)
@@ -357,51 +373,94 @@ private struct BeadButtonLabelStyle: ViewModifier {
     let kind: BeadButtonKind
     let fullWidth: Bool
 
+    /// 全宽 CTA（付费墙等）要更敦实；工具条小钮保持 28。
+    private var height: CGFloat { fullWidth ? 48 : 28 }
+    private var fontSize: CGFloat { fullWidth ? 16 : 12 }
+    private var corner: CGFloat { fullWidth ? BeadRadius.md : BeadRadius.sm }
+
     func body(content: Content) -> some View {
         switch kind {
         case .primary:
             content
-                .beadBody()
+                .font(.system(size: fontSize, weight: .semibold))
                 .foregroundStyle(BeadTheme.onPrimary)
-                .padding(.horizontal, 22)
-                .frame(height: 44)
+                .padding(.horizontal, fullWidth ? 18 : 12)
+                .frame(height: height)
                 .frame(maxWidth: fullWidth ? .infinity : nil)
-                .background(BeadTheme.primary, in: Capsule())
+                .background(
+                    BeadTheme.primaryGradient,
+                    in: RoundedRectangle(cornerRadius: fullWidth ? BeadRadius.md : BeadRadius.pill, style: .continuous)
+                )
+                .beadPrimaryShadow()
         case .ghost:
             content
-                .beadBody()
-                .foregroundStyle(BeadTheme.primary)
-                .padding(.horizontal, 22)
-                .frame(height: 44)
+                .font(.system(size: fontSize, weight: fullWidth ? .medium : .regular))
+                .foregroundStyle(BeadTheme.primaryDeep)
+                .padding(.horizontal, fullWidth ? 18 : 12)
+                .frame(height: height)
                 .frame(maxWidth: fullWidth ? .infinity : nil)
-                .overlay { Capsule().strokeBorder(BeadTheme.primary, lineWidth: 1) }
+                .background(
+                    BeadTheme.accentSoft,
+                    in: RoundedRectangle(cornerRadius: corner, style: .continuous)
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: corner, style: .continuous)
+                        .strokeBorder(BeadTheme.primary.opacity(0.35), lineWidth: 1)
+                }
         case .utility:
             content
-                .beadCaption()
+                .beadFinePrint()
                 .foregroundStyle(BeadTheme.onDark)
-                .padding(.horizontal, 15)
-                .frame(height: 32)
+                .padding(.horizontal, 12)
+                .frame(height: 28)
                 .background(
                     BeadTheme.overlaySurface,
-                    in: RoundedRectangle(cornerRadius: BeadRadius.sm)
+                    in: RoundedRectangle(cornerRadius: BeadRadius.sm, style: .continuous)
                 )
         case .pearl:
             content
-                .beadCaption()
+                .font(.system(size: fontSize, weight: .regular))
                 .foregroundStyle(BeadTheme.inkMuted80)
-                .padding(.horizontal, 14)
-                .frame(height: 34)
+                .padding(.horizontal, fullWidth ? 18 : 10)
+                .frame(height: height)
                 .frame(maxWidth: fullWidth ? .infinity : nil)
-                .background(BeadTheme.pearl, in: RoundedRectangle(cornerRadius: BeadRadius.md))
+                .background(
+                    BeadTheme.pearl,
+                    in: RoundedRectangle(cornerRadius: corner, style: .continuous)
+                )
                 .overlay {
-                    RoundedRectangle(cornerRadius: BeadRadius.md)
+                    RoundedRectangle(cornerRadius: corner, style: .continuous)
                         .strokeBorder(BeadTheme.hairline, lineWidth: 1)
                 }
         }
     }
 }
 
-/// 浮在作品上的圆形控制片（复位 / 3D / 编辑）。
+/// 浮在作品上的圆形控制片**外观**（不含按钮行为）。
+///
+/// 单独拆出来是为了能当 `NavigationLink` 的 label：`BeadIconButton` 是 `Button`，
+/// 而「编辑」要的是 push 语义（见 `BeadEditorView`）。
+struct BeadIconChip: View {
+    let systemName: String
+    var isOn = false
+    var size: CGFloat = 40
+
+    var body: some View {
+        Image(systemName: systemName)
+            .font(.system(size: size * 0.4, weight: .semibold))
+            .foregroundStyle(isOn ? BeadTheme.onPrimary : BeadTheme.ink)
+            .frame(width: size, height: size)
+            .background {
+                if isOn {
+                    Circle().fill(BeadTheme.primaryGradient)
+                } else {
+                    Circle().fill(BeadTheme.chipTranslucent.opacity(0.64))
+                }
+            }
+    }
+}
+
+/// 浮在作品上的圆形控制片（复位 / 3D）。
 struct BeadIconButton: View {
     let systemName: String
     var isOn = false
@@ -411,14 +470,7 @@ struct BeadIconButton: View {
 
     var body: some View {
         Button(action: action) {
-            Image(systemName: systemName)
-                .font(.system(size: size * 0.4, weight: .semibold))
-                .foregroundStyle(isOn ? BeadTheme.onPrimary : BeadTheme.ink)
-                .frame(width: size, height: size)
-                .background(
-                    isOn ? BeadTheme.primary : BeadTheme.chipTranslucent.opacity(0.64),
-                    in: Circle()
-                )
+            BeadIconChip(systemName: systemName, isOn: isOn, size: size)
         }
         .buttonStyle(BeadPressStyle())
         .disabled(!enabled)
@@ -428,7 +480,7 @@ struct BeadIconButton: View {
 
 // MARK: - 卡片 & 分组
 
-/// 白色工具卡：1px 细边 + 18pt 圆角，**没有投影**。
+/// 白色工具卡：大圆角 + 轻阴影（soft UI）。
 struct BeadCard<Content: View>: View {
     var padding: CGFloat = BeadSpace.lg
     var background: Color = BeadTheme.canvas
@@ -442,10 +494,7 @@ struct BeadCard<Content: View>: View {
                 background,
                 in: RoundedRectangle(cornerRadius: BeadRadius.lg, style: .continuous)
             )
-            .overlay {
-                RoundedRectangle(cornerRadius: BeadRadius.lg, style: .continuous)
-                    .strokeBorder(BeadTheme.hairline, lineWidth: 1)
-            }
+            .beadCardShadow()
     }
 }
 
@@ -461,18 +510,13 @@ struct BeadGroup<Content: View>: View {
             BeadTheme.canvas,
             in: RoundedRectangle(cornerRadius: BeadRadius.lg, style: .continuous)
         )
-        .overlay {
-            RoundedRectangle(cornerRadius: BeadRadius.lg, style: .continuous)
-                .strokeBorder(BeadTheme.hairline, lineWidth: 1)
-        }
+        .beadCardShadow()
     }
 }
 
 /// Pro 入口卡（付费墙头部 /「我的」会员入口）。
 ///
-/// 浅色模式**不再是一整块近黑**：白底页面上压一块黑卡太重，把「一次买断」说得
-/// 像警告；改成淡蓝卡 + 淡蓝细边，靠「彩色面」而不是明度反转来拎出会员。
-/// 深色模式退成抬升卡面（黑底上再压黑块会糊成一片）。
+/// 柔蓝渐变面，无描边：靠色差从页面底里浮出来。
 struct BeadProTile<Content: View>: View {
     var padding: CGFloat = BeadSpace.lg
     @ViewBuilder var content: () -> Content
@@ -482,13 +526,10 @@ struct BeadProTile<Content: View>: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(padding)
             .background(
-                BeadTheme.proTile,
+                BeadTheme.proTileGradient,
                 in: RoundedRectangle(cornerRadius: BeadRadius.lg, style: .continuous)
             )
-            .overlay {
-                RoundedRectangle(cornerRadius: BeadRadius.lg, style: .continuous)
-                    .strokeBorder(BeadTheme.proTileBorder, lineWidth: 1)
-            }
+            .beadCardShadow()
     }
 }
 
@@ -518,12 +559,7 @@ struct BeadSectionLabel: View {
 
 // MARK: - 胶囊 chip
 
-/// 选项胶囊，对齐 Apple 的 configurator chip。
-///
-/// - `hugContent = false`（默认）：等分占满可用宽度，用于 chips 行。
-/// - `hugContent = true`：按内容自适应宽度，用于「40×40」「分板线」这类独立按钮。
-/// - `prominentWhenSelected = false`：选中态改成「珍珠底 + 蓝描边」，用于信息型 chip。
-/// - `locked = true`：没买断 Pro 时给功能 chip 挂一把小锁（点了会弹付费墙）。
+/// 选项芯片：圆角矩形（不是胶囊）。
 struct BeadChip: View {
     let title: String
     var selected = false
@@ -534,6 +570,13 @@ struct BeadChip: View {
     var locked = false
     var action: () -> Void
 
+    private var shape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: BeadRadius.sm, style: .continuous)
+    }
+
+    private var softSelected: Bool { selected && !prominentWhenSelected }
+    private var prominentSelected: Bool { selected && prominentWhenSelected }
+
     var body: some View {
         Button(action: action) {
             HStack(spacing: 4) {
@@ -543,43 +586,46 @@ struct BeadChip: View {
                         .opacity(0.8)
                 }
                 Text(title)
-                    .font(.system(size: compact ? 12 : 14, weight: selected ? .semibold : .regular))
-                    .tracking(-0.224)
+                    .font(.system(size: compact ? 11 : 12, weight: .regular))
+                    .tracking(-0.12)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
             }
             .foregroundStyle(foreground)
-            .padding(.horizontal, compact ? 10 : 16)
-            .frame(height: compact ? 28 : 34)
+            .padding(.horizontal, compact ? 8 : 10)
+            .frame(height: compact ? 26 : 28)
             .frame(maxWidth: hugContent ? nil : .infinity)
-            .background(background, in: Capsule())
+            .background { chipBackground }
+            .clipShape(shape)
             .overlay {
-                Capsule().strokeBorder(border, lineWidth: highlighted ? 1.5 : 1)
+                // 始终保持1pt边框宽度，避免选中时布局跳动
+                shape.strokeBorder(border, lineWidth: 1)
             }
         }
         .buttonStyle(BeadPressStyle(pressedScale: 0.96))
     }
 
-    private var highlighted: Bool {
-        selected && !prominentWhenSelected
-    }
-
-    private var background: Color {
-        if selected {
-            return prominentWhenSelected ? BeadTheme.primary : BeadTheme.pearl
+    @ViewBuilder
+    private var chipBackground: some View {
+        if prominentSelected {
+            shape.fill(BeadTheme.primaryGradient)
+        } else if softSelected {
+            shape.fill(BeadTheme.accentSoft)
+        } else {
+            shape.fill(BeadTheme.pearl)
         }
-        return BeadTheme.pearl
     }
 
     private var foreground: Color {
         if selected {
-            return prominentWhenSelected ? BeadTheme.onPrimary : BeadTheme.primary
+            return prominentWhenSelected ? BeadTheme.onPrimary : BeadTheme.primaryDeep
         }
         return BeadTheme.inkMuted80
     }
 
     private var border: Color {
-        if highlighted { return BeadTheme.primaryFocus }
+        if softSelected { return BeadTheme.primary }
+        if prominentSelected { return .clear }
         return BeadTheme.hairline
     }
 }
@@ -597,7 +643,7 @@ struct BeadSliderRow: View {
             Text(label)
                 .beadCaption()
                 .foregroundStyle(BeadTheme.inkMuted80)
-                .frame(width: 36, alignment: .leading)
+                .frame(width: 48, alignment: .leading)
             Slider(
                 value: Binding(
                     get: { Double(value) },
@@ -627,7 +673,7 @@ struct BeadToolRow<Content: View>: View {
             Text(label)
                 .beadCaption()
                 .foregroundStyle(BeadTheme.inkMuted80)
-                .frame(width: 36, alignment: .leading)
+                .frame(width: 48, alignment: .leading)
             Spacer(minLength: 0)
             content()
         }

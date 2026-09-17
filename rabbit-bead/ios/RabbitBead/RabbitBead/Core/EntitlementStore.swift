@@ -42,14 +42,20 @@ final class EntitlementStore {
     }
 
     func requestPaywall() {
-        showPaywall = true
+        // 使用 DispatchQueue 确保在下一个运行循环中更新状态，避免与当前视图更新冲突
+        DispatchQueue.main.async { [weak self] in
+            self?.showPaywall = true
+        }
     }
 
     /// 已是 Pro 返回 true；否则弹出付费墙并返回 false。
     @discardableResult
     func requirePro() -> Bool {
         if isPro { return true }
-        showPaywall = true
+        // 使用 DispatchQueue 确保在下一个运行循环中更新状态，避免与当前视图更新冲突
+        DispatchQueue.main.async { [weak self] in
+            self?.showPaywall = true
+        }
         return false
     }
 

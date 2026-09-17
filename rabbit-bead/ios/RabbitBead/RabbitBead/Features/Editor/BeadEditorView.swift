@@ -23,34 +23,27 @@ struct BeadEditorView: View {
     @State private var showBoardSize = false
     @State private var showColors = false
     @State private var showExport = false
-    /// 手绘编辑是**另一个页面**（`BeadEditView`，在同 tab 内整页换），这里只负责换。
-    @State private var showEdit = false
+    /// 手绘编辑是**另一页**（`BeadEditView`），由预览条上的「编辑」用 `NavigationLink`
+    /// 推出去（目的地注册在 `BeadRootView` 的拼豆导航栈）。
     @State private var isExporting = false
     @State private var showSaveName = false
     @State private var saveNameDraft = ""
-    /// 参数面板默认收起，预览占更高；点「设置」展开。
-    @State private var showSettings = false
+    /// 参数面板默认展开，方便用户调整参数。
+    @State private var showSettings = true
     /// 复位请求：+1 让预览区重新适配
     @State private var resetToken = 0
 
     private var store: ProjectStore { ProjectStore.shared }
     private var entitlements: EntitlementStore { EntitlementStore.shared }
 
-    /// 展开/收起、切 3D、换页到编辑都走 `model.withLayoutAnimation` 发起（而不是
-    /// 自己 `withAnimation`）：它们都会改预览区高度，必须走同一条布局动画，预览区
-    /// 才能把「当帧容器尺寸」当成取景的唯一来源（见 `BeadPreviewCanvas`）。
+    /// 展开/收起、切 3D 都走 `model.withLayoutAnimation` 发起（而不是自己
+    /// `withAnimation`）：它们都会改预览区高度，必须走同一条布局动画，预览区才能把
+    /// 「当帧容器尺寸」当成取景的唯一来源（见 `BeadPreviewCanvas`）。
     ///
-    /// 手绘编辑不在这里：点「编辑」整页换成 `BeadEditView`（见 `openEdit()`）。
+    /// 手绘编辑不在这里：点「编辑」由 `NavigationLink` 推到 `BeadEditView`
+    /// （`BeadRootView` 里那条包在 `TabView` 外层的栈）。
     var body: some View {
-        ZStack {
-            if showEdit {
-                BeadEditView(model: model) { closeEdit() }
-                    .transition(.move(edge: .trailing))
-            } else {
-                editorContent
-                    .transition(.move(edge: .leading))
-            }
-        }
+        editorContent
         .sheet(isPresented: $showPalette) {
             BeadPaletteSheet(selectedId: model.settings.paletteId) { id in
                 model.selectPalette(id)
@@ -93,14 +86,14 @@ struct BeadEditorView: View {
             if model.messageOffersPro {
                 Button("去解锁") {
                     model.message = nil
-                    entitlements.requestPaywall()
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .milliseconds(280))
+                        entitlements.showPaywall = true
+                    }
                 }
             }
         } message: {
             Text(model.message ?? "")
-        }
-        .sheet(isPresented: paywallBinding) {
-            BeadPaywallView()
         }
         .alert("保存作品", isPresented: $showSaveName) {
             TextField("作品名称", text: $saveNameDraft)
@@ -149,7 +142,7 @@ struct BeadEditorView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background {
-            BeadTheme.parchment.ignoresSafeArea()
+            BeadTheme.parchmentGradient.ignoresSafeArea()
         }
     }
 
@@ -171,48 +164,79 @@ struct BeadEditorView: View {
 
     /// 空状态：一块**正方形**卡面就是入口。
     ///
-    /// 整块卡都能点，所以里面不再套一个蓝色药丸按钮 —— 那会让人以为只有药丸可点。
-    /// 「选择图片」只作为卡内的文案（配一个图标），点击热区由 `.contentShape` 铺满整块。
+    /// 只置 `showLibraryPicker`，真正的相册由根上的 `.photosPicker(isPresented:)` 弹出。
+    /// 不要在这里再嵌一层 `PhotosPicker`：和根上的共用 `$photoItem` 时，真机常出现
+    /// 「看得见卡、点了没反应」。
     private var uploadArea: some View {
-        // 外层用「撑满 + 居中」而不是上下各放一个 Spacer：Spacer 和方形卡都是
-        // 弹性尺寸，VStack 会把剩余高度三分，方形卡会被压矮（不再是正方形）。
-        Button {
-            showLibraryPicker = true
-        } label: {
-            // 普通 Button + `.photosPicker(isPresented:)`，**不要**把整块卡片做成
-            // `PhotosPicker` 的 label：label 版的点击判定在 Picker 内部，包一块自定义
-            // 卡片时命中区域不由我们决定，实测点了完全没反应。
-            VStack(spacing: BeadSpace.sm) {
-                Image(systemName: "photo.on.rectangle.angled")
-                    .font(.system(size: 30, weight: .light))
-                    .foregroundStyle(BeadTheme.primary)
-                Text("选择图片")
-                    .beadBodyStrong()
-                    .foregroundStyle(BeadTheme.ink)
-                Text("生成可拼的豆格图纸\n透明处理不铺豆")
-                    .beadFinePrint()
-                    .foregroundStyle(BeadTheme.inkMuted48)
-                    .multilineTextAlignment(.center)
+        GeometryReader { geo in
+            let side = min(geo.size.width, geo.size.height)
+            Button {
+                showLibraryPicker = true
+            } label: {
+                uploadCardLabel
+                    .frame(width: side, height: side)
             }
-            // 先铺满可用空间，再由 `aspectRatio` 收回成正方形（居中）。
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .aspectRatio(1, contentMode: .fit)
-            .background(
-                BeadTheme.canvas,
-                in: RoundedRectangle(cornerRadius: BeadRadius.lg, style: .continuous)
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: BeadRadius.lg, style: .continuous)
-                    .strokeBorder(
-                        BeadTheme.hairline,
-                        style: StrokeStyle(lineWidth: 1, dash: [6, 5])
-                    )
-            }
-            .contentShape(RoundedRectangle(cornerRadius: BeadRadius.lg, style: .continuous))
+            .buttonStyle(BeadPressStyle(pressedScale: 0.98))
+            .frame(width: side, height: side)
+            .beadCardShadow()
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         }
-        .buttonStyle(BeadPressStyle(pressedScale: 0.98))
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         .padding(.horizontal, BeadSpace.lg)
+    }
+
+    /// 选图卡面外观（热区由外层 Button 的固定正方形 frame 决定）。
+    private var uploadCardLabel: some View {
+        VStack(spacing: BeadSpace.sm) {
+            Image(systemName: "photo.on.rectangle.angled")
+                .font(.system(size: 30, weight: .light))
+                .foregroundStyle(BeadTheme.primary)
+            Text("选择图片")
+                .beadBodyStrong()
+                .foregroundStyle(BeadTheme.ink)
+            Text("生成可拼的豆格图纸\n透明处理不铺豆")
+                .beadFinePrint()
+                .foregroundStyle(BeadTheme.inkMuted48)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background {
+            RoundedRectangle(cornerRadius: BeadRadius.lg, style: .continuous)
+                .fill(
+                    // 卡面两态：浅色是白→极浅蓝（H5 upload-box）；深色抬到比页面底
+                    // 高一档的灰（页面底是近黑），否则「空状态卡」会糊进背景里、
+                    // 只剩一圈虚线浮着。这一档和 `canvas`（0x1C1C1E）同族。
+                    LinearGradient(
+                        colors: [
+                            Color.adaptive(light: 0xFFFFFF, dark: 0x222226),
+                            Color.adaptive(light: 0xF7FAFF, dark: 0x191A1D)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: BeadRadius.lg, style: .continuous)
+                        .fill(
+                            RadialGradient(
+                                colors: [
+                                    Color(hex: 0x6AA4F7).opacity(0.14),
+                                    Color.clear
+                                ],
+                                center: .top,
+                                startRadius: 0,
+                                endRadius: 180
+                            )
+                        )
+                }
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: BeadRadius.lg, style: .continuous)
+                .strokeBorder(
+                    BeadTheme.primary.opacity(0.45),
+                    style: StrokeStyle(lineWidth: 1.5, dash: [7, 5])
+                )
+        }
+        .contentShape(RoundedRectangle(cornerRadius: BeadRadius.lg, style: .continuous))
     }
 
     // MARK: - 预览框 + 预览工具条
@@ -233,16 +257,16 @@ struct BeadEditorView: View {
         }
     }
 
-    /// 左下分板翻页，右下视图工具（复位 / 编辑 / 3D）。
+    /// 左下分板翻页，右下视图工具（复位 / 3D）。
     private var previewBar: some View {
         HStack(spacing: BeadSpace.xs) {
             if model.boardCount > 1 {
-                HStack(spacing: 6) {
+                HStack(spacing: 8) {
                     pagerButton("chevron.left") { model.previousBoard() }
                     Text(model.boardLabel)
-                        .beadDigits(12, weight: .medium)
+                        .beadDigits(14, weight: .medium)
                         .foregroundStyle(BeadTheme.inkMuted48)
-                        .frame(width: 52)
+                        .frame(width: 56)
                     pagerButton("chevron.right") { model.nextBoard() }
                     if model.boardIndex >= 0 {
                         compactBarButton("全图".loc, kind: .neutral) {
@@ -254,35 +278,28 @@ struct BeadEditorView: View {
 
             Spacer(minLength: 0)
 
-            HStack(spacing: 6) {
-                BeadIconButton(systemName: "arrow.counterclockwise", size: 30) { resetView() }
+            HStack(spacing: 8) {
+                BeadIconButton(systemName: "arrow.counterclockwise", size: 36) { resetView() }
                     .accessibilityLabel("复位")
-                BeadIconButton(
-                    systemName: "paintbrush.pointed",
-                    size: 30
-                ) {
-                    openEdit()
-                }
-                .accessibilityLabel("编辑")
                 BeadIconButton(
                     systemName: "cube",
                     isOn: model.viewMode == .threeD,
-                    size: 30
+                    size: 36
                 ) {
                     model.toggleViewMode()
                 }
                 .accessibilityLabel("3D 预览")
             }
         }
-        .frame(minHeight: 30)
+        .frame(minHeight: 36)
     }
 
     private func pagerButton(_ systemName: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: systemName)
-                .font(.system(size: 12, weight: .semibold))
+                .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(BeadTheme.inkMuted80)
-                .frame(width: 30, height: 30)
+                .frame(width: 36, height: 36)
                 .background(
                     BeadTheme.pearl,
                     in: RoundedRectangle(cornerRadius: BeadRadius.sm, style: .continuous)
@@ -313,32 +330,59 @@ struct BeadEditorView: View {
         }
     }
 
-    /// 同一排：更多 · 裁切 · 重选 · 导出 · 保存。
+    /// 同一排：更多 · 裁切 · 编辑 · 重选 · 导出 · 保存。
     private var footerActions: some View {
-        HStack(spacing: 6) {
-            compactBarButton("更多".loc, kind: .neutral, isOn: showSettings) {
-                // 走模型的布局动画入口：预览区高度跟着变，得和「更多」面板同一条动画。
-                model.withLayoutAnimation {
-                    showSettings.toggle()
+        HStack(spacing: 8) {
+            // 左侧图标按钮组
+            HStack(spacing: 8) {
+                iconBarButton(systemName: "ellipsis", kind: .neutral, isOn: showSettings) {
+                    // 走模型的布局动画入口：预览区高度跟着变，得和「更多」面板同一条动画。
+                    model.withLayoutAnimation {
+                        showSettings.toggle()
+                    }
                 }
-            }
+                .accessibilityLabel("更多".loc)
 
-            compactBarButton("裁切".loc, kind: .neutral) {
-                model.openCrop()
-            }
+                iconBarButton(systemName: "crop", kind: .neutral) {
+                    model.openCrop()
+                }
+                .accessibilityLabel("裁切".loc)
 
-            compactBarButton("重选".loc, kind: .neutral) {
-                showLibraryPicker = true
+                // 编辑按钮：推到 `BeadEditView`
+                NavigationLink(value: BeadRoute.handEdit) {
+                    Image(systemName: "paintbrush.pointed")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundStyle(BeadTheme.inkMuted80)
+                        .frame(width: 36, height: 36)
+                        .background {
+                            RoundedRectangle(cornerRadius: BeadRadius.sm, style: .continuous)
+                                .fill(BeadTheme.pearl)
+                        }
+                        .overlay {
+                            RoundedRectangle(cornerRadius: BeadRadius.sm, style: .continuous)
+                                .strokeBorder(BeadTheme.hairline, lineWidth: 1)
+                        }
+                }
+                .buttonStyle(BeadPressStyle(pressedScale: 0.96))
+                .accessibilityLabel("编辑".loc)
+
+                iconBarButton(systemName: "photo", kind: .neutral) {
+                    showLibraryPicker = true
+                }
+                .accessibilityLabel("重选".loc)
             }
 
             Spacer(minLength: 4)
 
-            compactBarButton("导出".loc, kind: .primary, enabled: model.canExport) {
-                showExport = true
-            }
+            // 右侧文字按钮组
+            HStack(spacing: 8) {
+                compactBarButton("导出".loc, kind: .primary, enabled: model.canExport) {
+                    showExport = true
+                }
 
-            compactBarButton("保存".loc, kind: .ghost, locked: saveNeedsPro) {
-                beginSave()
+                compactBarButton("保存".loc, kind: .ghost, locked: saveNeedsPro) {
+                    beginSave()
+                }
             }
         }
     }
@@ -347,6 +391,44 @@ struct BeadEditorView: View {
         case neutral
         case primary
         case ghost
+    }
+
+    /// 图标样式的底栏按钮（用于更多、裁切、重选）
+    private func iconBarButton(
+        systemName: String,
+        kind: CompactBarKind,
+        isOn: Bool = false,
+        enabled: Bool = true,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 16, weight: .medium))
+                .foregroundStyle(compactForeground(kind: kind, isOn: isOn))
+                .frame(width: 36, height: 36)
+                .background {
+                    RoundedRectangle(cornerRadius: BeadRadius.sm, style: .continuous)
+                        .fill(compactBackgroundStyle(kind: kind, isOn: isOn))
+                }
+                .overlay {
+                    // 始终显示边框，避免布局跳动
+                    RoundedRectangle(cornerRadius: BeadRadius.sm, style: .continuous)
+                        .strokeBorder(
+                            isOn ? Color.clear : BeadTheme.hairline,
+                            lineWidth: 1
+                        )
+                }
+                .shadow(
+                    color: (kind == .primary || (kind == .neutral && isOn))
+                        ? Color(hex: 0x3478E0).opacity(0.28)
+                        : .clear,
+                    radius: 6,
+                    y: 3
+                )
+        }
+        .buttonStyle(BeadPressStyle(pressedScale: 0.96))
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.36)
     }
 
     private func compactBarButton(
@@ -362,23 +444,30 @@ struct BeadEditorView: View {
                 if locked { lockBadge() }
                 Text(title)
             }
-            .beadCaption()
+            .font(.system(size: 14, weight: .medium))
             .foregroundStyle(compactForeground(kind: kind, isOn: isOn))
-            .padding(.horizontal, 10)
-            .frame(height: 30)
-            .background(
-                compactBackground(kind: kind, isOn: isOn),
-                in: RoundedRectangle(cornerRadius: BeadRadius.sm, style: .continuous)
-            )
+            .padding(.horizontal, 12)
+            .frame(height: 36)
+            .background {
+                RoundedRectangle(cornerRadius: BeadRadius.sm, style: .continuous)
+                    .fill(compactBackgroundStyle(kind: kind, isOn: isOn))
+            }
             .overlay {
                 if kind == .ghost || (kind == .neutral && !isOn) {
                     RoundedRectangle(cornerRadius: BeadRadius.sm, style: .continuous)
                         .strokeBorder(
-                            kind == .ghost ? BeadTheme.primary : BeadTheme.hairline,
+                            kind == .ghost ? BeadTheme.primary.opacity(0.35) : BeadTheme.hairline,
                             lineWidth: 1
                         )
                 }
             }
+            .shadow(
+                color: (kind == .primary || (kind == .neutral && isOn))
+                    ? Color(hex: 0x3478E0).opacity(0.28)
+                    : .clear,
+                radius: 6,
+                y: 3
+            )
         }
         .buttonStyle(BeadPressStyle(pressedScale: 0.96))
         .disabled(!enabled)
@@ -390,20 +479,22 @@ struct BeadEditorView: View {
         case .primary:
             return BeadTheme.onPrimary
         case .ghost:
-            return BeadTheme.primary
+            return BeadTheme.primaryDeep
         case .neutral:
             return isOn ? BeadTheme.onPrimary : BeadTheme.inkMuted80
         }
     }
 
-    private func compactBackground(kind: CompactBarKind, isOn: Bool) -> Color {
+    private func compactBackgroundStyle(kind: CompactBarKind, isOn: Bool) -> AnyShapeStyle {
         switch kind {
         case .primary:
-            return BeadTheme.primary
+            return AnyShapeStyle(BeadTheme.primaryGradient)
         case .ghost:
-            return .clear
+            return AnyShapeStyle(BeadTheme.accentSoft)
         case .neutral:
-            return isOn ? BeadTheme.primary : BeadTheme.pearl
+            return isOn
+                ? AnyShapeStyle(BeadTheme.primaryGradient)
+                : AnyShapeStyle(BeadTheme.pearl)
         }
     }
 
@@ -464,8 +555,11 @@ struct BeadEditorView: View {
                         .foregroundStyle(BeadTheme.primary)
                         .lineLimit(1)
                         .padding(.horizontal, 14)
-                        .frame(height: 34)
-                        .overlay { Capsule().strokeBorder(BeadTheme.primary, lineWidth: 1) }
+                        .frame(height: 28)
+                        .overlay { 
+                            RoundedRectangle(cornerRadius: BeadRadius.sm, style: .continuous)
+                                .strokeBorder(BeadTheme.primary, lineWidth: 1) 
+                        }
                     }
                     .buttonStyle(BeadPressStyle(pressedScale: 0.96))
 
@@ -591,29 +685,7 @@ struct BeadEditorView: View {
         }
     }
 
-    // MARK: - 换页（生成 ⇄ 手绘编辑）
-
-    /// 「编辑」按钮：整页换到 `BeadEditView`（不弹 cover，底部 tab 不消失）。
-    ///
-    /// 先把模型切到编辑态再换页：预览区是新挂载的，它 `onAppear` 里读一次
-    /// `viewMode` 定初始状态 —— 万一那会儿还是 3D，就会白跑一段 3D→2D 过渡。
-    private func openEdit() {
-        model.setEditing(true)
-        model.withLayoutAnimation {
-            showEdit = true
-        }
-    }
-
-    /// 「完成」：换回生成页。
-    ///
-    /// 立刻退出编辑态（而不是等 `BeadEditView.onDisappear`）：生成页是在同一次过渡里
-    /// 滑进来的，晚一步退出的话那一瞬间还能在新画布上落笔。
-    private func closeEdit() {
-        model.setEditing(false)
-        model.withLayoutAnimation {
-            showEdit = false
-        }
-    }
+    // MARK: - 载入
 
     private func load(_ item: PhotosPickerItem) async {
         defer { photoItem = nil }
@@ -635,13 +707,6 @@ struct BeadEditorView: View {
         Binding(
             get: { model.message != nil },
             set: { if !$0 { model.message = nil } }
-        )
-    }
-
-    private var paywallBinding: Binding<Bool> {
-        Binding(
-            get: { entitlements.showPaywall },
-            set: { entitlements.showPaywall = $0 }
         )
     }
 }

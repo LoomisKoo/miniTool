@@ -3,11 +3,11 @@ import SwiftUI
 
 /// 「我的」tab：豆子库存 + 作品列表（同一列表一起滑）。
 ///
-/// 点库存 / 作品写入根 `NavigationPath`，由外层 `NavigationStack` push 全屏页。
+/// 子页全用 `NavigationLink(value:)` 推出去（不用 `path.append`），目的地注册在
+/// `BeadRootView` 的 `navigationDestination(for: BeadRoute.self)`。
 struct BeadMineView: View {
     /// 仅用来读当前色卡 id（库存入口）；不在这里 load 作品。
     let model: BeadEditorModel
-    @Binding var path: NavigationPath
 
     @State private var renameTarget: BeadProject?
     @State private var renameDraft = ""
@@ -26,15 +26,9 @@ struct BeadMineView: View {
         .listStyle(.insetGrouped)
         .listSectionSpacing(14)
         .scrollContentBackground(.hidden)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                BeadIconButton(systemName: "info", size: 32) {
-                    path.append(BeadRoute.about)
-                }
-                .accessibilityLabel("关于".loc)
-            }
+        .background {
+            BeadTheme.parchmentGradient.ignoresSafeArea()
         }
-        .background(BeadTheme.parchment)
         .onAppear {
             store.loadIfNeeded()
             inventory.loadIfNeeded()
@@ -68,9 +62,6 @@ struct BeadMineView: View {
         } message: {
             Text(inventory.message ?? "")
         }
-        .sheet(isPresented: paywallBinding) {
-            BeadPaywallView()
-        }
     }
 
     // MARK: - Pro
@@ -91,16 +82,16 @@ struct BeadMineView: View {
                 }
                 .buttonStyle(BeadPressStyle(pressedScale: 0.98))
                 .listRowBackground(Color.clear)
-                .listRowInsets(EdgeInsets())
+                .listRowSeparator(.hidden)
+                // insetGrouped section 会裁切贴边内容；留出空隙，描边/阴影才不被切掉
+                .listRowInsets(EdgeInsets(top: 4, leading: 4, bottom: 4, trailing: 4))
             }
         } header: {
             BeadSectionLabel(text: "会员".loc)
         }
     }
 
-    /// Pro 入口卡：全页唯一一处彩色面，用来把「会员」这件事拎出来。
-    ///
-    /// 浅色模式下是淡蓝卡（白底上贴近黑块太重），深色模式才是抬升卡面。
+    /// Pro 入口：整卡可点，不再叠一颗 CTA 按钮。
     private var proCard: some View {
         BeadProTile {
             HStack(alignment: .center, spacing: BeadSpace.sm) {
@@ -110,49 +101,36 @@ struct BeadMineView: View {
                         .foregroundStyle(BeadTheme.ink)
                     Text("豆库限色 · 高清导出 · 去背景 · 无限作品")
                         .beadCaption()
-                        .foregroundStyle(BeadTheme.inkMuted48)
+                        .foregroundStyle(BeadTheme.inkMuted80)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                Spacer(minLength: 0)
-                // 商品没拉到时不能编一个价格出来：国际区价格由 ASC 定，写死「¥18」是错的。
-                Text(entitlements.product?.displayPrice ?? "解锁 Pro".loc)
-                    .beadBodyStrong()
-                    .foregroundStyle(BeadTheme.onPrimary)
-                    .padding(.horizontal, 18)
-                    .frame(height: 36)
-                    .background(BeadTheme.primary, in: Capsule())
+                Spacer(minLength: BeadSpace.sm)
+                // 有价才显示；国际区价格由 ASC 给，不写死。
+                if let price = entitlements.product?.displayPrice {
+                    Text(price)
+                        .beadBodyStrong()
+                        .foregroundStyle(BeadTheme.primaryDeep)
+                }
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(BeadTheme.primary.opacity(0.45))
             }
         }
-    }
-
-    private var paywallBinding: Binding<Bool> {
-        Binding(
-            get: { entitlements.showPaywall },
-            set: { entitlements.showPaywall = $0 }
-        )
     }
 
     // MARK: - 豆子库存
 
     private var inventorySection: some View {
         Section {
-            Button {
-                path.append(BeadRoute.inventory(paletteId: paletteId))
-            } label: {
-                HStack(spacing: 0) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        inventoryTitleRow
-                        inventoryDotsRow
-                    }
-                    .padding(.vertical, 2)
-                    Spacer(minLength: 0)
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(BeadTheme.hairline)
+            // 不用 Button + `path.append`：`NavigationLink(value:)` 才带系统行样式
+            // （点按高亮、disclosure 箭头、无障碍），也不需要自己补 chevron。
+            NavigationLink(value: BeadRoute.inventory(paletteId: paletteId)) {
+                VStack(alignment: .leading, spacing: 8) {
+                    inventoryTitleRow
+                    inventoryDotsRow
                 }
-                .contentShape(Rectangle())
+                .padding(.vertical, 2)
             }
-            .buttonStyle(.plain)
         } header: {
             BeadSectionLabel(text: "豆子库存".loc)
         }
@@ -202,18 +180,9 @@ struct BeadMineView: View {
                     .listRowBackground(Color.clear)
             } else {
                 ForEach(store.projects) { project in
-                    Button {
-                        path.append(BeadRoute.project(project))
-                    } label: {
-                        HStack(spacing: 0) {
-                            projectRow(project)
-                            Image(systemName: "chevron.right")
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(BeadTheme.hairline)
-                        }
-                        .contentShape(Rectangle())
+                    NavigationLink(value: BeadRoute.project(project)) {
+                        projectRow(project)
                     }
-                    .buttonStyle(.plain)
                     .swipeActions(edge: .trailing) {
                         Button(role: .destructive) {
                             deleteTarget = project
