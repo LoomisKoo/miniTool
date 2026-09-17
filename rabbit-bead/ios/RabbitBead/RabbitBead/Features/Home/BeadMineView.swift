@@ -22,11 +22,18 @@ struct BeadMineView: View {
             proSection
             inventorySection
             projectsSection
-            aboutSection
         }
         .listStyle(.insetGrouped)
         .listSectionSpacing(14)
         .scrollContentBackground(.hidden)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                BeadIconButton(systemName: "info", size: 32) {
+                    path.append(BeadRoute.about)
+                }
+                .accessibilityLabel("关于".loc)
+            }
+        }
         .background(BeadTheme.parchment)
         .onAppear {
             store.loadIfNeeded()
@@ -236,39 +243,6 @@ struct BeadMineView: View {
         }
     }
 
-    // MARK: - 关于
-
-    /// 底部一行「关于」。色卡数据的 MIT 许可要求版权声明 + 许可全文随副本分发，
-    /// 入口不能只藏在代码注释里。
-    private var aboutSection: some View {
-        Section {
-            Button {
-                path.append(BeadRoute.about)
-            } label: {
-                HStack(spacing: BeadSpace.xs) {
-                    Text("关于")
-                        .beadBody()
-                        .foregroundStyle(BeadTheme.ink)
-                    Spacer(minLength: 0)
-                    Text(BeadMineView.versionText)
-                        .beadFinePrint()
-                        .foregroundStyle(BeadTheme.inkMuted48)
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(BeadTheme.hairline)
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-        }
-    }
-
-    private static var versionText: String {
-        let info = Bundle.main.infoDictionary
-        let short = info?["CFBundleShortVersionString"] as? String ?? "—"
-        return short
-    }
-
     /// 双行：封面 + 名称 / 尺寸·豆宽·限色。
     private func projectRow(_ project: BeadProject) -> some View {
         HStack(spacing: BeadSpace.sm) {
@@ -356,7 +330,6 @@ struct BeadProjectEditorView: View {
         BeadEditorView(model: model, embedded: true)
             .navigationTitle(model.projectName)
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar(.hidden, for: .tabBar)
             .task {
                 guard !didLoad else { return }
                 didLoad = true

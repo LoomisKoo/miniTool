@@ -665,9 +665,43 @@ struct BeadCanvasStyle: Equatable {
     var showSeam: Bool
     var showCodes: Bool
 
+    init(showGrid: Bool, showSeam: Bool, showCodes: Bool) {
+        self.showGrid = showGrid
+        self.showSeam = showSeam
+        self.showCodes = showCodes
+    }
+
     init(_ settings: BeadSettings) {
-        showGrid = settings.showGrid
-        showSeam = settings.showSeam
-        showCodes = settings.showCodes
+        self.init(
+            showGrid: settings.showGrid,
+            showSeam: settings.showSeam,
+            showCodes: settings.showCodes
+        )
+    }
+
+    /// 放大镜用：格线恒开（放大的意义就是看清落在哪一格），
+    /// 色号跟着格宽走（见 `Bead2DRenderer` 的 `codeShowCell`）。分板线不画。
+    static let loupe = BeadCanvasStyle(showGrid: true, showSeam: false, showCodes: true)
+}
+
+// MARK: - 提示浮层
+
+/// 浮在作品上的提示胶囊（近黑底 + 白字，对齐 Apple 浮层控制片的明度关系）。
+struct BeadHintBanner: View {
+    let hint: String?
+
+    var body: some View {
+        if let hint {
+            Text(hint)
+                .font(.system(size: 14, weight: .semibold))
+                .tracking(-0.224)
+                .foregroundStyle(BeadTheme.onDark)
+                .padding(.horizontal, 18)
+                .padding(.vertical, 11)
+                .background(BeadTheme.overlaySurface, in: Capsule())
+                .padding(.bottom, BeadSpace.sm)
+                .transition(.opacity.combined(with: .move(edge: .bottom)))
+                .animation(.easeInOut(duration: 0.2), value: hint)
+        }
     }
 }

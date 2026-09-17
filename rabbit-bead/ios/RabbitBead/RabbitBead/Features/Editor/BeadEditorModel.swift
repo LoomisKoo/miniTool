@@ -774,10 +774,10 @@ final class BeadEditorModel {
 
     /// 进入/退出编辑。进入时清掉高亮，避免看不清真实颜色。
     ///
-    /// 只能在 2D 编辑：3D 下点编辑会先切回平面；进 3D 见 `toggleViewMode` 会清掉编辑态。
+    /// 只能在 2D 编辑：3D 下进编辑会先切回平面；切 3D 见 `toggleViewMode` 会清掉编辑态。
     ///
-    /// 用 `withAnimation` 包住：工具条显隐会改参数面板的高度，从而改预览区高度。
-    /// 没有这一步时预览框会在一帧内跳变，画布随即按新尺寸重算（看起来像闪一下）。
+    /// 用 `withAnimation` 包住：进编辑会顺带切回 2D（预览区换一层），页面本身也会换
+    /// （`BeadEditorView` 在生成页与 `BeadEditView` 之间换），不包的话这一帧会跳一下。
     func setEditing(_ on: Bool) {
         guard on == false || grid != nil else { return }
         withLayoutAnimation {

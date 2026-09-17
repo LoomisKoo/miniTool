@@ -45,6 +45,7 @@
 "分板线：关" = "Board lines: off";
 "分板线：开" = "Board lines: on";
 "分板逐个导出" = "One image per board";
+"列 %ld · 行 %ld" = "Col %1$ld · Row %2$ld";
 "删除" = "Delete";
 "删除作品？" = "Delete this project?";
 "加大方板" = "Extra-large square board";

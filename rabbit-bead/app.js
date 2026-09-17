@@ -3053,24 +3053,53 @@
     octx.drawImage(pattern, x0, y0);
 
     if (axes && pw > 0 && ph > 0) {
-      var axFont = Math.max(16, Math.round(cell * 0.42));
-      octx.font = axFont + 'px sans-serif';
+      // 字号先按格宽的 42% 取（下限 16px，与 H5 原口径一致），再压到「一格装得下」：
+      // 格子被缩小导出时（cell 会掉到 20 以下）字号不跟着缩，相邻标号就会叠在一起。
+      // 压到看不清（< 11px）就不再缩了 —— 改成跳格标号，刻度短线仍然每格都画。
+      var AX_READABLE = 11;
+      var axFont = function (size) { return size + 'px sans-serif'; };
+      var axWidth = function (text, size) {
+        octx.font = axFont(size);
+        return octx.measureText(text).width;
+      };
+      var axLabeling = function (widest) {
+        var ideal = Math.max(16, cell * 0.42);
+        var fit = Math.min(ideal, cell * 0.72);
+        var w0 = axWidth(widest, ideal);
+        if (w0 > 0) fit = Math.min(fit, ideal * cell * 0.88 / w0);
+        if (fit >= AX_READABLE) return { font: fit, step: 1 };
+        return {
+          font: AX_READABLE,
+          step: Math.max(1,
+            Math.ceil(AX_READABLE * 1.25 / Math.max(1, cell)),
+            Math.ceil(axWidth(widest, AX_READABLE) / Math.max(1, cell * 0.9)))
+        };
+      };
+      // 列号取位数列（最后一个）、行号取位行号：它们的宽度决定字号能有多大。
+      var colLabels = axLabeling(String(rect.x0 + pw));
+      var rowLabels = axLabeling(String(rect.y0 + ph));
       octx.textAlign = 'center';
       octx.textBaseline = 'middle';
       octx.fillStyle = '#333';
       var i;
       var j;
+      octx.font = axFont(colLabels.font);
+      for (i = 0; i < pw; i += colLabels.step) {
+        octx.fillText(String(rect.x0 + i + 1), x0 + i * cell + cell / 2, y0 - m.axisTop / 2 - 1);
+      }
       for (i = 0; i < pw; i++) {
         var colCx = x0 + i * cell + cell / 2;
-        octx.fillText(String(rect.x0 + i + 1), colCx, y0 - m.axisTop / 2 - 1);
         octx.fillStyle = 'rgba(0,0,0,0.08)';
         octx.fillRect(colCx - 0.5, y0 - 2, 1, 4);
         octx.fillStyle = '#333';
       }
       octx.textAlign = 'right';
+      octx.font = axFont(rowLabels.font);
+      for (j = 0; j < ph; j += rowLabels.step) {
+        octx.fillText(String(rect.y0 + j + 1), x0 - 8, y0 + j * cell + cell / 2);
+      }
       for (j = 0; j < ph; j++) {
         var rowCy = y0 + j * cell + cell / 2;
-        octx.fillText(String(rect.y0 + j + 1), x0 - 8, rowCy);
         octx.fillStyle = 'rgba(0,0,0,0.08)';
         octx.fillRect(x0 - 2, rowCy - 0.5, 4, 1);
         octx.fillStyle = '#333';

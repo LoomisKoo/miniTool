@@ -474,6 +474,41 @@ enum BeadArtworkRenderer {
         }
     }
 
+    // MARK: - 坐标轴
+
+    /// 坐标标号的排版：字号 + **每隔几格标一次**。
+    ///
+    /// 字号先按 H5 的口径取（格宽的 42%，下限 16pt），再压到「一格装得下」。
+    /// 这一步不能少：格子被缩小导出时（`pickMetrics` 会把 `cell` 压到 20 以下）
+    /// 字号不跟着缩，相邻的标号就会叠在一起 —— 看起来就是「坐标文字比格子还大」。
+    ///
+    /// 压到看不清（< 11pt）就不再继续缩了：字号定在 11pt，改成跳格标号，刻度短线
+    /// 仍然每格都画。跳格从本区域第一格起算，所以每块板的起始行列永远有号。
+    private static func axisLabeling(cell: CGFloat, widest: String) -> (font: CGFloat, step: Int) {
+        /// 再小就不值得印了，宁少标几个（标号取每格中心，跳格不会错位）。
+        let readable: CGFloat = 11
+        let ideal = max(16, cell * 0.42)
+        let idealWidth = labelWidth(widest, size: ideal)
+        let fitting = min(
+            ideal,
+            // 行高约 1.2×字号，留一点行距：一格 ≤ 0.72 格高
+            cell * 0.72,
+            // 最宽的标号（位数列号 / 行号）不能顶到相邻格
+            idealWidth > 0 ? ideal * cell * 0.88 / idealWidth : ideal
+        )
+        guard fitting < readable else { return (fitting, 1) }
+
+        let byHeight = Int(ceil(readable * 1.25 / max(1, cell)))
+        let byWidth = Int(ceil(labelWidth(widest, size: readable) / max(1, cell * 0.9)))
+        return (readable, max(1, byHeight, byWidth))
+    }
+
+    private static func labelWidth(_ text: String, size: CGFloat) -> CGFloat {
+        (text as NSString)
+            .size(withAttributes: [.font: UIFont.systemFont(ofSize: size, weight: .regular)])
+            .width
+    }
+
     private static func drawAxis(
         grid: BeadGrid,
         rect: GridRect,
@@ -486,32 +521,46 @@ enum BeadArtworkRenderer {
         _ = grid
         _ = axisLeft
         let cellSize = CGFloat(cell)
-        let font = UIFont.systemFont(ofSize: max(16, cellSize * 0.42), weight: .regular)
-        let attributes: [NSAttributedString.Key: Any] = [
-            .font: font,
+        // 列号取位数列（最后一个），行号取位行号：它们的宽度决定字号能有多大。
+        let columns = axisLabeling(cell: cellSize, widest: "\(rect.x0 + rect.width)")
+        let rows = axisLabeling(cell: cellSize, widest: "\(rect.y0 + rect.height)")
+        let columnAttributes: [NSAttributedString.Key: Any] = [
+            .font: UIFont.systemFont(ofSize: columns.font, weight: .regular),
             .foregroundColor: UIColor(white: 0.2, alpha: 1),
         ]
-        // 刻度短线，与 H5 一致：列号下方 1×4、行号右侧 4×1，极浅灰
+        let rowAttributes: [NSAttributedString.Key: Any] = [
+            .font: UIFont.systemFont(ofSize: rows.font, weight: .regular),
+            .foregroundColor: UIColor(white: 0.2, alpha: 1),
+        ]
+        // 刻度短线，与 H5 一致：列号下方 1×4、行号右侧 4×1，极浅灰。
+        // 短线**每格都画**（标号可以跳格，刻度不能跳，否则看不出格数）。
         ctx.setFillColor(UIColor(white: 0, alpha: 0.08).cgColor)
 
-        for i in 0..<rect.width {
+        for i in stride(from: 0, to: rect.width, by: columns.step) {
             let text = "\(rect.x0 + i + 1)" as NSString
-            let size = text.size(withAttributes: attributes)
+            let size = text.size(withAttributes: columnAttributes)
             let cx = origin.x + CGFloat(i) * cellSize + cellSize / 2
             text.draw(
                 at: CGPoint(x: cx - size.width / 2, y: origin.y - axisTop / 2 - size.height / 2 - 1),
-                withAttributes: attributes
+                withAttributes: columnAttributes
             )
+        }
+        for i in 0..<rect.width {
+            let cx = origin.x + CGFloat(i) * cellSize + cellSize / 2
             ctx.fill(CGRect(x: cx - 0.5, y: origin.y - 2, width: 1, height: 4))
         }
-        for j in 0..<rect.height {
+
+        for j in stride(from: 0, to: rect.height, by: rows.step) {
             let text = "\(rect.y0 + j + 1)" as NSString
-            let size = text.size(withAttributes: attributes)
+            let size = text.size(withAttributes: rowAttributes)
             let cy = origin.y + CGFloat(j) * cellSize + cellSize / 2
             text.draw(
                 at: CGPoint(x: origin.x - 8 - size.width, y: cy - size.height / 2),
-                withAttributes: attributes
+                withAttributes: rowAttributes
             )
+        }
+        for j in 0..<rect.height {
+            let cy = origin.y + CGFloat(j) * cellSize + cellSize / 2
             ctx.fill(CGRect(x: origin.x - 2, y: cy - 0.5, width: 4, height: 1))
         }
     }

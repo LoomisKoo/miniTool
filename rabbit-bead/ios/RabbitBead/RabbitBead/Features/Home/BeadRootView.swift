@@ -42,7 +42,6 @@ struct BeadRootView: View {
                         switch route {
                         case .inventory(let paletteId):
                             BeadInventoryView(paletteId: paletteId)
-                                .toolbar(.hidden, for: .tabBar)
                         case .project(let project):
                             BeadProjectEditorView(project: project)
                         case .about:

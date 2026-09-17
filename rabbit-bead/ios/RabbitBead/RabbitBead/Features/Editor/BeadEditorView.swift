@@ -22,8 +22,9 @@ struct BeadEditorView: View {
     @State private var showPalette = false
     @State private var showBoardSize = false
     @State private var showColors = false
-    @State private var showBrush = false
     @State private var showExport = false
+    /// 手绘编辑是**另一个页面**（`BeadEditView`，在同 tab 内整页换），这里只负责换。
+    @State private var showEdit = false
     @State private var isExporting = false
     @State private var showSaveName = false
     @State private var saveNameDraft = ""
@@ -35,33 +36,20 @@ struct BeadEditorView: View {
     private var store: ProjectStore { ProjectStore.shared }
     private var entitlements: EntitlementStore { EntitlementStore.shared }
 
-    /// 展开/收起、编辑条显隐、切 3D 都走 `model.withLayoutAnimation` 发起（而不是
+    /// 展开/收起、切 3D、换页到编辑都走 `model.withLayoutAnimation` 发起（而不是
     /// 自己 `withAnimation`）：它们都会改预览区高度，必须走同一条布局动画，预览区
     /// 才能把「当帧容器尺寸」当成取景的唯一来源（见 `BeadPreviewCanvas`）。
+    ///
+    /// 手绘编辑不在这里：点「编辑」整页换成 `BeadEditView`（见 `openEdit()`）。
     var body: some View {
-        VStack(spacing: 0) {
-            if model.hasGrid {
-                previewShell
-                    .padding(.horizontal, 16)
-                    .padding(.top, embedded ? 0 : 12)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-                settingsBlock
-                    .padding(.horizontal, 16)
-                    .padding(.top, BeadSpace.sm)
-                    .padding(.bottom, BeadSpace.md)
-            } else if model.isOpeningContent {
-                openingPlaceholder
+        ZStack {
+            if showEdit {
+                BeadEditView(model: model) { closeEdit() }
+                    .transition(.move(edge: .trailing))
             } else {
-                uploadArea
+                editorContent
+                    .transition(.move(edge: .leading))
             }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(BeadTheme.parchment)
-        .onChange(of: model.isEditing) { _, editing in
-            // 编辑与设置互斥：进手绘只出编辑条，收起设置参数。
-            guard editing else { return }
-            model.withLayoutAnimation { showSettings = false }
         }
         .sheet(isPresented: $showPalette) {
             BeadPaletteSheet(selectedId: model.settings.paletteId) { id in
@@ -79,15 +67,6 @@ struct BeadEditorView: View {
                 highlightedCode: model.highlightedCode
             ) { code in
                 model.highlightedCode = code
-            }
-        }
-        .sheet(isPresented: $showBrush) {
-            BeadBrushSheet(
-                palette: model.palette,
-                counts: model.usageCounts,
-                selectedCode: model.brushCode
-            ) { code in
-                model.setBrush(code)
             }
         }
         .sheet(isPresented: $showExport) {
@@ -146,6 +125,32 @@ struct BeadEditorView: View {
         )
         .task { ProjectStore.shared.loadIfNeeded() }
         .onDisappear { model.flushPendingSave() }
+    }
+
+    /// 生成页本体：预览（含 meta）→ 设置折叠条 → 导出/保存。
+    @ViewBuilder
+    private var editorContent: some View {
+        VStack(spacing: 0) {
+            if model.hasGrid {
+                previewShell
+                    .padding(.horizontal, 16)
+                    .padding(.top, embedded ? 0 : 12)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                settingsBlock
+                    .padding(.horizontal, 16)
+                    .padding(.top, BeadSpace.sm)
+                    .padding(.bottom, BeadSpace.md)
+            } else if model.isOpeningContent {
+                openingPlaceholder
+            } else {
+                uploadArea
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .background {
+            BeadTheme.parchment.ignoresSafeArea()
+        }
     }
 
     // MARK: - 空状态（选择图片）
@@ -215,7 +220,7 @@ struct BeadEditorView: View {
     private var previewShell: some View {
         VStack(spacing: 4) {
             BeadPreviewPane(model: model, resetToken: resetToken)
-                .overlay(alignment: .bottom) { hintBanner }
+                .overlay(alignment: .bottom) { BeadHintBanner(hint: model.hint) }
 
             Text(model.metaText)
                 .beadFinePrint()
@@ -225,23 +230,6 @@ struct BeadEditorView: View {
                 .padding(.top, 2)
 
             previewBar
-        }
-    }
-
-    /// 提示浮层。浮在作品上，用近黑胶囊 + 白字（对齐 Apple 浮层控制片的明度关系）。
-    @ViewBuilder
-    private var hintBanner: some View {
-        if let hint = model.hint {
-            Text(hint)
-                .font(.system(size: 14, weight: .semibold))
-                .tracking(-0.224)
-                .foregroundStyle(BeadTheme.onDark)
-                .padding(.horizontal, 18)
-                .padding(.vertical, 11)
-                .background(BeadTheme.overlaySurface, in: Capsule())
-                .padding(.bottom, BeadSpace.sm)
-                .transition(.opacity.combined(with: .move(edge: .bottom)))
-                .animation(.easeInOut(duration: 0.2), value: hint)
         }
     }
 
@@ -271,10 +259,9 @@ struct BeadEditorView: View {
                     .accessibilityLabel("复位")
                 BeadIconButton(
                     systemName: "paintbrush.pointed",
-                    isOn: model.isEditing,
                     size: 30
                 ) {
-                    model.setEditing(!model.isEditing)
+                    openEdit()
                 }
                 .accessibilityLabel("编辑")
                 BeadIconButton(
@@ -310,13 +297,10 @@ struct BeadEditorView: View {
 
     // MARK: - 设置折叠 + 底栏
 
-    /// 编辑条与设置参数互斥；底栏始终一行。
+    /// 设置面板：编辑（手绘）已经独立成一页，这里只剩生成参数。
     private var settingsBlock: some View {
         VStack(spacing: BeadSpace.xs) {
-            if model.isEditing {
-                editGroup
-                    .transition(.opacity.combined(with: .move(edge: .bottom)))
-            } else if showSettings {
+            if showSettings {
                 ScrollView {
                     paramsGroup
                 }
@@ -329,18 +313,13 @@ struct BeadEditorView: View {
         }
     }
 
-    /// 同一排：设置 · 裁切 · 重选 · 导出 · 保存。
+    /// 同一排：更多 · 裁切 · 重选 · 导出 · 保存。
     private var footerActions: some View {
         HStack(spacing: 6) {
-            compactBarButton("更多".loc, kind: .neutral, isOn: showSettings && !model.isEditing) {
+            compactBarButton("更多".loc, kind: .neutral, isOn: showSettings) {
                 // 走模型的布局动画入口：预览区高度跟着变，得和「更多」面板同一条动画。
                 model.withLayoutAnimation {
-                    if model.isEditing {
-                        model.setEditing(false)
-                        showSettings = true
-                    } else {
-                        showSettings.toggle()
-                    }
+                    showSettings.toggle()
                 }
             }
 
@@ -453,57 +432,7 @@ struct BeadEditorView: View {
             .opacity(0.85)
     }
 
-    /// 手绘工具条（H5 `#et-group`）。
-    private var editGroup: some View {
-        BeadGroup {
-            VStack(spacing: BeadSpace.xs) {
-                HStack(spacing: 6) {
-                    ForEach(EditTool.allCases) { tool in
-                        BeadChip(title: tool.label, selected: model.tool == tool) {
-                            model.setTool(tool)
-                        }
-                    }
-                    brushChip
-                }
-
-                HStack(spacing: 6) {
-                    BeadChip(title: "撤销".loc) { model.undo() }
-                        .opacity(model.canUndo ? 1 : 0.36)
-                        .disabled(!model.canUndo)
-                    BeadChip(title: "重做".loc) { model.redo() }
-                        .opacity(model.canRedo ? 1 : 0.36)
-                        .disabled(!model.canRedo)
-                    BeadChip(title: "清空手绘".loc) { model.clearHandEdits() }
-                }
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, BeadSpace.sm)
-        }
-    }
-
-    /// 当前画笔豆色，点开选色面板。
-    private var brushChip: some View {
-        Button {
-            showBrush = true
-        } label: {
-            HStack(spacing: 6) {
-                BeadSwatch(color: model.brush?.rgb.swiftUIColor ?? .clear, size: 15)
-                Text(model.brush?.code ?? "选色".loc)
-                    .beadCaption()
-                    .foregroundStyle(BeadTheme.inkMuted80)
-                    .monospacedDigit()
-                    .lineLimit(1)
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, 14)
-            .frame(height: 34)
-            .frame(maxWidth: .infinity)
-            .background(BeadTheme.pearl, in: Capsule())
-            .overlay { Capsule().strokeBorder(BeadTheme.hairline, lineWidth: 1) }
-        }
-        .buttonStyle(BeadPressStyle(pressedScale: 0.96))
-    }
-
+    /// 生成参数（H5 `#params-group`）。
     private var paramsGroup: some View {
         BeadGroup {
             VStack(alignment: .leading, spacing: BeadSpace.sm) {
@@ -659,6 +588,30 @@ struct BeadEditorView: View {
         resetToken += 1
         if model.viewMode == .threeD {
             model.showHint("已复位视角".loc)
+        }
+    }
+
+    // MARK: - 换页（生成 ⇄ 手绘编辑）
+
+    /// 「编辑」按钮：整页换到 `BeadEditView`（不弹 cover，底部 tab 不消失）。
+    ///
+    /// 先把模型切到编辑态再换页：预览区是新挂载的，它 `onAppear` 里读一次
+    /// `viewMode` 定初始状态 —— 万一那会儿还是 3D，就会白跑一段 3D→2D 过渡。
+    private func openEdit() {
+        model.setEditing(true)
+        model.withLayoutAnimation {
+            showEdit = true
+        }
+    }
+
+    /// 「完成」：换回生成页。
+    ///
+    /// 立刻退出编辑态（而不是等 `BeadEditView.onDisappear`）：生成页是在同一次过渡里
+    /// 滑进来的，晚一步退出的话那一瞬间还能在新画布上落笔。
+    private func closeEdit() {
+        model.setEditing(false)
+        model.withLayoutAnimation {
+            showEdit = false
         }
     }
 

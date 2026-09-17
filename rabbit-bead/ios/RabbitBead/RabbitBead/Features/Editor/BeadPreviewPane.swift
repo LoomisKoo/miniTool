@@ -28,6 +28,8 @@ struct BeadPreviewPane: View {
 
     @State private var isPainting = false
     @State private var abortStroke = false
+    /// 落笔时手指所在的格。非 nil 时在画布上浮出放大镜（见 `BeadPaintLoupe`）。
+    @State private var paintLoupe: PaintLoupe?
     @State private var panning = false
     @State private var pinchActive = false
     @State private var pinchStartScale: CGFloat = 1
@@ -101,6 +103,13 @@ struct BeadPreviewPane: View {
         var duration: Double
     }
 
+    /// 落笔放大镜的锚点：手指在哪一格 + 手指在预览框里的位置。
+    private struct PaintLoupe: Equatable {
+        var col: Int
+        var row: Int
+        var screen: CGPoint
+    }
+
     /// 3D 旋转的手势基准。`translation` 是记下基准那一刻的累计位移，
     /// 目标角度 = `yaw/pitch` + (当前位移 − `translation`) × 灵敏度。
     private struct RotationAnchor: Equatable {
@@ -138,7 +147,7 @@ struct BeadPreviewPane: View {
             let animating = morph != nil || cameraMorph != nil || transformRun != nil || resizeRef != nil
             // 始终用同一个 TimelineView，避免 morph 起停时整棵画布被拆掉重建（会闪一下）。
             TimelineView(.animation(minimumInterval: nil, paused: !animating)) { timeline in
-                canvasStack(now: animating ? timeline.date : .now)
+                canvasStack(now: animating ? timeline.date : .now, viewport: proxy.size)
             }
             .onAppear {
                 viewSize = proxy.size
@@ -220,7 +229,7 @@ struct BeadPreviewPane: View {
     // MARK: - 画布
 
     @ViewBuilder
-    private func canvasStack(now: Date) -> some View {
+    private func canvasStack(now: Date, viewport: CGSize) -> some View {
         if let grid = model.grid {
             let progress = morphProgress(at: now)
             let tilt = tiltProgress(progress)
@@ -305,6 +314,24 @@ struct BeadPreviewPane: View {
             .clipShape(RoundedRectangle(cornerRadius: BeadRadius.lg, style: .continuous))
             // 全项目唯一一处投影：作品压在台面上的那点重量。
             .beadProductShadow()
+            // 落笔放大镜浮在作品上（在裁剪之后，允许轻微越出预览框边缘）。
+            .overlay(alignment: .topLeading) { paintLoupeOverlay(in: viewport) }
+        }
+    }
+
+    /// 放大镜只在落笔时出现（画笔 / 橡皮），取色不需要。
+    @ViewBuilder
+    private func paintLoupeOverlay(in viewport: CGSize) -> some View {
+        if let loupe = paintLoupe, let grid = model.grid {
+            BeadPaintLoupe(
+                grid: grid,
+                rect: model.visibleRect,
+                col: loupe.col,
+                row: loupe.row,
+                touch: loupe.screen,
+                viewport: viewport,
+                appearance: BeadAppearance(colorScheme)
+            )
         }
     }
 
@@ -630,6 +657,7 @@ struct BeadPreviewPane: View {
                         model.beginStroke(at: contentPoint(value.startLocation))
                     }
                     guard !abortStroke else { return }
+                    updatePaintLoupe(at: value.location)
                     model.extendStroke(to: contentPoint(value.location))
                     return
                 }
@@ -650,6 +678,7 @@ struct BeadPreviewPane: View {
                     model.endStroke(commit: !abortStroke)
                     isPainting = false
                     abortStroke = false
+                    paintLoupe = nil
                     return
                 }
                 panning = false
@@ -673,6 +702,7 @@ struct BeadPreviewPane: View {
                     abortStroke = true
                     model.endStroke(commit: false)
                     isPainting = false
+                    paintLoupe = nil
                 }
                 if !pinchActive {
                     pinchActive = true
@@ -756,6 +786,20 @@ struct BeadPreviewPane: View {
             x: (screen.x - offset.width) / cell + CGFloat(model.visibleRect.x0),
             y: (screen.y - offset.height) / cell + CGFloat(model.visibleRect.y0)
         )
+    }
+
+    /// 落笔位置 → 放大镜锚点（格坐标 + 手指在预览框里的位置）。
+    ///
+    /// 只认落在可见区域内的点：手指滑出板外时放大镜收起，而不是停在上一格。
+    private func updatePaintLoupe(at location: CGPoint) {
+        let content = contentPoint(location)
+        let col = Int(floor(content.x))
+        let row = Int(floor(content.y))
+        guard model.visibleRect.contains(x: col, y: row) else {
+            paintLoupe = nil
+            return
+        }
+        paintLoupe = PaintLoupe(col: col, row: row, screen: location)
     }
 
     // MARK: - 3D 手势

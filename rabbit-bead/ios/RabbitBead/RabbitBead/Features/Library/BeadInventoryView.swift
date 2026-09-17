@@ -61,8 +61,7 @@ struct BeadInventoryView: View {
                     .tag(item)
             }
         }
-        // 外层（首页）tab 被 destination 藏掉了；这里显式把本页 tab bar 拉回来，
-        // 否则有的系统版本会把「藏 tab」一路传到内层 TabView。
+        // 本页底部「全部 / 已有」TabView 需要显式可见，避免被导航栈影响。
         .toolbar(.visible, for: .tabBar)
         .background(BeadTheme.parchment)
         .navigationTitle("豆子库存")
