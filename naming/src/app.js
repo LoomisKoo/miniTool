@@ -1827,7 +1827,7 @@
     var slots = st.slots;
     var hasSur = !!st.surname;
 
-    var preview = '<p class="hint">先挑一个姓，再挑一两个字。两个字最常见，一个字或三个字以上也可以。</p>';
+    var preview = '';
     if (hasSur && slots.length) {
       var rel = NM.readability(st.surname, slots);
       var why = [];
@@ -1865,19 +1865,16 @@
       '<button class="slot-row" data-go="studio-sur">' +
       '<span class="slot-k">姓</span>' +
       (hasSur
-        ? '<span class="slot-v">' + esc(st.surname.c) + '</span>' +
-          '<span class="slot-side">' + esc(NM.surPy(st.surname)) + '</span>'
-        : '<span class="slot-v slot-empty">还没选</span>' +
-          '<span class="slot-side">点这里挑姓</span>') +
+        ? '<span class="slot-v">' + esc(st.surname.c) + '</span>'
+        : '<span class="slot-v slot-empty">选择</span>') +
       '<span class="slot-go">›</span></button>';
 
     var nameRow =
       '<button class="slot-row" data-go="studio-char">' +
       '<span class="slot-k">名</span>' +
       (slots.length
-        ? '<span class="slot-v">' + esc(slots.join('')) + '</span>' +
-        '<span class="slot-side">共 ' + slots.length + ' 字</span>'
-        : '<span class="slot-v slot-empty">还没选</span>') +
+        ? '<span class="slot-v">' + esc(slots.join('')) + '</span>'
+        : '<span class="slot-v slot-empty">选择</span>') +
       '<span class="slot-go">›</span></button>';
 
     return (
