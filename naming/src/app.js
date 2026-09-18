@@ -12,6 +12,8 @@
   }
 
   var LS_FAV = 'naming.fav.v1';
+  var LS_STATE = 'naming.state.v2';
+  var STORAGE_MIN_CLIENT = 9460; /* 小红书客户端 9.46.0 */
   var state = {
     screen: 'home',
     answers: [],
@@ -29,6 +31,8 @@
     surKeyword: '',
     detailFrom: 'result',
     fav: [],
+    /* 推荐反馈：不喜欢的整名 / 排除字 / 想保留的字 */
+    feedback: { banFull: {}, banChars: {}, keepChars: [] },
     /* 工作台：选姓与选字各自独立成页（studio-sur / studio-char），
      * 每页有各自的筛选，不筛选时列出全部。 */
     studio: {
@@ -43,17 +47,279 @@
     enMode: 'browse',
     enPicked: null,
     enF: { g: 'all', era: 'all', vibe: 'all', theme: 'all', lang: 'all', keyword: '' },
+    /* 「我的」画像/生辰默认收起，避免占满首屏 */
+    mineExpand: { profile: false, bazi: false },
     /* 生辰起名：公历生日 + 可选时辰 */
     baziForm: { y: 1998, m: 6, d: 15, hour: -1 },
     baziInfo: null,
-    mode: 'zh'
+    mode: 'zh',
+    /* 存储后端：native（小红书 Storage）/ local / none */
+    storage: { backend: 'local', ready: false, tip: '', tipShown: false }
   };
 
-  function loadFav() {
-    try { state.fav = JSON.parse(localStorage.getItem(LS_FAV) || '[]'); } catch (e) { state.fav = []; }
+  var persistTimer = null;
+  var sheetFocusReturn = null;
+
+  function isXhsEnv() {
+    return !!(window.xhs && window.xhs.miniTool);
   }
+
+  function readBuildVersion(launchOptions) {
+    var env = launchOptions && launchOptions.miniToolEnv;
+    return Number(env && env.buildVersion) || 0;
+  }
+
+  function getClientVersion(buildVersion) {
+    return Math.floor(buildVersion / 1000);
+  }
+
+  function isClientVersionAtLeast(buildVersion, minClientVersion) {
+    return getClientVersion(buildVersion) >= minClientVersion;
+  }
+
+  function getBuildVersion() {
+    var xhs = window.xhs;
+    var sync = readBuildVersion(xhs && xhs.launchOptions);
+    if (sync) return Promise.resolve(sync);
+    var miniTool = xhs && xhs.miniTool;
+    if (!miniTool || typeof miniTool.getLaunchOptions !== 'function') {
+      return Promise.resolve(0);
+    }
+    return miniTool.getLaunchOptions().then(function (opts) {
+      return readBuildVersion(opts);
+    }).catch(function () { return 0; });
+  }
+
+  function canUseNativeStorage() {
+    return getBuildVersion().then(function (bv) {
+      var miniTool = window.xhs && window.xhs.miniTool;
+      return (
+        isClientVersionAtLeast(bv, STORAGE_MIN_CLIENT) &&
+        !!miniTool &&
+        typeof miniTool.setStorage === 'function' &&
+        typeof miniTool.getStorage === 'function'
+      );
+    });
+  }
+
+  function saveData(key, data) {
+    return canUseNativeStorage().then(function (ok) {
+      if (ok) {
+        return window.xhs.miniTool.setStorage({ key: key, data: data }).then(function () {
+          state.storage.backend = 'native';
+          return true;
+        }).catch(function () { return false; });
+      }
+      try {
+        localStorage.setItem(key, JSON.stringify(data));
+        state.storage.backend = isXhsEnv() ? 'local' : 'local';
+        return true;
+      } catch (e) {
+        return false;
+      }
+    });
+  }
+
+  function loadData(key) {
+    return canUseNativeStorage().then(function (ok) {
+      if (ok) {
+        return window.xhs.miniTool.getStorage({ key: key }).then(function (res) {
+          state.storage.backend = 'native';
+          return res && res.data !== undefined ? res.data : null;
+        }).catch(function () { return null; });
+      }
+      try {
+        var raw = localStorage.getItem(key);
+        return raw ? JSON.parse(raw) : null;
+      } catch (e) {
+        return null;
+      }
+    });
+  }
+
+  function removeData(key) {
+    return canUseNativeStorage().then(function (ok) {
+      if (ok && typeof window.xhs.miniTool.removeStorage === 'function') {
+        return window.xhs.miniTool.removeStorage({ key: key }).then(function () {
+          return true;
+        }).catch(function () { return false; });
+      }
+      try { localStorage.removeItem(key); return true; } catch (e) { return false; }
+    });
+  }
+
+  function normalizeFavItem(f) {
+    if (!f || typeof f !== 'object' || !f.full) return null;
+    return {
+      full: String(f.full),
+      py: f.py || '',
+      why: f.why || '',
+      src: f.src || 'unknown',
+      at: f.at || 0,
+      note: f.note || ''
+    };
+  }
+
+  function normalizeFeedback(fb) {
+    var out = { banFull: {}, banChars: {}, keepChars: [] };
+    if (!fb || typeof fb !== 'object') return out;
+    if (fb.banFull && typeof fb.banFull === 'object') out.banFull = fb.banFull;
+    if (fb.banChars && typeof fb.banChars === 'object') out.banChars = fb.banChars;
+    if (Array.isArray(fb.keepChars)) {
+      out.keepChars = fb.keepChars.filter(function (c) {
+        return typeof c === 'string' && c.length === 1;
+      }).slice(0, 4);
+    }
+    return out;
+  }
+
+  function feedbackOpts() {
+    return {
+      banFull: state.feedback.banFull || {},
+      banChars: state.feedback.banChars || {},
+      keepChars: state.feedback.keepChars || []
+    };
+  }
+
+  function snapshotPersist() {
+    return {
+      v: 3,
+      fav: state.fav.slice(0, 60),
+      profile: state.profile,
+      baziForm: state.baziForm,
+      baziInfo: state.baziInfo
+    };
+  }
+
+  function applyPersist(data) {
+    if (!data || typeof data !== 'object') return;
+    if (Array.isArray(data.fav)) {
+      state.fav = data.fav.map(normalizeFavItem).filter(Boolean).slice(0, 60);
+    }
+    if (data.profile) state.profile = data.profile;
+    if (data.baziForm && typeof data.baziForm === 'object') {
+      state.baziForm.y = +data.baziForm.y || state.baziForm.y;
+      state.baziForm.m = +data.baziForm.m || state.baziForm.m;
+      state.baziForm.d = +data.baziForm.d || state.baziForm.d;
+      state.baziForm.hour = data.baziForm.hour == null ? -1 : +data.baziForm.hour;
+    }
+    if (data.baziInfo) state.baziInfo = data.baziInfo;
+    /* 偏好 / 工作台 / 英文名页等均为会话临时态，不从本地恢复 */
+  }
+
+  function clearSessionFeedback() {
+    state.feedback = { banFull: {}, banChars: {}, keepChars: [] };
+  }
+
+  /* 推荐相关页：结果 / 详情 / 答题 / 生辰；离开后清空偏好 */
+  function isRecommendFlow(screen) {
+    return screen === 'result' || screen === 'detail' || screen === 'quiz' || screen === 'bazi';
+  }
+
+  function paintStorageTip() {
+    var el = $('#storage-tip') || document.querySelector('.storage-tip-mine');
+    var tip = state.storage.tip || '';
+    var nodes = document.querySelectorAll('.storage-tip, .storage-tip-mine');
+    for (var i = 0; i < nodes.length; i++) {
+      nodes[i].textContent = tip;
+      if (tip) nodes[i].removeAttribute('hidden');
+      else nodes[i].setAttribute('hidden', '');
+    }
+    if (el) { /* keep linter quiet */ }
+  }
+
+  function setStorageTip(msg) {
+    state.storage.tip = msg || '';
+    paintStorageTip();
+  }
+
+  function schedulePersist() {
+    if (persistTimer) clearTimeout(persistTimer);
+    persistTimer = setTimeout(function () {
+      persistTimer = null;
+      commitPersist();
+    }, 280);
+  }
+
+  function commitPersist() {
+    var payload = snapshotPersist();
+    return saveData(LS_STATE, payload).then(function (ok) {
+      if (!ok) {
+        state.storage.backend = 'none';
+        if (isXhsEnv()) setStorageTip('当前环境未能保存进度，关掉页面后可能丢失');
+        else setStorageTip('浏览器未能保存进度，可检查是否禁用了本地存储');
+        return false;
+      }
+      /* 同步旧 key，方便低版本 / 调试；失败忽略 */
+      try { localStorage.setItem(LS_FAV, JSON.stringify(state.fav.slice(0, 60))); } catch (e) {}
+      if (state.storage.tip && state.storage.backend !== 'none') {
+        /* 写入成功后清掉失败提示；版本过低的提示保留 */
+        if (state.storage.tip.indexOf('版本较低') === -1) setStorageTip('');
+      }
+      return true;
+    });
+  }
+
+  function loadFavLegacy() {
+    try {
+      var raw = localStorage.getItem(LS_FAV);
+      if (!raw) return [];
+      var arr = JSON.parse(raw);
+      return Array.isArray(arr) ? arr.map(normalizeFavItem).filter(Boolean) : [];
+    } catch (e) { return []; }
+  }
+
+  function initPersist() {
+    return loadData(LS_STATE).then(function (data) {
+      if (data) {
+        applyPersist(data);
+      } else {
+        /* 迁移旧收藏 */
+        var legacy = loadFavLegacy();
+        if (legacy.length) state.fav = legacy;
+      }
+      return canUseNativeStorage().then(function (nativeOk) {
+        state.storage.ready = true;
+        if (isXhsEnv() && !nativeOk) {
+          state.storage.backend = 'local';
+          setStorageTip('当前小红书版本较低，进度可能无法可靠保存；建议升级到 9.46 及以上');
+        } else if (nativeOk) {
+          state.storage.backend = 'native';
+          /* 若刚从 localStorage 迁过来，立刻写入原生 Storage */
+          if (!data && state.fav.length) commitPersist();
+        }
+        render();
+      });
+    }).catch(function () {
+      state.storage.ready = true;
+      var legacy = loadFavLegacy();
+      if (legacy.length) state.fav = legacy;
+      if (isXhsEnv()) setStorageTip('无法读取已存进度，将按新会话开始');
+      render();
+    });
+  }
+
   function saveFav() {
-    try { localStorage.setItem(LS_FAV, JSON.stringify(state.fav.slice(0, 60))); } catch (e) {}
+    schedulePersist();
+  }
+
+  function clearAllLocalData() {
+    state.fav = [];
+    state.profile = null;
+    state.baziInfo = null;
+    state.feedback = { banFull: {}, banChars: {}, keepChars: [] };
+    state.studio.slots = [];
+    state.studio.surname = null;
+    state.recs = [];
+    state.current = null;
+    state.enInput = '';
+    state.enPicked = null;
+    return removeData(LS_STATE).then(function () {
+      try { localStorage.removeItem(LS_FAV); } catch (e) {}
+      try { localStorage.removeItem(LS_STATE); } catch (e) {}
+      toast('已清除本机数据');
+      go('home');
+    });
   }
 
   /* ── 通用 ─────────────────────────────────── */
@@ -68,7 +334,7 @@
   }
 
   /* 只有在需要「单个姓」的场景（工作台默认值）才随机取一个常见姓。
-   * 结果页不再这样用——那里交给 NM.recommend 按性格推。 */
+   * 结果页按已选姓调用 buildRecsForSurname 荐名。 */
   function randomSurname() {
     return NM.SURNAMES[Math.floor(Math.random() * Math.min(40, NM.SURNAMES.length))];
   }
@@ -139,7 +405,7 @@
   function radarItems(radar, selfOnly) {
     return radar.map(function (r) {
       var word = r.mine >= 50 ? r.high : r.low;
-      return '<div class="axis">' +
+      return '<div class="axis axis-' + esc(r.key) + '">' +
         '<b>' + esc(r.label) + '</b>' +
         '<span class="axis-bars">' +
         '  <span class="axis-track you"><i style="width:' + r.mine + '%"></i></span>' +
@@ -183,6 +449,27 @@
       (right || '') + '</div>';
   }
 
+  /* 名人同字/同名卡片：详情页与工作台预览共用 */
+  function celebCard(given, chars) {
+    if (!NM.celebsForName) return '';
+    var list = NM.celebsForName(given, chars, 3);
+    if (!list.length) return '';
+    var rows = list.map(function (x) {
+      return '<div class="celeb-row">' +
+        '<div class="celeb-top"><b>' + esc(x.name) + '</b>' +
+        '<i class="celeb-how">' + esc(x.how) + '</i></div>' +
+        '<div class="celeb-era">' + esc(x.era) + '</div>' +
+        '<p class="celeb-bio">' + esc(x.bio) + '</p></div>';
+    }).join('');
+    return (
+      '<section class="card">' +
+      '  <div class="card-title">相关名人 <span class="muted">灵感参考</span></div>' +
+      rows +
+      '  <p class="hint" style="margin-top:10px">仅作文化联想，不代表姓名优劣。</p>' +
+      '</section>'
+    );
+  }
+
   /* 独立成卡片（名字详情页用）。没有性格数据（如刷新后直接看收藏里的名字）时整块不出现。 */
   function radarCard(radar) {
     if (!radar || !radar.length) return '';
@@ -199,24 +486,14 @@
   function renderHome() {
     return (
       '<section class="entry-list">' +
-      '  <button class="entry" data-go="quiz">' +
-      '    <span class="entry-icon">测</span>' +
-      '    <span class="entry-body"><b>测性格取名</b><i>8 道题，给你一个说得清理由的名字</i></span>' +
-      '    <span class="entry-arrow">›</span>' +
-      '  </button>' +
-      '  <button class="entry" data-go="bazi">' +
-      '    <span class="entry-icon">辰</span>' +
-      '    <span class="entry-body"><b>生辰起名</b><i>按生日排八字，宜补五行微调用字</i></span>' +
-      '    <span class="entry-arrow">›</span>' +
-      '  </button>' +
-      '  <button class="entry" data-go="translit">' +
-      '    <span class="entry-icon">配</span>' +
-      '    <span class="entry-body"><b>西名中起</b><i>Emma Wilson → 季见山，配一个中国式姓名</i></span>' +
+      '  <button class="entry" data-go="result">' +
+      '    <span class="entry-icon">性</span>' +
+      '    <span class="entry-body"><b>按性格取中文名</b><i>先定姓氏，再按气质推荐名字</i></span>' +
       '    <span class="entry-arrow">›</span>' +
       '  </button>' +
       '  <button class="entry" data-go="en">' +
       '    <span class="entry-icon">英</span>' +
-      '    <span class="entry-body"><b>取英文名</b><i>分类自选，或按中文名 / 性格推荐</i></span>' +
+      '    <span class="entry-body"><b>取英文名</b><i>按性格推荐，或从中文名 / 分类里挑</i></span>' +
       '    <span class="entry-arrow">›</span>' +
       '  </button>' +
       '  <button class="entry" data-go="studio">' +
@@ -226,38 +503,82 @@
       '  </button>' +
       '</section>' +
 
-      /* 收藏入口不再放在首页：它已经是「我的」这个 tab 的主体内容 */
-      '<p class="foot-note">所有计算都在本机完成 · 结果仅供参考</p>'
+      '<p class="foot-note">所有计算都在本机完成 · 结果仅供参考</p>' +
+      '<p class="storage-tip" id="storage-tip" hidden></p>'
     );
   }
 
   /* ── 我的：性格画像 + 收藏 ─────────────────
    * 画像来自「8 道题」；没测过就给一个空布局和「去测试」，点进测试流程。 */
-  function renderMine() {
+  function foldProfileBlock(ex) {
     var p = state.profile;
-    var bazi = currentBazi();
-    /* 画像一张卡说完：标题右边紧贴一句话性格，标题行末尾是「重新测」（小文字按钮）。 */
-    var head = (p && p.answered)
-      ? '<section class="card">' +
-        portraitHead(NM.describe(p), '<button class="link-btn" data-go="quiz">重新测</button>') +
-        portraitBody(NM.radarSelf(p)) +
+    if (p && p.answered) {
+      return (
+        '<section class="card mine-fold">' +
+        '  <button type="button" class="mine-fold-hd" data-mine-toggle="profile">' +
+        '    <span class="mine-fold-main"><b>性格画像</b><i>' + esc(NM.describe(p)) + '</i></span>' +
+        '    <span class="mine-fold-act">' + (ex.profile ? '收起' : '展开') + '</span>' +
+        '  </button>' +
+        (ex.profile
+          ? ('<div class="mine-fold-body">' +
+            portraitBody(NM.radarSelf(p)) +
+            '<button class="link-btn" data-go="quiz">重新测</button></div>')
+          : '') +
         '</section>'
-      : '<section class="card mine-empty">' +
-        '  <div class="mine-empty-t">还没有性格画像</div>' +
-        '  <p class="hint">8 道题，测完这里会有一张你的性格雷达，名字也会照着它推荐。</p>' +
-        '  <button class="ghost-btn" data-go="quiz">去测试</button>' +
-        '</section>';
+      );
+    }
+    return (
+      '<section class="card mine-fold">' +
+      '  <button type="button" class="mine-fold-hd" data-go="quiz">' +
+      '    <span class="mine-fold-main"><b>性格画像</b><i>还没有，去测 8 道题</i></span>' +
+      '    <span class="mine-fold-act">去测试</span>' +
+      '  </button>' +
+      '</section>'
+    );
+  }
 
-    var bz = bazi
-      ? baziCard(bazi, '<button class="link-btn" data-go="bazi">改生辰</button>')
-      : '';
+  function foldBaziBlock(ex) {
+    var bazi = currentBazi();
+    if (bazi) {
+      return (
+        '<section class="card mine-fold">' +
+        '  <button type="button" class="mine-fold-hd" data-mine-toggle="bazi">' +
+        '    <span class="mine-fold-main"><b>生辰八字</b><i>' + esc(bazi.pillarStr || bazi.summary || '') + '</i></span>' +
+        '    <span class="mine-fold-act">' + (ex.bazi ? '收起' : '展开') + '</span>' +
+        '  </button>' +
+        (ex.bazi
+          ? ('<div class="mine-fold-body">' +
+            '<p class="bazi-sum" style="margin-top:0">' + esc(bazi.summary) + '</p>' +
+            '<div class="bazi-meta">' + esc(bazi.solar.y + '/' + bazi.solar.m + '/' + bazi.solar.d) +
+            (bazi.lunar ? ' · ' + esc(lunarText(bazi.lunar)) : '') + '</div>' +
+            '<div class="wx-bars">' + wxBars(bazi.counts) + '</div>' +
+            '<button class="link-btn" data-go="bazi">改生辰</button></div>')
+          : '') +
+        '</section>'
+      );
+    }
+    return (
+      '<section class="card mine-fold">' +
+      '  <button type="button" class="mine-fold-hd" data-go="bazi">' +
+      '    <span class="mine-fold-main"><b>生辰八字</b><i>未添加，可作推荐辅助</i></span>' +
+      '    <span class="mine-fold-act">添加</span>' +
+      '  </button>' +
+      '</section>'
+    );
+  }
+
+  function renderMine() {
+    var ex = state.mineExpand || { profile: false, bazi: false };
 
     var rows = state.fav.map(function (f, i) {
-      /* 整行都是「打开这条」的点击区：名字、右边那颗心、两者之间的空隙都算同一行。
-         名字仍然是 <button>（键盘能 Tab 到），行上再挂一份，空隙按下去也有反应。 */
+      var meta = [];
+      if (f.src && f.src !== 'unknown') meta.push(favSrcLabel(f.src));
+      if (f.note) meta.push(f.note);
       return '<div class="fav-row" data-fav-open="' + i + '">' +
         '<button class="fav-open" data-fav-open="' + i + '">' +
-        '  <span class="fav-body"><b>' + esc(f.full) + '</b></span>' +
+        '  <span class="fav-body"><b>' + esc(f.full) + '</b>' +
+        (meta.length ? '<i class="fav-meta">' + esc(meta.join(' · ')) + '</i>' : '') +
+        '</span>' +
         '</button>' +
         '<button class="fav-del" data-fav-del="' + i + '" aria-label="取消收藏">' +
         '  <svg viewBox="0 0 24 24"><path d="M12 20.5S3.5 15.4 3.5 9.6A4.6 4.6 0 0 1 12 7a4.6 4.6 0 0 1 8.5 2.6c0 5.8-8.5 10.9-8.5 10.9z"/></svg>' +
@@ -270,7 +591,15 @@
       : '<div class="mine-sec">收藏</div>' +
         '<section class="card"><p class="empty" style="padding:26px 12px">还没有收藏。看到喜欢的名字，点「收藏」就存这儿了。</p></section>';
 
-    return head + bz + list;
+    /* 资料置顶；画像/生辰默认收起 */
+    return foldProfileBlock(ex) + foldBaziBlock(ex) + list;
+  }
+
+  function favSrcLabel(src) {
+    return ({
+      quiz: '性格推荐', bazi: '生辰', result: '推荐', detail: '详情',
+      studio: '自选', translit: '西名中起', en: '英文名', unknown: ''
+    })[src] || '';
   }
 
   /* ── 测试 ─────────────────────────────────── */
@@ -301,21 +630,181 @@
     );
   }
 
+  function withFeedback(opts) {
+    var fb = feedbackOpts();
+    opts = opts || {};
+    opts.banFull = fb.banFull;
+    opts.banChars = fb.banChars;
+    opts.keepChars = fb.keepChars;
+    return opts;
+  }
+
+  /* 按当前偏好重算这个姓下的候选；换名 / 备选都必须走这里，否则会用到偏好变更前的旧列表 */
+  function rebuildCandidates() {
+    state.candidates = (state.profile && state.surname)
+      ? NM.namesForSurname(state.profile, state.surname, withFeedback({ wantGender: state.wantGender }))
+      : [];
+    return state.candidates;
+  }
+
+  /* 偏好刚改完：清掉「已看过」里不合规的，必要时换掉当前名。排除/保留是硬过滤。 */
+  function applyFeedbackToDetail(opts) {
+    opts = opts || {};
+    rebuildCandidates();
+    state.shown = {};
+    var cur = state.current;
+    if (!cur) return { ok: true, swapped: false };
+    var keep = state.feedback.keepChars || [];
+    var ban = state.feedback.banChars || {};
+    var ok = true;
+    var i;
+    if (state.feedback.banFull && state.feedback.banFull[cur.full]) ok = false;
+    for (i = 0; i < (cur.chars || []).length; i++) {
+      if (ban[cur.chars[i]]) { ok = false; break; }
+    }
+    for (i = 0; i < keep.length; i++) {
+      if ((cur.chars || []).indexOf(keep[i]) === -1) { ok = false; break; }
+    }
+    if (ok && !opts.forceSwap) {
+      state.shown[cur.full] = 1;
+      return { ok: true, swapped: false };
+    }
+    var nxt = NM.sampleTop(state.candidates, 0.7, 1, state.shown);
+    if (nxt.length) {
+      state.current = nxt[0];
+      state.shown[nxt[0].full] = 1;
+      return { ok: true, swapped: true };
+    }
+    if (state.candidates.length) {
+      state.current = state.candidates[0];
+      state.shown[state.current.full] = 1;
+      return { ok: true, swapped: true };
+    }
+    return { ok: false, swapped: false };
+  }
+
+  function refreshRecs() {
+    if (!state.profile) return;
+    /* 国内主路径：必须先有姓，只在该姓下荐名 */
+    if (!state.surname) {
+      state.recs = [];
+      return;
+    }
+    state.recs = buildRecsForSurname(state.surname, {
+      count: 6, exclude: state.recShown
+    });
+    if (!state.recs.length) {
+      state.recShown = {};
+      state.recs = buildRecsForSurname(state.surname, { count: 6 });
+    }
+  }
+
+  /* 固定姓氏下，把 namesForSurname 结果收成结果页用的 rec 结构 */
+  function buildRecsForSurname(surname, opts) {
+    opts = opts || {};
+    if (!state.profile || !surname) return [];
+    var want = opts.count || 6;
+    var exclude = opts.exclude || {};
+    var list = NM.namesForSurname(state.profile, surname, withFeedback({
+      wantGender: state.wantGender
+    }));
+    var pool = [];
+    for (var i = 0; i < list.length; i++) {
+      var x = list[i];
+      var full = surname.c + x.given;
+      if (exclude[x.given] || exclude[full]) continue;
+      pool.push({
+        surname: surname,
+        name: x,
+        given: x.given,
+        chars: x.chars,
+        full: full,
+        fit: 1,
+        euphony: x.euphony,
+        score: x.mix != null ? x.mix : x.score
+      });
+    }
+    var picked = NM.sampleTop(pool, opts.temperature || 0.28, want,
+      {}, function (r) { return r.given; });
+    return picked.length ? picked : pool.slice(0, want);
+  }
+
+  /* 推荐 /「我的」共用的偏好管理卡：可逐项取消 */
+  function feedbackPrefCard(opts) {
+    opts = opts || {};
+    var fb = state.feedback;
+    var banNames = Object.keys(fb.banFull || {});
+    var banChars = Object.keys(fb.banChars || {});
+    var keep = fb.keepChars || [];
+    if (!banNames.length && !banChars.length && !keep.length) return '';
+
+    var keepChips = keep.length
+      ? '<div class="pref-row"><span class="pref-k keep">保留</span><div class="pref-chips">' +
+        keep.map(function (ch) {
+          return '<button type="button" class="pref-tag keep" data-unkeep-char="' + esc(ch) + '" title="取消保留">' +
+            esc(ch) + '<i aria-hidden="true">×</i></button>';
+        }).join('') + '</div></div>'
+      : '';
+
+    var banChips = banChars.length
+      ? '<div class="pref-row"><span class="pref-k ban">排除</span><div class="pref-chips">' +
+        banChars.map(function (ch) {
+          return '<button type="button" class="pref-tag ban" data-unban-char="' + esc(ch) + '" title="取消排除">' +
+            esc(ch) + '<i aria-hidden="true">×</i></button>';
+        }).join('') + '</div></div>'
+      : '';
+
+    var banRow = banNames.length
+      ? '<div class="pref-row pref-row-link">' +
+        '<span class="pref-k">不喜欢</span>' +
+        '<button type="button" class="pref-link" data-open-sheet="ban-names">' +
+        banNames.length + ' 个名字<span>管理</span></button></div>'
+      : '';
+
+    var emptyNote = opts.empty
+      ? '<p class="pref-empty-msg">当前偏好把候选都筛掉了，可点标签取消，或清空偏好。</p>'
+      : '';
+
+    return (
+      '<section class="card pref-card">' +
+      '  <div class="card-title">推荐偏好' +
+      '    <button type="button" class="link-btn" data-clear-feedback>清空</button></div>' +
+      '<div class="pref-body">' + keepChips + banChips + banRow + '</div>' +
+      emptyNote +
+      '</section>'
+    );
+  }
+
+  function banNamesSheetHtml() {
+    var names = Object.keys(state.feedback.banFull || {});
+    if (!names.length) {
+      return '<p class="empty">还没有标记不喜欢的名字。在详情页点「换名」会自动记下来。</p>';
+    }
+    var rows = names.map(function (full) {
+      return '<div class="ban-row">' +
+        '<span class="ban-name">' + esc(full) + '</span>' +
+        '<button type="button" class="link-btn" data-unban-name="' + esc(full) + '">恢复</button></div>';
+    }).join('');
+    return (
+      '<p class="hint" style="margin:4px 0 8px">这些名字不会再出现在推荐里。点「恢复」取消一条。</p>' +
+      '<div class="ban-list">' + rows + '</div>'
+    );
+  }
+
   function finishQuiz() {
     state.profile = NM.profileFromAnswers(state.answers);
     /* 测完若已有生辰，把宜补五行带上 */
     if (state.profile && state.baziInfo) {
       NM.attachBazi(state.profile, state.baziInfo);
     }
-    state.surname = null;
+    /* 保留已选姓：国人通常姓已定，只重算该姓下的名 */
     state.shown = {};
     state.current = null;
     state.candidates = [];
     state.recShown = {};
-    /* 一次性推一组不同的「姓 + 名」。不再是先摇一个姓再配名——
-     * 那样无论什么性格都只会看到同一个姓。 */
-    state.recs = NM.recommend(state.profile, { wantGender: state.wantGender, count: 6 });
+    refreshRecs();
     /* 结果页顶掉答题页：返回键该回首页，不该回最后一题 */
+    schedulePersist();
     go('result', true);
   }
 
@@ -338,7 +827,7 @@
     return NM.BAZI_WX.map(function (w) {
       var n = counts[w] || 0;
       var pct = Math.min(100, Math.round(n / 4 * 100));
-      return '<div class="wx-row"><span class="wx-k">' + w + '</span>' +
+      return '<div class="wx-row wx-' + w + '"><span class="wx-k">' + w + '</span>' +
         '<span class="wx-bar"><i style="width:' + pct + '%"></i></span>' +
         '<span class="wx-n">' + (Math.round(n * 10) / 10) + '</span></div>';
     }).join('');
@@ -354,7 +843,17 @@
       '  <div class="bazi-meta">' + esc(info.solar.y + '/' + info.solar.m + '/' + info.solar.d) +
       (info.lunar ? ' · ' + esc(lunarText(info.lunar)) : '') + '</div>' +
       '  <div class="wx-bars">' + wxBars(info.counts) + '</div>' +
-      '  <p class="hint" style="margin-top:10px">用字按宜补五行微调，性格仍是主轴。结果仅供参考。</p>' +
+      '  <p class="hint" style="margin-top:10px">用字按宜补五行微调，性格仍是主轴。传统文化参考，不代表科学结论。</p>' +
+      '</section>'
+    );
+  }
+
+  function baziPromptCard() {
+    return (
+      '<section class="card bazi-card bazi-prompt">' +
+      '  <div class="card-title"><span class="ct-name">生辰辅助</span></div>' +
+      '  <p class="bazi-sum">补充出生日期，推荐时会参考宜补五行。</p>' +
+      '  <button class="ghost-btn" data-go="bazi">加生辰</button>' +
       '</section>'
     );
   }
@@ -389,7 +888,7 @@
     return (
       '<section class="card">' +
       '  <div class="card-title">公历生日</div>' +
-      '  <p class="hint">本地排盘，年柱以立春为界。时辰不清楚可留空。</p>' +
+      '  <p class="hint">本地排盘，年柱以立春为界。时辰不清楚可留空。结果仅供参考，不代表科学结论。</p>' +
       '  <div class="bazi-pick">' +
       '    <button type="button" class="bazi-field" data-open-sheet="bazi-date">' +
       '      <b>' + f.y + '</b><i>年</i></button>' +
@@ -425,12 +924,12 @@
     } else {
       state.profile = NM.profileFromBazi(info);
     }
-    state.surname = null;
     state.shown = {};
     state.current = null;
     state.candidates = [];
     state.recShown = {};
-    state.recs = NM.recommend(state.profile, { wantGender: state.wantGender, count: 6 });
+    refreshRecs();
+    schedulePersist();
     go('result', true);
   }
 
@@ -472,8 +971,8 @@
       '    <b class="rec-name">' + esc(rec.full) + '</b>' +
       '    <i class="rec-py">' + esc(NM.namePinyin(rec.surname, rec.chars)) + '</i>' +
       '  </span>' +
-      '  <span class="rec-meta">姓「' + esc(rec.surname.c) + '」' + esc(NM.surnameVibe(rec.surname)) +
-      ' ｜ ' + esc(NM.euphonyLabel(rec.euphony)) + ' · ' + esc(tagOf(rec.name)) + '</span>' +
+      '  <span class="rec-meta">' + esc(NM.euphonyLabel(rec.euphony)) +
+      ' · ' + esc(tagOf(rec.name)) + '</span>' +
       '</span>' +
       '<span class="rec-go">›</span>' +
       '</button>';
@@ -482,31 +981,55 @@
   function renderResult() {
     var p = state.profile;
     if (!p) return '<p class="empty">先做一遍测试，才知道该往哪个方向取。</p>';
-    var recs = state.recs || [];
+    var hasSur = !!state.surname;
+    var recs = hasSur ? (state.recs || []) : [];
     var hasQuiz = !!p.answered;
-    var head = hasQuiz
-      ? ('<section class="card">' +
-        portraitHead(NM.describe(p),
-          '<button class="link-btn" data-go="bazi">' + (p.bazi ? '改生辰' : '加生辰') + '</button>') +
-        portraitBody(NM.radarSelf(p)) +
-        '</section>')
-      : '';
-    var bz = p.bazi ? baziCard(p.bazi) : '';
+    var ex = state.mineExpand || { profile: false, bazi: false };
+    /* 与「我的」相同：画像/生辰默认折叠 */
+    var folds = (hasQuiz ? foldProfileBlock(ex) : '') + foldBaziBlock(ex);
+
+    if (!hasSur) {
+      return folds;
+    }
+
     var title = p.bazi && !hasQuiz
-      ? '按生辰宜补，推荐这些组合'
-      : (p.bazi ? '性格 + 生辰，推荐这些组合' : '按这个性格，推荐这些组合');
+      ? '「' + esc(state.surname.c) + '」姓 · 按生辰宜补'
+      : (p.bazi
+        ? '「' + esc(state.surname.c) + '」姓 · 性格 + 生辰'
+        : '「' + esc(state.surname.c) + '」姓 · 按性格推荐');
+    var empty = !recs.length;
+    var prefCard = feedbackPrefCard({ empty: empty });
+    var banN = Object.keys(state.feedback.banFull || {}).length;
+    var emptyBlock = empty
+      ? ('<div class="rec-empty">' +
+        '<p class="rec-empty-t">没找到合适的名字</p>' +
+        '<p class="rec-empty-d">' +
+        (prefCard
+          ? '当前偏好把候选都筛掉了。点上方标签取消一条，或清空偏好。'
+          : '可换个性别再试，或稍后再换一批。') +
+        '</p>' +
+        (prefCard
+          ? ('<div class="rec-empty-actions">' +
+            (banN
+              ? '<button type="button" class="primary-btn" data-open-sheet="ban-names">管理不喜欢的名字</button>'
+              : '') +
+            '<button type="button" class="ghost-btn" data-clear-feedback>清空全部偏好</button>' +
+            '</div>')
+          : '') +
+        '</div>')
+      : '';
 
     return (
-      head + bz +
+      folds +
+      prefCard +
       '<section class="rec-list">' +
       '  <div class="rec-head">' +
       '    <b>' + title + '</b>' +
       '    <button class="mini-btn" data-refresh-rec>换一批</button>' +
       '  </div>' +
-      (recs.length ? recs.map(recRow).join('')
-        : '<p class="empty">没找到合适的组合，换个性别偏好再试试。</p>') +
-      '  <p class="rec-hint">每条都是一个完整的姓 + 名，点开看字义、读音和分享卡片。' +
-      '不满意姓的话，可以自己挑一个。</p>' +
+      (recs.length ? recs.map(recRow).join('') : emptyBlock) +
+      '  <p class="rec-hint">每条是「' + esc(state.surname.c) + '」+ 名。点开看字义、读音和分享卡片。' +
+      '「精选」偏真人常用，「生成」按字义拼配。</p>' +
       '</section>'
     );
   }
@@ -527,7 +1050,8 @@
         '</div></div>';
     }
     if (s === 'result') {
-      return '<button class="primary-btn" data-open-sheet="surname">选姓氏</button>';
+      return '<button class="primary-btn" data-open-sheet="surname">' +
+        (state.surname ? '换姓氏' : '选姓氏') + '</button>';
     }
     if (s === 'bazi') {
       return '<button class="primary-btn" data-bazi-run>按生辰取名</button>';
@@ -544,26 +1068,21 @@
         : '<button class="primary-btn" data-tl-run>生成姓名</button>';
     }
     if (s === 'studio') {
-      var n = state.studio.slots.length;
-      var save = '<button class="primary-btn"' + (n ? ' data-st-save' : ' disabled') + '>' +
-        (n ? '收藏' : '先选一个字') + '</button>';
-      /* 选中的字要能清掉，不然选错了只能一个个点回去 */
-      return (n ? '<div class="row-2"><button class="ghost-btn" data-st-clear>清空重选</button>' + save + '</div>' : save);
+      /* 底栏只留「确定」回首页；收藏做成详情同款红按钮，放在台面内容区 */
+      return '<button class="primary-btn" data-go-back="home">确定</button>';
     }
     if (s === 'studio-sur') {
-      return '<button class="primary-btn" data-go-back="studio">选好了</button>';
+      return '<button class="primary-btn" data-go-back="studio">确定</button>';
     }
     if (s === 'studio-char') {
       /* 已选栏放底栏里：底栏是固定的，选字不会把页面内容顶下去 */
-      var picked = state.studio.slots.length
-        ? '<div class="dock-picked">' +
-          '<span class="dock-picked-k">已选 ' + state.studio.slots.length + ' 字</span>' +
-          '<div class="picked" id="st-picked">' + pickedChips() + '</div>' +
-          '<button type="button" class="link-clear" data-st-clear>清空</button>' +
-          '</div>'
-        : '';
-      return picked + '<button class="primary-btn" data-go-back="studio">' +
-        (state.studio.slots.length ? '确定' : '返回台面') + '</button>';
+      if (!state.studio.slots.length) return '';
+      return '<div class="dock-picked">' +
+        '<span class="dock-picked-k">已选 ' + state.studio.slots.length + ' 字</span>' +
+        '<div class="picked" id="st-picked">' + pickedChips() + '</div>' +
+        '<button type="button" class="link-clear" data-st-clear>清空</button>' +
+        '</div>' +
+        '<button class="primary-btn" data-go-back="studio">确定</button>';
     }
     /* 「我的」是内容页，底栏不用放任何操作 */
     if (s === 'mine') return '';
@@ -596,13 +1115,31 @@
     var charRows = (c.chars || []).map(function (ch) {
       if (!NM.getChar(ch)) return '';
       var wx = NM.domainWx(NM.getChar(ch).dom);
+      var banned = !!(state.feedback.banChars && state.feedback.banChars[ch]);
+      var kept = (state.feedback.keepChars || []).indexOf(ch) !== -1;
       return '<div class="char-row"><b>' + esc(ch) + '</b><span class="char-py">' + NM.namePinyin(null, [ch]) +
         '</span><span class="char-m">' + esc(NM.charNote(ch).text) +
-        (wx ? ' · ' + wx : '') + '</span></div>';
+        (wx ? ' · ' + wx : '') + '</span>' +
+        '<span class="char-fb">' +
+        '<button type="button" class="chip chip-xs' + (banned ? ' active' : '') + '" data-ban-char="' + esc(ch) + '" title="之后不会再出现这个字">' +
+        (banned ? '已排除' : '排除') + '</button>' +
+        '<button type="button" class="chip chip-xs' + (kept ? ' active' : '') + '" data-keep-char="' + esc(ch) + '" title="之后名字都必须带这个字">' +
+        (kept ? '已保留' : '保留') + '</button>' +
+        '</span></div>';
     }).join('');
+
+    var keepHint = (state.feedback.keepChars || []).length || Object.keys(state.feedback.banChars || {}).length
+      ? '<p class="hint char-fb-hint">排除 = 之后绝不再出现；保留 = 之后都必须带上。点「换名」会换掉当前名，并记下你不喜欢它。</p>'
+      : '<p class="hint char-fb-hint">可「排除」不要的字、「保留」必须留下的字。「换名」= 不喜欢当前名并换下一个。</p>';
 
     var cc = p && p.answered ? NM.crossCulture(p, { wantGender: state.wantGender }) : { en: null };
     var enAlt = cc.en ? cc.en.name : null;
+    var whyBits = [];
+    if (c.source === 'curated') whyBits.push(tagOf(c) === '清雅' ? '精选清雅名' : '精选常见名');
+    else whyBits.push('按字义拼成');
+    if (eu >= 0.85) whyBits.push('念起来顺口');
+    if (p && p.answered) whyBits.push('贴合你的性格画像');
+    if (wxNote) whyBits.push('兼顾生辰宜补');
 
     return (
       '<section class="name-card" data-mark="' + esc(c.surname.c) + '">' +
@@ -610,6 +1147,7 @@
       '  <div class="name-big">' + esc(c.full) + '</div>' +
       '  <div class="name-py">' + NM.namePinyin(c.surname, c.chars) + '</div>' +
       '  <p class="name-why">' + esc(whyFor(c)) + '</p>' +
+      '  <p class="name-reason">适合你，是因为：' + esc(whyBits.join(' · ')) + '</p>' +
       '  <div class="name-actions">' +
       '    <button class="pill primary" data-again>换名</button>' +
       '    <button class="pill" data-open-sheet="pool">备选名</button>' +
@@ -623,6 +1161,7 @@
       '<section class="card">' +
       '  <div class="card-title">名字里有什么</div>' +
       charRows +
+      keepHint +
       '<div class="read-note ' + (eu >= 0.85 ? 'ok' : 'warn') + '">' +
       (rel.ok ? '读感没问题' : rel.issues.join('、')) +
       ' · 念着' + esc(NM.euphonyLabel(eu)) +
@@ -632,10 +1171,12 @@
 
       (wxNote
         ? '<section class="card"><div class="card-title">生辰用字</div><p class="bazi-sum">' +
-          esc(wxNote) + '</p></section>'
+          esc(wxNote) + '</p><p class="hint">传统文化参考，不代表科学结论。</p></section>'
         : '') +
 
       radarCard(radar) +
+
+      celebCard(c.given || (c.chars || []).join(''), c.chars) +
 
       (enAlt ?
         '<section class="card">' +
@@ -653,6 +1194,7 @@
    * 选完就地生效，不往页面栈里插页，浮层一次只显示一种内容（`sheet.type`）。 */
   var SHEET_TITLE = {
     surname: '选姓氏', pool: '备选名字',
+    'ban-names': '不喜欢的名字',
     'bazi-date': '选择生日', 'bazi-hour': '选择时辰'
   };
   var SHEET_CLOSE_MS = 260;
@@ -835,7 +1377,6 @@
   /* 浮层里的姓氏卡片。搜索时只留一栏搜索结果，不和推荐、复姓混在一起 —— 
    * 搜索框下就是答案，没有「顺便看看别的」这种干扰。 */
   function surnameRowsHtml(kw) {
-    var p = state.profile;
     if (kw) {
       var hit = NM.searchSurnames(NM.allSurnames(), kw);
       return (
@@ -847,33 +1388,17 @@
         '</section>'
       );
     }
-    var rec = NM.rankSurnames(p, { limit: 24 });
-    var compound = NM.rankSurnames(p, { all: true, limit: 400 }).filter(function (x) {
-      return NM.isCompound(x.sur);
-    });
+    /* 选姓 = 确认自己的姓，不再按性格「推荐姓氏」 */
     var all = NM.allSurnames();
     return (
       '<section class="card">' +
-      '  <div class="card-title">和你最搭的姓</div>' +
-      '  <div class="sur-grid">' + surnameGrid(rec.map(function (x) { return x.sur; }), 24) + '</div>' +
-      '</section>' +
-
-      /* 复姓单独一栏：它们少见，混在「最搭的姓」里会把常见姓挤掉 */
-      (compound.length ?
-        '<section class="card">' +
-        '  <div class="card-title">复姓 <span class="muted">两个字，也可用</span></div>' +
-        '  <div class="sur-grid">' + surnameGrid(compound.slice(0, 16).map(function (x) { return x.sur; }), 16) + '</div>' +
-        '</section>' : '') +
-
-      '<section class="card">' +
-      '  <div class="card-title">全部姓氏 <span class="count" id="sur-all-count">' + all.length + '</span></div>' +
-      '  <div class="sur-grid" id="sur-all">' + surnameGrid(all, 340) + '</div>' +
+      '  <div class="sur-grid" id="sur-all">' + surnameGrid(all, 400) + '</div>' +
       '</section>'
     );
   }
 
   function surnamePickerHtml() {
-    if (!state.profile) return '<p class="empty">先做一遍测试，才好按性格挑姓。</p>';
+    if (!state.profile) return '<p class="empty">先做一遍测试，再来选姓氏。</p>';
     var kw = state.surKeyword.trim().toLowerCase();
     return (
       '<div class="sheet-search">' +
@@ -889,7 +1414,9 @@
   function poolPickerHtml() {
     if (!state.surname) return '<p class="empty">先挑一个姓，再看这个姓下的名字。</p>';
     /* namesForSurname 已经把顺口度揉进排序了，直接用 */
-    var base = NM.namesForSurname(state.profile, state.surname, { wantGender: poolFilter.gender });
+    var base = NM.namesForSurname(state.profile, state.surname, withFeedback({
+      wantGender: poolFilter.gender
+    }));
     state.candidates = base;
 
     var shown = base.filter(function (x) {
@@ -933,6 +1460,7 @@
   function sheetHtml(type) {
     if (type === 'pool') return poolPickerHtml();
     if (type === 'surname') return surnamePickerHtml();
+    if (type === 'ban-names') return banNamesSheetHtml();
     if (type.indexOf('bazi-') === 0) return baziPickerHtml(type);
     return surnamePickerHtml();
   }
@@ -965,6 +1493,7 @@
     sheet.closing = false;
     sheet.base = state.screen;
     sheet.type = type;
+    sheetFocusReturn = document.activeElement;
     if (type === 'surname') state.surKeyword = '';
     if (type === 'bazi-date' || type === 'bazi-hour') {
       sheet.draft = {
@@ -982,6 +1511,10 @@
     lockPage(true);
     var ip = $('#sur-input');
     if (ip && ip.focus) { try { ip.focus(); } catch (e) {} }
+    else {
+      var closeBtn = $('#sheet-close');
+      if (closeBtn && closeBtn.focus) { try { closeBtn.focus(); } catch (e2) {} }
+    }
   }
 
   /* 浮层开着的时候锁住底下的页面滚动。
@@ -1015,7 +1548,14 @@
       lockPage(false);
       var closeBtn = $('#sheet-close');
       if (closeBtn) closeBtn.textContent = '关闭';
-      if (wasBazi) render({ keepScroll: true });
+      if (wasBazi) {
+        schedulePersist();
+        render({ keepScroll: true });
+      }
+      if (sheetFocusReturn && sheetFocusReturn.focus) {
+        try { sheetFocusReturn.focus(); } catch (e) {}
+      }
+      sheetFocusReturn = null;
     };
     sheet.closing = true;
     if (!canAnimate()) return done();
@@ -1081,7 +1621,7 @@
         '  <div class="card-title">姓是怎么定的</div>' +
         '  <div class="cross-row"><span class="cross-k">姓氏</span><b>' + esc(r.surname.c) + '</b>' +
         '<span class="cross-m">' + esc(NM.surnameVibe(r.surname)) + '</span></div>' +
-        '  <p class="rec-hint">' + esc(surnameWhy(r)) + '</p>' +
+        '  <p class="card-explain">' + esc(surnameWhy(r)) + '</p>' +
         '</section>' +
 
         '<section class="card">' +
@@ -1097,6 +1637,8 @@
           '  <div class="cross-row"><span class="cross-k">音译</span><b>' + esc(r.translitStyle) + '</b>' +
           '<span class="cross-m">证件、护照上用的写法</span></div>' +
           '</section>' : '') +
+
+        celebCard(m.given || (m.chars || []).join(''), m.chars) +
 
         '<section class="card"><div class="card-title">换几个名字试试</div>' + altRows + '</section>';
     }
@@ -1174,6 +1716,64 @@
     }).join('');
   }
 
+  /* 当前筛选摘要 + 一键清除；无结果时提示放宽 */
+  function filterSummary(parts, clearAttr, empty) {
+    var active = parts.filter(Boolean);
+    if (!active.length && !empty) return '';
+    if (!active.length && empty) {
+      return '<div class="filter-summary empty-sum">' +
+        '<span>没有符合条件的结果</span>' +
+        '<button type="button" class="link-btn" ' + clearAttr + '>清除筛选</button></div>';
+    }
+    return '<div class="filter-summary">' +
+      '<span class="filter-summary-k">已筛选</span>' +
+      '<span class="filter-summary-v">' + esc(active.join(' · ')) + '</span>' +
+      '<button type="button" class="link-btn" ' + clearAttr + '>清除</button></div>';
+  }
+
+  function surFilterParts() {
+    var f = state.studio.surF, kw = (state.studio.surKeyword || '').trim();
+    var parts = [];
+    if (f.type === 'single') parts.push('单姓');
+    if (f.type === 'compound') parts.push('复姓');
+    if (f.pop === 'common') parts.push('常见');
+    if (f.pop === 'rare') parts.push('少见');
+    if (f.letter !== 'all') parts.push(String(f.letter).toUpperCase());
+    if (kw) parts.push('「' + kw + '」');
+    return parts;
+  }
+
+  function charFilterParts() {
+    var f = state.studio.charF, kw = (state.studio.charKeyword || '').trim();
+    var parts = [];
+    if (f.dom !== 'all' && NM.DOMAINS[f.dom]) {
+      parts.push(NM.DOMAINS[f.dom].label.split(' · ')[0]);
+    }
+    if (f.g === 'f') parts.push('偏女');
+    if (f.g === 'm') parts.push('偏男');
+    if (f.g === 'u') parts.push('中性');
+    if (f.freq === 'common') parts.push('常用');
+    if (f.freq === 'rare') parts.push('少见');
+    if (f.letter !== 'all') parts.push(String(f.letter).toUpperCase());
+    if (kw) parts.push('「' + kw + '」');
+    return parts;
+  }
+
+  function enFilterParts() {
+    var f = state.enF, parts = [];
+    if (f.g === 'f') parts.push('偏女');
+    if (f.g === 'm') parts.push('偏男');
+    if (f.era !== 'all') parts.push(EN_ERA_LABEL[f.era] || f.era);
+    if (f.vibe !== 'all') {
+      var vibe = EN_VIBE.filter(function (x) { return x[0] === f.vibe; })[0];
+      if (vibe) parts.push(vibe[1]);
+    }
+    if (f.theme !== 'all') parts.push(f.theme);
+    if (f.lang !== 'all') parts.push(f.lang);
+    if ((f.keyword || '').trim()) parts.push('「' + f.keyword.trim() + '」');
+    return parts;
+  }
+
   function studioSurs() {
     var st = state.studio, f = st.surF;
     var list = NM.allSurnames().filter(function (s) {
@@ -1224,11 +1824,11 @@
   /* 台面：只放「换姓 / 换名」两个入口和拼出来的名字 */
   function renderStudio() {
     var st = state.studio;
-    if (!st.surname) st.surname = NM.SURNAMES[0];
     var slots = st.slots;
+    var hasSur = !!st.surname;
 
     var preview = '<p class="hint">先挑一个姓，再挑一两个字。两个字最常见，一个字或三个字以上也可以。</p>';
-    if (slots.length) {
+    if (hasSur && slots.length) {
       var rel = NM.readability(st.surname, slots);
       var why = [];
       slots.forEach(function (ch) {
@@ -1241,23 +1841,34 @@
       if (slots.length >= 3) tips.push('三个字以上的名不常见，属于非主流取名，自己确认喜欢就好。');
       if (slots.length >= STUDIO_MAX) tips.push('已经到 ' + STUDIO_MAX + ' 个字了，再多就不像名字了。');
 
+      var full = st.surname.c + slots.join('');
+      var saved = state.fav.some(function (f) { return f.full === full; });
+
       preview =
         '<div class="studio-preview">' +
-        '<div class="name-big small">' + esc(st.surname.c + slots.join('')) + '</div>' +
+        '<div class="name-big small">' + esc(full) + '</div>' +
         '<div class="name-py">' + NM.namePinyin(st.surname, slots) + '</div>' +
         '<p class="name-why">' + esc(why.join('；')) + '</p>' +
         '<div class="read-note ' + (rel.ok ? 'ok' : 'warn') + '">' +
         (rel.ok ? '读感没问题' : rel.issues.join('、')) +
         (rel.good.length ? ' · ' + rel.good.join(' · ') : '') + '</div>' +
         (tips.length ? '<div class="tip-note">' + esc(tips.join(' ')) + '</div>' : '') +
-        '</div>';
+        '<div class="name-actions studio-actions">' +
+        '<button type="button" class="pill' + (saved ? '' : ' fav') + '" data-st-save">' +
+        (saved ? '已收藏' : '收藏') + '</button>' +
+        '<button type="button" class="pill" data-st-clear>清空重选</button>' +
+        '</div></div>' +
+        celebCard(slots.join(''), slots);
     }
 
     var surRow =
       '<button class="slot-row" data-go="studio-sur">' +
       '<span class="slot-k">姓</span>' +
-      '<span class="slot-v">' + esc(st.surname.c) + '</span>' +
-      '<span class="slot-side">' + esc(NM.surPy(st.surname)) + '</span>' +
+      (hasSur
+        ? '<span class="slot-v">' + esc(st.surname.c) + '</span>' +
+          '<span class="slot-side">' + esc(NM.surPy(st.surname)) + '</span>'
+        : '<span class="slot-v slot-empty">还没选</span>' +
+          '<span class="slot-side">点这里挑姓</span>') +
       '<span class="slot-go">›</span></button>';
 
     var nameRow =
@@ -1266,13 +1877,11 @@
       (slots.length
         ? '<span class="slot-v">' + esc(slots.join('')) + '</span>' +
         '<span class="slot-side">共 ' + slots.length + ' 字</span>'
-        : '<span class="slot-v slot-empty">还没选</span>' +
-        '<span class="slot-side">' + NM.CHARS.length + ' 个字可选</span>') +
+        : '<span class="slot-v slot-empty">还没选</span>') +
       '<span class="slot-go">›</span></button>';
 
     return (
       '<section class="card">' +
-      '  <div class="card-title">自己拼一个 <span class="muted">点下面两行分别去挑</span></div>' +
       surRow + nameRow +
       '</section>' +
       preview
@@ -1320,23 +1929,22 @@
       '</div>';
 
     var picked = '<button class="mini-btn" data-sur-random>随便来一个</button>';
+    var parts = surFilterParts();
+    var sum = filterSummary(parts, 'data-clear-sur-f', !list.length);
 
     return (
       '<div class="toolbar">' +
       '  <input class="search" id="st-sur-input" type="search" placeholder="搜汉字或拼音：苏 / su / ouyang"' +
-      '    value="' + esc(st.surKeyword || '') + '">' +
+      '    value="' + esc(st.surKeyword || '') + '" aria-label="搜索姓氏">' +
       rows +
+      sum +
+      '  <div class="toolbar-meta"><span class="count" id="st-sur-count">' +
+      list.length + ' / ' + all.length + ' 个</span>' + picked + '</div>' +
       '</div>' +
       surIntro(st.surname) +
-      '<section class="card">' +
-      '  <div class="card-title">全部姓氏 <span class="count" id="st-sur-count">' +
-      list.length + ' / ' + all.length + ' 个</span>' + picked + '</div>' +
-      '  <div class="sur-grid grid-box" id="st-sur-grid">' +
-      (surCells(list) || '<p class="empty">没筛到这个姓，放宽一下条件。</p>') +
-      '</div>' +
-      '</section>' +
-      '<p class="rec-hint">点一个姓看介绍，底部「选好了」再回去。常见度按实际人口来的，' +
-      '「少见」也都是念得出来的姓，不用担心别人不认识。</p>'
+      '<div class="sur-grid grid-box" id="st-sur-grid">' +
+      (surCells(list) || '<p class="empty">没筛到这个姓，放宽一下条件。<button type="button" class="link-btn" data-clear-sur-f>清除筛选</button></p>') +
+      '</div>'
     );
   }
 
@@ -1364,18 +1972,21 @@
       '</div>';
 
     var slots = st.slots;
+    var parts = charFilterParts();
+    var sum = filterSummary(parts, 'data-clear-char-f', !list.length);
 
     return (
       '<div class="toolbar">' +
       '  <input class="search" id="st-char-input" type="search" placeholder="搜汉字或拼音：沐 / mu"' +
-      '    value="' + esc(st.charKeyword || '') + '">' +
+      '    value="' + esc(st.charKeyword || '') + '" aria-label="搜索用字">' +
       rows +
+      sum +
       '</div>' +
       '<section class="card">' +
       '  <div class="card-title">全部字库 <span class="count" id="st-char-count">' +
       list.length + ' / ' + NM.CHARS.length + ' 个</span></div>' +
       '  <div class="char-grid grid-box" id="st-char-grid">' +
-      (charCells(list) || '<p class="empty">没筛到这个字，放宽一下条件。</p>') +
+      (charCells(list) || '<p class="empty">没筛到这个字，放宽一下条件。<button type="button" class="link-btn" data-clear-char-f>清除筛选</button></p>') +
       '</div>' +
       '</section>' +
       '<p class="rec-hint">筛选全部为「全部」时列出全部 ' + NM.CHARS.length +
@@ -1505,7 +2116,9 @@
       }
       if (f.lang !== 'all' && enLangOf(it) !== f.lang) return false;
       if (kw) {
-        var hay = (it.n + ' ' + (it.zh || '') + ' ' + (it.org || '') + ' ' + (it.m || '')).toLowerCase();
+        var aliases = (NM.EN_CELEB_SEARCH && NM.EN_CELEB_SEARCH[String(it.n || '').toLowerCase()]) || [];
+        var hay = (it.n + ' ' + (it.zh || '') + ' ' + (it.org || '') + ' ' + (it.m || '') +
+          ' ' + (it.nick || []).join(' ') + ' ' + aliases.join(' ')).toLowerCase();
         if (hay.indexOf(kw) === -1) return false;
       }
       return true;
@@ -1519,7 +2132,13 @@
     } catch (e) { return null; }
   }
 
-  function enRow(it, i, extra) {    var meta = (it.zh ? it.zh + ' · ' : '') + (it.org || '');
+  function enRow(it, i, extra) {
+    var enCelebs = (NM.EN_CELEBS && NM.EN_CELEBS[String(it.n || '').toLowerCase()]) || [];
+    var celebNames = enCelebs.map(function (x) {
+      return x[0] + (x[3] ? '（' + x[3] + '）' : '');
+    }).join('、');
+    var meta = (it.zh ? it.zh + ' · ' : '') + (it.org || '') +
+      (celebNames ? ' · 名人：' + celebNames : '');
     if (extra) meta += extra;
     var on = state.enPicked && state.enPicked.n === it.n;
     return '<button class="pool-row en-row' + (on ? ' active' : '') + '" data-en-pick="' + i + '">' +
@@ -1532,6 +2151,16 @@
   function enPickedCard() {
     var it = state.enPicked;
     if (!it) return '';
+    var enCelebs = (NM.EN_CELEBS && NM.EN_CELEBS[String(it.n || '').toLowerCase()]) || [];
+    var celebHtml = enCelebs.length
+      ? '<div class="en-celebs"><div class="en-celebs-title">同名名人 <span class="muted">灵感参考</span></div>' +
+        enCelebs.map(function (x) {
+          return '<div class="en-celeb-row"><b>' + esc(x[0]) +
+            (x[3] ? ' <span class="en-celeb-zh">（' + esc(x[3]) + '）</span>' : '') +
+            '</b><i>' + esc(x[1]) + '</i><p>' + esc(x[2]) + '</p></div>';
+        }).join('') +
+        '<p class="hint" style="margin-top:10px;margin-bottom:0">仅作文化联想，不代表姓名优劣。</p></div>'
+      : '';
     return (
       '<section class="card picked-card">' +
       '  <div class="card-title">当前选中</div>' +
@@ -1549,6 +2178,7 @@
       (it.nick && it.nick.length
         ? '<p class="hint" style="margin-top:8px;margin-bottom:0">昵称：' + esc(it.nick.join(' / ')) + '</p>'
         : '') +
+      celebHtml +
       '  </div>' +
       '</section>'
     );
@@ -1557,14 +2187,16 @@
   function renderEnBrowse() {
     var f = state.enF;
     var list = browseEnNames();
+    var parts = enFilterParts();
+    var sum = filterSummary(parts, 'data-clear-en-f', !list.length);
     var rows = list.length
       ? list.map(function (it, i) { return enRow(it, i, ''); }).join('')
-      : '<p class="empty">这个分类下没有名字，换个筛选试试。</p>';
+      : '<p class="empty">这个分类下没有名字。<button type="button" class="link-btn" data-clear-en-f>清除筛选</button></p>';
 
     return (
       '<div class="toolbar">' +
       '  <input class="search" id="en-search" type="search" placeholder="搜英文 / 译名 / 含义：Ava / 艾娃 / 智慧"' +
-      '    value="' + esc(f.keyword || '') + '">' +
+      '    value="' + esc(f.keyword || '') + '" aria-label="搜索英文名">' +
       '  <div class="filter-row">' +
       filterRow([['all', '不限性别'], ['f', '偏女'], ['m', '偏男']], f.g, 'data-en-g') +
       '  </div>' +
@@ -1572,6 +2204,7 @@
       '  <div class="filter-row">' + filterRow(EN_VIBE, f.vibe, 'data-en-vibe') + '</div>' +
       '  <div class="filter-row">' + filterRow(EN_THEME, f.theme, 'data-en-theme') + '</div>' +
       '  <div class="filter-row">' + filterRow(EN_LANG, f.lang, 'data-en-lang') + '</div>' +
+      sum +
       '</div>' +
       enPickedCard() +
       '<section class="card">' +
@@ -1595,10 +2228,10 @@
 
     return (
       '<section class="card">' +
-      '  <div class="card-title">中文名 <span class="muted">可留空，纯按性格取</span></div>' +
+      '  <div class="card-title">中文名 <span class="muted">从中文出发取英文名，可留空</span></div>' +
       '  <input class="input" id="en-input" placeholder="例如 沐晴 / 李慕白 / 欧阳见山" value="' + esc(state.enInput) + '">' +
       genderRow +
-      '  <p class="hint">边输边配：填了中文名就按拼音贴近挑，留空只看性格气质。</p>' +
+      '  <p class="hint">填了中文名按拼音贴近；也可只填姓。留空则按性格气质推荐。</p>' +
       '</section>' +
       '<div id="en-rec-out">' + enRecOut() + '</div>'
     );
@@ -1660,6 +2293,8 @@
     cardExport.url = url;
     cardExport.name = '仙鹿起名-' +
       (data.full || (data.enName && data.enName.n) || 'name') + '.jpg';
+    var closeBtn = $('#modal-close');
+    if (closeBtn && closeBtn.focus) { try { closeBtn.focus(); } catch (e) {} }
   }
 
   /* 保存卡片。曾经的写法是把 data: URL 直接挂在 <a download> 上，但部分浏览器
@@ -1667,6 +2302,18 @@
    * data URL —— macOS 找不到能打开它的 App，就弹「没有可打开的程序」。 */
   function saveCard() {
     if (!cardExport.url) return;
+    var dl = $('#modal-dl');
+    if (dl) {
+      dl.classList.add('is-busy');
+      dl.textContent = '保存中…';
+    }
+    var doneUi = function (ok, msg) {
+      if (dl) {
+        dl.classList.remove('is-busy');
+        dl.textContent = '下载图片';
+      }
+      if (msg) toast(msg);
+    };
 
     /* 小红书等容器：<a download> 被禁用，改走原生桥存相册（与星空跳一跳同一套） */
     var bridge = window.xhs && window.xhs.miniTool;
@@ -1677,8 +2324,8 @@
       var p = typeof bridge.writeTempFile === 'function'
         ? bridge.writeTempFile({ data: cardExport.url }).then(function (res) { return toAlbum(res.filePath); })
         : toAlbum(cardExport.url);
-      p.then(function () { toast('已保存到相册'); })
-       .catch(function () { toast('保存失败，请检查相册权限后重试'); });
+      p.then(function () { doneUi(true, '已保存到相册'); })
+       .catch(function () { doneUi(false, '保存失败，请检查相册权限后重试'); });
       return;
     }
 
@@ -1692,9 +2339,11 @@
       a.click();
       a.remove();
       setTimeout(function () { URL.revokeObjectURL(objURL); }, 2000);
+      doneUi(true, '已开始下载');
     } catch (e) {
       /* 极端兜底：另开一页显示图片，交给用户长按保存 */
-      window.open(cardExport.url, '_blank');
+      try { window.open(cardExport.url, '_blank'); } catch (e2) {}
+      doneUi(false, '请长按图片保存');
     }
   }
 
@@ -1783,13 +2432,14 @@
       /* 详情页不放标题：名字本身已经在页面正中，顶上再写一句是废话 */
       detail: '',
       pool: '备选名字',
-      translit: '西名中起', studio: '自选姓名', mine: '我的', en: '英文名',
-      'studio-sur': '挑一个姓', 'studio-char': '挑选姓名'
+      translit: '西名中起', studio: '自选姓名', mine: '我的', en: '取英文名',
+      'studio-sur': '选姓氏', 'studio-char': '挑选姓名'
     }[s] || '仙鹿起名';
     $('#hd-title').textContent = title;
     $('#screen').scrollTop = 0;
     window.scrollTo(0, keepY);
     syncToTop();
+    paintStorageTip();
   }
 
   /* ── 页面切换：iOS NavigationLink 式 ────────
@@ -1879,6 +2529,8 @@
   function swapTo(screen, isPop) {
     if (screen === state.screen) return render();
     var from = state.screen;
+    /* 离开推荐相关页时清空临时偏好 */
+    if (isRecommendFlow(from) && !isRecommendFlow(screen)) clearSessionFeedback();
     state.screen = screen;
     if (isTab(from, screen)) { hist = []; return render(); }
     if (isPop) slideSwap(true);
@@ -1931,9 +2583,20 @@
     /* 浮层：给当前这一页换一个选择，就地生效，不进页面栈 */
     if (d.openSheet) return openSheet(d.openSheet);
 
+    if (d.mineToggle) {
+      if (!state.mineExpand) state.mineExpand = { profile: false, bazi: false };
+      state.mineExpand[d.mineToggle] = !state.mineExpand[d.mineToggle];
+      return render({ keepScroll: true });
+    }
+
     if (d.goBack) return goBack(d.goBack);
 
     if (d.go) {
+      if (d.go === 'result' && state.profile && state.profile.answered) {
+        if (state.surname && (!state.recs || !state.recs.length)) refreshRecs();
+        if (!state.surname) state.recs = [];
+      }
+      if (d.go === 'result' && !(state.profile && state.profile.answered)) d.go = 'quiz';
       if (d.go === 'quiz') { state.answers = []; state.qi = 0; }
       if (d.go === 'bazi' && state.baziInfo && state.baziInfo.solar) {
         state.baziForm.y = state.baziInfo.solar.y;
@@ -1971,14 +2634,24 @@
       return render();
     }
     if (t.hasAttribute('data-again')) {
-      /* 从推荐点进来时还没有算过这个姓的备选，这里补齐 */
-      if (!state.candidates || !state.candidates.length) {
-        state.candidates = state.profile && state.surname
-          ? NM.namesForSurname(state.profile, state.surname, { wantGender: state.wantGender })
-          : [];
+      /* 「换名」= 不喜欢当前名（记入 banFull）并换下一个 */
+      var curAgain = state.current;
+      if (curAgain && curAgain.full) {
+        if (!state.feedback.banFull) state.feedback.banFull = {};
+        state.feedback.banFull[curAgain.full] = 1;
       }
+      rebuildCandidates();
       var one = NM.sampleTop(state.candidates, 0.7, 1, state.shown);
-      if (!one.length) { toast('这个姓的候选都用完了，换个姓吧'); return; }
+      if (!one.length) {
+        state.shown = {};
+        one = NM.sampleTop(state.candidates, 0.7, 1, state.shown);
+      }
+      if (!one.length) {
+        toast((state.feedback.keepChars || []).length
+          ? '带这些保留字的候选不够了，试试取消部分保留或换姓'
+          : '这个姓的候选都用完了，换个姓吧');
+        return render({ keepScroll: true });
+      }
       state.current = one[0];
       state.shown[one[0].full] = 1;
       return render();
@@ -1997,14 +2670,11 @@
     }
     if (t.hasAttribute('data-refresh-rec')) {
       if (!state.profile) return;
-      state.recs.forEach(function (r) { state.recShown[r.surname.c] = 1; });
+      if (!state.surname) return toast('请先选姓氏');
+      state.recs.forEach(function (r) { state.recShown[r.given] = 1; });
       /* 排除记录攒太多会把候选池抽干，定期清一次 */
-      if (Object.keys(state.recShown).length > 24) state.recShown = {};
-      var fresh = NM.recommend(state.profile, {
-        wantGender: state.wantGender, count: 6, exclude: state.recShown
-      });
-      if (fresh.length) state.recs = fresh;
-      else { state.recShown = {}; state.recs = NM.recommend(state.profile, { wantGender: state.wantGender, count: 6 }); }
+      if (Object.keys(state.recShown).length > 40) state.recShown = {};
+      refreshRecs();
       return render({ keepScroll: true });
     }
     if (d.pickSurname) {
@@ -2014,17 +2684,21 @@
       state.surname = ps;
       state.shown = {};
       state.candidates = [];
+      state.recShown = {};
       poolFilter.tag = 'all';
 
-      /* 结果页本身不认姓氏（它列的是「姓 + 名」组合），所以选完在同一个浮层里
-       * 换成该姓的候选名 —— 浮层不关、不再多跳一页。 */
-      if (surBase === 'result') { sheet.type = 'pool'; return paintSheet(false); }
+      /* 结果页：选姓后直接在该姓下生成名字推荐 */
+      if (surBase === 'result') {
+        refreshRecs();
+        closeSheet();
+        return render();
+      }
 
       closeSheet();
       /* 详情页：给新姓配一个最合适的名，原地换掉当前详情 */
       if (surBase === 'detail') {
         if (!state.profile) return toast('先做一遍测试，才能按新姓重排名字');
-        var next = NM.namesForSurname(state.profile, ps, { wantGender: state.wantGender });
+        var next = NM.namesForSurname(state.profile, ps, withFeedback({ wantGender: state.wantGender }));
         state.candidates = next;
         var one2 = NM.sampleTop(next, 0.7, 1, state.shown);
         if (one2.length) { state.current = one2[0]; state.shown[one2[0].full] = 1; }
@@ -2073,7 +2747,14 @@
         toast('已取消收藏');
         return render({ keepScroll: true });
       }
-      state.fav.unshift({ full: cur.full, py: NM.namePinyin(cur.surname, cur.chars), why: whyFor(cur) });
+      state.fav.unshift({
+        full: cur.full,
+        py: NM.namePinyin(cur.surname, cur.chars),
+        why: whyFor(cur),
+        src: state.detailFrom === 'mine' ? 'detail' : (state.detailFrom || 'detail'),
+        at: Date.now(),
+        note: ''
+      });
       saveFav();
       toast('已收藏');
       return render({ keepScroll: true });
@@ -2093,7 +2774,10 @@
       state.fav.unshift({
         full: mSave.full,
         py: NM.namePinyin(mSave.surname, mSave.chars),
-        why: whyFor(mSave)
+        why: whyFor(mSave),
+        src: 'translit',
+        at: Date.now(),
+        note: ''
       });
       saveFav();
       toast('已收藏');
@@ -2137,7 +2821,7 @@
 
     if (d.sur) {
       state.studio.surname = NM.allSurnames().filter(function (s) { return s.c === d.sur; })[0] || state.studio.surname;
-      /* 点姓只选中并展示介绍，底部「选好了」才回台面 */
+      /* 点姓只选中并展示介绍，底部「确定」才回台面 */
       return render({ keepScroll: true });
     }
     if (t.hasAttribute('data-sur-random')) {
@@ -2167,8 +2851,13 @@
         try { cell = document.querySelector('.char-cell[data-char="' + c + '"]'); } catch (err) { cell = null; }
         (cell && cell.classList ? cell : t).classList.toggle('active', at === -1);
         var dk2 = $('#dock');
-        if (dk2) dk2.innerHTML = dockFor('studio-char');
+        if (dk2) {
+          var dkHtml = dockFor('studio-char');
+          dk2.innerHTML = dkHtml;
+          dk2.classList.toggle('hidden', !dkHtml);
+        }
         if (document.body) {
+          document.body.classList.toggle('has-dock', !!(dk2 && !dk2.classList.contains('hidden')));
           document.body.classList.toggle('has-dock-picked', s2.length > 0);
         }
         return;
@@ -2176,20 +2865,37 @@
       render({ keepScroll: true });
       return;
     }
-    if (t.hasAttribute('data-st-clear')) { state.studio.slots = []; return render({ keepScroll: true }); }
+    if (t.hasAttribute('data-st-clear')) {
+      state.studio.slots = [];
+      return render({ keepScroll: true });
+    }
     if (t.hasAttribute('data-st-save')) {
       var sc = state.studio, ch = sc.slots.slice();
+      if (!sc.surname) return toast('先选姓氏');
       if (!ch.length) return toast('先选一个字');
       var full = sc.surname.c + ch.join('');
-      if (state.fav.some(function (f) { return f.full === full; })) return toast('已经收藏过了');
+      var favAt = -1;
+      for (var si = 0; si < state.fav.length; si++) {
+        if (state.fav[si].full === full) { favAt = si; break; }
+      }
+      if (favAt !== -1) {
+        state.fav.splice(favAt, 1);
+        saveFav();
+        toast('已取消收藏');
+        return render({ keepScroll: true });
+      }
       state.fav.unshift({
         full: full,
         py: NM.namePinyin(sc.surname, ch),
-        why: ch.map(function (x) { var it = NM.getChar(x); return x + '：' + (it ? it.m : ''); }).join('；')
+        why: ch.map(function (x) { var it = NM.getChar(x); return x + '：' + (it ? it.m : ''); }).join('；'),
+        src: 'studio',
+        at: Date.now(),
+        note: ''
       });
       saveFav();
       /* 多个字的名给一句「非主流」的提示，但不拦着 */
-      return toast(ch.length >= 3 ? '已收藏（三字以上的名不常见）' : '已收藏');
+      toast(ch.length >= 3 ? '已收藏（三字以上的名不常见）' : '已收藏');
+      return render({ keepScroll: true });
     }
 
     if (d.favDel !== undefined) {
@@ -2249,6 +2955,112 @@
       });
       return;
     }
+
+    if (d.banName) {
+      if (!state.feedback.banFull) state.feedback.banFull = {};
+      var nowBanned = false;
+      if (state.feedback.banFull[d.banName]) {
+        delete state.feedback.banFull[d.banName];
+        toast('已恢复「' + d.banName + '」');
+      } else {
+        state.feedback.banFull[d.banName] = 1;
+        toast('已记下不喜欢「' + d.banName + '」');
+        nowBanned = true;
+      }
+      if (state.screen === 'detail') applyFeedbackToDetail({ forceSwap: nowBanned });
+      if (state.screen === 'result') refreshRecs();
+      if (sheet.type === 'ban-names' && sheetIsOpen()) paintSheet(true);
+      return render({ keepScroll: true });
+    }
+    if (d.unbanName) {
+      if (state.feedback.banFull) delete state.feedback.banFull[d.unbanName];
+      toast('已恢复「' + d.unbanName + '」');
+      if (state.screen === 'detail') applyFeedbackToDetail();
+      if (state.screen === 'result') refreshRecs();
+      if (sheet.type === 'ban-names' && sheetIsOpen()) {
+        if (!Object.keys(state.feedback.banFull || {}).length) closeSheet();
+        else paintSheet(true);
+      }
+      return render({ keepScroll: true });
+    }
+    if (d.unbanChar) {
+      if (state.feedback.banChars) delete state.feedback.banChars[d.unbanChar];
+      toast('已取消排除「' + d.unbanChar + '」');
+      if (state.screen === 'detail') applyFeedbackToDetail();
+      if (state.screen === 'result') refreshRecs();
+      return render({ keepScroll: true });
+    }
+    if (d.unkeepChar) {
+      state.feedback.keepChars = (state.feedback.keepChars || []).filter(function (c) {
+        return c !== d.unkeepChar;
+      });
+      toast('已取消保留「' + d.unkeepChar + '」');
+      if (state.screen === 'detail') applyFeedbackToDetail();
+      if (state.screen === 'result') refreshRecs();
+      return render({ keepScroll: true });
+    }
+    if (d.banChar) {
+      if (!state.feedback.banChars) state.feedback.banChars = {};
+      if (state.feedback.banChars[d.banChar]) {
+        delete state.feedback.banChars[d.banChar];
+        toast('已取消排除「' + d.banChar + '」');
+        applyFeedbackToDetail();
+      } else {
+        state.feedback.banChars[d.banChar] = 1;
+        state.feedback.keepChars = (state.feedback.keepChars || []).filter(function (c) {
+          return c !== d.banChar;
+        });
+        toast('之后绝不再出现「' + d.banChar + '」');
+        var banRes = applyFeedbackToDetail();
+        if (!banRes.ok) toast('带当前偏好的候选不够了，试试取消部分排除或换姓');
+      }
+      if (state.screen === 'result') refreshRecs();
+      return render({ keepScroll: true });
+    }
+    if (d.keepChar) {
+      var kc = state.feedback.keepChars || [];
+      var kAt = kc.indexOf(d.keepChar);
+      if (kAt !== -1) {
+        kc.splice(kAt, 1);
+        toast('已取消保留「' + d.keepChar + '」');
+        applyFeedbackToDetail();
+      } else {
+        if (kc.length >= 4) { toast('最多保留 4 个字'); return; }
+        kc.push(d.keepChar);
+        if (state.feedback.banChars) delete state.feedback.banChars[d.keepChar];
+        toast('之后名字都必须带「' + d.keepChar + '」');
+        var keepRes = applyFeedbackToDetail();
+        if (!keepRes.ok) toast('带这些保留字的候选不够了，试试取消部分保留或换姓');
+      }
+      state.feedback.keepChars = kc;
+      if (state.screen === 'result') refreshRecs();
+      return render({ keepScroll: true });
+    }
+    if (t.hasAttribute('data-clear-feedback')) {
+      state.feedback = { banFull: {}, banChars: {}, keepChars: [] };
+      if (state.profile && state.screen === 'result') {
+        state.recShown = {};
+        refreshRecs();
+      }
+      if (state.screen === 'detail') applyFeedbackToDetail();
+      if (sheet.type === 'ban-names' && sheetIsOpen()) closeSheet();
+      toast('已清空推荐偏好');
+      return render({ keepScroll: true });
+    }
+    if (t.hasAttribute('data-clear-sur-f')) {
+      state.studio.surF = { type: 'all', pop: 'all', letter: 'all' };
+      state.studio.surKeyword = '';
+      return render({ keepScroll: true });
+    }
+    if (t.hasAttribute('data-clear-char-f')) {
+      state.studio.charF = { dom: 'all', g: 'all', freq: 'all', letter: 'all' };
+      state.studio.charKeyword = '';
+      return render({ keepScroll: true });
+    }
+    if (t.hasAttribute('data-clear-en-f')) {
+      state.enF = { g: 'all', era: 'all', vibe: 'all', theme: 'all', lang: 'all', keyword: '' };
+      return render({ keepScroll: true });
+    }
   });
 
   $('#hd-back').addEventListener('click', function () {
@@ -2277,7 +3089,11 @@
   $('#sheet-close').addEventListener('click', function () { closeSheet(); });
   $('#sheet-mask').addEventListener('click', function () { closeSheet(); });
   document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape' && sheetIsOpen()) closeSheet();
+    if (e.key === 'Escape') {
+      if (sheetIsOpen()) { closeSheet(); return; }
+      var modal = $('#modal');
+      if (modal && !modal.classList.contains('hidden')) { closeModal(); return; }
+    }
   });
 
   /* 搜索框：只重画列表、不整个 render()，否则输入框会掉焦点。 */
@@ -2395,6 +3211,6 @@
     if (cnt) cnt.textContent = list.length + ' / ' + NM.CHARS.length + ' 个';
   }
 
-  loadFav();
   render();
+  initPersist();
 })();

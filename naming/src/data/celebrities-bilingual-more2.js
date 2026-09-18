@@ -1,0 +1,248 @@
+/* 双语名人参考库扩充卷 II
+ * 与前两卷使用同一 schema；英文全名采用通行写法，中文名采用常用译名。
+ */
+var NM = (window.NM = window.NM || {});
+
+NM.BILINGUAL_CELEBS_MORE2 = [
+  /* ── 国际娱乐：美国 / 英国 / 欧洲 ───────────────────── */
+  { en: 'Charlie Chaplin', zh: '查理·卓别林', tokens: ['Charlie', 'Chaplin'], job: '英国喜剧演员、导演', bio: '默片时代最具影响力的电影创作者之一，以小流浪汉形象闻名。' },
+  { en: 'Audrey Hepburn', zh: '奥黛丽·赫本', tokens: ['Audrey', 'Hepburn'], job: '英国演员、公益人士', bio: '经典电影演员，晚年长期参与联合国儿童基金会公益工作。' },
+  { en: 'Alfred Hitchcock', zh: '阿尔弗雷德·希区柯克', tokens: ['Alfred', 'Hitchcock'], job: '英国导演、制片人', bio: '悬疑电影大师，以镜头语言和心理惊悚叙事影响后世电影。' },
+  { en: 'Elvis Presley', zh: '埃尔维斯·普雷斯利', tokens: ['Elvis', 'Presley'], job: '美国歌手、演员', bio: '摇滚乐早期最具代表性的流行文化偶像之一。' },
+  { en: 'Michael Jackson', zh: '迈克尔·杰克逊', tokens: ['Michael', 'Jackson'], job: '美国歌手、舞者', bio: '以音乐、舞蹈和舞台制作革新流行音乐表演。' },
+  { en: 'Madonna', zh: '麦当娜', tokens: ['Madonna'], job: '美国歌手、演员', bio: '长期以音乐创作、舞台形象和艺术表达影响流行文化。' },
+  { en: 'Whitney Houston', zh: '惠特尼·休斯顿', tokens: ['Whitney', 'Houston'], job: '美国歌手、演员', bio: '以宽广音域和经典流行歌曲成为重要歌手。' },
+  { en: 'Bob Dylan', zh: '鲍勃·迪伦', tokens: ['Bob', 'Dylan'], job: '美国歌手、诗人', bio: '以诗性歌词和民谣创作改变现代流行音乐，获诺贝尔文学奖。' },
+  { en: 'Bruce Springsteen', zh: '布鲁斯·斯普林斯汀', tokens: ['Bruce', 'Springsteen'], job: '美国歌手、词曲作者', bio: '以摇滚创作和关注普通人生活的歌词著称。' },
+  { en: 'Lady Gaga', zh: 'Lady Gaga', tokens: ['Lady', 'Gaga'], job: '美国歌手、演员', bio: '以音乐创作、舞台艺术和电影表演闻名。' },
+  { en: 'Adele', zh: '阿黛尔', tokens: ['Adele'], job: '英国歌手、词曲作者', bio: '以深情演唱和多首全球流行歌曲获得广泛影响力。' },
+  { en: 'Ed Sheeran', zh: '艾德·希兰', tokens: ['Ed', 'Sheeran'], job: '英国歌手、词曲作者', bio: '以民谣流行创作、吉他演奏和现场表演闻名。' },
+  { en: 'Elton John', zh: '埃尔顿·约翰', tokens: ['Elton', 'John'], job: '英国歌手、作曲家', bio: '以钢琴演奏、流行歌曲和长期音乐事业著称。' },
+  { en: 'David Bowie', zh: '大卫·鲍伊', tokens: ['David', 'Bowie'], job: '英国歌手、演员', bio: '持续变换音乐风格和舞台形象，影响摇滚与流行艺术。' },
+  { en: 'George Michael', zh: '乔治·迈克尔', tokens: ['George', 'Michael'], job: '英国歌手、词曲作者', bio: '以流行歌曲创作和独唱事业获得国际知名度。' },
+  { en: 'Ralph Fiennes', zh: '拉尔夫·费因斯', tokens: ['Ralph', 'Fiennes'], job: '英国演员、导演', bio: '活跃于舞台与电影，擅长历史人物和复杂戏剧角色。' },
+  { en: 'Kate Winslet', zh: '凯特·温斯莱特', tokens: ['Kate', 'Winslet'], job: '英国演员', bio: '以多类型电影中的细腻表演获得奥斯卡最佳女主角。' },
+  { en: 'Christian Bale', zh: '克里斯蒂安·贝尔', tokens: ['Christian', 'Bale'], job: '英国演员', bio: '以严格的角色准备和多变的银幕形象闻名。' },
+  { en: 'Matt Damon', zh: '马特·达蒙', tokens: ['Matt', 'Damon'], job: '美国演员、编剧', bio: '活跃于商业电影和剧情片，也参与编剧与制片。' },
+  { en: 'Julia Roberts', zh: '朱莉娅·罗伯茨', tokens: ['Julia', 'Roberts'], job: '美国演员、制片人', bio: '长期活跃于好莱坞，以喜剧和剧情电影角色为人熟知。' },
+  { en: 'Viola Davis', zh: '维奥拉·戴维斯', tokens: ['Viola', 'Davis'], job: '美国演员、制片人', bio: '以舞台、电视和电影中的有力表演获得多项重要荣誉。' },
+  { en: 'George Clooney', zh: '乔治·克鲁尼', tokens: ['George', 'Clooney'], job: '美国演员、导演', bio: '活跃于电影表演、导演和社会公益领域。' },
+  { en: 'Pedro Pascal', zh: '佩德罗·帕斯卡', tokens: ['Pedro', 'Pascal'], job: '智利裔美国演员', bio: '凭电视剧与电影中的多样角色获得国际知名度。' },
+  { en: 'Greta Gerwig', zh: '格蕾塔·葛韦格', tokens: ['Greta', 'Gerwig'], job: '美国导演、编剧、演员', bio: '以关注女性成长的电影创作和清晰的个人风格受到关注。' },
+  { en: 'Wes Anderson', zh: '韦斯·安德森', tokens: ['Wes', 'Anderson'], job: '美国导演、编剧', bio: '以对称构图、童话色彩和独特幽默形成鲜明电影风格。' },
+  { en: 'Tim Burton', zh: '蒂姆·波顿', tokens: ['Tim', 'Burton'], job: '美国导演、制片人', bio: '以哥特式美学、奇幻题材和标志性角色设计闻名。' },
+  { en: 'James Cameron', zh: '詹姆斯·卡梅隆', tokens: ['James', 'Cameron'], job: '加拿大导演、编剧', bio: '执导多部具有技术创新和全球影响力的商业电影。' },
+  { en: 'Guillermo del Toro', zh: '吉尔莫·德尔·托罗', tokens: ['Guillermo', 'Toro'], job: '墨西哥导演、作家', bio: '以奇幻生物、寓言叙事和细腻的视觉设计著称。' },
+  { en: 'Jean-Luc Godard', zh: '让·吕克·戈达尔', tokens: ['Jean-Luc', 'Godard'], job: '法国导演、编剧', bio: '法国新浪潮重要导演，以跳接和自反性叙事革新电影语言。' },
+  { en: 'Ingmar Bergman', zh: '英格玛·伯格曼', tokens: ['Ingmar', 'Bergman'], job: '瑞典导演、编剧', bio: '以探索信仰、死亡和亲密关系的电影作品闻名。' },
+  { en: 'Marion Cotillard', zh: '玛丽昂·歌迪亚', tokens: ['Marion', 'Cotillard'], job: '法国演员', bio: '活跃于法国与国际电影，塑造过多种复杂角色。' },
+  { en: 'Monica Bellucci', zh: '莫妮卡·贝鲁奇', tokens: ['Monica', 'Bellucci'], job: '意大利演员、模特', bio: '以意大利及国际电影中的表演和银幕形象受到关注。' },
+  { en: 'Penélope Cruz', zh: '佩内洛普·克鲁兹', tokens: ['Penelope', 'Cruz'], job: '西班牙演员', bio: '活跃于西班牙语电影和好莱坞制作，曾获奥斯卡最佳女配角。' },
+  { en: 'Javier Bardem', zh: '哈维尔·巴登', tokens: ['Javier', 'Bardem'], job: '西班牙演员', bio: '以具有强烈个人气质的电影角色和国际表演事业著称。' },
+  { en: 'Björk', zh: '比约克', tokens: ['Bjork'], job: '冰岛歌手、音乐人', bio: '以实验性音乐、视觉艺术和独特演出形式闻名。' },
+
+  /* ── 国际娱乐：韩国 / 日本 / 印度 / 拉美 / 非洲 ─────── */
+  { en: 'Kim Tae-hyung', zh: '金泰亨', tokens: ['Kim', 'Tae-hyung'], job: '韩国歌手、演员', bio: '以团体与个人音乐作品、舞台表演和影视活动受到关注。' },
+  { en: 'Jungkook', zh: '田柾国', tokens: ['Jungkook'], job: '韩国歌手', bio: '以团体与个人音乐作品和舞台表演获得国际知名度。' },
+  { en: 'Lisa', zh: '拉莉莎·马诺班', tokens: ['Lisa'], job: '泰国歌手、舞者', bio: '以团体与个人音乐、舞蹈和时尚活动在全球受到关注。' },
+  { en: 'Son Ye-jin', zh: '孙艺珍', tokens: ['Son', 'Ye-jin'], job: '韩国演员', bio: '长期活跃于韩国电影与电视剧，角色类型多样。' },
+  { en: 'Lee Jung-jae', zh: '李政宰', tokens: ['Lee', 'Jung-jae'], job: '韩国演员、导演', bio: '以电影和电视剧表演获得国际关注，也从事导演创作。' },
+  { en: 'Youn Yuh-jung', zh: '尹汝贞', tokens: ['Youn', 'Yuh-jung'], job: '韩国演员', bio: '长期活跃于韩国影视，凭国际电影表演获得奥斯卡最佳女配角。' },
+  { en: 'Kenshi Yonezu', zh: '米津玄师', tokens: ['Kenshi', 'Yonezu'], job: '日本歌手、音乐人', bio: '以流行音乐创作、制作和动画主题曲获得广泛知名度。' },
+  { en: 'Hikaru Utada', zh: '宇多田光', tokens: ['Hikaru', 'Utada'], job: '日美歌手、词曲作者', bio: '以日语与英语流行音乐创作在亚洲拥有广泛影响力。' },
+  { en: 'Amitabh Bachchan', zh: '阿米特巴·巴强', tokens: ['Amitabh', 'Bachchan'], job: '印度演员、制片人', bio: '印度电影史上最具代表性的演员之一，职业生涯横跨数十年。' },
+  { en: 'Deepika Padukone', zh: '迪皮卡·帕度柯妮', tokens: ['Deepika', 'Padukone'], job: '印度演员、制片人', bio: '长期活跃于印度电影，也参与心理健康公共倡议。' },
+  { en: 'Alia Bhatt', zh: '阿莉雅·布哈特', tokens: ['Alia', 'Bhatt'], job: '印度演员、歌手', bio: '以印度电影中的多样角色和制片工作受到关注。' },
+  { en: 'Rajinikanth', zh: '拉吉尼坎特', tokens: ['Rajinikanth'], job: '印度演员', bio: '印度南部电影最具影响力的明星之一，以独特银幕风格闻名。' },
+  { en: 'Madhuri Dixit', zh: '玛杜丽·迪克西特', tokens: ['Madhuri', 'Dixit'], job: '印度演员、舞者', bio: '以电影表演、舞蹈和长期流行文化影响力著称。' },
+  { en: 'Shakira', zh: '夏奇拉', tokens: ['Shakira'], job: '哥伦比亚歌手、舞者', bio: '以拉丁流行音乐、舞蹈和跨语言创作获得全球知名度。' },
+  { en: 'Bad Bunny', zh: '坏兔子', tokens: ['Bad', 'Bunny'], job: '波多黎各歌手、制作人', bio: '以拉丁陷阱和雷鬼音乐作品推动西语流行音乐全球传播。' },
+  { en: 'Sofía Vergara', zh: '索菲娅·维加拉', tokens: ['Sofia', 'Vergara'], job: '哥伦比亚演员、制片人', bio: '活跃于美国电视与电影，也参与商业事业。' },
+  { en: 'Celia Cruz', zh: '塞莉娅·克鲁兹', tokens: ['Celia', 'Cruz'], job: '古巴歌手', bio: '以萨尔萨音乐和标志性的舞台演出成为拉丁音乐传奇。' },
+  { en: 'Wizkid', zh: '威兹基德', tokens: ['Wizkid'], job: '尼日利亚歌手', bio: '非洲流行音乐代表人物之一，推动 Afrobeats 走向国际。' },
+  { en: 'Burna Boy', zh: '伯纳男孩', tokens: ['Burna', 'Boy'], job: '尼日利亚歌手', bio: '以融合非洲节奏与全球流行元素的音乐受到关注。' },
+  { en: "Youssou N'Dour", zh: '尤苏·恩多尔', tokens: ['Youssou', 'Ndour'], job: '塞内加尔歌手、政治人物', bio: '以 mbalax 音乐和国际文化交流活动闻名。' },
+  { en: 'Trevor Noah', zh: '特雷弗·诺亚', tokens: ['Trevor', 'Noah'], job: '南非喜剧演员、主持人', bio: '以脱口秀、喜剧表演和国际公共议题评论为人熟知。' },
+
+  /* ── 华语娱乐：大陆 / 香港 / 台湾 / 新加坡 / 海外 ──── */
+  { en: 'Hu Ge', zh: '胡歌', tokens: ['Hu', 'Ge'], job: '中国演员、歌手', bio: '以电视剧与电影表演及舞台作品受到广泛认可。' },
+  { en: 'Zhang Ruoyun', zh: '张若昀', tokens: ['Zhang', 'Ruoyun'], job: '中国演员', bio: '活跃于电视剧和电影，擅长多种类型角色。' },
+  { en: 'Wang Kai', zh: '王凯', tokens: ['Wang', 'Kai'], job: '中国演员、歌手', bio: '以电视剧、电影和舞台表演为人熟知。' },
+  { en: 'Deng Ziqi', zh: '邓紫棋', tokens: ['Deng', 'Ziqi'], job: '香港歌手、词曲作者', bio: '以流行音乐创作、演唱及现场表现获得国际关注。' },
+  { en: 'Wang Leehom', zh: '王力宏', tokens: ['Wang', 'Leehom'], job: '美籍华人歌手、音乐人', bio: '以华语流行音乐创作、演唱和跨文化音乐融合闻名。' },
+  { en: 'David Wang', zh: '王杰', tokens: ['David', 'Wang'], job: '香港歌手、词曲作者', bio: '以国语流行歌曲和具有辨识度的嗓音获得知名度。' },
+  { en: 'Teresa Cheung', zh: '张柏芝', tokens: ['Teresa', 'Cheung'], job: '香港演员、歌手', bio: '长期活跃于香港电影和音乐领域。' },
+  { en: 'Carina Lau', zh: '刘嘉玲', tokens: ['Carina', 'Lau'], job: '香港演员', bio: '以电影与电视剧表演和长期银幕事业著称。' },
+  { en: 'Brigitte Lin', zh: '林青霞', tokens: ['Brigitte', 'Lin'], job: '台湾演员、作家', bio: '华语电影经典演员，塑造过多种鲜明角色。' },
+  { en: 'Sylvia Chang', zh: '张艾嘉', tokens: ['Sylvia', 'Chang'], job: '台湾演员、导演、歌手', bio: '横跨表演、导演、编剧与音乐创作。' },
+  { en: 'Hou Hsiao-hsien', zh: '侯孝贤', tokens: ['Hou', 'Hsiao-hsien'], job: '台湾导演、编剧', bio: '台湾新电影重要导演，以克制长镜头和历史记忆书写闻名。' },
+  { en: 'Edward Yang', zh: '杨德昌', tokens: ['Edward', 'Yang'], job: '台湾导演、编剧', bio: '台湾新电影代表导演，关注都市生活与现代人的关系。' },
+  { en: 'Tsai Ming-liang', zh: '蔡明亮', tokens: ['Tsai', 'Ming-liang'], job: '马来西亚华裔导演', bio: '以极简影像、长镜头和都市孤独主题著称。' },
+  { en: 'Eric Chou', zh: '周兴哲', tokens: ['Eric', 'Chou'], job: '台湾歌手、词曲作者', bio: '以华语抒情流行歌曲和创作能力受到关注。' },
+  { en: 'G.E.M. Tang', zh: '邓紫棋', tokens: ['GEM', 'Tang'], job: '香港歌手、词曲作者', bio: '以流行音乐创作、演唱及现场表现获得国际关注。' },
+  { en: 'Miriam Yeung', zh: '杨千嬅', tokens: ['Miriam', 'Yeung'], job: '香港歌手、演员', bio: '以粤语流行音乐和电影表演长期活跃于华语文化圈。' },
+  { en: 'Nicholas Tse', zh: '谢霆锋', tokens: ['Nicholas', 'Tse'], job: '香港歌手、演员', bio: '横跨音乐、电影、电视与餐饮事业。' },
+  { en: 'Francis Ng', zh: '吴镇宇', tokens: ['Francis', 'Ng'], job: '香港演员', bio: '以电影和电视剧中的多样角色及鲜明表演风格闻名。' },
+  { en: 'Takeshi Kaneshiro', zh: '金城武', tokens: ['Takeshi', 'Kaneshiro'], job: '日台演员', bio: '活跃于华语与日本电影，拥有跨地区观众影响力。' },
+  { en: 'Vivian Chow', zh: '周慧敏', tokens: ['Vivian', 'Chow'], job: '香港歌手、演员', bio: '以粤语流行音乐和影视作品成为香港流行文化代表人物。' },
+  { en: 'Gong Yoo', zh: '孔刘', tokens: ['Gong', 'Yoo'], job: '韩国演员', bio: '以电视剧和电影作品在亚洲拥有广泛知名度。' },
+
+  /* ── 中国古代与近现代历史人物 ─────────────────────── */
+  { en: 'Han Fei', zh: '韩非', tokens: ['Han', 'Fei'], job: '中国思想家', bio: '法家思想代表人物，著有《韩非子》，讨论制度与治理。' },
+  { en: 'Mozi', zh: '墨子', tokens: ['Mozi'], job: '中国思想家、科学家', bio: '墨家学派创始人，主张兼爱，也关注逻辑与技术。' },
+  { en: 'Qu Yuan', zh: '屈原', tokens: ['Qu', 'Yuan'], job: '中国诗人、政治家', bio: '战国时期楚国诗人，《离骚》作者，端午文化与其相关。' },
+  { en: 'Sima Qian', zh: '司马迁', tokens: ['Sima', 'Qian'], job: '中国史学家、文学家', bio: '《史记》作者，建立纪传体通史的典范。' },
+  { en: 'Li Bai', zh: '李白', tokens: ['Li', 'Bai'], job: '中国诗人', bio: '盛唐诗人，作品想象瑰丽，后世誉为诗仙。' },
+  { en: 'Du Fu', zh: '杜甫', tokens: ['Du', 'Fu'], job: '中国诗人', bio: '盛唐诗人，以关注社会现实和深沉诗风著称。' },
+  { en: 'Wang Wei', zh: '王维', tokens: ['Wang', 'Wei'], job: '中国诗人、画家', bio: '唐代诗人和画家，山水诗与禅意影响深远。' },
+  { en: 'Bai Juyi', zh: '白居易', tokens: ['Bai', 'Juyi'], job: '中国诗人', bio: '唐代诗人，作品语言平易，关注民生与社会现实。' },
+  { en: 'Su Shi', zh: '苏轼', tokens: ['Su', 'Shi'], job: '中国文学家、书画家', bio: '宋代文学巨匠，诗词散文书画皆有重要成就。' },
+  { en: 'Wang Anshi', zh: '王安石', tokens: ['Wang', 'Anshi'], job: '中国政治家、文学家', bio: '北宋政治家、文学家，主持熙宁变法并留下诗文作品。' },
+  { en: 'Zhu Xi', zh: '朱熹', tokens: ['Zhu', 'Xi'], job: '中国思想家、教育家', bio: '宋代理学集大成者，长期影响东亚教育与思想传统。' },
+  { en: 'Wang Yangming', zh: '王阳明', tokens: ['Wang', 'Yangming'], job: '中国思想家、军事家', bio: '明代心学代表人物，强调知行合一。' },
+  { en: 'Tang Taizong', zh: '唐太宗', tokens: ['Tang', 'Taizong'], job: '唐朝皇帝', bio: '唐太宗李世民，开创贞观之治并重视纳谏。' },
+  { en: 'Emperor Taizu of Song', zh: '宋太祖', tokens: ['Emperor', 'Taizu', 'Song'], job: '宋朝皇帝', bio: '宋朝建立者，推进中央集权并重建统一政权。' },
+  { en: 'Nurhaci', zh: '努尔哈赤', tokens: ['Nurhaci'], job: '后金建立者', bio: '统一女真各部并建立后金，为清朝建立奠定基础。' },
+  { en: 'Kang Youwei', zh: '康有为', tokens: ['Kang', 'Youwei'], job: '中国思想家、政治家', bio: '晚清维新思想家，推动变法和近代政治改革讨论。' },
+  { en: 'Liang Qichao', zh: '梁启超', tokens: ['Liang', 'Qichao'], job: '中国思想家、文学家', bio: '近代思想家、政论家和教育家，对现代中国公共写作影响深远。' },
+  { en: 'Cai Yuanpei', zh: '蔡元培', tokens: ['Cai', 'Yuanpei'], job: '中国教育家', bio: '教育家、北京大学校长，倡导兼容并包和学术自由。' },
+  { en: 'Lu Xun', zh: '鲁迅', tokens: ['Lu', 'Xun'], job: '中国作家、思想家', bio: '中国现代文学重要奠基者，以小说、杂文和翻译影响深远。' },
+  { en: 'Hu Shi', zh: '胡适', tokens: ['Hu', 'Shi'], job: '中国学者、作家', bio: '新文化运动代表人物，提倡白话文和实验主义。' },
+  { en: 'Qian Xuesen', zh: '钱学森', tokens: ['Qian', 'Xuesen'], job: '中国科学家', bio: '中国航天事业奠基人之一，参与导弹与航天技术建设。' },
+  { en: 'Deng Jiaxian', zh: '邓稼先', tokens: ['Deng', 'Jiaxian'], job: '中国核物理学家', bio: '中国核武器研制的重要科学家，长期从事国防科研。' },
+  { en: 'Yuan Longping', zh: '袁隆平', tokens: ['Yuan', 'Longping'], job: '中国农学家', bio: '杂交水稻研究先驱，为粮食增产和农业科学作出重要贡献。' },
+  { en: 'Tu Youyou', zh: '屠呦呦', tokens: ['Tu', 'Youyou'], job: '中国药学家', bio: '因青蒿素研究获得诺贝尔生理学或医学奖。' },
+  { en: 'Lin Zexu', zh: '林则徐', tokens: ['Lin', 'Zexu'], job: '清朝政治家', bio: '晚清政治家，因禁烟和维护国家主权而成为历史人物。' },
+  { en: 'Zhang Qian', zh: '张骞', tokens: ['Zhang', 'Qian'], job: '中国外交家、探险家', bio: '汉代出使西域，促进中原与中亚交流并推动丝绸之路发展。' },
+
+  /* ── 世界历史、思想与公共人物 ─────────────────────── */
+  { en: 'Hammurabi', zh: '汉谟拉比', tokens: ['Hammurabi'], job: '古巴比伦国王', bio: '以《汉谟拉比法典》闻名，是古代成文法的重要代表。' },
+  { en: 'Pericles', zh: '伯里克利', tokens: ['Pericles'], job: '古希腊政治家', bio: '雅典民主政治的重要领导者，推动古典雅典文化发展。' },
+  { en: 'Ashoka', zh: '阿育王', tokens: ['Ashoka'], job: '印度帝国君主', bio: '孔雀王朝重要统治者，晚年倡导佛教与非暴力治理。' },
+  { en: 'Murasaki Shikibu', zh: '紫式部', tokens: ['Murasaki', 'Shikibu'], job: '日本作家', bio: '《源氏物语》作者，被视为世界早期长篇小说的重要作家。' },
+  { en: 'Ibn Sina', zh: '伊本·西那', tokens: ['Ibn', 'Sina'], job: '波斯医学家、哲学家', bio: '中世纪伊斯兰世界学者，《医典》长期影响医学教育。' },
+  { en: 'Ibn Khaldun', zh: '伊本·赫勒敦', tokens: ['Ibn', 'Khaldun'], job: '阿拉伯历史学家', bio: '以社会历史理论和《历史绪论》对社会科学影响深远。' },
+  { en: 'Saladin', zh: '萨拉丁', tokens: ['Saladin'], job: '库尔德族政治家、军事家', bio: '中世纪重要统治者，以统一埃及叙利亚和外交才能闻名。' },
+  { en: 'Mansa Musa', zh: '曼萨·穆萨', tokens: ['Mansa', 'Musa'], job: '马里帝国君主', bio: '马里帝国统治者，以财富、朝觐和跨撒哈拉交流闻名。' },
+  { en: 'Christopher Columbus', zh: '克里斯托弗·哥伦布', tokens: ['Christopher', 'Columbus'], job: '航海家', bio: '大西洋航海推动了欧洲与美洲之间持续的历史接触。' },
+  { en: 'Johannes Gutenberg', zh: '约翰内斯·古腾堡', tokens: ['Johannes', 'Gutenberg'], job: '德国发明家', bio: '改良活字印刷技术，推动欧洲知识传播。' },
+  { en: 'Simón Bolívar', zh: '西蒙·玻利瓦尔', tokens: ['Simon', 'Bolivar'], job: '南美政治家、军事家', bio: '拉丁美洲独立运动重要领导者，被称为解放者。' },
+  { en: 'Abigail Adams', zh: '阿比盖尔·亚当斯', tokens: ['Abigail', 'Adams'], job: '美国政治思想家', bio: '美国建国时期重要公共人物，以书信和政治见解闻名。' },
+  { en: 'Franklin D. Roosevelt', zh: '富兰克林·罗斯福', tokens: ['Franklin', 'Roosevelt'], job: '美国总统', bio: '美国总统，推行新政并在二战时期领导美国。' },
+  { en: 'Eleanor Roosevelt', zh: '埃莉诺·罗斯福', tokens: ['Eleanor', 'Roosevelt'], job: '美国公共人物、人权倡导者', bio: '参与联合国人权工作，推动《世界人权宣言》形成。' },
+  { en: 'Golda Meir', zh: '果尔达·梅厄', tokens: ['Golda', 'Meir'], job: '以色列政治家', bio: '以色列第四任总理，也是该国早期重要女性领导人。' },
+  { en: 'Desmond Tutu', zh: '德斯蒙德·图图', tokens: ['Desmond', 'Tutu'], job: '南非主教、人权倡导者', bio: '反种族隔离运动重要声音，倡导真相与和解。' },
+  { en: 'Aung San Suu Kyi', zh: '昂山素季', tokens: ['Aung', 'San', 'Suu'], job: '缅甸政治人物', bio: '缅甸民主运动重要人物，曾获诺贝尔和平奖。' },
+
+  /* ── 科学 / 技术 / 医学 ───────────────────────────── */
+  { en: 'Nikola Tesla', zh: '尼古拉·特斯拉', tokens: ['Nikola', 'Tesla'], job: '塞尔维亚裔美国发明家', bio: '在交流电、电机和无线技术方面作出重要贡献。' },
+  { en: 'Thomas Edison', zh: '托马斯·爱迪生', tokens: ['Thomas', 'Edison'], job: '美国发明家、企业家', bio: '参与电灯、录音和电力系统等技术的商业化发展。' },
+  { en: 'Louis Pasteur', zh: '路易·巴斯德', tokens: ['Louis', 'Pasteur'], job: '法国化学家、微生物学家', bio: '推动微生物学、疫苗和巴氏消毒法发展。' },
+  { en: 'Rosalind Franklin', zh: '罗莎琳德·富兰克林', tokens: ['Rosalind', 'Franklin'], job: '英国化学家、晶体学家', bio: '通过 X 射线晶体学研究为 DNA 结构认识提供关键证据。' },
+  { en: 'Katherine Johnson', zh: '凯瑟琳·约翰逊', tokens: ['Katherine', 'Johnson'], job: '美国数学家', bio: '为美国早期载人航天任务进行轨道计算。' },
+  { en: 'Tim Berners-Lee', zh: '蒂姆·伯纳斯-李', tokens: ['Tim', 'Berners-Lee'], job: '英国计算机科学家', bio: '万维网发明者，推动开放网络标准发展。' },
+  { en: 'Grace Hopper', zh: '格蕾丝·霍珀', tokens: ['Grace', 'Hopper'], job: '美国计算机科学家', bio: '编译器先驱，推动现代程序设计语言和软件工程发展。' },
+  { en: 'Vint Cerf', zh: '文顿·瑟夫', tokens: ['Vint', 'Cerf'], job: '美国计算机科学家', bio: '互联网协议设计的重要参与者，被称为互联网之父之一。' },
+  { en: 'James Watson', zh: '詹姆斯·沃森', tokens: ['James', 'Watson'], job: '美国生物学家', bio: '参与 DNA 双螺旋结构研究，并获诺贝尔生理学或医学奖。' },
+  { en: 'Francis Crick', zh: '弗朗西斯·克里克', tokens: ['Francis', 'Crick'], job: '英国分子生物学家', bio: '参与 DNA 结构研究并推动分子生物学发展。' },
+  { en: 'Carl Sagan', zh: '卡尔·萨根', tokens: ['Carl', 'Sagan'], job: '美国天文学家、科普作家', bio: '以行星科学研究和面向公众的宇宙学写作闻名。' },
+  { en: 'Kip Thorne', zh: '基普·索恩', tokens: ['Kip', 'Thorne'], job: '美国物理学家', bio: '研究引力波和相对论，参与引力波探测项目。' },
+  { en: 'Chien-Shiung Wu', zh: '吴健雄', tokens: ['Chien-Shiung', 'Wu'], job: '华裔美国物理学家', bio: '实验物理学家，在弱相互作用研究中作出重要贡献。' },
+  { en: 'Jocelyn Bell Burnell', zh: '乔丝琳·贝尔·伯奈尔', tokens: ['Jocelyn', 'Bell', 'Burnell'], job: '英国天体物理学家', bio: '发现脉冲星，长期推动科学教育与女性参与科学。' },
+  { en: 'Mae Jemison', zh: '梅·杰米森', tokens: ['Mae', 'Jemison'], job: '美国医生、宇航员', bio: '首位进入太空的非裔美国女性，兼具医学与工程背景。' },
+  { en: 'Fei-Fei Li', zh: '李飞飞', tokens: ['Fei-Fei', 'Li'], job: '华裔美国计算机科学家', bio: '人工智能与计算机视觉研究者，推动以人为本的人工智能讨论。' },
+  { en: 'Demis Hassabis', zh: '戴密斯·哈萨比斯', tokens: ['Demis', 'Hassabis'], job: '英国人工智能研究者、企业家', bio: '人工智能研究与科技创业者，参与推动蛋白质结构预测研究。' },
+  { en: 'Katalin Karikó', zh: '卡塔琳·考里科', tokens: ['Katalin', 'Kariko'], job: '匈牙利裔美国生物化学家', bio: 'mRNA 技术研究者，因相关医学贡献获得诺贝尔奖。' },
+
+  /* ── 文学 / 视觉艺术 / 音乐 ───────────────────────── */
+  { en: 'Homer', zh: '荷马', tokens: ['Homer'], job: '古希腊诗人', bio: '《伊利亚特》和《奥德赛》传统上归于其名下。' },
+  { en: 'Dante Alighieri', zh: '但丁', tokens: ['Dante', 'Alighieri'], job: '意大利诗人', bio: '《神曲》作者，深刻影响欧洲文学和意大利语发展。' },
+  { en: 'Geoffrey Chaucer', zh: '杰弗里·乔叟', tokens: ['Geoffrey', 'Chaucer'], job: '英国诗人', bio: '《坎特伯雷故事集》作者，被视为英语文学重要奠基者。' },
+  { en: 'Miguel de Cervantes', zh: '米格尔·德·塞万提斯', tokens: ['Miguel', 'Cervantes'], job: '西班牙作家', bio: '《堂吉诃德》作者，对现代小说发展影响深远。' },
+  { en: 'Fyodor Dostoevsky', zh: '陀思妥耶夫斯基', tokens: ['Fyodor', 'Dostoevsky'], job: '俄国作家', bio: '以心理深度和伦理思考著称，代表作包括《罪与罚》。' },
+  { en: 'Franz Kafka', zh: '弗兰茨·卡夫卡', tokens: ['Franz', 'Kafka'], job: '德语作家', bio: '现代主义文学代表，作品常描写异化、制度与存在困境。' },
+  { en: 'James Joyce', zh: '詹姆斯·乔伊斯', tokens: ['James', 'Joyce'], job: '爱尔兰作家', bio: '现代主义文学作家，以语言实验和意识流写作闻名。' },
+  { en: 'Chinua Achebe', zh: '钦努阿·阿契贝', tokens: ['Chinua', 'Achebe'], job: '尼日利亚作家', bio: '非洲英语文学重要作家，以小说书写殖民经验与文化变迁。' },
+  { en: 'Nawal El Saadawi', zh: '纳瓦尔·萨达维', tokens: ['Nawal', 'Saadawi'], job: '埃及作家、医生', bio: '以文学和社会写作关注女性权益与社会结构。' },
+  { en: 'Isabel Allende', zh: '伊莎贝尔·阿连德', tokens: ['Isabel', 'Allende'], job: '智利作家', bio: '以家族叙事、历史记忆和女性视角的小说闻名。' },
+  { en: 'Rabindranath Tagore', zh: '泰戈尔', tokens: ['Rabindranath', 'Tagore'], job: '印度诗人、作家', bio: '诺贝尔文学奖得主，作品横跨诗歌、小说、音乐与教育。' },
+  { en: 'Khalil Gibran', zh: '纪伯伦', tokens: ['Khalil', 'Gibran'], job: '黎巴嫩裔作家、画家', bio: '以诗歌散文和哲理性作品在世界范围广泛流传。' },
+  { en: 'Banksy', zh: '班克斯', tokens: ['Banksy'], job: '英国街头艺术家', bio: '以具有社会评论意味的街头艺术和匿名创作闻名。' },
+  { en: "Georgia O'Keeffe", zh: '乔治亚·欧姬芙', tokens: ['Georgia', 'Keeffe'], job: '美国画家', bio: '现代主义画家，以花卉、骨骼和新墨西哥景观绘画闻名。' },
+  { en: 'Claude Monet', zh: '克劳德·莫奈', tokens: ['Claude', 'Monet'], job: '法国画家', bio: '印象派代表人物，重视光线和瞬间视觉感受。' },
+  { en: 'Salvador Dalí', zh: '萨尔瓦多·达利', tokens: ['Salvador', 'Dali'], job: '西班牙画家', bio: '超现实主义代表，以梦境般的图像和精细画法著称。' },
+  { en: 'Auguste Rodin', zh: '奥古斯特·罗丹', tokens: ['Auguste', 'Rodin'], job: '法国雕塑家', bio: '现代雕塑重要先驱，代表作包括《思想者》。' },
+  { en: 'Le Corbusier', zh: '勒·柯布西耶', tokens: ['Le', 'Corbusier'], job: '瑞士裔法国建筑师', bio: '现代主义建筑和城市规划的重要理论家与实践者。' },
+  { en: 'Zaha Hadid', zh: '扎哈·哈迪德', tokens: ['Zaha', 'Hadid'], job: '英籍伊拉克建筑师', bio: '以流动曲线和前卫建筑设计闻名，曾获普利兹克奖。' },
+  { en: 'Antoni Gaudí', zh: '安东尼·高迪', tokens: ['Antoni', 'Gaudi'], job: '西班牙建筑师', bio: '以自然形态、彩色装饰和巴塞罗那建筑作品著称。' },
+  { en: 'Igor Stravinsky', zh: '伊戈尔·斯特拉文斯基', tokens: ['Igor', 'Stravinsky'], job: '俄裔作曲家', bio: '二十世纪重要作曲家，持续探索芭蕾、古典与现代音乐语言。' },
+  { en: 'Aretha Franklin', zh: '艾瑞莎·富兰克林', tokens: ['Aretha', 'Franklin'], job: '美国歌手、钢琴家', bio: '灵魂乐代表歌手，以强大的嗓音和音乐影响力闻名。' },
+  { en: 'Miles Davis', zh: '迈尔斯·戴维斯', tokens: ['Miles', 'Davis'], job: '美国爵士乐手', bio: '爵士小号手和作曲家，多次推动爵士乐风格转变。' },
+  { en: 'Bob Marley', zh: '鲍勃·马利', tokens: ['Bob', 'Marley'], job: '牙买加歌手、音乐人', bio: '雷鬼音乐全球传播的重要人物，作品常表达和平与团结。' },
+
+  /* ── 商业 / 体育 / 公共人物 ───────────────────────── */
+  { en: 'Sam Walton', zh: '山姆·沃尔顿', tokens: ['Sam', 'Walton'], job: '美国企业家', bio: '沃尔玛创办人，推动大型零售连锁商业模式发展。' },
+  { en: 'Madam C. J. Walker', zh: 'C·J·沃克夫人', tokens: ['Madam', 'Walker'], job: '美国企业家、慈善家', bio: '美国早期知名女性企业家和慈善人士。' },
+  { en: 'Indra Nooyi', zh: '英德拉·努伊', tokens: ['Indra', 'Nooyi'], job: '印度裔美国企业家', bio: '曾领导百事公司，长期参与企业战略和公共事务。' },
+  { en: 'Susan Wojcicki', zh: '苏珊·沃西基', tokens: ['Susan', 'Wojcicki'], job: '美国科技管理者', bio: '曾任 YouTube 首席执行官，长期参与互联网产品与科技管理。' },
+  { en: 'Satya Nadella', zh: '萨提亚·纳德拉', tokens: ['Satya', 'Nadella'], job: '印度裔美国企业家', bio: '微软首席执行官，推动云计算和人工智能业务发展。' },
+  { en: 'Jensen Huang', zh: '黄仁勋', tokens: ['Jensen', 'Huang'], job: '美籍华人企业家、工程师', bio: '英伟达共同创办人，推动图形处理器和人工智能计算发展。' },
+  { en: 'Zhang Yiming', zh: '张一鸣', tokens: ['Zhang', 'Yiming'], job: '中国企业家', bio: '字节跳动创办人，参与发展内容推荐与互联网产品。' },
+  { en: 'Ren Zhengfei', zh: '任正非', tokens: ['Ren', 'Zhengfei'], job: '中国企业家、工程师', bio: '华为创办人，长期从事通信技术和企业管理。' },
+  { en: 'Ma Huateng', zh: '马化腾', tokens: ['Ma', 'Huateng'], job: '中国企业家', bio: '腾讯主要创办人之一，参与发展即时通信与互联网服务。' },
+  { en: 'N. R. Narayana Murthy', zh: '纳拉亚纳·穆尔蒂', tokens: ['Narayana', 'Murthy'], job: '印度企业家', bio: 'Infosys 共同创办人，推动印度软件服务产业发展。' },
+  { en: 'Carlos Slim', zh: '卡洛斯·斯利姆', tokens: ['Carlos', 'Slim'], job: '墨西哥企业家', bio: '长期投资电信、零售和金融等行业。' },
+  { en: 'Sundar Pichai', zh: '桑达尔·皮查伊', tokens: ['Sundar', 'Pichai'], job: '印度裔美国科技管理者', bio: '谷歌及 Alphabet 首席执行官，长期从事互联网产品管理。' },
+  { en: 'Sergey Brin', zh: '谢尔盖·布林', tokens: ['Sergey', 'Brin'], job: '美国企业家、计算机科学家', bio: '谷歌共同创办人，参与搜索和互联网技术发展。' },
+  { en: 'Larry Page', zh: '拉里·佩奇', tokens: ['Larry', 'Page'], job: '美国企业家、计算机科学家', bio: '谷歌共同创办人，参与搜索引擎和互联网产品创新。' },
+  { en: 'Neymar', zh: '内马尔', tokens: ['Neymar'], job: '巴西足球运动员', bio: '以盘带、创造力和长期国际职业生涯闻名。' },
+  { en: 'Kylian Mbappé', zh: '基利安·姆巴佩', tokens: ['Kylian', 'Mbappe'], job: '法国足球运动员', bio: '以速度、进球能力和国际赛事表现受到关注。' },
+  { en: 'Marta Vieira da Silva', zh: '玛塔', tokens: ['Marta', 'Vieira'], job: '巴西足球运动员', bio: '女子足球史上最具代表性的球员之一。' },
+  { en: 'Megan Rapinoe', zh: '梅甘·拉皮诺', tokens: ['Megan', 'Rapinoe'], job: '美国足球运动员', bio: '世界杯冠军球员，长期倡导性别平等和社会正义。' },
+  { en: 'Manny Pacquiao', zh: '曼尼·帕奎奥', tokens: ['Manny', 'Pacquiao'], job: '菲律宾拳击运动员、政治家', bio: '多级别世界拳王，退役后参与菲律宾公共事务。' },
+  { en: 'Michael Phelps', zh: '迈克尔·菲尔普斯', tokens: ['Michael', 'Phelps'], job: '美国游泳运动员', bio: '奥运会奖牌数领先的游泳运动员之一。' },
+  { en: 'Tiger Woods', zh: '泰格·伍兹', tokens: ['Tiger', 'Woods'], job: '美国高尔夫球运动员', bio: '现代高尔夫最具影响力的球员之一，拥有多项重要赛事冠军。' },
+  { en: 'Lewis Hamilton', zh: '刘易斯·汉密尔顿', tokens: ['Lewis', 'Hamilton'], job: '英国赛车手', bio: '一级方程式世界冠军，积极参与多元与环保议题。' },
+  { en: 'Max Verstappen', zh: '马克斯·维斯塔潘', tokens: ['Max', 'Verstappen'], job: '荷兰赛车手', bio: '一级方程式世界冠军，以速度和进攻型驾驶风格闻名。' },
+  { en: 'Rafael Nadal', zh: '拉斐尔·纳达尔', tokens: ['Rafael', 'Nadal'], job: '西班牙网球运动员', bio: '大满贯冠军，以红土场成就和坚韧球风著称。' },
+  { en: 'Novak Djokovic', zh: '诺瓦克·德约科维奇', tokens: ['Novak', 'Djokovic'], job: '塞尔维亚网球运动员', bio: '大满贯冠军，以全面技术和长期竞技表现闻名。' },
+  { en: 'Mikaela Shiffrin', zh: '米凯拉·希弗琳', tokens: ['Mikaela', 'Shiffrin'], job: '美国高山滑雪运动员', bio: '高山滑雪世界冠军和奥运奖牌得主。' },
+  { en: 'Li Na', zh: '李娜', tokens: ['Li', 'Na'], job: '中国网球运动员', bio: '亚洲首位赢得大满贯单打冠军的网球运动员之一。' },
+  { en: 'Liu Xiang', zh: '刘翔', tokens: ['Liu', 'Xiang'], job: '中国田径运动员', bio: '男子110米栏奥运冠军，推动中国田径受到国际关注。' },
+  { en: 'Sun Yang', zh: '孙杨', tokens: ['Sun', 'Yang'], job: '中国游泳运动员', bio: '奥运冠军和世界纪录保持者，长期参加国际游泳赛事。' },
+  { en: 'Zhang Yining', zh: '张怡宁', tokens: ['Zhang', 'Yining'], job: '中国乒乓球运动员', bio: '奥运冠军和世界冠军，被认为是乒乓球历史代表球员之一。' },
+  { en: 'Hidilyn Diaz', zh: '海蒂琳·迪亚斯', tokens: ['Hidilyn', 'Diaz'], job: '菲律宾举重运动员', bio: '菲律宾首枚奥运金牌获得者。' },
+  { en: 'Wangari Maathai', zh: '旺加里·马塔伊', tokens: ['Wangari', 'Maathai'], job: '肯尼亚环保人士', bio: '绿带运动创始人，因环境保护与和平倡议获诺贝尔和平奖。' },
+  { en: 'David Attenborough', zh: '大卫·爱登堡', tokens: ['David', 'Attenborough'], job: '英国自然纪录片主持人', bio: '以自然纪录片和生物多样性公共传播闻名。' },
+  { en: 'Anthony Fauci', zh: '安东尼·福奇', tokens: ['Anthony', 'Fauci'], job: '美国医学专家', bio: '传染病专家，长期参与美国公共卫生政策与科普。' },
+  { en: 'José Andrés', zh: '何塞·安德烈斯', tokens: ['Jose', 'Andres'], job: '西班牙裔美国厨师、慈善家', bio: '以世界中央厨房等项目在灾害地区提供人道援助。' },
+  { en: 'Leymah Gbowee', zh: '莱伊曼·古博韦', tokens: ['Leymah', 'Gbowee'], job: '利比里亚和平倡导者', bio: '组织妇女和平运动，因推动结束利比里亚内战获诺贝尔和平奖。' }
+];
+
+NM.BILINGUAL_CELEBS = (NM.BILINGUAL_CELEBS || []).concat(NM.BILINGUAL_CELEBS_MORE2);
+var more2BilingualRows = NM.BILINGUAL_CELEBS_MORE2.reduce(function (rows, person) {
+  person.tokens.forEach(function (token) {
+    rows.push([
+      token, '', '', '公众人物常用英文名或姓氏 token', 'now', 'u',
+      token.slice(0, 2).toLowerCase(), '',
+      [0.2, 0.2, 0.2, 0.2], [0.2, 0.4, 0.1],
+      '在双语名人参考中作为独立英文名或姓氏使用'
+    ]);
+  });
+  return rows;
+}, []);
+NM.NAMES_EN = NM.NAMES_EN.concat(NM.packEn(more2BilingualRows));
+
+NM.BILINGUAL_CELEBS_MORE2.forEach(function (person) {
+  person.tokens.forEach(function (token) {
+    var key = token.toLowerCase();
+    NM.EN_CELEBS[key] = NM.EN_CELEBS[key] || [];
+    if (!NM.EN_CELEBS[key].some(function (item) { return item[0] === person.en; })) {
+      NM.EN_CELEBS[key].push([person.en, person.job, person.bio, person.zh]);
+    }
+    NM.EN_CELEB_SEARCH[key] = NM.EN_CELEB_SEARCH[key] || [];
+    if (NM.EN_CELEB_SEARCH[key].indexOf(person.en.toLowerCase()) === -1) {
+      NM.EN_CELEB_SEARCH[key].push(person.en.toLowerCase());
+    }
+  });
+});

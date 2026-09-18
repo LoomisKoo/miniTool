@@ -384,10 +384,27 @@
     return true;
   }
 
+  /* 用户反馈：不喜欢整名 / 排除某字 / 必须保留某字 */
+  function passesFeedback(chars, given, full, opts) {
+    if (!opts) return true;
+    if (opts.banFull && opts.banFull[full]) return false;
+    if (opts.banGiven && opts.banGiven[given]) return false;
+    var i;
+    if (opts.banChars) {
+      for (i = 0; i < chars.length; i++) if (opts.banChars[chars[i]]) return false;
+    }
+    if (opts.keepChars && opts.keepChars.length) {
+      for (i = 0; i < opts.keepChars.length; i++) {
+        if (chars.indexOf(opts.keepChars[i]) === -1) return false;
+      }
+    }
+    return true;
+  }
+
   /**
    * 排序出候选名单。
    * @param profile  NM.profileFromAnswers 的结果
-   * @param opts     { surname, wantGender, wantTags, limit }
+   * @param opts     { surname, wantGender, wantTags, limit, banFull, banGiven, banChars, keepChars }
    */
   NM.rankNames = function (profile, opts) {
     opts = opts || {};
@@ -399,6 +416,7 @@
       if (seen[given]) return;
       /* 精选名是真人用过的组合，跳过「意象域相容」这条——它本来就是给拼装名兜底的 */
       if (!validate(surname, chars, given, { skipDomain: source === 'curated' })) return;
+      if (!passesFeedback(chars, given, surname.c + given, opts)) return;
       if (!genderOk(chars, opts.wantGender)) return;
       var vec = givenVec(chars);
       if (!vec) return;
@@ -768,12 +786,18 @@
   /**
    * 和 rankNames 的区别：姓本身也参与打分（读音气质 vs 你的性格），
    * 且每组都要求念着顺口。返回的是多组不同姓氏的组合。
-   * @param opts { wantGender, count, breadth, temperature, exclude }
+   * @param opts { wantGender, count, breadth, temperature, exclude, banFull, banGiven, banChars, keepChars }
    */
   NM.recommend = function (profile, opts) {
     opts = opts || {};
     var want = opts.count || 6;
     var breadth = opts.breadth || 44;
+    var fb = {
+      banFull: opts.banFull || {},
+      banGiven: opts.banGiven || {},
+      banChars: opts.banChars || {},
+      keepChars: opts.keepChars || []
+    };
 
     /* 1) 所有姓先算「和你有多搭」 */
     var ranked = NM.rankSurnames(profile);
@@ -785,11 +809,15 @@
     var usedGiven = {};
     for (var k = 0; k < Math.min(breadth, ranked.length); k++) {
       var item = ranked[k];
-      var names = NM.rankNames(profile, { surname: item.sur, wantGender: opts.wantGender, limit: 80 });
+      var names = NM.rankNames(profile, {
+        surname: item.sur, wantGender: opts.wantGender, limit: 80,
+        banFull: fb.banFull, banGiven: fb.banGiven, banChars: fb.banChars, keepChars: fb.keepChars
+      });
       if (!names.length) continue;
       var best = null;
       for (var n = 0; n < names.length; n++) {
         if (usedGiven[names[n].given]) continue;
+        if (fb.banFull[item.sur.c + names[n].given]) continue;
         var eu = NM.euphony(item.sur, names[n].chars);
         var sc = names[n].score * 0.70 + eu * 0.30;
         if (!best || sc > best.combined) best = { name: names[n], eu: eu, combined: sc };
@@ -822,7 +850,11 @@
     opts = opts || {};
     var list = NM.rankNames(profile, {
       surname: surname,
-      wantGender: opts.wantGender
+      wantGender: opts.wantGender,
+      banFull: opts.banFull,
+      banGiven: opts.banGiven,
+      banChars: opts.banChars,
+      keepChars: opts.keepChars
     });
     /* 按「名字好 + 顺口」重排，顺口度占三成——不然会推出「李知微」这种
      * 字都好但两个 i 韵叠在一起的名字 */

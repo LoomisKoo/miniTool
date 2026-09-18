@@ -48,3 +48,22 @@ NM.packEn = function (rows) {
   });
 };
 
+/* 英文名文件分批加载；同名时保留最先出现的完整记录。 */
+NM.dedupeNamesEn = function (rows) {
+  var seen = Object.create(null);
+  return (rows || []).filter(function (it) {
+    var key = String(it && it.n || '').toLowerCase();
+    if (!key || seen[key]) return false;
+    seen[key] = true;
+    return true;
+  });
+};
+
+/* 名人：['全名', 匹配键(字符串或数组), '时代·领域', '两三段简介'] */
+NM.packCelebs = function (rows) {
+  return rows.map(function (r) {
+    var keys = r[1];
+    if (typeof keys === 'string') keys = [keys];
+    return { name: r[0], keys: keys || [], era: r[2] || '', bio: r[3] || '' };
+  });
+};

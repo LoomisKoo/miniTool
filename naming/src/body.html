@@ -36,7 +36,7 @@
 
 <div class="sheet hidden" id="sheet">
   <div class="sheet-mask" id="sheet-mask"></div>
-  <div class="sheet-panel" role="dialog" aria-modal="true" aria-label="选姓氏">
+  <div class="sheet-panel" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
     <div class="sheet-hd">
       <span class="sheet-title" id="sheet-title">选姓氏</span>
       <button class="sheet-close" id="sheet-close" type="button">关闭</button>
@@ -45,12 +45,12 @@
   </div>
 </div>
 
-<div class="modal hidden" id="modal">
+<div class="modal hidden" id="modal" role="dialog" aria-modal="true" aria-label="名字卡片预览">
   <div class="modal-top">
     <button class="modal-btn" id="modal-close" type="button">关闭</button>
   </div>
   <div class="modal-body"><img id="modal-img" alt="名字卡片"></div>
-  <div class="modal-foot"><a class="modal-dl" id="modal-dl" download>下载图片</a></div>
+  <div class="modal-foot"><a class="modal-dl" id="modal-dl" href="#" download>下载图片</a></div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -79,6 +79,21 @@
 <script src="data/names-en-more.js"></script>
 <script src="data/names-en-more2.js"></script>
 <script src="data/names-en-more3.js"></script>
+<script src="data/names-en-celebs.js"></script>
+<script src="data/names-en-common.js"></script>
+<script src="data/names-en-curated.js"></script>
+<script src="data/names-en-chinese-surnames.js"></script>
+<script src="data/celebrities-en.js"></script>
+<script src="data/celebrities-bilingual.js"></script>
+<script src="data/celebrities-bilingual-more.js"></script>
+<script src="data/celebrities-bilingual-more2.js"></script>
+<script>
+  /* 各批次允许独立维护；运行时按首次出现记录去除大小写不敏感重复项。 */
+  NM.NAMES_EN = NM.dedupeNamesEn(NM.NAMES_EN);
+</script>
+<script src="data/celebrities.js"></script>
+<script src="data/celebrities-more.js"></script>
+<script src="data/celebrities-more2.js"></script>
 <script src="engine.js"></script>
 <script src="card.js"></script>
 <script src="app.js"></script>
