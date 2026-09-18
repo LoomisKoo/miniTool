@@ -488,7 +488,7 @@
       '<section class="entry-list">' +
       '  <button class="entry" data-go="result">' +
       '    <span class="entry-icon">性</span>' +
-      '    <span class="entry-body"><b>按性格取中文名</b><i>先定姓氏，再按气质推荐名字</i></span>' +
+      '    <span class="entry-body"><b>按性格取名</b><i>先定姓氏，再按气质推荐名字</i></span>' +
       '    <span class="entry-arrow">›</span>' +
       '  </button>' +
       '  <button class="entry" data-go="en">' +
@@ -984,8 +984,10 @@
     var hasSur = !!state.surname;
     var recs = hasSur ? (state.recs || []) : [];
     var hasQuiz = !!p.answered;
-    var ex = state.mineExpand || { profile: false, bazi: false };
-    /* 与「我的」相同：画像/生辰默认折叠 */
+    /* 没选姓时先展开资料帮助决策；选好姓后收起，把空间留给推荐名 */
+    var ex = hasSur
+      ? { profile: false, bazi: false }
+      : { profile: true, bazi: true };
     var folds = (hasQuiz ? foldProfileBlock(ex) : '') + foldBaziBlock(ex);
 
     if (!hasSur) {
@@ -1069,7 +1071,8 @@
     }
     if (s === 'studio') {
       /* 底栏只留「确定」回首页；收藏做成详情同款红按钮，放在台面内容区 */
-      return '<button class="primary-btn" data-go-back="home">确定</button>';
+      var studioReady = !!(state.studio.surname && state.studio.slots.length);
+      return '<button class="primary-btn"' + (studioReady ? ' data-go-back="home"' : ' disabled') + '>确定</button>';
     }
     if (s === 'studio-sur') {
       return '<button class="primary-btn" data-go-back="studio">确定</button>';
@@ -2463,52 +2466,11 @@
   }
 
   function slideSwap(isPop) {
-    var sc = $('#screen'), dk = $('#dock');
-    if (!canAnimate() || !sc || !sc.classList || !document.body) return render();
-
+    /* 旧版用固定幽灵层模拟滑动，会把已滚动页面的内容向上错位。
+       页面切换直接重绘，保证每个新页面从顶部稳定开始。 */
     if (ptTimer) { clearTimeout(ptTimer); ptTimer = null; }
     clearGhost();
-
-    var rect = sc.getBoundingClientRect();
-    var vh = window.innerHeight ||
-      (document.documentElement && document.documentElement.clientHeight) || rect.bottom;
-    var top = Math.max(0, Math.round(rect.top));
-
-    /* 旧页做成一层固定图层：位置和高度按切换前的视口量，滚动位置原样保留 */
-    var ghost = document.createElement('main');
-    ghost.className = 'page-ghost';
-    ghost.setAttribute('aria-hidden', 'true');
-    ghost.style.top = top + 'px';
-    ghost.style.left = Math.round(rect.left) + 'px';
-    ghost.style.width = Math.round(rect.width) + 'px';
-    ghost.style.height = Math.max(0, Math.round(vh - top)) + 'px';
-    /* 底栏留白按切换前的状态钉住：换页后 body 上的 has-dock 类会变，
-       不钉住的话图层的 padding 会在动画中途跳一下 */
-    try {
-      var cs = window.getComputedStyle(sc);
-      if (cs && cs.paddingBottom) ghost.style.paddingBottom = cs.paddingBottom;
-    } catch (e) {}
-    ghost.innerHTML = sc.innerHTML +
-      (dk && !dk.classList.contains('hidden') && dk.innerHTML.trim()
-        ? '<div class="' + dk.className + '">' + dk.innerHTML + '</div>'
-        : '');
-    document.body.appendChild(ghost);
-    /* 内容已在文档流里滚过 scrollY，图层靠自身滚动对齐回同一段 */
-    ghost.scrollTop = Math.max(0, -rect.top);
-
     render();
-
-    var inCls = isPop ? 'pt-in-pop' : 'pt-in-push';
-    ghost.classList.add(isPop ? 'pt-out-pop' : 'pt-out-push');
-    sc.classList.add(inCls);
-    if (dk && dk.classList) dk.classList.add(inCls);
-
-    ptTimer = setTimeout(function () {
-      ptTimer = null;
-      clearGhost();
-      sc.classList.remove(inCls);
-      if (dk && dk.classList) dk.classList.remove(inCls);
-    }, PT_MS + 60);
   }
 
   /* 一级页面之间（首页 ⇄ 我的）是平级切换，不走压栈动效：
