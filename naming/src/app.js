@@ -2438,6 +2438,7 @@
     $('#hd-title').textContent = title;
     $('#screen').scrollTop = 0;
     window.scrollTo(0, keepY);
+    bindGridScroll();
     syncToTop();
     paintStorageTip();
   }
@@ -2514,17 +2515,43 @@
     swapTo(screen, true);
   }
 
-  /* 回到顶部：滚过一段距离才浮出，点了平滑滚回去 */
+  /* 回到顶部：滚过一段距离才浮出，点了平滑滚回去。
+   * 挑选姓/字页的长列表在 .grid-box 里滚，不只听 window。 */
   var TO_TOP_AT = 420;
+  var gridScrollEl = null;
+
+  function bindGridScroll() {
+    if (gridScrollEl) {
+      gridScrollEl.removeEventListener('scroll', syncToTop);
+      gridScrollEl = null;
+    }
+    var id = state.screen === 'studio-char' ? 'st-char-grid'
+      : state.screen === 'studio-sur' ? 'st-sur-grid'
+      : null;
+    if (!id) return;
+    var el = $('#' + id);
+    if (!el) return;
+    gridScrollEl = el;
+    el.addEventListener('scroll', syncToTop, { passive: true });
+  }
+
   function syncToTop() {
     var btn = $('#to-top');
     if (!btn || !btn.classList) return;
     var y = window.pageYOffset || (document.documentElement && document.documentElement.scrollTop) || 0;
+    if (gridScrollEl) y = Math.max(y, gridScrollEl.scrollTop || 0);
     btn.classList.toggle('on', y >= TO_TOP_AT);
   }
   if (window.addEventListener) window.addEventListener('scroll', syncToTop, { passive: true });
 
   function scrollToTop() {
+    if (gridScrollEl) {
+      try {
+        gridScrollEl.scrollTo({ top: 0, behavior: 'smooth' });
+      } catch (e) {
+        gridScrollEl.scrollTop = 0;
+      }
+    }
     try {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (e) {
@@ -3160,6 +3187,7 @@
     if (box) box.innerHTML = surCells(list) || '<p class="empty">没筛到这个姓，放宽一下条件。</p>';
     var cnt = $('#st-sur-count');
     if (cnt) cnt.textContent = list.length + ' / ' + NM.allSurnames().length + ' 个';
+    syncToTop();
   }
 
   function paintCharGrid() {
@@ -3168,6 +3196,7 @@
     if (box) box.innerHTML = charCells(list) || '<p class="empty">没筛到这个字，放宽一下条件。</p>';
     var cnt = $('#st-char-count');
     if (cnt) cnt.textContent = list.length + ' / ' + NM.CHARS.length + ' 个';
+    syncToTop();
   }
 
   render();

@@ -1,0 +1,601 @@
+/* DeerNames — 英文文案。
+ *
+ * key 一律是中文原文（见 Core/L10n.swift）。带参数的 key 用 %@ / %ld 占位；
+ * 中文不需要写译文，缺条目时 L10n 会拿中文原文直接做格式化。
+ * 只有界面文案和应用生成的说明文字进这张表 —— 名字本身、字义、名人简介等
+ * 数据内容不翻译。 */
+
+/* ===== 通用 ===== */
+
+"首页" = "Home";
+"我的" = "Mine";
+"仙鹿起名" = "DeerNames";
+"仙鹿起名 · 名字实验室" = "DeerNames · Name Lab";
+"设置" = "Settings";
+"语言" = "Language";
+"关于" = "About";
+"关于仙鹿起名" = "About DeerNames";
+"关于这个名字" = "About the name";
+"换个写法" = "Other spellings";
+"通用" = "Common";
+"拼音" = "Pinyin";
+"港式" = "HK";
+"仙鹿起名从性格、含义、读音和文化语境出发，帮助你找到愿意长期使用的名字。" = "DeerNames helps you find a name you will want to use for years, guided by personality, meaning, pronunciation, and culture.";
+"关闭" = "Close";
+"取消" = "Cancel";
+"完成" = "Done";
+"确定" = "Done";
+"选择" = "Choose";
+"清除" = "Clear";
+"清除筛选" = "Clear filters";
+"清空" = "Clear";
+"恢复" = "Restore";
+"展开" = "Show";
+"收起" = "Hide";
+"添加" = "Add";
+"更换" = "Change";
+"回到顶部" = "Back to top";
+"已筛选" = "Filtered";
+"没有符合条件的结果" = "Nothing matches";
+"名字本身不会被翻译，解释文字会跟随界面语言变化。" = "Names themselves are not translated. Explanations follow the app language.";
+"；" = "; ";
+"、" = ", ";
+"「%@」" = "“%@”";
+"%@（%@）" = "%@ (%@)";
+"%@：%@" = "%@: %@";
+
+/* ===== 首页 ===== */
+
+"按性格取名" = "Name by personality";
+"按你的气质推荐英文名" = "Recommend English names that match your vibe";
+"按你的气质排" = "Ranked by your vibe";
+"先去测一下性格，回来看这里。" = "Take the personality quiz, then come back.";
+"中名西取" = "From your Chinese name";
+"填上你现有的中文名，配读音贴近的英文名" = "Enter your Chinese name and get English names that sound close";
+"先填中文姓名" = "Enter a Chinese name first";
+"在上面填中文姓名，会按它的读音挑读起来最像的英文名。" = "Enter a Chinese name above — the picks will be the English names that sound closest to it.";
+"换一个字，这里的名字会跟着重排。" = "Change a character and this list re-ranks.";
+"换个字试试。" = "Try different characters.";
+"已有英文名，查语源、含义与名人" = "Look up an existing English name's origin and meaning";
+"自选姓名" = "Build your own";
+"姓和名都从英文名库里挑" = "Pick both the surname and given name from the library";
+"从英文姓库里挑（非必须）" = "Pick from the surname library (optional)";
+"从英文名库里挑" = "Pick from the given-name library";
+"自己挑姓和名，实时看音译与含义" = "Pick a surname and a given name, see the transliteration live";
+"照中文名读音配的英文名" = "Matched by your Chinese name's sound";
+"读音贴近的英文名" = "Closest in sound";
+"先定姓氏，再按气质推荐名字" = "Pick a surname first, then get names by feel";
+"取英文名" = "Find an English name";
+"按性格推荐，或从中文名 / 分类里挑" = "Get recommendations, or browse by category";
+"自己挑姓和字，实时看读感与释义" = "Pick a surname and characters, with live notes";
+
+/* ===== 入口 / 引导 ===== */
+
+"选择你想要的名字" = "Choose the kind of name you want";
+"点击一个方向，直接开始。" = "Pick a direction to begin.";
+"中文名" = "Chinese name";
+"英文名" = "English name";
+"按性格、按外文名，或自己挑字" = "By personality, by your own foreign name, or by hand";
+"按性格、按中文名读音，或自己挑姓和名" = "By personality, by your Chinese name's sound, or by hand";
+"填上你现有的外文名，配一个中国式名字" = "Type the name you already have and get a Chinese-style one";
+"还没测过性格" = "No personality test yet";
+"做 8 道题，三扇门都会按你的气质来排名字。" = "Answer 8 questions and all three paths will rank names by your feel.";
+"做 8 道题，两边的名字都会按你的气质来排。" = "Answer 8 questions and both Chinese and English names will be ranked to your vibe.";
+"适合中文语境的自然名字" = "A natural name for Chinese-speaking contexts";
+"适合英文语境的自然名字" = "A natural name for English-speaking contexts";
+"已有名字也没关系，可以在下一步作为参考。" = "Already have a name? You can use it as inspiration.";
+"下一步" = "Continue";
+"可选" = "Optional";
+"必填" = "Required";
+"生成名字" = "Generate";
+"跳过这一步" = "Skip";
+"为我推荐" = "Recommend for me";
+"根据中文名寻找英文名" = "Find an English name from my Chinese name";
+"保留气质，或参考读音" = "Keep the feeling, or follow the sound";
+"根据外文名寻找中文名" = "Find a Chinese name from my name";
+"生成自然中文名，不只是音译" = "Create a natural Chinese name, not a transliteration";
+"按气质推荐" = "Recommend by feel";
+"回答几道问题，找到适合你的名字" = "Answer a few questions to find a fitting name";
+"根据中文名取英文名" = "English name from my Chinese name";
+"保留气质，也可以参考读音" = "Keep the feeling, sound optional";
+"外文名起中文名" = "Chinese name from a foreign name";
+"输入名字，生成自然中文名" = "Enter a name to create a natural Chinese name";
+"输入你的外文名，我们会为你寻找自然的中文名。" = "Enter your name and we will find a natural Chinese name for you.";
+"想从零开始也可以；如果你已有英文名，可以告诉我们。" = "You can start from scratch, or share your English name if you have one.";
+"输入你的中文名，我们会为你寻找适合的英文名。" = "Enter your Chinese name and we will find an English name that fits.";
+"想从零开始也可以；如果你已有中文名，可以告诉我们。" = "You can start from scratch, or share your Chinese name if you have one.";
+"有英文名可以参考吗？" = "Do you have an English name for reference?";
+"有中文名可以参考吗？" = "Do you have a Chinese name for reference?";
+"没有也没关系，留空即可从零开始。" = "No problem if you don’t. Leave it blank to start from scratch.";
+"输入英文名（可选）" = "English name (optional)";
+"输入中文名（可选）" = "Chinese name (optional)";
+"我们会参考读音和气质，但优先生成自然的中文名，而不是机械音译。" = "We consider pronunciation and feel, but we prioritize a natural Chinese name over a mechanical transliteration.";
+"我们会参考读音和气质，给你推荐适合长期使用的英文名。" = "We consider pronunciation and feel to suggest an English name you can use for years.";
+"先答 8 道题，再按气质推荐名字" = "Answer 8 questions, then get names by feel";
+"外文名起中文" = "Chinese name from a foreign name";
+"输入外文名，生成自然中文名" = "Enter a foreign name to get a natural Chinese name";
+"生辰起名" = "Name with birth details";
+"用出生日期作为传统文化辅助参考" = "Use birth details as an optional cultural reference";
+"自己挑姓和字，查看读感与释义" = "Choose a surname and characters";
+"结果" = "Result";
+"查看全部推荐" = "View all recommendations";
+"搜索名字、含义或读音" = "Search names, meanings, or pronunciation";
+
+/* ===== 性格测试 ===== */
+
+"性格测试" = "Personality quiz";
+"上一题" = "Previous";
+"取名偏向" = "Name preference";
+"不限" = "Any";
+"女生" = "Girls";
+"男生" = "Boys";
+"女" = "Girls";
+"男" = "Boys";
+"偏女" = "Feminine";
+"偏男" = "Masculine";
+"中性" = "Neutral";
+"不限性别" = "Any gender";
+
+/* ===== 结果页 ===== */
+
+"推荐组合" = "Recommendations";
+"推荐偏好" = "Preferences";
+"性格画像" = "Personality";
+"生辰八字" = "Birth details";
+"还没有，去测 8 道题" = "Not yet — take the 8-question quiz";
+"未添加，可作推荐辅助" = "Not added — optional";
+"已添加出生日期" = "Birth date added";
+"重新测" = "Retake";
+"去测试" = "Take the quiz";
+"先做一遍测试，才知道该往哪个方向取。" = "Take the quiz first to know which direction to go.";
+"先定姓氏" = "Pick a surname first";
+"推荐的名字都挂在你自己的姓下面。点上面的「选姓氏」，选好就按性格排一批出来。" = "Recommendations hang off your own surname. Tap “Choose surname” above and we will rank a batch by personality.";
+"姓" = "Surname";
+"名" = "Given";
+"选姓氏" = "Choose surname";
+"先选一个姓" = "Pick a surname first";
+"推荐的名字都挂在自己的姓下面，选好姓再回来看全部。" = "Recommendations hang off your own surname — pick one, then come back for the full list.";
+"查看全部" = "View all";
+"换一批" = "Refresh";
+"没找到合适的名字" = "No suitable name found";
+"没找到合适的名字，换个性别偏好再试试。" = "No suitable name found — try another gender preference.";
+"可换个性别再试，或稍后再换一批。" = "Try another gender preference, or refresh in a moment.";
+"当前偏好可能把候选都筛掉了，回上一页清一下偏好再试。" = "Your preferences may have filtered everything out — go back and clear some.";
+"全部推荐" = "All recommendations";
+"「%@」姓 · 按性格推荐" = "Surname “%@” · by personality";
+"「%@」姓 · 性格 + 生辰" = "Surname “%@” · personality + birth details";
+"「%@」姓 · 按生辰宜补" = "Surname “%@” · by favorable elements";
+"%ld 个" = "%ld";
+"%ld 个名字" = "%ld names";
+"保留" = "Keep";
+"排除" = "Exclude";
+"不喜欢" = "Disliked";
+"排除的字之后不再出现，保留的字之后必须带上。" = "Excluded characters stop appearing; kept ones always stay.";
+"排除 = 之后不再出现；保留 = 之后必须带上。" = "Exclude = never show again; Keep = always include it.";
+"已清空推荐偏好" = "Preferences cleared";
+"已取消保留「%@」" = "No longer keeping “%@”";
+"已取消排除「%@」" = "No longer excluding “%@”";
+"生辰辅助" = "Birth details (optional)";
+"补充出生日期，推荐时会参考宜补五行。" = "Add a birth date; recommendations will consider favorable elements.";
+"加生辰" = "Add birth details";
+"改生辰" = "Edit birth details";
+
+/* ===== 名字详情 ===== */
+
+"适合你，是因为：" = "Why it fits you: ";
+"换名" = "Another";
+"备选名" = "More names";
+"备选名字" = "More names";
+"不喜欢的名字" = "Disliked names";
+"名字里有什么" = "What’s in the name";
+"相似的名字" = "Similar names";
+"点一下换过来" = "Tap to swap in";
+"含「%@」字" = "shares “%@”";
+"气质相近" = "similar feel";
+"读感没问题" = "Reads well";
+"念着" = "reads: ";
+"生辰用字" = "Birth-detail characters";
+"同一个你，换个文化叫什么" = "The same you, in another culture";
+"看更多英文名" = "See more English names";
+"生成分享卡片" = "Create share card";
+"从收藏里翻出来的名字" = "A name from your favorites";
+"已排除" = "Excluded";
+"已保留" = "Kept";
+"精选清雅名" = "curated, elegant";
+"精选常见名" = "curated, common";
+"按字义拼成" = "built from character meanings";
+"念起来顺口" = "reads smoothly";
+"贴合你的性格画像" = "fits your personality";
+"兼顾生辰宜补" = "matches favorable elements";
+"之后绝不再出现「%@」" = "“%@” will never appear again";
+"之后名字都必须带「%@」" = "Every name must include “%@”";
+"最多保留 4 个字" = "You can keep at most 4 characters";
+"带当前偏好的候选不够了，试试取消部分排除或换姓" = "Not enough candidates with these preferences — remove an exclusion or change the surname";
+"带这些保留字的候选不够了，试试取消部分保留或换姓" = "Not enough candidates with these kept characters — keep fewer or change the surname";
+"相关名人" = "Notable namesakes";
+"灵感参考" = "For inspiration";
+"你" = "You";
+"这个名字" = "This name";
+"字义拆解" = "Character meanings";
+"同名名人 灵感参考" = "Notable namesakes";
+"按性格取的中文名" = "A Chinese name from your personality";
+"由生辰取的中文名" = "A Chinese name from birth details";
+"性格 · 生辰取名" = "Personality · Birth details";
+"由性格取的英文名" = "An English name from your personality";
+"精选英文名" = "Curated English name";
+
+/* ===== 生辰 ===== */
+
+"公历生日" = "Gregorian birth date";
+"本地排盘，年柱以立春为界。时辰不清楚可留空。" = "Charts are calculated on-device; the year pillar starts at the beginning of spring. Leave the hour blank if unsure.";
+"时辰" = "Hour";
+"时辰未知" = "Hour unknown";
+"不清楚可跳过" = "Skip if unsure";
+"预览" = "Preview";
+"按生辰取名" = "Names by birth details";
+"%@ 年 %@ 月 %@ 日" = "%@/%@/%@";
+"选择生日" = "Choose date";
+"选择时辰" = "Choose hour";
+"生日无效" = "Invalid date";
+"请选择 1900–2100 之间的公历生日" = "Choose a Gregorian date between 1900 and 2100";
+"日主%@%@，%@，%@" = "Day master %@ (%@) · %@ · %@";
+"五行缺%@" = "missing %@";
+"五行偏弱于%@" = "weak in %@";
+"五行较均衡" = "elements fairly balanced";
+"宜补%@" = "favorable: %@";
+"%@属%@" = "%@ belongs to %@";
+"%@，合宜补%@" = "%@, matching favorable %@";
+"农历 %@" = "Lunar %@";
+"木" = "Wood";
+"火" = "Fire";
+"土" = "Earth";
+"金" = "Metal";
+"水" = "Water";
+
+/* ===== 西名中起 ===== */
+
+"输入原名" = "Enter the original name";
+"取一个中国式名字" = "Get a Chinese-style name";
+"例如 Emma Wilson / Liam / Sofia" = "e.g. Emma Wilson / Liam / Sofia";
+"给的是中国人真会取的名字（两三个字，姓照原名的音头配，也可能是欧阳、司马这样的复姓），不是「格蕾丝」这类只贴读音的音译。" = "You get names Chinese people really use (two or three characters, with the surname matched to the sound of the original — including compound surnames like 欧阳 or 司马), not a sound-only transliteration such as 格蕾丝.";
+"西名中起" = "Chinese name from a foreign name";
+"生成姓名" = "Generate";
+"照 %@ 取的中文名" = "A Chinese name inspired by %@";
+"换一组姓名" = "Another set";
+"存卡片" = "Save card";
+"姓是怎么定的" = "How the surname was chosen";
+"姓氏" = "Surname";
+"姓氏：" = "Surname: ";
+"如果要音译写法" = "If you need a transliteration";
+"音译" = "Transliteration";
+"证件、护照上用的写法" = "For ID and passports";
+"换几个名字试试" = "Try a few more names";
+"贴「%@」的发音，%@" = "Follows the sound of “%@”: %@";
+"%@取%@音" = "%@ for the sound %@";
+"「%@」的通行中文写法，读音与气质都贴合" = "The common Chinese form of “%@” — sound and feel both fit";
+"「%@」的音头" = "sound of “%@”";
+"「%@」的开头音" = "opening sound of “%@”";
+"照%@取，读起来有点原名的影子；%@" = "Chosen from %@, so it echoes the original name; %@";
+"复姓，两个字" = "a two-character compound surname";
+"单姓，好写好认" = "a single surname, easy to write and read";
+"先输入一个外文名" = "Enter a foreign name first";
+"这个名字没配出合适的组合，换个拼写试试" = "No good combination for this name — try another spelling";
+"没别的组合了" = "No more combinations";
+"已经收藏过了" = "Already saved";
+
+/* ===== 名字工作台 ===== */
+
+"单字名：干净利落，但重名概率高。" = "One-character names are crisp, but far more likely to be shared.";
+"三个字以上的名不常见，属于非主流取名，自己确认喜欢就好。" = "Given names of three or more characters are uncommon and unconventional — fine as long as you like it.";
+"已经到 %ld 个字了，再多就不像名字了。" = "That’s already %ld characters — more stops looking like a name.";
+"最多 %ld 个字" = "At most %ld characters";
+"清空重选" = "Clear";
+"先放宽一下筛选" = "Loosen the filters first";
+"先选姓氏" = "Pick a surname first";
+"先选一个字" = "Pick a character first";
+"已收藏（三字以上的名不常见）" = "Saved (three-character names are uncommon)";
+"挑选姓名" = "Pick characters";
+"全部意象" = "All imagery";
+"全部字库" = "All characters";
+"全部字母" = "All letters";
+"全部" = "All";
+"单姓" = "Single";
+"复姓" = "Compound";
+"不限常见度" = "Any frequency";
+"不限常用度" = "Any frequency";
+"常见" = "Common";
+"少见" = "Rare";
+"较少" = "Uncommon";
+"一般" = "Average";
+"大姓" = "Very common";
+"常用" = "Common";
+"清雅" = "Elegant";
+"%ld / %ld 个" = "%ld / %ld";
+"随便来一个" = "Surprise me";
+"当前选中" = "Selected";
+"暂无更多介绍" = "No further details";
+"没筛到这个姓，放宽一下条件。" = "No surname matches — loosen the filters.";
+"没筛到这个字，放宽一下条件。" = "No character matches — loosen the filters.";
+"搜汉字或拼音：苏 / su / ouyang" = "Search character or pinyin: 苏 / su / ouyang";
+"搜汉字或拼音：沐 / mu" = "Search character or pinyin: 沐 / mu";
+"已选 %ld 字" = "%ld selected";
+
+/* ===== 意象域标签 ===== */
+
+"天" = "Sky";
+"山" = "Mountain";
+"玉" = "Jade";
+"心" = "Mind";
+"静" = "Calm";
+"音" = "Sound";
+"鸟兽" = "Creatures";
+"朗" = "Bright";
+"日常" = "Everyday";
+
+/* ===== 英文名 ===== */
+
+"分类自选" = "Browse";
+"智能推荐" = "For you";
+"搜英文 / 译名 / 含义：Ava / 艾娃 / 智慧" = "Search name, translation or meaning: Ava / 艾娃 / wisdom";
+"英文名库" = "English names";
+"这个分类下没有名字。" = "No names in this category.";
+"可按年代、气质、寓意、语源筛选；点一个名字看介绍，底栏存成卡片。" = "Filter by era, vibe, meaning or origin. Tap a name for details, then save it as a card from the bottom bar.";
+"从中文出发取英文名，可留空" = "Start from a Chinese name (optional)";
+"例如 沐晴 / 李慕白 / 欧阳见山" = "e.g. 沐晴 / 李慕白 / 欧阳见山";
+"填了中文名按拼音贴近；也可只填姓。留空则按性格气质推荐。" = "With a Chinese name we match by pinyin; a surname alone works too. Leave it blank to match your personality instead.";
+"和你的性格最搭的英文名" = "English names that fit your personality";
+"照「%@」配的英文名" = "English names matching “%@”";
+"换个字试试；想看现成的名字，切到「分类自选」。" = "Try another name, or switch to “Browse” to see ready-made picks.";
+" · 音近 %@" = " · sounds like %@";
+" · 名人：" = " · Namesakes: ";
+"其他" = "Other";
+"昵称：" = "Nicknames: ";
+"生成卡片" = "Create card";
+"全部年代" = "All eras";
+"当下" = "Current";
+"90后" = "90s";
+"主流" = "Mainstream";
+"老派" = "Vintage";
+"古典" = "Classic";
+"全部气质" = "All vibes";
+"温暖" = "Warm";
+"清冷" = "Cool";
+"外向" = "Outgoing";
+"内敛" = "Reserved";
+"理性" = "Rational";
+"感性" = "Intuitive";
+"稳重" = "Steady";
+"跳脱" = "Restless";
+"古典感" = "Classic feel";
+"简洁" = "Simple";
+"直白" = "Direct";
+"全部寓意" = "All meanings";
+"光" = "Light";
+"爱" = "Love";
+"美" = "Beauty";
+"力" = "Strength";
+"力量" = "Strength";
+"王" = "Royalty";
+"王者" = "Royalty";
+"花" = "Flora";
+"花草" = "Flora";
+"星" = "Stars";
+"星辰" = "Stars";
+"鸟" = "Birds";
+"飞鸟" = "Birds";
+"守护" = "Protection";
+"高贵" = "Noble";
+"胜利" = "Victory";
+"战士" = "Warrior";
+"礼物" = "Gift";
+"温柔" = "Tender";
+"和平" = "Peace";
+"自由" = "Freedom";
+"智慧" = "Wisdom";
+"幸运" = "Fortune";
+"生命" = "Life";
+"全部语源" = "All origins";
+"拉丁" = "Latin";
+"希腊" = "Greek";
+"希伯来" = "Hebrew";
+"日耳曼" = "Germanic";
+"古英" = "Old English";
+"英语" = "English";
+"英" = "English";
+"爱尔兰" = "Irish";
+"威尔士" = "Welsh";
+"苏格兰" = "Scottish";
+"法语" = "French";
+"北欧" = "Norse";
+"意大利" = "Italian";
+"西班牙" = "Spanish";
+"斯拉夫" = "Slavic";
+"凯尔特" = "Celtic";
+"波斯" = "Persian";
+
+/* ===== 雷达轴 ===== */
+
+"温度" = "Warmth";
+"社交" = "Social";
+"决策" = "Decision";
+"节奏" = "Tempo";
+"时代" = "Era";
+"繁简" = "Style";
+"表达" = "Expression";
+"现代" = "Modern";
+"华丽" = "Ornate";
+"含蓄" = "Subtle";
+
+/* ===== 性格描述 ===== */
+
+"温和" = "Warm";
+"不冷不热" = "Even-tempered";
+"张弛有度" = "Adaptable";
+"偏理性" = "Leaning rational";
+"凭感觉" = "Leaning intuitive";
+"理性与直觉各半" = "Equal parts reason and intuition";
+"稳" = "Steady";
+"节奏自由" = "Free-flowing";
+
+/* ===== 读感 / 顺口度 ===== */
+
+"声调有起伏" = "tones rise and fall";
+"声调全同，念起来太平" = "all tones are the same — flat to say";
+"三个三声连读，念着拗口" = "three third tones in a row — awkward to say";
+"有音节重复，容易混淆" = "repeated syllables — easy to confuse";
+"没有重音" = "no repeated sounds";
+"两个字重复了" = "the two characters are the same";
+"两个字意象差得远，凑在一起不像名字" = "the two images clash — doesn’t read like a name";
+"字与字意象相容" = "the characters’ images match";
+"这个组合有负面谐音，不建议" = "negative homophone — not recommended";
+"连起来读会撞上不好的词" = "reads like an unintended word";
+"用字少见，不容易撞名" = "rare characters — unlikely to be shared";
+"用字常见，稳妥好认" = "common characters — safe and easy";
+"「%@」不在字库里" = "“%@” is not in the character library";
+"朗朗上口" = "very smooth";
+"顺口" = "smooth";
+"念着顺" = "easy to say";
+"稍拗口" = "a bit awkward";
+"音译用字，取其读音" = "transliteration character, for its sound only";
+"百搭" = "versatile";
+"温润" = "warm";
+"开阔" = "open";
+"端稳" = "steady";
+"轻灵" = "light";
+"谨严" = "disciplined";
+"疏朗" = "spacious";
+"时新" = "modern";
+"华美" = "ornate";
+"爽利" = "crisp";
+"含蕴" = "subtle";
+
+/* ===== 浮层 / 收藏 ===== */
+
+/* 按钮文案（详情 / 自选 / 收藏页的胶囊），别当成名词 "Favorites"。 */
+
+"收藏" = "Save";
+"我的收藏" = "Favorites";
+"已收藏" = "Saved";
+"已取消收藏" = "Removed from favorites";
+"库里已经没有这个名字了" = "This name is no longer in the library.";
+"已保存到相册" = "Saved to Photos";
+"分享卡片" = "Share card";
+"存到相册" = "Save to Photos";
+"搜索「%@」" = "Search “%@”";
+"没搜到这个姓。" = "No such surname.";
+"先做一遍测试，再来选姓氏。" = "Take the quiz first, then choose a surname.";
+"先做一遍测试，才能按新姓重排名字" = "Take the quiz first to re-rank names for a new surname";
+"先挑一个姓，再看这个姓下的名字。" = "Pick a surname first to see its names.";
+"没有符合条件的名字。" = "No names match.";
+"这个姓的候选都用完了，换个姓吧" = "No candidates left for this surname — try another one";
+"请先选姓氏" = "Pick a surname first";
+"生成" = "Generated";
+"还没有收藏。看到喜欢的名字，点「收藏」就存这儿了。" = "No favorites yet. When you like a name, tap “Favorites” and it lands here.";
+"还没有标记不喜欢的名字。在详情页点「换名」会自动记下来。" = "No disliked names yet. Tapping “Another” on a detail page records it automatically.";
+"这些名字不会再出现在推荐里。点「恢复」取消一条。" = "These names will not appear in recommendations again. Tap “Restore” to undo one.";
+"已恢复「%@」" = "Restored “%@”";
+
+/* ===== 收藏来源 ===== */
+
+"性格推荐" = "Personality";
+"生辰" = "Birth details";
+"推荐" = "Recommended";
+"详情" = "Detail";
+"自选" = "Custom";
+// MARK: 语源（engine.json 的 org 字段，用于英文名标签）
+"丹麦" = "Danish";
+"亚拉姆" = "Aramaic";
+"阿拉姆" = "Aramaic";
+"阿拉米" = "Aramaic";
+"俄" = "Russian";
+"俄语" = "Russian";
+"印第安" = "Native American";
+"美洲原住民" = "Native American";
+"达科他" = "Dakota";
+"夏威夷" = "Hawaiian";
+"巴斯克" = "Basque";
+"布列塔尼" = "Breton";
+"德" = "German";
+"日语" = "Japanese";
+"梵语" = "Sanskrit";
+"法" = "French";
+"荷兰" = "Dutch";
+"诺曼" = "Norman";
+"阿拉伯" = "Arabic";
+"公众人物常用英文名或姓氏 token" = "Common public-figure name or surname";
+"华人姓氏拉丁拼写" = "Romanized Chinese surname";
+"%@。%@" = "%@. %@";
+
+/* ===== 英文名页：三扇门 + 自选姓名 ===== */
+
+/* 底部 tab 的标签和页面里的标题分开：tab 只有三分之一屏宽（英文写全会被截断），
+ * 页面里的标题才用完整说法。 */
+
+"按性格" = "For you";
+"自己取名" = "Build your own";
+"按性格推荐" = "By personality";
+"已有英文名" = "A name you already have";
+"留空＝按性格推荐；填了按读音贴近" = "Empty = by personality; filled = sound-alike match";
+"库里有就直接查，没有就按词尾推测" = "Found in the library, or guessed from its ending";
+"输入任意英文名：Aurora / Kai / Mei" = "Type any English name: Aurora / Kai / Mei";
+"查看这个名字" = "Look up this name";
+"名字库里没有的名字也能查：会按词尾推测语源和性别，再给出音近的名字和中文音译。" = "Names outside the library work too: the ending suggests an origin and gender, then you get sound-alike names and a Chinese transliteration.";
+"先输入一个英文名" = "Type an English name first";
+"名字信息" = "Name info";
+"库外名字" = "Not in the library";
+"语源不详：这个词尾不在常见规则里。" = "Origin unknown: this ending is not in the common patterns.";
+"推测语源：%@" = "Likely origin: %@";
+"中文音译参考：%@" = "Chinese transliteration: %@";
+"相近的英文名" = "Close English names";
+"库里音近的名字" = "Sound-alike names in the library";
+"按性格推荐，或自己挑姓和名" = "By personality, or pick a surname and a given name yourself";
+"换个字试试；想看现成的名字，切到「自选姓名」。" = "Try another character; to browse ready-made names, switch to Build your own name.";
+
+/* 自选英文名（选姓 + 选名，和中文名的「自选姓名」对称） */
+
+"自选英文名" = "Build your own English name";
+"自己挑姓和名，像中文名那样" = "Pick a surname and a given name, Chinese-style";
+"姓在上一行填或挑；不填也能直接存卡片。" = "Fill in or pick the surname above; you can also leave it out.";
+"中文姓名" = "Chinese name";
+"英文姓" = "Surname";
+"例如 李慕白 / 欧阳修" = "e.g. 李慕白 / 欧阳修";
+"你自己的姓：Lee / Wilson" = "Your own surname: Lee / Wilson";
+"按性格气质排" = "By personality";
+"照「%@」的读音贴近" = "Close in sound to「%@」";
+"上面填了中文姓名就按拼音贴近；留空则按性格气质推荐。" = "Enter a Chinese name above to match by sound; leave it empty to match by personality.";
+"从库里挑" = "Pick from the library";
+"中文常写作：%@" = "Usually written %@ in Chinese";
+"查看详情" = "See details";
+"选英文姓" = "Choose a surname";
+"选英文名" = "Choose a given name";
+"搜姓氏：Wil / 威" = "Search: Wil / 威";
+"没选中名字。" = "No name selected.";
+"自选的英文名" = "A custom English name";
+"按性格取的自选英文名" = "A custom English name tuned to your personality";
+// MARK: 词尾规则表的语源说明（Engine/NameEngineCustom.swift）
+"中文拼音：这更像中文名的拉丁写法" = "Chinese pinyin — this reads like a Chinese name in Latin letters";
+"北欧父名（……之子）" = "Nordic patronymic (son of …)";
+"北欧／德语父名（……之子）" = "Nordic/German patronymic (son of …)";
+"英语父名（……之子）" = "English patronymic (son of …)";
+"西班牙语父名" = "Spanish patronymic";
+"古英语／日耳曼语" = "Old English/Germanic";
+"古北欧／古英语" = "Old Norse/Old English";
+"古英语地名" = "Old English place name";
+"波兰语" = "Polish";
+"斯拉夫语" = "Slavic";
+"法语小称" = "French, a diminutive ending";
+"意大利／拉丁小称" = "Italian/Latin, a diminutive ending";
+"拉丁／意大利小称" = "Latin/Italian, a diminutive ending";
+"希伯来语" = "Hebrew";
+"希伯来语（神之名）" = "Hebrew (of God)";
+"希伯来语（神）" = "Hebrew (God)";
+"拉丁语" = "Latin";
+"希腊语／西葡语" = "Greek/Spanish-Portuguese";
+"拉丁／希腊语，多为女性名" = "Latin/Greek, common in feminine names";
+"威尔士语" = "Welsh";
+"爱尔兰语，William 的短形式" = "Irish, short for William";
+"希腊语" = "Greek";
+"同姓名人" = "People who shared the name";
+"同名人物" = "People with this surname";
+"换一个" = "Shuffle";
+"点一个名字，看它的释义和同名人物。" = "Tap a name to see its meaning and namesakes.";
