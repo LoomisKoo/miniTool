@@ -1316,10 +1316,42 @@
   /* ================= 手势 ================= */
   const ptrs = new Map();
   let pinchD = 0, pinchZ = 1, moved = false, movedPx = 0, animId = 0;
+  let panVelLon = 0, panVelLat = 0, lastPanT = 0, wasPinching = false;
   const local = e => { const r = wrap.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
-  function cancelAnim() { cancelAnimationFrame(animId); }
+  function cancelAnim() { cancelAnimationFrame(animId); animId = 0; }
   function isUiTarget(t) {
     return !!(t && t.closest && t.closest('#clusterDlg, .zoomctl, #sheet, #filterDlg, #clusterMask, #sheetMask'));
+  }
+
+  function startPanInertia() {
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const speed = Math.hypot(panVelLon, panVelLat);
+    if (speed < 0.00015) return; // deg/ms
+    cancelAnim();
+    dragging = true;
+    let last = performance.now();
+    (function step(t) {
+      const dt = Math.min(34, Math.max(0, t - last));
+      last = t;
+      if (dt > 0) {
+        cam.lon = wrapLon(cam.lon + panVelLon * dt);
+        cam.lat += panVelLat * dt;
+        clampCam();
+        // ~220ms 半衰期
+        const decay = Math.exp(-dt / 220);
+        panVelLon *= decay;
+        panVelLat *= decay;
+        scheduleDraw();
+      }
+      if (Math.hypot(panVelLon, panVelLat) > 0.00008) {
+        animId = requestAnimationFrame(step);
+      } else {
+        animId = 0;
+        panVelLon = panVelLat = 0;
+        dragging = false;
+        scheduleDraw();
+      }
+    })(performance.now());
   }
 
   wrap.addEventListener('pointerdown', e => {
@@ -1327,9 +1359,13 @@
     try { (e.target || canvas).setPointerCapture(e.pointerId); } catch (err) {}
     ptrs.set(e.pointerId, local(e));
     pinchD = 0; moved = false; movedPx = 0;
+    panVelLon = panVelLat = 0;
+    lastPanT = performance.now();
+    wasPinching = ptrs.size >= 2;
     dragging = true;
     cancelAnim();
     if (ptrs.size === 2) {
+      wasPinching = true;
       const [a, b] = [...ptrs.values()];
       pinchD = Math.hypot(a[0] - b[0], a[1] - b[1]);
       pinchZ = cam.zoom;
@@ -1343,6 +1379,7 @@
     const dx = p1[0] - p0[0], dy = p1[1] - p0[1];
     ptrs.set(e.pointerId, p1);
     if (ptrs.size === 2) {
+      wasPinching = true;
       const [a, b] = [...ptrs.values()];
       const d = Math.hypot(a[0] - b[0], a[1] - b[1]);
       if (pinchD > 0 && d > 0) {
@@ -1351,12 +1388,22 @@
         zoomTo(clampZoom(pinchZ * (d / pinchD)), mx, my);
       }
       moved = true; movedPx += Math.abs(dx) + Math.abs(dy);
+      panVelLon = panVelLat = 0;
     } else if (ptrs.size === 1) {
       movedPx += Math.abs(dx) + Math.abs(dy);
       if (movedPx > 1.5) moved = true;
       if (moved) {
-        cam.lon = wrapLon(cam.lon - dx / cam.zoom);
-        cam.lat += dy / cam.zoom;
+        const now = performance.now();
+        const dt = Math.max(1, now - lastPanT);
+        const dLon = -dx / cam.zoom;
+        const dLat = dy / cam.zoom;
+        cam.lon = wrapLon(cam.lon + dLon);
+        cam.lat += dLat;
+        // 指数滑动平均，跟手速度
+        const a = 1 - Math.exp(-dt / 40);
+        panVelLon += (dLon / dt - panVelLon) * a;
+        panVelLat += (dLat / dt - panVelLat) * a;
+        lastPanT = now;
         clampCam();
         scheduleDraw();
       }
@@ -1365,10 +1412,16 @@
   function endPtr(e) {
     ptrs.delete(e.pointerId);
     if (ptrs.size === 0) {
+      const doInertia = moved && !wasPinching && (performance.now() - lastPanT) < 80;
       moved = false;
-      dragging = false;
+      wasPinching = false;
       endZoomGesture();
-      scheduleDraw(); // 松手精绘
+      if (doInertia) startPanInertia();
+      else {
+        panVelLon = panVelLat = 0;
+        dragging = false;
+        scheduleDraw(); // 松手精绘
+      }
     }
   }
   wrap.addEventListener('pointerup', endPtr);
