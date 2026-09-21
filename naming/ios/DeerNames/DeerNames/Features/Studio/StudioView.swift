@@ -64,10 +64,17 @@ struct StudioView: View {
                         HStack(spacing: 10) {
                             pill(model.isSaved(preview.full) ? L10n.t("已收藏") : L10n.t("收藏"),
                                  favorite: !model.isSaved(preview.full)) {
-                                model.studioSave()
+                                withAnimation(NamingMotion.pick) {
+                                    model.studioSave()
+                                }
+                            }
+                            pill(L10n.t("配小名")) {
+                                model.openNickFromStudio()
                             }
                             pill(L10n.t("清空重选")) {
-                                model.studioSlots = []
+                                withAnimation(NamingMotion.pick) {
+                                    model.studioSlots = []
+                                }
                             }
                         }
                         .padding(.top, 14)
@@ -83,15 +90,12 @@ struct StudioView: View {
         .namingPageBackground()
         .navigationTitle(L10n.t("自选姓名"))
         .navigationBarTitleDisplayMode(.inline)
-        .safeAreaInset(edge: .bottom) {
+        .namingDock {
             DockPrimaryButton(title: L10n.t("确定"),
                               enabled: model.studioSurname != nil && !model.studioSlots.isEmpty) {
                 /* 回「中文名」入口页（自选只是那页上的一扇门），不是一路弹回首页。 */
                 model.popTo(.zh)
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 10)
-            .background(.regularMaterial)
         }
     }
 

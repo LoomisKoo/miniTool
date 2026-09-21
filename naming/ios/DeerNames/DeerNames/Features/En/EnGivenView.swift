@@ -83,7 +83,7 @@ struct EnGivenView: View {
                 .overlay(alignment: .bottomTrailing) {
                     if showTop {
                         ScrollTopButton {
-                            withAnimation(.easeOut(duration: 0.25)) {
+                            withAnimation(NamingMotion.appear) {
                                 proxy.scrollTo(topID, anchor: .top)
                             }
                         }
@@ -92,18 +92,15 @@ struct EnGivenView: View {
                         .transition(.opacity)
                     }
                 }
-                .animation(.easeInOut(duration: 0.18), value: showTop)
+                .animation(NamingMotion.fade, value: showTop)
             }
         }
         .namingPageBackground()
         .navigationTitle(L10n.t("选英文名"))
         .navigationBarTitleDisplayMode(.inline)
-        .safeAreaInset(edge: .bottom) {
+        .namingDock {
             /* 底部只剩一个确定：选中的名字的释义已经挪到筛选条下面了。 */
             DockPrimaryButton(title: L10n.t("确定")) { model.pop() }
-                .padding(.horizontal, 20)
-                .padding(.vertical, 10)
-                .background(.regularMaterial)
         }
     }
 

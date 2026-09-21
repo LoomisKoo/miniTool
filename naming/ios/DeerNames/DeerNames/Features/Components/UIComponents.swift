@@ -23,7 +23,8 @@ struct ChipButton: View {
                 }
                 .clipShape(Capsule())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(NamingPressButtonStyle())
+        .sensoryFeedback(.selection, trigger: active)
     }
 }
 
@@ -40,6 +41,21 @@ struct FilterRow: View {
                 }
             }
             .padding(.vertical, 1)
+        }
+    }
+}
+
+/// 筛选 sheet 用：胶囊自动换行，不横滑。
+struct FilterFlow: View {
+    let items: [(String, String)]
+    let current: String
+    var action: (String) -> Void
+
+    var body: some View {
+        FlowLayout(spacing: 8, lineSpacing: 8) {
+            ForEach(items, id: \.0) { item in
+                ChipButton(text: item.1, active: current == item.0) { action(item.0) }
+            }
         }
     }
 }
@@ -139,8 +155,60 @@ struct DockPrimaryButton: View {
                 }
                 .clipShape(RoundedRectangle(cornerRadius: NamingRadius.medium, style: .continuous))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(NamingPressButtonStyle())
         .disabled(!enabled)
+    }
+}
+
+/* 底部操作栏：
+ * - iOS 26+：`safeAreaBar`，吃系统 scroll edge 模糊
+ * - 以下：`safeAreaInset` + Material 毛玻璃
+ * 内置左右 20 / 上下 10 padding，调用方只塞按钮或 Chip 行。 */
+extension View {
+    func namingDock<Dock: View>(
+        visible: Bool = true,
+        @ViewBuilder content: @escaping () -> Dock
+    ) -> some View {
+        modifier(NamingDockModifier(visible: visible, dock: content))
+    }
+}
+
+private struct NamingDockModifier<Dock: View>: ViewModifier {
+    var visible: Bool
+    @ViewBuilder var dock: () -> Dock
+
+    func body(content: Content) -> some View {
+        if visible {
+            docked(content)
+        } else {
+            content
+        }
+    }
+
+    @ViewBuilder
+    private func docked(_ content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content.safeAreaBar(edge: .bottom) { dockBody }
+        } else {
+            content.safeAreaInset(edge: .bottom) {
+                dockBody
+                    .background {
+                        ZStack(alignment: .top) {
+                            Rectangle()
+                                .fill(.ultraThinMaterial)
+                                .ignoresSafeArea(edges: .bottom)
+                            NamingTheme.hairline
+                                .frame(height: 0.5)
+                        }
+                    }
+            }
+        }
+    }
+
+    private var dockBody: some View {
+        dock()
+            .padding(.horizontal, 20)
+            .padding(.vertical, 10)
     }
 }
 
@@ -160,7 +228,7 @@ struct GhostButton: View {
                         .stroke(NamingTheme.primary.opacity(0.5), lineWidth: 1)
                 }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(NamingPressButtonStyle())
     }
 }
 
@@ -278,8 +346,8 @@ struct ScrollTopButton: View {
             .overlay { Circle().strokeBorder(NamingTheme.hairline, lineWidth: 1) }
             .shadow(color: .black.opacity(0.16), radius: 8, y: 3)
             .contentShape(Circle())
-            .scaleEffect(pressed ? 0.92 : 1)
-            .animation(.easeOut(duration: 0.12), value: pressed)
+            .scaleEffect(pressed ? 0.97 : 1)
+            .animation(NamingMotion.press, value: pressed)
             /* 列表惯性滚动时，ScrollView 的 pan 手势会抢走普通点击（TapGesture 要等
              * 「按下 + 抬起 + 没移动」才成立，减速中这一串常常被打断），所以：
              *   1. 用 minimumDistance: 0 的 DragGesture，手指按下就成立；
@@ -587,20 +655,26 @@ struct FlowLayout: Layout {
     }
 }
 
-/* 选字页的「已选」卡 —— 点一个字就在筛选条下面摊开它的读音 / 五行 / 释义。
- *
- * 早先选完字什么都不显示，得按「确定」回自选页才看到释义，等于挑字时是瞎挑。
- * 一个字一行，字 + 读音 + 五行在上，释义独占下一行（挤在同一行英文会被折成三行）。 */
+/* 选字页的「已选」卡 —— 点一个字就在上面摊开读音 / 五行 / 释义。
+ * 取消单字、清空整批都在这张卡上，不占底部栏。 */
 struct SelectedCharInfoCard: View {
     let chars: [String]
+    var onRemove: ((String) -> Void)? = nil
+    var onClear: (() -> Void)? = nil
 
     var body: some View {
         if !chars.isEmpty {
             NamingCard(padding: 16) {
-                CardTitleRow(L10n.f("已选 %ld 字", chars.count), bottomInset: 4)
+                CardTitleRow(title: L10n.f("已选 %ld 字", chars.count), bottomInset: 4) {
+                    if let onClear {
+                        Button(L10n.t("清空"), action: onClear)
+                            .font(.system(size: 13))
+                            .foregroundStyle(NamingTheme.primaryDeep)
+                    }
+                }
                 VStack(spacing: 0) {
                     ForEach(chars, id: \.self) { ch in
-                        CharInfoRow(ch: ch)
+                        CharInfoRow(ch: ch, onRemove: onRemove.map { handler in { handler(ch) } })
                         if ch != chars.last {
                             Divider().overlay(NamingTheme.hairline)
                         }
@@ -611,10 +685,10 @@ struct SelectedCharInfoCard: View {
     }
 }
 
-/// 一个字的信息：大字 + 读音 + 五行 + 释义。
-/// 字号 / 留白都收着一档：这卡在列表上面，太胖会把字库挤到屏幕外。
+/// 一个字的信息：大字 + 读音 + 五行 + 释义；可选右侧取消。
 struct CharInfoRow: View {
     let ch: String
+    var onRemove: (() -> Void)? = nil
 
     @Environment(NamingAppModel.self) private var model
 
@@ -637,6 +711,15 @@ struct CharInfoRow: View {
                         .background(NamingTheme.primary.opacity(0.12), in: Capsule())
                 }
                 Spacer(minLength: 0)
+                if let onRemove {
+                    Button(action: onRemove) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 18))
+                            .foregroundStyle(NamingTheme.muted)
+                    }
+                    .buttonStyle(NamingPressButtonStyle())
+                    .accessibilityLabel(L10n.t("取消选中"))
+                }
             }
             Text(info.note)
                 .font(.system(size: 12.5))
@@ -667,7 +750,7 @@ struct ShuffleChip: View {
             .padding(.vertical, 6)
             .background(NamingTheme.primary.opacity(0.12), in: Capsule())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(NamingPressButtonStyle())
     }
 }
 
@@ -691,7 +774,8 @@ struct FavoritePill: View {
             .background(active ? AnyShapeStyle(NamingTheme.primaryDeep) : AnyShapeStyle(NamingTheme.pearl))
             .clipShape(Capsule())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(NamingPressButtonStyle())
+        .sensoryFeedback(.impact(flexibility: .soft, intensity: 0.6), trigger: active)
     }
 }
 

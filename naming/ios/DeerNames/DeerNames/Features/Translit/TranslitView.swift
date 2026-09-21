@@ -51,7 +51,7 @@ struct TranslitView: View {
         .namingPageBackground()
         .navigationTitle(L10n.t("西名中起"))
         .navigationBarTitleDisplayMode(.inline)
-        .safeAreaInset(edge: .bottom) {
+        .namingDock {
             DockPrimaryButton(title: model.translitResult == nil ? L10n.t("生成姓名") : L10n.t("收藏")) {
                 if model.translitResult == nil {
                     model.runTranslit()
@@ -59,9 +59,6 @@ struct TranslitView: View {
                     model.translitSave()
                 }
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 10)
-            .background(.regularMaterial)
         }
     }
 

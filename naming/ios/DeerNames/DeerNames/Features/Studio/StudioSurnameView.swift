@@ -1,20 +1,33 @@
 import SwiftUI
 
-/* 选姓氏（工作台）—— 对应 app.js 的 renderStudioSur。
- * 搜索框贴在导航栏下面不滚走；列表滚远了右下角浮出回顶按钮。
- * 点格子＝选中，选中后字母筛选下面显示这个姓的来历和同姓名人，底部「确定」才返回。 */
+/* 选姓氏（工作台）—— 搜索贴顶；选中简介固定在列表上方；筛选进漏斗 sheet，点「完成」才应用。 */
 
 struct StudioSurnameView: View {
     @Environment(NamingAppModel.self) private var model
     @State private var showTop = false
+    @State private var showFilters = false
 
     private let columns = [GridItem(.adaptive(minimum: 66), spacing: 10)]
     private let topID = "studio-sur-top"
+
+    private var filterActive: Bool {
+        let f = model.studioSurF
+        return f.type != "all" || f.pop != "all" || f.letter != "all"
+    }
 
     var body: some View {
         VStack(spacing: 0) {
             searchField
             Divider().overlay(NamingTheme.hairline)
+
+            if let s = model.studioSurname {
+                VStack(spacing: 12) {
+                    ZhSurnameInfoCard(s: s) { shufflePick() }
+                    ZhNamesakeCard(items: model.surnameCelebs(s))
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 12)
+            }
 
             ScrollViewReader { proxy in
                 ScrollView {
@@ -23,29 +36,6 @@ struct StudioSurnameView: View {
 
                         let list = model.studioSurs()
                         let all = NameEngine.shared.allSurnames()
-
-                        FilterRow(items: [("all", L10n.t("全部")), ("single", L10n.t("单姓")), ("compound", L10n.t("复姓"))],
-                                  current: model.studioSurF.type) { model.studioSurF.type = $0 }
-                        FilterRow(items: [("all", L10n.t("不限常见度")), ("common", L10n.t("常见")), ("rare", L10n.t("少见"))],
-                                  current: model.studioSurF.pop) { model.studioSurF.pop = $0 }
-                        FilterRow(items: [("all", L10n.t("全部字母"))]
-                                  + model.lettersOf(all.map { $0.py }).map { ($0, $0.uppercased()) },
-                                  current: model.studioSurF.letter) { model.studioSurF.letter = $0 }
-
-                        /* 选中的姓的来历摆在这儿（筛选条下面），不占底部；
-                         * 同姓名人是单独一张卡，没有就不显示。 */
-                        if let s = model.studioSurname {
-                            VStack(spacing: 14) {
-                                ZhSurnameInfoCard(s: s) { shufflePick() }
-                                ZhNamesakeCard(items: model.surnameCelebs(s))
-                            }
-                            .geometryGroup()
-                        }
-
-                        FilterSummaryView(parts: filterParts, empty: list.isEmpty) {
-                            model.studioSurF = StudioFilters()
-                            model.studioSurKeyword = ""
-                        }
 
                         HStack {
                             Text(L10n.f("%ld / %ld 个", list.count, all.count))
@@ -63,23 +53,23 @@ struct StudioSurnameView: View {
                         } else {
                             LazyVGrid(columns: columns, spacing: 10) {
                                 ForEach(list, id: \.c) { s in
+                                    let on = model.studioSurname?.c == s.c
                                     Button {
-                                        /* 选中态和列表下移在一个事务里，见 NamingMotion。 */
-                                        withAnimation(NamingMotion.pick) { model.studioSurname = s }
+                                        pickSurname(s)
                                     } label: {
                                         VStack(spacing: 3) {
                                             Text(s.c)
                                                 .font(.system(size: 18, weight: .semibold))
-                                                .foregroundStyle(model.studioSurname?.c == s.c ? .white : NamingTheme.ink)
+                                                .foregroundStyle(on ? .white : NamingTheme.ink)
                                             Text(NameEngine.shared.surnameVibe(s))
                                                 .font(.system(size: 10))
-                                                .foregroundStyle(model.studioSurname?.c == s.c ? .white.opacity(0.85) : NamingTheme.muted)
+                                                .foregroundStyle(on ? .white.opacity(0.85) : NamingTheme.muted)
                                                 .lineLimit(1)
                                         }
                                         .frame(maxWidth: .infinity)
                                         .padding(.vertical, 10)
                                         .background {
-                                            if model.studioSurname?.c == s.c {
+                                            if on {
                                                 NamingTheme.gradient
                                             } else {
                                                 NamingTheme.canvas
@@ -88,7 +78,7 @@ struct StudioSurnameView: View {
                                         .clipShape(RoundedRectangle(cornerRadius: NamingRadius.small, style: .continuous))
                                         .overlay {
                                             RoundedRectangle(cornerRadius: NamingRadius.small, style: .continuous)
-                                                .strokeBorder(model.studioSurname?.c == s.c ? .clear : NamingTheme.hairline, lineWidth: 1)
+                                                .strokeBorder(on ? .clear : NamingTheme.hairline, lineWidth: 1)
                                         }
                                     }
                                     .buttonStyle(.plain)
@@ -105,7 +95,7 @@ struct StudioSurnameView: View {
                 .overlay(alignment: .bottomTrailing) {
                     if showTop {
                         ScrollTopButton {
-                            withAnimation(.easeOut(duration: 0.25)) {
+                            withAnimation(NamingMotion.appear) {
                                 proxy.scrollTo(topID, anchor: .top)
                             }
                         }
@@ -114,36 +104,46 @@ struct StudioSurnameView: View {
                         .transition(.opacity)
                     }
                 }
-                .animation(.easeInOut(duration: 0.18), value: showTop)
+                .animation(NamingMotion.fade, value: showTop)
             }
         }
         .namingPageBackground()
         .navigationTitle(L10n.t("选姓氏"))
         .navigationBarTitleDisplayMode(.inline)
-        .safeAreaInset(edge: .bottom) {
-            /* 底部只剩一个确定：选中的姓的来历已经挪到筛选条下面了，
-             * 这里不再占着屏幕底部显示名字。 */
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button { showFilters = true } label: {
+                    Image(systemName: filterActive
+                          ? "line.3.horizontal.decrease.circle.fill"
+                          : "line.3.horizontal.decrease.circle")
+                        .foregroundStyle(filterActive ? NamingTheme.primaryDeep : NamingTheme.ink)
+                }
+                .accessibilityLabel(L10n.t("筛选"))
+            }
+        }
+        .sheet(isPresented: $showFilters) {
+            StudioSurnameFilterSheet()
+                .environment(model)
+                .presentationDetents([.medium, .large])
+        }
+        .namingDock {
             DockPrimaryButton(title: L10n.t("确定")) { model.popTo(.studio) }
-                .padding(.horizontal, 20)
-                .padding(.vertical, 10)
-                .background(.regularMaterial)
         }
     }
 
-    /* 底部那行小字：拼音 · 英文写法 · 单/复姓 · 常见度 · 气质 —— 现在由
-     * `ZhSurnameInfoCard` 显示（见 UIComponents.swift）。 */
+    private func pickSurname(_ s: NMSurname) {
+        withAnimation(NamingMotion.pick) { model.studioSurname = s }
+    }
 
-    /// 「换一个」：在**当前筛选结果**里随机挑（筛选太狠没剩几个就先提示）。
     private func shufflePick() {
         let pool = model.studioSurs()
         if pool.isEmpty {
             model.toast(L10n.t("先放宽一下筛选"))
         } else if let pick = pool.randomElement() {
-            withAnimation(NamingMotion.pick) { model.studioSurname = pick }
+            pickSurname(pick)
         }
     }
 
-    /* 搜索框贴在导航栏下面，不跟着列表滚。 */
     private var searchField: some View {
         TextField(L10n.t("搜汉字或拼音：苏 / su / ouyang"),
                   text: Binding(get: { model.studioSurKeyword }, set: { model.studioSurKeyword = $0 }))
@@ -160,17 +160,61 @@ struct StudioSurnameView: View {
             .padding(.top, 8)
             .padding(.bottom, 10)
     }
+}
 
-    private var filterParts: [String] {
-        var parts: [String] = []
-        let f = model.studioSurF
-        if f.type == "single" { parts.append(L10n.t("单姓")) }
-        if f.type == "compound" { parts.append(L10n.t("复姓")) }
-        if f.pop == "common" { parts.append(L10n.t("常见")) }
-        if f.pop == "rare" { parts.append(L10n.t("少见")) }
-        if f.letter != "all" { parts.append(f.letter.uppercased()) }
-        let kw = model.studioSurKeyword.trimmingCharacters(in: .whitespaces)
-        if !kw.isEmpty { parts.append(L10n.f("「%@」", kw)) }
-        return parts
+struct StudioSurnameFilterSheet: View {
+    @Environment(NamingAppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    @State private var draft = StudioFilters()
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    filterBlock(title: L10n.t("类型")) {
+                        FilterFlow(items: [("all", L10n.t("全部")), ("single", L10n.t("单姓")),
+                                           ("compound", L10n.t("复姓"))],
+                                   current: draft.type) { draft.type = $0 }
+                    }
+                    filterBlock(title: L10n.t("常见度")) {
+                        FilterFlow(items: [("all", L10n.t("不限常见度")), ("common", L10n.t("常见")),
+                                           ("rare", L10n.t("少见"))],
+                                   current: draft.pop) { draft.pop = $0 }
+                    }
+                    filterBlock(title: L10n.t("拼音首字母")) {
+                        let all = NameEngine.shared.allSurnames()
+                        FilterFlow(items: [("all", L10n.t("全部字母"))]
+                                   + model.lettersOf(all.map { $0.py }).map { ($0, $0.uppercased()) },
+                                   current: draft.letter) { draft.letter = $0 }
+                    }
+                }
+                .padding(20)
+            }
+            .namingPageBackground()
+            .navigationTitle(L10n.t("筛选"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(L10n.t("重置")) { draft = StudioFilters() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(L10n.t("完成")) {
+                        model.studioSurF = draft
+                        dismiss()
+                    }
+                }
+            }
+            .onAppear { draft = model.studioSurF }
+        }
+    }
+
+    private func filterBlock<Content: View>(title: String,
+                                            @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(NamingTheme.muted)
+            content()
+        }
     }
 }

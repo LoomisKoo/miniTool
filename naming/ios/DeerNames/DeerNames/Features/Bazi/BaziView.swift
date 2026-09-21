@@ -89,11 +89,8 @@ struct BaziView: View {
         .namingPageBackground()
         .navigationTitle(L10n.t("生辰起名"))
         .navigationBarTitleDisplayMode(.inline)
-        .safeAreaInset(edge: .bottom) {
+        .namingDock {
             DockPrimaryButton(title: L10n.t("按生辰取名")) { model.finishBazi() }
-                .padding(.horizontal, 20)
-                .padding(.vertical, 10)
-                .background(.regularMaterial)
         }
         .sheet(item: $picker) { kind in
             BaziPickerSheet(kind: kind, draft: $draft) { commit() }

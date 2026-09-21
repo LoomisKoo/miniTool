@@ -144,7 +144,9 @@ struct EnStudioView: View {
                     HStack(spacing: 10) {
                         FavoritePill(title: model.isSavedEn(model.enFullName(g.n)) ? L10n.t("已收藏") : L10n.t("收藏"),
                                      active: !model.isSavedEn(model.enFullName(g.n))) {
-                            model.toggleEnFav(g, src: "enStudio")
+                            withAnimation(NamingMotion.pick) {
+                                model.toggleEnFav(g, src: "enStudio")
+                            }
                         }
                         Spacer(minLength: 0)
                     }
@@ -155,14 +157,9 @@ struct EnStudioView: View {
         }
         .navigationTitle(L10n.t("自选姓名"))
         .navigationBarTitleDisplayMode(.inline)
-        .safeAreaInset(edge: .bottom) {
+        .namingDock(visible: model.enGivenPick != nil) {
             /* 挑好了就在这儿出卡片，不用滚回上面找按钮。 */
-            if model.enGivenPick != nil {
-                DockPrimaryButton(title: L10n.t("生成卡片")) { model.openCardEnStudio() }
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 10)
-                    .background(.regularMaterial)
-            }
+            DockPrimaryButton(title: L10n.t("生成卡片")) { model.openCardEnStudio() }
         }
     }
 
@@ -554,7 +551,7 @@ private struct EnModePage<Content: View>: View {
             .overlay(alignment: .bottomTrailing) {
                 if showTop {
                     ScrollTopButton {
-                        withAnimation(.easeOut(duration: 0.25)) {
+                        withAnimation(NamingMotion.appear) {
                             proxy.scrollTo(topID, anchor: .top)
                         }
                     }
@@ -563,7 +560,7 @@ private struct EnModePage<Content: View>: View {
                     .transition(.opacity)
                 }
             }
-            .animation(.easeInOut(duration: 0.18), value: showTop)
+            .animation(NamingMotion.fade, value: showTop)
         }
     }
 }

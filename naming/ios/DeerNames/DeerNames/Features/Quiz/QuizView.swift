@@ -74,7 +74,7 @@ struct QuizView: View {
         .namingPageBackground()
         .navigationTitle(L10n.t("性格测试"))
         .navigationBarTitleDisplayMode(.inline)
-        .safeAreaInset(edge: .bottom) {
+        .namingDock {
             HStack(spacing: 10) {
                 Text(L10n.t("取名偏向"))
                     .font(.system(size: 13))
@@ -86,9 +86,6 @@ struct QuizView: View {
                 }
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 10)
-            .background(.regularMaterial)
         }
     }
 }

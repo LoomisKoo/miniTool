@@ -17,7 +17,9 @@ struct EnDetailView: View {
                         HStack(spacing: 10) {
                             FavoritePill(title: saved ? L10n.t("已收藏") : L10n.t("收藏"),
                                          active: !saved) {
-                                model.toggleEnFav(it, src: model.enDetailMode)
+                                withAnimation(NamingMotion.pick) {
+                                    model.toggleEnFav(it, src: model.enDetailMode)
+                                }
                             }
                             Spacer(minLength: 0)
                         }
@@ -37,12 +39,9 @@ struct EnDetailView: View {
         .namingPageBackground()
         .navigationTitle(model.enPicked.map { model.enFullName($0.n) } ?? L10n.t("英文名"))
         .navigationBarTitleDisplayMode(.inline)
-        .safeAreaInset(edge: .bottom) {
+        .namingDock(visible: model.enPicked != nil) {
             if let it = model.enPicked {
                 DockPrimaryButton(title: L10n.t("生成卡片")) { model.openCardEn(it) }
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 10)
-                    .background(.regularMaterial)
             }
         }
     }

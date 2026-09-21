@@ -1,7 +1,7 @@
 import SwiftUI
 
-/* 挑选姓名 —— 对应 app.js 的 renderStudioChar。
- * 一千多个字格，搜索框贴在导航栏下不滚走；底部固定「已选」栏，选字不会把内容顶下去。 */
+/* 挑选姓名 —— 搜索贴顶；已选固定在列表上方（不进 ScrollView，避免选字时网格被顶下去）；
+ * 筛选进漏斗 sheet，点「完成」才应用。 */
 
 private enum StudioCharScroll {
     static let topID = "studio-char-top"
@@ -10,13 +10,34 @@ private enum StudioCharScroll {
 struct StudioCharView: View {
     @Environment(NamingAppModel.self) private var model
     @State private var showTop = false
+    @State private var showFilters = false
 
     private let columns = [GridItem(.adaptive(minimum: 46), spacing: 8)]
+
+    private var filterActive: Bool {
+        let f = model.studioCharF
+        return f.dom != "all" || f.g != "all" || f.freq != "all" || f.letter != "all"
+    }
 
     var body: some View {
         VStack(spacing: 0) {
             searchField
             Divider().overlay(NamingTheme.hairline)
+
+            /* 已选卡放在滚动区外：高度变化只压缩列表视口，格子坐标不动，不会拖着选中动画跑。 */
+            if !model.studioSlots.isEmpty {
+                SelectedCharInfoCard(
+                    chars: model.studioSlots,
+                    onRemove: { ch in
+                        toggleChar(ch)
+                    },
+                    onClear: {
+                        withAnimation(NamingMotion.pick) { model.studioSlots = [] }
+                    }
+                )
+                .padding(.horizontal, 20)
+                .padding(.top, 12)
+            }
 
             ScrollViewReader { proxy in
                 ScrollView {
@@ -26,28 +47,9 @@ struct StudioCharView: View {
                         let engine = NameEngine.shared
                         let list = model.studioChars()
 
-                        FilterRow(items: [("all", L10n.t("全部意象"))]
-                                  + engine.data.domainKeyList.map { ($0, domainLabel($0)) },
-                                  current: model.studioCharF.dom) { model.studioCharF.dom = $0 }
-                        FilterRow(items: [("all", L10n.t("不限性别")), ("f", L10n.t("偏女")), ("m", L10n.t("偏男")), ("u", L10n.t("中性"))],
-                                  current: model.studioCharF.g) { model.studioCharF.g = $0 }
-                        FilterRow(items: [("all", L10n.t("不限常用度")), ("common", L10n.t("常用")), ("rare", L10n.t("少见"))],
-                                  current: model.studioCharF.freq) { model.studioCharF.freq = $0 }
-                        FilterRow(items: [("all", L10n.t("全部字母"))]
-                                  + model.lettersOf(engine.data.chars.map { $0.py }).map { ($0, $0.uppercased()) },
-                                  current: model.studioCharF.letter) { model.studioCharF.letter = $0 }
-
-                        FilterSummaryView(parts: filterParts, empty: list.isEmpty) {
-                            model.studioCharF = CharFilters()
-                            model.studioCharKeyword = ""
-                        }
-
-                        /* 选中的字就地摊开：读音 / 五行 / 释义。
-                         * 早先这里什么都不显示，得按「确定」回自选页才看得到释义。 */
-                        SelectedCharInfoCard(chars: model.studioSlots)
-
                         NamingCard {
-                            CardTitleRow(L10n.t("全部字库"), subtitle: L10n.f("%ld / %ld 个", list.count, engine.data.chars.count))
+                            CardTitleRow(L10n.t("全部字库"),
+                                         subtitle: L10n.f("%ld / %ld 个", list.count, engine.data.chars.count))
                             if list.isEmpty {
                                 Text(L10n.t("没筛到这个字，放宽一下条件。"))
                                     .font(.system(size: 13.5))
@@ -57,8 +59,7 @@ struct StudioCharView: View {
                                     ForEach(list, id: \.c) { c in
                                         let on = model.studioSlots.contains(c.c)
                                         Button {
-                                            /* 填充 / 描边的切换也走同一个动效，不然点字是硬切。 */
-                                            withAnimation(NamingMotion.pick) { model.toggleStudioChar(c.c) }
+                                            toggleChar(c.c)
                                         } label: {
                                             Text(c.c)
                                                 .font(.system(size: 19, weight: on ? .semibold : .regular))
@@ -91,7 +92,7 @@ struct StudioCharView: View {
                 .overlay(alignment: .bottomTrailing) {
                     if showTop {
                         ScrollTopButton {
-                            withAnimation(.easeOut(duration: 0.25)) {
+                            withAnimation(NamingMotion.appear) {
                                 proxy.scrollTo(StudioCharScroll.topID, anchor: .top)
                             }
                         }
@@ -100,54 +101,38 @@ struct StudioCharView: View {
                         .transition(.opacity)
                     }
                 }
-                .animation(.easeInOut(duration: 0.18), value: showTop)
+                .animation(NamingMotion.fade, value: showTop)
             }
         }
         .namingPageBackground()
         .navigationTitle(L10n.t("挑选姓名"))
         .navigationBarTitleDisplayMode(.inline)
-        .safeAreaInset(edge: .bottom) {
-            VStack(spacing: 8) {
-                if !model.studioSlots.isEmpty {
-                    HStack(spacing: 8) {
-                        /* 「已选 N 字」和释义在上面那张卡里，这里只管快速取消。 */
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 8) {
-                                ForEach(model.studioSlots, id: \.self) { ch in
-                                    Button {
-                                        model.toggleStudioChar(ch)
-                                    } label: {
-                                        HStack(spacing: 4) {
-                                            Text(ch)
-                                            Image(systemName: "xmark").font(.system(size: 9, weight: .bold))
-                                        }
-                                        .font(.system(size: 14, weight: .semibold))
-                                        .foregroundStyle(.white)
-                                        .padding(.horizontal, 11)
-                                        .padding(.vertical, 6)
-                                        .background {
-                                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                                .fill(NamingTheme.primary)
-                                        }
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                            }
-                        }
-                        Button(L10n.t("清空")) { model.studioSlots = [] }
-                            .font(.system(size: 13))
-                            .foregroundStyle(NamingTheme.primaryDeep)
-                    }
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button { showFilters = true } label: {
+                    Image(systemName: filterActive
+                          ? "line.3.horizontal.decrease.circle.fill"
+                          : "line.3.horizontal.decrease.circle")
+                        .foregroundStyle(filterActive ? NamingTheme.primaryDeep : NamingTheme.ink)
                 }
-                DockPrimaryButton(title: L10n.t("确定")) { model.popTo(.studio) }
+                .accessibilityLabel(L10n.t("筛选"))
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 10)
-            .background(.regularMaterial)
+        }
+        .sheet(isPresented: $showFilters) {
+            StudioCharFilterSheet()
+                .environment(model)
+                .presentationDetents([.medium, .large])
+        }
+        .namingDock {
+            DockPrimaryButton(title: L10n.t("确定")) { model.popTo(.studio) }
         }
     }
 
-    /* 搜索框贴在导航栏下面，不跟着列表滚。 */
+    /// 已选卡在滚动区外，可以用动画做选中态，不会再拖着网格位移。
+    private func toggleChar(_ ch: String) {
+        withAnimation(NamingMotion.pick) { model.toggleStudioChar(ch) }
+    }
+
     private var searchField: some View {
         TextField(L10n.t("搜汉字或拼音：沐 / mu"),
                   text: Binding(get: { model.studioCharKeyword }, set: { model.studioCharKeyword = $0 }))
@@ -164,29 +149,73 @@ struct StudioCharView: View {
             .padding(.top, 8)
             .padding(.bottom, 10)
     }
+}
 
-    /* 意象域的名字是「水 · 清透」这种，筛选条上只取前半段。 */
+/* 字库筛选：草稿态，点「完成」才写回 model。 */
+struct StudioCharFilterSheet: View {
+    @Environment(NamingAppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    @State private var draft = CharFilters()
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    filterBlock(title: L10n.t("意象")) {
+                        FilterFlow(items: [("all", L10n.t("全部意象"))]
+                                   + NameEngine.shared.data.domainKeyList.map { ($0, domainLabel($0)) },
+                                   current: draft.dom) { draft.dom = $0 }
+                    }
+                    filterBlock(title: L10n.t("性别倾向")) {
+                        FilterFlow(items: [("all", L10n.t("不限性别")), ("f", L10n.t("偏女")),
+                                           ("m", L10n.t("偏男")), ("u", L10n.t("中性"))],
+                                   current: draft.g) { draft.g = $0 }
+                    }
+                    filterBlock(title: L10n.t("常用度")) {
+                        FilterFlow(items: [("all", L10n.t("不限常用度")), ("common", L10n.t("常用")),
+                                           ("rare", L10n.t("少见"))],
+                                   current: draft.freq) { draft.freq = $0 }
+                    }
+                    filterBlock(title: L10n.t("拼音首字母")) {
+                        FilterFlow(items: [("all", L10n.t("全部字母"))]
+                                   + model.lettersOf(NameEngine.shared.data.chars.map { $0.py })
+                                    .map { ($0, $0.uppercased()) },
+                                   current: draft.letter) { draft.letter = $0 }
+                    }
+                }
+                .padding(20)
+            }
+            .namingPageBackground()
+            .navigationTitle(L10n.t("筛选"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(L10n.t("重置")) { draft = CharFilters() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(L10n.t("完成")) {
+                        model.studioCharF = draft
+                        dismiss()
+                    }
+                }
+            }
+            .onAppear { draft = model.studioCharF }
+        }
+    }
+
+    private func filterBlock<Content: View>(title: String,
+                                            @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(NamingTheme.muted)
+            content()
+        }
+    }
+
     private func domainLabel(_ key: String) -> String {
         guard let d = NameEngine.shared.data.domains[key] else { return key }
         let head = d.label.split(separator: "·").first.map(String.init) ?? d.label
         return L10n.t(head.trimmingCharacters(in: .whitespaces))
-    }
-
-    private var filterParts: [String] {
-        var parts: [String] = []
-        let f = model.studioCharF
-        if f.dom != "all", let d = NameEngine.shared.data.domains[f.dom] {
-            let head = String(d.label.split(separator: "·").first ?? "").trimmingCharacters(in: .whitespaces)
-            parts.append(L10n.t(head))
-        }
-        if f.g == "f" { parts.append(L10n.t("偏女")) }
-        if f.g == "m" { parts.append(L10n.t("偏男")) }
-        if f.g == "u" { parts.append(L10n.t("中性")) }
-        if f.freq == "common" { parts.append(L10n.t("常用")) }
-        if f.freq == "rare" { parts.append(L10n.t("少见")) }
-        if f.letter != "all" { parts.append(f.letter.uppercased()) }
-        let kw = model.studioCharKeyword.trimmingCharacters(in: .whitespaces)
-        if !kw.isEmpty { parts.append(L10n.f("「%@」", kw)) }
-        return parts
     }
 }

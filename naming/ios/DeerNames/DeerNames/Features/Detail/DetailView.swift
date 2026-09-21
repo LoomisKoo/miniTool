@@ -22,12 +22,9 @@ struct DetailView: View {
         .namingPageBackground()
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
-        .safeAreaInset(edge: .bottom) {
+        .namingDock(visible: model.current != nil) {
             if let c = model.current {
                 DockPrimaryButton(title: L10n.t("生成分享卡片")) { model.openCardZh(c) }
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 10)
-                    .background(.regularMaterial)
             }
         }
     }
@@ -78,11 +75,17 @@ struct DetailView: View {
             FlowLayout(spacing: 10, lineSpacing: 10) {
                 pill(L10n.t("换名"), primary: true) { model.again() }
                 pill(L10n.t("备选名")) { model.sheet = .pool }
-                pill(saved ? L10n.t("已收藏") : L10n.t("收藏"), favorite: !saved) { model.toggleSave() }
+                pill(saved ? L10n.t("已收藏") : L10n.t("收藏"), favorite: !saved) {
+                    withAnimation(NamingMotion.pick) {
+                        model.toggleSave()
+                    }
+                }
                 pill(L10n.t("选姓氏")) { model.sheet = .surname }
             }
             .padding(.top, 16)
         }
+
+        SpeechCheckCard(surname: c.surname, chars: c.chars, speakText: c.full)
 
         // 名字里有什么
         NamingCard {
@@ -204,7 +207,8 @@ struct DetailView: View {
                 .padding(.vertical, 5)
                 .background(on ? AnyShapeStyle(color) : AnyShapeStyle(NamingTheme.pearl), in: Capsule())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(NamingPressButtonStyle())
+        .sensoryFeedback(.selection, trigger: on)
     }
 
     private func crossRow(_ key: String, _ value: String, _ extra: String?) -> some View {
@@ -250,7 +254,7 @@ struct DetailView: View {
                 }
                 .clipShape(Capsule())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(NamingPressButtonStyle())
     }
 
     private func reasonBits(_ c: NameResult, eu: Double, hasBazi: Bool) -> String {
