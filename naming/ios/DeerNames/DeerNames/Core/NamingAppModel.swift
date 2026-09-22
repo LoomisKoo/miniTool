@@ -15,6 +15,9 @@ enum NamingScreen: Hashable {
      *  - enStudio 自选姓名（姓和名都从英文库里挑） */
     case enRec, enSound, enStudio
     case enDetail, enSur, enGiven
+    case compare, report
+    /// 小名 / 昵称（从中文名详情进入）。
+    case nick
 }
 
 enum NamingTab: Hashable { case home, mine }
@@ -165,6 +168,10 @@ final class NamingAppModel {
 
     var mineExpandProfile = false
     var mineExpandBazi = false
+    /// 昵称页打开时的模式。首页「社交昵称」和名字详情「小名」共用一页，进之前先设好。
+    var nickMode: NickMode = .child
+    var compareSelection: Set<String> = []
+    var nickDetail: NickItem?
 
     var baziForm = BaziForm()
     var baziInfo: BaziInfo?
@@ -613,6 +620,13 @@ final class NamingAppModel {
             go(.enDetail)
             return
         }
+        if f.kind == "nick" {
+            nickDetail = NickEngine.socialItems(in: "全部").first { $0.text == f.full }
+                ?? NickItem(text: f.full, type: "社交昵称", category: "社交昵称",
+                            tags: ["成人"], score: 0.5, note: f.why,
+                            zhNote: f.why)
+            return
+        }
         let name = favToName(f)
         current = name
         surname = name.surname
@@ -655,8 +669,59 @@ final class NamingAppModel {
         let table: [String: String] = ["quiz": "性格推荐", "bazi": "生辰", "result": "推荐", "detail": "详情",
                                        "studio": "自选", "translit": "西名中起", "en": "英文名",
                                        "enSound": "中名西取", "enStudio": "自选英文名",
+                                       "nick": "小名昵称", "nickChild": "小名", "nickSocial": "社交昵称",
                                        "unknown": ""]
         return L10n.t(table[src] ?? "")
+    }
+
+    // MARK: - 小名 / 昵称
+
+    func openNick() {
+        nickMode = .child
+        go(.nick)
+    }
+
+    /// 自选姓名里配小名。
+    func openNickFromStudio() {
+        guard !studioSlots.isEmpty else {
+            toast(L10n.t("先挑好字，再来配小名"))
+            return
+        }
+        nickMode = .child
+        go(.nick)
+    }
+
+    /// 首页一级入口：仅社交昵称。
+    func openSocialNick() {
+        nickMode = .social
+        go(.nick)
+    }
+
+    func isSavedNick(_ text: String) -> Bool {
+        fav.contains { $0.kind == "nick" && $0.full == text }
+    }
+
+    func toggleNickFav(_ item: NickItem) {
+        if let idx = fav.firstIndex(where: { $0.kind == "nick" && $0.full == item.text }) {
+            fav.remove(at: idx)
+            schedulePersist()
+            toast(L10n.t("已取消收藏"))
+            return
+        }
+        let from: String
+        if nickMode == .child, !studioSlots.isEmpty {
+            from = (studioSurname?.c ?? "") + studioSlots.joined()
+        } else if nickMode == .social {
+            from = ""
+        } else {
+            from = current?.full ?? ""
+        }
+        let source = nickMode == .child ? "nickChild" : "nickSocial"
+        fav.insert(FavItem(full: item.text, py: "", why: item.note, src: source,
+                           at: Date().timeIntervalSince1970, note: from,
+                           given: item.text, kind: "nick"), at: 0)
+        schedulePersist()
+        toast(L10n.t("已收藏"))
     }
 
     // MARK: - 选姓氏
@@ -1248,6 +1313,9 @@ final class NamingAppModel {
 
     // MARK: - 卡片数据
 
+    /// 是否去掉水印：由外部注入的 Pro 状态决定（model 不直接持有 ProStore，避免循环依赖）。
+    var cardNoWatermark = false
+
     func cardDataZh(_ c: NameResult) -> NamingCardData {
         let p = profile
         let bazi = currentBazi()
@@ -1258,7 +1326,8 @@ final class NamingAppModel {
                               radar: answered ? engine.radar(p!, c.vec) : nil,
                               bazi: (bazi?.ok ?? false) ? bazi : nil,
                               baziNote: (bazi?.ok ?? false) ? BaziEngine.explainName(c.chars, bazi!) : "",
-                              answered: answered, enName: nil, mode: "zh")
+                              answered: answered, enName: nil, mode: "zh",
+                              watermark: !cardNoWatermark)
     }
 
     /* 英文名的卡片数据：两种模式只差一个标签，
@@ -1282,7 +1351,8 @@ final class NamingAppModel {
                               desc: engine.describe(p), radar: engine.radar(p, NameVector(trait: it.tr, style: it.st, chars: [])),
                               bazi: nil, baziNote: "", answered: true, enName: it, mode: mode,
                               enSurname: sur.isEmpty ? nil : NMSurnameEn(n: sur, zh: enSurnameZh(sur), head: ""),
-                              zhSource: useZh, zhSourcePy: zhPy)
+                              zhSource: useZh, zhSourcePy: zhPy,
+                              watermark: !cardNoWatermark)
     }
 
     @MainActor

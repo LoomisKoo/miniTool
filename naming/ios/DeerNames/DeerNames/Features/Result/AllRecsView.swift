@@ -71,7 +71,7 @@ struct AllRecsView: View {
             .overlay(alignment: .bottomTrailing) {
                 if showTop {
                     ScrollTopButton {
-                        withAnimation(.easeOut(duration: 0.25)) {
+                        withAnimation(NamingMotion.appear) {
                             proxy.scrollTo(topID, anchor: .top)
                         }
                     }
@@ -80,7 +80,7 @@ struct AllRecsView: View {
                     .transition(.opacity)
                 }
             }
-            .animation(.easeInOut(duration: 0.18), value: showTop)
+            .animation(NamingMotion.fade, value: showTop)
         }
         .navigationTitle(L10n.t("全部推荐"))
         .navigationBarTitleDisplayMode(.inline)
@@ -131,6 +131,6 @@ struct AllRecsView: View {
                     .strokeBorder(model.isSaved(rec.full) ? NamingTheme.primary.opacity(0.6) : NamingTheme.hairline, lineWidth: 1)
             }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(NamingPressButtonStyle())
     }
 }

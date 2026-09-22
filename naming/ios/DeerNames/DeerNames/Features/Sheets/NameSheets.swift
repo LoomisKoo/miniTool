@@ -56,7 +56,7 @@ struct SurnameSheet: View {
                         .overlay(alignment: .bottomTrailing) {
                             if showTop {
                                 ScrollTopButton {
-                                    withAnimation(.easeOut(duration: 0.25)) {
+                                    withAnimation(NamingMotion.appear) {
                                         proxy.scrollTo(topID, anchor: .top)
                                     }
                                 }
@@ -65,7 +65,7 @@ struct SurnameSheet: View {
                                 .transition(.opacity)
                             }
                         }
-                        .animation(.easeInOut(duration: 0.18), value: showTop)
+                        .animation(NamingMotion.fade, value: showTop)
                     }
                 }
             }
@@ -93,7 +93,9 @@ struct SurnameSheet: View {
     private func surnameCell(_ s: NMSurname) -> some View {
         let on = model.surname?.c == s.c
         return Button {
-            model.pickSurname(s)
+            withAnimation(NamingMotion.pick) {
+                model.pickSurname(s)
+            }
         } label: {
             VStack(spacing: 3) {
                 Text(s.c)
@@ -119,7 +121,7 @@ struct SurnameSheet: View {
                     .strokeBorder(on ? .clear : NamingTheme.hairline, lineWidth: 1)
             }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(NamingPressButtonStyle())
     }
 }
 
@@ -220,7 +222,7 @@ struct PoolSheet: View {
                         .overlay(alignment: .bottomTrailing) {
                             if showTop {
                                 ScrollTopButton {
-                                    withAnimation(.easeOut(duration: 0.25)) {
+                                    withAnimation(NamingMotion.appear) {
                                         proxy.scrollTo(poolTopID, anchor: .top)
                                     }
                                 }
@@ -229,7 +231,7 @@ struct PoolSheet: View {
                                 .transition(.opacity)
                             }
                         }
-                        .animation(.easeInOut(duration: 0.18), value: showTop)
+                        .animation(NamingMotion.fade, value: showTop)
                     }
                 }
             }

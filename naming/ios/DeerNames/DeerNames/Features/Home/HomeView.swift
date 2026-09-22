@@ -1,9 +1,9 @@
 import SwiftUI
 
-/* 首页 —— 对应 app.js 的 renderHome：两个入口（中文名 / 英文名）。
+/* 首页 —— 对应 app.js 的 renderHome：中文名 / 英文名 / 社交昵称。
  *
  * **入口按「要什么名字」分，不按「你是谁」分**：取名字的具体方式（按性格 / 按已有的名字 /
- * 自选姓名）收在各自的入口页里，两个入口页结构对称。 */
+ * 自选姓名）收在各自的入口页里；社交昵称是独立一级能力，不从详情里进。 */
 
 struct HomeView: View {
     @Environment(NamingAppModel.self) private var model
@@ -19,6 +19,10 @@ struct HomeView: View {
                 EntryRow(icon: L10n.isEnglish ? "E" : "英", title: L10n.t("英文名"),
                          subtitle: L10n.t("按性格、按中文名读音，或自己挑姓和名")) {
                     model.openEn()
+                }
+                EntryRow(icon: L10n.isEnglish ? "N" : "昵", title: L10n.t("社交昵称"),
+                         subtitle: L10n.t("按气质抽一批，也可随机；有性格更准")) {
+                    model.openSocialNick()
                 }
             }
             .padding(20)

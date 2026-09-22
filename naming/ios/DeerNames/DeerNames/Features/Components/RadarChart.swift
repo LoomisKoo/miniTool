@@ -7,8 +7,7 @@ struct RadarChartView: View {
     let items: [RadarItem]
     var selfOnly: Bool = false
     var size: CGFloat = 190
-
-    private let nameColor = Color(hex: 0xF26D8D)
+    var nameColor: Color = Color(hex: 0xF26D8D)
 
     var body: some View {
         let c = size / 2

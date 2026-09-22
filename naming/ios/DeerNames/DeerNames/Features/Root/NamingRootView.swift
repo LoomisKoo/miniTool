@@ -17,6 +17,7 @@ struct NamingRootView: View {
      * 旧语言（这正是之前的 bug）。id 放在里面：页面栈重建，而 `.sheet` 本身没动，
      * 弹层内容跟着这次 body 重算刷新。 */
     @AppStorage(L10n.storageKey) private var appLanguage = ""
+    @Environment(ProStore.self) private var pro
 
     var body: some View {
         stack
@@ -27,24 +28,42 @@ struct NamingRootView: View {
                     SettingsView()
                 }
                 .environment(model)
+                .environment(pro)
             }
             .sheet(item: Binding(get: { model.sheet }, set: { model.sheet = $0 })) { kind in
                 NameSheetHost(kind: kind)
                     .environment(model)
+                    .environment(pro)
             }
             .sheet(isPresented: Binding(get: { model.cardImage != nil }, set: { if !$0 { model.cardImage = nil } })) {
                 if let image = model.cardImage {
                     CardPreviewSheet(image: image)
                         .environment(model)
+                        .environment(pro)
                 }
+            }
+            .sheet(item: Binding(get: { model.nickDetail }, set: { model.nickDetail = $0 })) { item in
+                NickExplanationSheet(item: item)
+                    .environment(model)
+                    .environment(pro)
+            }
+            .sheet(isPresented: Binding(
+                get: { pro.showPaywall },
+                set: { pro.showPaywall = $0 }
+            )) {
+                ProSheet()
+                    .environment(pro)
             }
             .overlay(alignment: .bottom) {
                 if let text = model.toastText {
                     NamingToastView(text: text)
-                        .transition(.opacity.combined(with: .move(edge: .bottom)))
+                        .transition(.asymmetric(
+                            insertion: .opacity.combined(with: .move(edge: .bottom)),
+                            removal: .opacity
+                        ))
                 }
             }
-            .animation(.easeInOut(duration: 0.18), value: model.toastText)
+            .animation(NamingMotion.appear, value: model.toastText)
     }
 
     /// 页面栈本体 —— 换语言时整块重建（`path` 绑在 model 上，所以还停在原来那一页）。
@@ -110,6 +129,9 @@ struct ScreenHost: View {
             case .enDetail: EnDetailView()
             case .enSur: EnSurnameView()
             case .enGiven: EnGivenView()
+            case .compare: NameCompareView()
+            case .report: NameReportView()
+            case .nick: NickView()
             case .home, .mine: EmptyView()
             }
         }

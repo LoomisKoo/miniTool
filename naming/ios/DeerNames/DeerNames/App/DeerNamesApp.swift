@@ -6,6 +6,7 @@ struct DeerNamesApp: App {
 
     /// 模型放在 App 层：切语言时下面整棵树会按 id 重建，模型不能跟着重置。
     @State private var model = NamingAppModel()
+    @State private var pro = ProStore()
 
     var body: some Scene {
         WindowGroup {
@@ -16,6 +17,15 @@ struct DeerNamesApp: App {
                 .environment(\.locale, appLanguage.isEmpty
                              ? Locale.autoupdatingCurrent
                              : Locale(identifier: appLanguage))
+                .environment(pro)
+                .task {
+                    await pro.start()
+                    pro.ensureDevUnlock()
+                }
+                .onChange(of: pro.isPro) { _, unlocked in
+                    model.cardNoWatermark = unlocked
+                }
+                .onAppear { model.cardNoWatermark = pro.isPro }
         }
     }
 }

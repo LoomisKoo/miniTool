@@ -21,6 +21,8 @@ struct NamingCardData {
      * 空着就退回以前的行为：显示英文名的音译（艾玛）。 */
     var zhSource: String? = nil
     var zhSourcePy: String? = nil
+    /// 免费用户卡片带水印；Pro 去掉。
+    var watermark: Bool = true
 }
 
 enum NamingCardRenderer {
@@ -86,7 +88,7 @@ struct NamingShareCard: View {
     /// 所以英文模式下字号要收一档，再留 `minimumScaleFactor` 兜住长名。
     private var primaryName: String { isZhName ? L10n.zhPrimary(data.full, zhPinyin) : data.full }
 
-    private var primarySize: CGFloat { isZhName && L10n.isEnglish ? 58 : 78 }
+    private var primarySize: CGFloat { isZhName && L10n.isEnglish ? 44 : 52 }
 
     /// 副标：只有「英文界面 + 中文名」时才需要补回汉字，其余情况走下面的拼音行。
     private var secondaryHanzi: String? {
@@ -94,12 +96,6 @@ struct NamingShareCard: View {
         return data.full
     }
 
-    /// 顶部标签的逐字空格是汉字版式（字距），英文照做会变成「A C h i n e s e」。
-    private var labelText: String {
-        L10n.isEnglish ? label : label.map { String($0) }.joined(separator: " ")
-    }
-
-    /// 英文名的含义（库里查不到含义就退回语源）。
     private var enMeaning: String? {
         guard let en = data.enName else { return nil }
         let m = L10n.d("namesEn", en.n, "m", en.m).trimmingCharacters(in: .whitespaces)
@@ -109,93 +105,145 @@ struct NamingShareCard: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            /* 顶部标签做成胶囊：裸文字摆在空白顶上显得飘。 */
-            Text(labelText)
-                .font(.system(size: 13.5, weight: .semibold))
-                .tracking(L10n.isEnglish ? 1.2 : 3)
-                .foregroundStyle(NamingTheme.primaryDeep)
-                .padding(.horizontal, 18)
-                .padding(.vertical, 8)
-                .background(NamingTheme.primary.opacity(0.12), in: Capsule())
-                .padding(.top, 40)
+        VStack(spacing: 14) {
+            brandRow
+                .padding(.horizontal, 28)
+                .padding(.top, 28)
 
-            Spacer(minLength: 10)
-
-            nameBlock
-
-            /* 名字与正文之间一条短横线：卡片最需要的是一点呼吸。 */
-            Rectangle()
-                .fill(NamingTheme.hairline)
-                .frame(width: 54, height: 1)
-                .padding(.top, 22)
-
-            if !data.desc.isEmpty {
-                Text("“\(data.desc)”")
-                    .font(.system(size: 16.5))
-                    .lineSpacing(5)
-                    .multilineTextAlignment(.center)
-                    .foregroundStyle(NamingTheme.ink.opacity(0.82))
-                    .lineLimit(3)
-                    .padding(.horizontal, 56)
-                    .padding(.top, 18)
+            sharePanel {
+                Text(label)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(NamingTheme.primaryDeep)
+                    .frame(maxWidth: .infinity)
+                nameBlock
+                    .padding(.top, 8)
+                if !data.desc.isEmpty {
+                    Text(data.desc)
+                        .font(.system(size: 15))
+                        .lineSpacing(4)
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(NamingTheme.ink.opacity(0.85))
+                        .lineLimit(3)
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 12)
+                }
+                if let m = enMeaning {
+                    Text(m)
+                        .font(.system(size: 14))
+                        .lineSpacing(4)
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(NamingTheme.muted)
+                        .lineLimit(3)
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 8)
+                }
             }
+            .padding(.horizontal, 24)
 
-            if let m = enMeaning {
-                Text(m)
-                    .font(.system(size: 14))
-                    .lineSpacing(5)
-                    .multilineTextAlignment(.center)
-                    .foregroundStyle(NamingTheme.muted)
-                    .lineLimit(4)
-                    .padding(.horizontal, 58)
-                    .padding(.top, 16)
-            }
-
-            if !data.chars.isEmpty {
-                charBlock.padding(.top, 18)
-            }
-
-            if let bazi = data.bazi {
-                VStack(spacing: 8) {
-                    Text(bazi.pillarStr)
-                        .font(.system(size: 22, weight: .semibold))
-                        .foregroundStyle(NamingTheme.primaryDeep)
-                    if !(data.baziNote.isEmpty && bazi.short.isEmpty) {
-                        Text(data.baziNote.isEmpty ? bazi.short : data.baziNote)
-                            .font(.system(size: 14))
-                            .multilineTextAlignment(.center)
-                            .foregroundStyle(NamingTheme.muted)
-                            .padding(.horizontal, 48)
+            if !data.chars.isEmpty || data.bazi != nil {
+                sharePanel {
+                    if !data.chars.isEmpty {
+                        Text(L10n.t("字义拆解"))
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(NamingTheme.ink)
+                        charBlock
+                            .padding(.top, 10)
+                    }
+                    if let bazi = data.bazi {
+                        if !data.chars.isEmpty {
+                            Divider().overlay(NamingTheme.hairline).padding(.vertical, 10)
+                        }
+                        Text(L10n.t("生辰"))
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(NamingTheme.ink)
+                        Text(bazi.pillarStr)
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundStyle(NamingTheme.primaryDeep)
+                            .padding(.top, 8)
+                        if !(data.baziNote.isEmpty && bazi.short.isEmpty) {
+                            Text(data.baziNote.isEmpty ? bazi.short : data.baziNote)
+                                .font(.system(size: 13.5))
+                                .foregroundStyle(NamingTheme.muted)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .padding(.top, 6)
+                        }
                     }
                 }
-                .padding(.top, 20)
+                .padding(.horizontal, 24)
             }
 
             if let radar = data.radar, !radar.isEmpty {
-                radarBlock(radar)
-                    .padding(.horizontal, 54)
-                    .padding(.top, 16)
+                sharePanel {
+                    Text(L10n.t("性格画像"))
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(NamingTheme.ink)
+                    radarBlock(radar)
+                        .padding(.top, 8)
+                }
+                .padding(.horizontal, 24)
             }
 
-            Spacer(minLength: 12)
+            Spacer(minLength: 8)
 
-            VStack(spacing: 10) {
-                Rectangle()
-                    .fill(NamingTheme.hairline)
-                    .frame(width: 40, height: 1)
-                Text(L10n.t("仙鹿起名 · 名字实验室"))
-                    .font(.system(size: 12.5))
-                    .tracking(2)
+            VStack(spacing: 4) {
+                Text(L10n.t("仙鹿起名"))
+                    .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(NamingTheme.muted)
+                if data.watermark {
+                    Text(L10n.t("免费版 · 升级 Pro 去水印"))
+                        .font(.system(size: 11))
+                        .foregroundStyle(NamingTheme.primaryDeep.opacity(0.85))
+                }
             }
-            .padding(.bottom, 30)
+            .padding(.bottom, 22)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(
-            LinearGradient(colors: [NamingTheme.background, NamingTheme.canvas],
-                           startPoint: .top, endPoint: .bottom)
+            LinearGradient(
+                colors: [
+                    NamingTheme.background,
+                    NamingTheme.background.opacity(0.70),
+                    NamingTheme.canvas
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
         )
+        .overlay {
+            if data.watermark {
+                Text(L10n.t("仙鹿起名"))
+                    .font(.system(size: 42, weight: .bold))
+                    .foregroundStyle(NamingTheme.ink.opacity(0.05))
+                    .rotationEffect(.degrees(-28))
+                    .allowsHitTesting(false)
+            }
+        }
+    }
+
+    private var brandRow: some View {
+        HStack(spacing: 10) {
+            Text("鹿")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 34, height: 34)
+                .background(NamingTheme.gradient,
+                            in: RoundedRectangle(cornerRadius: NamingRadius.small, style: .continuous))
+            Text(L10n.t("仙鹿起名"))
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(NamingTheme.ink)
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func sharePanel<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 0, content: content)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(18)
+            .background(NamingTheme.canvas, in: RoundedRectangle(cornerRadius: NamingRadius.large, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: NamingRadius.large, style: .continuous)
+                    .strokeBorder(NamingTheme.hairline.opacity(0.9), lineWidth: 1)
+            }
     }
 
     private var nameBlock: some View {
@@ -205,21 +253,22 @@ struct NamingShareCard: View {
                 .foregroundStyle(NamingTheme.ink)
                 .lineLimit(1)
                 .minimumScaleFactor(0.5)
-                .padding(.horizontal, 40)
+                .frame(maxWidth: .infinity)
 
             if let hanzi = secondaryHanzi {
                 Text(hanzi)
-                    .font(.system(size: 24, weight: .medium))
+                    .font(.system(size: 20, weight: .medium))
                     .foregroundStyle(NamingTheme.muted)
-                    .padding(.top, 10)
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 8)
             } else if !pinyinLine.isEmpty {
                 Text(pinyinLine)
-                    .font(.system(size: 18))
+                    .font(.system(size: 16))
                     .foregroundStyle(NamingTheme.muted)
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
-                    .padding(.horizontal, 40)
-                    .padding(.top, 12)
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 8)
             }
         }
     }
@@ -227,10 +276,6 @@ struct NamingShareCard: View {
     /// 字义拆解（只有中文名卡片有字）。
     private var charBlock: some View {
         VStack(alignment: .leading, spacing: 11) {
-            Text(L10n.t("字义拆解"))
-                .font(.system(size: 13.5, weight: .semibold))
-                .tracking(2)
-                .foregroundStyle(NamingTheme.muted)
             ForEach(data.chars, id: \.self) { ch in
                 HStack(spacing: 14) {
                     Text(ch)
@@ -253,7 +298,6 @@ struct NamingShareCard: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 56)
     }
 
     /* 卡片上的雷达：图 + 两列小条。
@@ -262,12 +306,12 @@ struct NamingShareCard: View {
         VStack(spacing: 10) {
             HStack(spacing: 16) {
                 legendDot(color: NamingTheme.ink.opacity(0.75), text: L10n.t("你"))
-                legendDot(color: Color(hex: 0xF26D8D), text: L10n.t("这个名字"))
+                legendDot(color: NamingTheme.primary, text: L10n.t("这个名字"))
             }
             .font(.system(size: 11.5))
             .foregroundStyle(NamingTheme.muted)
 
-            RadarChartView(items: items, size: L10n.isEnglish ? 142 : 150)
+            RadarChartView(items: items, size: L10n.isEnglish ? 128 : 136, nameColor: NamingTheme.primary)
 
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 16),
                                 GridItem(.flexible(), spacing: 16)], spacing: 9) {

@@ -12,35 +12,48 @@ struct LanguageSettingsView: View {
     }
 
     var body: some View {
-        List {
-            Section {
-                ForEach(options, id: \.0) { option in
-                    Button {
-                        appLanguage = option.0
-                    } label: {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(option.1)
-                                    .foregroundStyle(NamingTheme.ink)
-                                Text(option.2)
-                                    .font(.system(size: 12))
-                                    .foregroundStyle(NamingTheme.muted)
+        ScrollView {
+            VStack(spacing: 14) {
+                NamingCard(padding: 8) {
+                    ForEach(Array(options.enumerated()), id: \.element.0) { index, option in
+                        Button {
+                            appLanguage = option.0
+                        } label: {
+                            HStack(spacing: 12) {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(option.1)
+                                        .font(.system(size: 16, weight: .semibold))
+                                        .foregroundStyle(NamingTheme.ink)
+                                    Text(option.2)
+                                        .font(.system(size: 12))
+                                        .foregroundStyle(NamingTheme.muted)
+                                }
+                                Spacer(minLength: 0)
+                                if appLanguage == option.0 {
+                                    Image(systemName: "checkmark")
+                                        .font(.system(size: 15, weight: .semibold))
+                                        .foregroundStyle(NamingTheme.primaryDeep)
+                                }
                             }
-                            Spacer()
-                            if appLanguage == option.0 {
-                                Image(systemName: "checkmark")
-                                    .foregroundStyle(NamingTheme.primaryDeep)
-                            }
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 12)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        if index != options.count - 1 {
+                            Divider().overlay(NamingTheme.hairline)
                         }
                     }
                 }
-            } footer: {
                 Text(L10n.t("名字本身不会被翻译，解释文字会跟随界面语言变化。"))
+                    .font(.system(size: 12.5))
+                    .foregroundStyle(NamingTheme.muted)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 4)
             }
+            .padding(20)
         }
-        .listStyle(.insetGrouped)
-        .scrollContentBackground(.hidden)
-        .background(NamingTheme.background.ignoresSafeArea())
+        .namingPageBackground()
         .navigationTitle(L10n.t("语言"))
         .navigationBarTitleDisplayMode(.inline)
     }

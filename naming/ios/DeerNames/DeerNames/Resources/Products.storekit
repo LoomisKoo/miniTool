@@ -1,0 +1,41 @@
+{
+  "identifier" : "DeerNamesProducts",
+  "nonRenewingSubscriptions" : [
+
+  ],
+  "products" : [
+    {
+      "displayPrice" : "38",
+      "familyShareable" : true,
+      "internalID" : "DEERPROLIFETIME001",
+      "localizations" : [
+        {
+          "description" : "Unlock full nicknames, cross-language pronunciation checks, nickname guides, name comparison reports, and watermark-free cards.",
+          "displayName" : "DeerNames Pro",
+          "locale" : "en_US"
+        },
+        {
+          "description" : "解锁完整昵称库、跨语言读音体检、昵称详解、名字对比报告与无水印卡片。一次买断，永久使用。",
+          "displayName" : "仙鹿起名 Pro",
+          "locale" : "zh_CN"
+        }
+      ],
+      "productID" : "com.deernames.pro.lifetime",
+      "referenceName" : "DeerNames Pro Lifetime",
+      "type" : "NonConsumable"
+    }
+  ],
+  "settings" : {
+    "_failTransactionsEnabled" : false,
+    "_storeKitErrors" : [
+
+    ]
+  },
+  "subscriptionGroups" : [
+
+  ],
+  "version" : {
+    "major" : 3,
+    "minor" : 0
+  }
+}

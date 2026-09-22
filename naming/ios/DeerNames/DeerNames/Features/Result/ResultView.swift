@@ -247,12 +247,14 @@ struct FeedbackPrefCard: View {
             NamingCard {
                 CardTitleRow(title: L10n.t("推荐偏好")) {
                     Button(L10n.t("清空")) {
-                        model.feedback = FeedbackOptions()
-                        model.recShown = []
-                        if model.screen == .result { model.refreshRecs() }
-                        if model.screen == .detail { model.applyFeedbackToDetail() }
-                        model.sheet = nil
-                        model.toast(L10n.t("已清空推荐偏好"))
+                        withAnimation(NamingMotion.pick) {
+                            model.feedback = FeedbackOptions()
+                            model.recShown = []
+                            if model.screen == .result { model.refreshRecs() }
+                            if model.screen == .detail { model.applyFeedbackToDetail() }
+                            model.sheet = nil
+                            model.toast(L10n.t("已清空推荐偏好"))
+                        }
                     }
                     .font(.system(size: 13))
                     .foregroundStyle(NamingTheme.primaryDeep)

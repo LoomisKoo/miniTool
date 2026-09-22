@@ -9,6 +9,7 @@ struct MineView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 14) {
+                ProStatusCard()
                 profileFold
                 baziFold
                 favSection
@@ -29,18 +30,23 @@ struct MineView: View {
                 FoldHeader(title: L10n.t("性格画像"),
                            subtitle: NameEngine.shared.describe(p),
                            actionLabel: model.mineExpandProfile ? L10n.t("收起") : L10n.t("展开")) {
-                    model.mineExpandProfile.toggle()
+                    withAnimation(NamingMotion.pick) {
+                        model.mineExpandProfile.toggle()
+                    }
                 }
                 if model.mineExpandProfile {
-                    RadarBodyView(items: NameEngine.shared.radarSelf(p), selfOnly: true)
-                        .padding(.top, 12)
-                    HStack {
-                        Button(L10n.t("重新测")) { model.openQuiz() }
-                            .font(.system(size: 14))
-                            .foregroundStyle(NamingTheme.primaryDeep)
-                        Spacer()
+                    VStack(alignment: .leading, spacing: 0) {
+                        RadarBodyView(items: NameEngine.shared.radarSelf(p), selfOnly: true)
+                            .padding(.top, 12)
+                        HStack {
+                            Button(L10n.t("重新测")) { model.openQuiz() }
+                                .font(.system(size: 14))
+                                .foregroundStyle(NamingTheme.primaryDeep)
+                            Spacer()
+                        }
+                        .padding(.top, 10)
                     }
-                    .padding(.top, 10)
+                    .transition(.opacity)
                 }
             }
         } else {
@@ -61,7 +67,9 @@ struct MineView: View {
                 FoldHeader(title: L10n.t("生辰八字"),
                            subtitle: bazi.pillarStr.isEmpty ? bazi.summary : bazi.pillarStr,
                            actionLabel: model.mineExpandBazi ? L10n.t("收起") : L10n.t("展开")) {
-                    model.mineExpandBazi.toggle()
+                    withAnimation(NamingMotion.pick) {
+                        model.mineExpandBazi.toggle()
+                    }
                 }
                 if model.mineExpandBazi {
                     VStack(alignment: .leading, spacing: 10) {
@@ -79,6 +87,7 @@ struct MineView: View {
                             .foregroundStyle(NamingTheme.primaryDeep)
                     }
                     .padding(.top, 12)
+                    .transition(.opacity)
                 }
             }
         } else {
@@ -111,7 +120,27 @@ struct MineView: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)
             }
+            .transition(.opacity.combined(with: .move(edge: .top)))
         } else {
+            if model.fav.filter({ $0.kind != "en" && $0.kind != "nick" }).count >= 2 {
+                Button {
+                    model.go(.compare)
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "square.grid.2x2")
+                        Text(L10n.t("比较收藏的名字"))
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                    }
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(NamingTheme.primaryDeep)
+                    .padding(14)
+                    .background(NamingTheme.primary.opacity(0.10),
+                                in: RoundedRectangle(cornerRadius: NamingRadius.medium, style: .continuous))
+                }
+                .buttonStyle(NamingPressButtonStyle())
+            }
+
             NamingCard(padding: 8) {
                 VStack(spacing: 0) {
                     ForEach(Array(model.fav.enumerated()), id: \.element.full) { index, item in
@@ -133,20 +162,27 @@ struct MineView: View {
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .contentShape(Rectangle())
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(NamingPressButtonStyle())
 
                             Button {
                                 guard index < model.fav.count else { return }
-                                model.fav.remove(at: index)
-                                model.schedulePersist()
+                                withAnimation(NamingMotion.pick) {
+                                    model.fav.remove(at: index)
+                                    model.schedulePersist()
+                                }
                             } label: {
                                 Image(systemName: "heart.fill")
                                     .foregroundStyle(NamingTheme.primary)
+                                    .frame(width: 36, height: 36)
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(NamingPressButtonStyle())
                         }
                         .padding(.horizontal, 10)
                         .padding(.vertical, 11)
+                        .transition(.asymmetric(
+                            insertion: .opacity.combined(with: .move(edge: .top)),
+                            removal: .opacity.combined(with: .scale)
+                        ))
 
                         if index != model.fav.count - 1 {
                             Divider().overlay(NamingTheme.hairline)
@@ -154,6 +190,7 @@ struct MineView: View {
                     }
                 }
             }
+            .transition(.opacity.combined(with: .move(edge: .top)))
         }
     }
 
@@ -162,6 +199,10 @@ struct MineView: View {
         if f.kind == "en" {
             /* 英文名：主标就是英文本身；副标的中文音译只给中文界面（存的时候写进 note）。 */
             if !L10n.isEnglish, !f.note.isEmpty { parts.append(f.note) }
+        } else if f.kind == "nick" {
+            if f.src == "nickChild", !f.note.isEmpty {
+                parts.append(L10n.f("给 %@", f.note))
+            }
         } else {
             /* 英文界面下主标是汉字，副标补一行拼音。 */
             if L10n.isEnglish, !f.py.isEmpty { parts.append(Pinyin.titleCase(f.py)) }
