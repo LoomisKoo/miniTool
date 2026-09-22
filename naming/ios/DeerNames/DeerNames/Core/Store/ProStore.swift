@@ -10,8 +10,8 @@ import StoreKit
 @MainActor
 final class ProStore {
     static let productID = "com.deernames.pro.lifetime"
-    private static let cacheKey = "naming.pro.unlocked.v1"
-    private static let debugKey = "naming.pro.debugUnlock.v1"
+    nonisolated private static let cacheKey = "naming.pro.unlocked.v1"
+    nonisolated private static let debugKey = "naming.pro.debugUnlock.v1"
 
     var isPro = false
     var product: Product?
@@ -143,8 +143,8 @@ final class ProStore {
 
     // MARK: - private
 
-    private func resolvedPro(storeUnlocked: Bool = UserDefaults.standard.bool(forKey: cacheKey)) -> Bool {
-        if storeUnlocked { return true }
+    private func resolvedPro(storeUnlocked: Bool? = nil) -> Bool {
+        if storeUnlocked == true { return true }
         if UserDefaults.standard.bool(forKey: Self.cacheKey) { return true }
         if Self.autoUnlockInDev, UserDefaults.standard.bool(forKey: Self.debugKey) {
             return true

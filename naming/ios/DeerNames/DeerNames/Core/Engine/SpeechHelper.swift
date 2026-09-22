@@ -57,7 +57,8 @@ enum SpeechHelper {
         "万": ("wàn", "mò", "复姓「万俟」读 mò"),
     ]
 
-    private static let synthesizer = AVSpeechSynthesizer()
+    @MainActor
+    private static let engine = SpeechSynthesisEngine()
 
     static func inspect(surname: NMSurname?, chars: [String]) -> SpeechCheck {
         let engine = NameEngine.shared
@@ -91,28 +92,24 @@ enum SpeechHelper {
         return SpeechCheck(syllables: syllables, polyphones: hints, readability: rel, toneWave: tones)
     }
 
+    @MainActor
     static func speak(_ text: String, language: String = "zh-CN") -> SpeechSpeakResult {
         let spoken = speakable(text)
         guard !spoken.isEmpty else { return .nothingToRead }
 
-        let session = AVAudioSession.sharedInstance()
-        try? session.setCategory(.playback, mode: .spokenAudio, options: [.duckOthers])
-        try? session.setActive(true)
-
-        let voice = AVSpeechSynthesisVoice(language: language)
+        let resolvedVoice = AVSpeechSynthesisVoice(language: language)
             ?? AVSpeechSynthesisVoice(language: language.hasPrefix("zh") ? "zh-CN" : "en-US")
-        guard voice != nil else { return .noVoice }
+        guard let resolvedVoice else { return .noVoice }
+
+        let session = AVAudioSession.sharedInstance()
+        try? session.setCategory(.playback, mode: .spokenAudio, options: [.duckOthers, .defaultToSpeaker])
+        try? session.setActive(true, options: .notifyOthersOnDeactivation)
 
         let utterance = AVSpeechUtterance(string: spoken)
-        utterance.voice = voice
+        utterance.voice = resolvedVoice
         utterance.rate = AVSpeechUtteranceDefaultSpeechRate * 0.92
-        /* stopSpeaking 会把同一次调用里紧接着的 speak 一起取消，所以挪到下一轮。 */
-        if synthesizer.isSpeaking {
-            synthesizer.stopSpeaking(at: .immediate)
-        }
-        DispatchQueue.main.async {
-            synthesizer.speak(utterance)
-        }
+
+        engine.speak(utterance)
         return .started
     }
 
@@ -125,7 +122,29 @@ enum SpeechHelper {
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    @MainActor
     static func stop() {
+        engine.stop()
+    }
+}
+
+@MainActor
+private final class SpeechSynthesisEngine: NSObject, AVSpeechSynthesizerDelegate {
+    private let synthesizer = AVSpeechSynthesizer()
+
+    override init() {
+        super.init()
+        synthesizer.delegate = self
+    }
+
+    func speak(_ utterance: AVSpeechUtterance) {
+        if synthesizer.isSpeaking {
+            synthesizer.stopSpeaking(at: .immediate)
+        }
+        synthesizer.speak(utterance)
+    }
+
+    func stop() {
         synthesizer.stopSpeaking(at: .immediate)
     }
 }

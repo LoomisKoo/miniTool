@@ -240,10 +240,6 @@ struct NamingShareCard: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(18)
             .background(NamingTheme.canvas, in: RoundedRectangle(cornerRadius: NamingRadius.large, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: NamingRadius.large, style: .continuous)
-                    .strokeBorder(NamingTheme.hairline.opacity(0.9), lineWidth: 1)
-            }
     }
 
     private var nameBlock: some View {

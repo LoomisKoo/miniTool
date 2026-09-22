@@ -4,9 +4,7 @@ import SwiftUI
 
 struct SurnameSheet: View {
     @Environment(NamingAppModel.self) private var model
-    @State private var showTop = false
     private let columns = [GridItem(.adaptive(minimum: 70), spacing: 10)]
-    private let topID = "surname-top"
 
     var body: some View {
         Group {
@@ -23,50 +21,32 @@ struct SurnameSheet: View {
 
                     Divider().overlay(NamingTheme.hairline)
 
-                    ScrollViewReader { proxy in
-                        ScrollView {
-                            let kw = model.surKeyword.trimmingCharacters(in: .whitespaces).lowercased()
-                            let all = NameEngine.shared.allSurnames()
-                            let list = kw.isEmpty ? all : NameEngine.shared.searchSurnames(all, kw)
+                    ScrollView {
+                        let kw = model.surKeyword.trimmingCharacters(in: .whitespaces).lowercased()
+                        let all = NameEngine.shared.allSurnames()
+                        let list = kw.isEmpty ? all : NameEngine.shared.searchSurnames(all, kw)
 
-                            VStack(spacing: 12) {
-                                Color.clear.frame(height: 0).id(topID)
-
-                                NamingCard {
-                                    if !kw.isEmpty {
-                                        CardTitleRow(L10n.f("搜索「%@」", kw), subtitle: "\(list.count)")
-                                    }
-                                    if list.isEmpty {
-                                        Text(L10n.t("没搜到这个姓。"))
-                                            .font(.system(size: 13.5))
-                                            .foregroundStyle(NamingTheme.muted)
-                                    } else {
-                                        LazyVGrid(columns: columns, spacing: 10) {
-                                            ForEach(Array(list.prefix(400)), id: \.c) { s in
-                                                surnameCell(s)
-                                            }
+                        VStack(spacing: 12) {
+                            NamingCard {
+                                if !kw.isEmpty {
+                                    CardTitleRow(L10n.f("搜索「%@」", kw), subtitle: "\(list.count)")
+                                }
+                                if list.isEmpty {
+                                    Text(L10n.t("没搜到这个姓。"))
+                                        .font(.system(size: 13.5))
+                                        .foregroundStyle(NamingTheme.muted)
+                                } else {
+                                    LazyVGrid(columns: columns, spacing: 10) {
+                                        ForEach(Array(list.prefix(400)), id: \.c) { s in
+                                            surnameCell(s)
                                         }
                                     }
                                 }
                             }
-                            .padding(16)
-                            .namingScrollProbe()
                         }
-                        .namingScrollTopDetector { showTop = $0 }
-                        .overlay(alignment: .bottomTrailing) {
-                            if showTop {
-                                ScrollTopButton {
-                                    withAnimation(NamingMotion.appear) {
-                                        proxy.scrollTo(topID, anchor: .top)
-                                    }
-                                }
-                                .padding(.trailing, 16)
-                                .padding(.bottom, 16)
-                                .transition(.opacity)
-                            }
-                        }
-                        .animation(NamingMotion.fade, value: showTop)
+                        .padding(16)
                     }
+                    .namingScrollSurface()
                 }
             }
         }
@@ -80,10 +60,6 @@ struct SurnameSheet: View {
             .font(.system(size: 15))
             .padding(11)
             .background(NamingTheme.canvas, in: RoundedRectangle(cornerRadius: NamingRadius.small, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: NamingRadius.small, style: .continuous)
-                    .strokeBorder(NamingTheme.hairline, lineWidth: 1)
-            }
             .autocorrectionDisabled()
             .padding(.horizontal, 16)
             .padding(.top, 6)
@@ -116,10 +92,6 @@ struct SurnameSheet: View {
                 }
             }
             .clipShape(RoundedRectangle(cornerRadius: NamingRadius.small, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: NamingRadius.small, style: .continuous)
-                    .strokeBorder(on ? .clear : NamingTheme.hairline, lineWidth: 1)
-            }
         }
         .buttonStyle(NamingPressButtonStyle())
     }
@@ -127,8 +99,6 @@ struct SurnameSheet: View {
 
 struct PoolSheet: View {
     @Environment(NamingAppModel.self) private var model
-    @State private var showTop = false
-    private let poolTopID = "pool-top"
 
     var body: some View {
         VStack(spacing: 0) {
@@ -180,59 +150,41 @@ struct PoolSheet: View {
                         .padding(.top, 24)
                     Spacer()
                 } else {
-                    ScrollViewReader { proxy in
-                        ScrollView {
-                            VStack(spacing: 0) {
-                                Color.clear.frame(height: 0).id(poolTopID)
-
-                                ForEach(rows, id: \.full) { x in
-                                    Button {
-                                        model.pickPoolName(x.given)
-                                    } label: {
-                                        HStack(spacing: 10) {
-                                            VStack(alignment: .leading, spacing: 3) {
-                                                Text(x.full)
-                                                    .font(.system(size: 16, weight: .semibold))
-                                                    .foregroundStyle(NamingTheme.ink)
-                                                Text(L10n.listPyPrefix(Pinyin.titleCase(Pinyin.name(x.surname, x.chars))) + model.tagOf(x) + " · " + truncatedWhy(x))
-                                                    .font(.system(size: 12))
-                                                    .foregroundStyle(NamingTheme.muted)
-                                                    .lineLimit(1)
-                                            }
-                                            Spacer(minLength: 0)
-                                            Text(NameEngine.shared.euphonyLabel(
-                                                x.euphony ?? NameEngine.shared.euphony(model.surname, x.chars)))
+                    ScrollView {
+                        VStack(spacing: 0) {
+                            ForEach(rows, id: \.full) { x in
+                                Button {
+                                    model.pickPoolName(x.given)
+                                } label: {
+                                    HStack(spacing: 10) {
+                                        VStack(alignment: .leading, spacing: 3) {
+                                            Text(x.full)
+                                                .font(.system(size: 16, weight: .semibold))
+                                                .foregroundStyle(NamingTheme.ink)
+                                            Text(L10n.listPyPrefix(Pinyin.titleCase(Pinyin.name(x.surname, x.chars))) + model.tagOf(x) + " · " + truncatedWhy(x))
                                                 .font(.system(size: 12))
-                                                .foregroundStyle(NamingTheme.primaryDeep)
-                                                .padding(.horizontal, 9)
-                                                .padding(.vertical, 4)
-                                                .background(NamingTheme.primary.opacity(0.12), in: Capsule())
+                                                .foregroundStyle(NamingTheme.muted)
+                                                .lineLimit(1)
                                         }
-                                        .padding(.horizontal, 16)
-                                        .padding(.vertical, 12)
-                                        .contentShape(Rectangle())
+                                        Spacer(minLength: 0)
+                                        Text(NameEngine.shared.euphonyLabel(
+                                            x.euphony ?? NameEngine.shared.euphony(model.surname, x.chars)))
+                                            .font(.system(size: 12))
+                                            .foregroundStyle(NamingTheme.primaryDeep)
+                                            .padding(.horizontal, 9)
+                                            .padding(.vertical, 4)
+                                            .background(NamingTheme.primary.opacity(0.12), in: Capsule())
                                     }
-                                    .buttonStyle(.plain)
-                                    Divider().overlay(NamingTheme.hairline)
+                                    .padding(.horizontal, 16)
+                                    .padding(.vertical, 12)
+                                    .contentShape(Rectangle())
                                 }
+                                .buttonStyle(.plain)
+                                Divider().overlay(NamingTheme.hairline)
                             }
                         }
-                        .namingScrollProbe()
-                        .namingScrollTopDetector { showTop = $0 }
-                        .overlay(alignment: .bottomTrailing) {
-                            if showTop {
-                                ScrollTopButton {
-                                    withAnimation(NamingMotion.appear) {
-                                        proxy.scrollTo(poolTopID, anchor: .top)
-                                    }
-                                }
-                                .padding(.trailing, 16)
-                                .padding(.bottom, 16)
-                                .transition(.opacity)
-                            }
-                        }
-                        .animation(NamingMotion.fade, value: showTop)
                     }
+                    .namingScrollSurface()
                 }
             }
         }

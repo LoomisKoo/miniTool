@@ -3,13 +3,8 @@ import SwiftUI
 /* 挑选姓名 —— 搜索贴顶；已选固定在列表上方（不进 ScrollView，避免选字时网格被顶下去）；
  * 筛选进漏斗 sheet，点「完成」才应用。 */
 
-private enum StudioCharScroll {
-    static let topID = "studio-char-top"
-}
-
 struct StudioCharView: View {
     @Environment(NamingAppModel.self) private var model
-    @State private var showTop = false
     @State private var showFilters = false
 
     private let columns = [GridItem(.adaptive(minimum: 46), spacing: 8)]
@@ -39,70 +34,47 @@ struct StudioCharView: View {
                 .padding(.top, 12)
             }
 
-            ScrollViewReader { proxy in
-                ScrollView {
-                    VStack(spacing: 14) {
-                        Color.clear.frame(height: 0).id(StudioCharScroll.topID)
+            ScrollView {
+                VStack(spacing: 14) {
+                    let engine = NameEngine.shared
+                    let list = model.studioChars()
 
-                        let engine = NameEngine.shared
-                        let list = model.studioChars()
-
-                        NamingCard {
-                            CardTitleRow(L10n.t("全部字库"),
-                                         subtitle: L10n.f("%ld / %ld 个", list.count, engine.data.chars.count))
-                            if list.isEmpty {
-                                Text(L10n.t("没筛到这个字，放宽一下条件。"))
-                                    .font(.system(size: 13.5))
-                                    .foregroundStyle(NamingTheme.muted)
-                            } else {
-                                LazyVGrid(columns: columns, spacing: 8) {
-                                    ForEach(list, id: \.c) { c in
-                                        let on = model.studioSlots.contains(c.c)
-                                        Button {
-                                            toggleChar(c.c)
-                                        } label: {
-                                            Text(c.c)
-                                                .font(.system(size: 19, weight: on ? .semibold : .regular))
-                                                .foregroundStyle(on ? .white : NamingTheme.ink)
-                                                .frame(maxWidth: .infinity)
-                                                .frame(height: 46)
-                                                .background {
-                                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                                        .fill(on ? AnyShapeStyle(NamingTheme.primary)
-                                                              : AnyShapeStyle(c.phon ? NamingTheme.pearl : NamingTheme.background))
-                                                }
-                                                .overlay {
-                                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                                        .strokeBorder(on ? NamingTheme.primaryDeep : NamingTheme.hairline,
-                                                                      lineWidth: on ? 2 : 1)
-                                                }
-                                        }
-                                        .buttonStyle(.plain)
+                    NamingCard {
+                        CardTitleRow(L10n.t("全部字库"),
+                                     subtitle: L10n.f("%ld / %ld 个", list.count, engine.data.chars.count))
+                        if list.isEmpty {
+                            Text(L10n.t("没筛到这个字，放宽一下条件。"))
+                                .font(.system(size: 13.5))
+                                .foregroundStyle(NamingTheme.muted)
+                        } else {
+                            LazyVGrid(columns: columns, spacing: 8) {
+                                ForEach(list, id: \.c) { c in
+                                    let on = model.studioSlots.contains(c.c)
+                                    Button {
+                                        toggleChar(c.c)
+                                    } label: {
+                                        Text(c.c)
+                                            .font(.system(size: 19, weight: on ? .semibold : .regular))
+                                            .foregroundStyle(on ? .white : NamingTheme.ink)
+                                            .frame(maxWidth: .infinity)
+                                            .frame(height: 46)
+                                            .background {
+                                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                                    .fill(on ? AnyShapeStyle(NamingTheme.primary)
+                                                          : AnyShapeStyle(c.phon ? NamingTheme.pearl : NamingTheme.background))
+                                            }
                                     }
+                                    .buttonStyle(.plain)
                                 }
                             }
                         }
                     }
-                    .padding(.horizontal, 20)
-                    .padding(.top, 14)
-                    .padding(.bottom, 20)
-                    .namingScrollProbe()
                 }
-                .namingScrollTopDetector(threshold: 260) { showTop = $0 }
-                .overlay(alignment: .bottomTrailing) {
-                    if showTop {
-                        ScrollTopButton {
-                            withAnimation(NamingMotion.appear) {
-                                proxy.scrollTo(StudioCharScroll.topID, anchor: .top)
-                            }
-                        }
-                        .padding(.trailing, 18)
-                        .padding(.bottom, 16)
-                        .transition(.opacity)
-                    }
-                }
-                .animation(NamingMotion.fade, value: showTop)
+                .padding(.horizontal, 20)
+                .padding(.top, 14)
+                .padding(.bottom, 20)
             }
+            .namingScrollSurface()
         }
         .namingPageBackground()
         .navigationTitle(L10n.t("挑选姓名"))
@@ -140,10 +112,6 @@ struct StudioCharView: View {
             .font(.system(size: 15))
             .padding(11)
             .background(NamingTheme.canvas, in: RoundedRectangle(cornerRadius: NamingRadius.small, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: NamingRadius.small, style: .continuous)
-                    .strokeBorder(NamingTheme.hairline, lineWidth: 1)
-            }
             .autocorrectionDisabled()
             .padding(.horizontal, 20)
             .padding(.top, 8)

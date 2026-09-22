@@ -21,10 +21,19 @@ struct StudioView: View {
 
                 if let preview = model.studioPreview() {
                     NamingCard {
-                        Text(L10n.zhPrimary(preview.full, Pinyin.titleCase(preview.py)))
-                            .font(.system(size: 34, weight: .bold))
-                            .foregroundStyle(NamingTheme.ink)
-                            .frame(maxWidth: .infinity)
+                        HStack(alignment: .center, spacing: 0) {
+                            Color.clear.frame(width: 40, height: 40)
+                            Text(L10n.zhPrimary(preview.full, Pinyin.titleCase(preview.py)))
+                                .font(.system(size: 34, weight: .bold))
+                                .foregroundStyle(NamingTheme.ink)
+                                .multilineTextAlignment(.center)
+                                .frame(maxWidth: .infinity)
+                            FavoriteHeart(saved: model.isSaved(preview.full)) {
+                                withAnimation(NamingMotion.pick) {
+                                    model.studioSave()
+                                }
+                            }
+                        }
                         Text(L10n.zhSecondary(preview.full, Pinyin.titleCase(preview.py)))
                             .font(.system(size: 13))
                             .foregroundStyle(NamingTheme.muted)
@@ -62,12 +71,6 @@ struct StudioView: View {
                         }
 
                         HStack(spacing: 10) {
-                            pill(model.isSaved(preview.full) ? L10n.t("已收藏") : L10n.t("收藏"),
-                                 favorite: !model.isSaved(preview.full)) {
-                                withAnimation(NamingMotion.pick) {
-                                    model.studioSave()
-                                }
-                            }
                             pill(L10n.t("配小名")) {
                                 model.openNickFromStudio()
                             }
@@ -106,8 +109,8 @@ struct StudioView: View {
                     .font(.system(size: 14))
                     .foregroundStyle(NamingTheme.muted)
                     .lineLimit(1)
-                    /* 英文是 Surname / Given，宽一点，别断成三行。 */
-                    .frame(width: L10n.isEnglish ? 58 : 24, alignment: .leading)
+                    .minimumScaleFactor(0.85)
+                    .frame(width: NamingTheme.slotLabelWidth, alignment: .leading)
                 if let value {
                     Text(value)
                         .font(.system(size: 18, weight: .semibold))
@@ -179,14 +182,14 @@ struct StudioView: View {
         s.shared.isEmpty ? L10n.t("气质相近") : L10n.f("含「%@」字", s.shared.joined())
     }
 
-    private func pill(_ title: String, favorite: Bool = false, action: @escaping () -> Void) -> some View {
+    private func pill(_ title: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title)
                 .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(favorite ? .white : NamingTheme.ink)
+                .foregroundStyle(NamingTheme.ink)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 9)
-                .background(favorite ? AnyShapeStyle(NamingTheme.primaryDeep) : AnyShapeStyle(NamingTheme.pearl))
+                .background(NamingTheme.pearl)
                 .clipShape(Capsule())
         }
         .buttonStyle(.plain)

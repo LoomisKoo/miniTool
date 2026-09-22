@@ -42,10 +42,6 @@ struct BaziView: View {
                         .padding(.horizontal, 14)
                         .padding(.vertical, 14)
                         .background(NamingTheme.background, in: RoundedRectangle(cornerRadius: NamingRadius.small, style: .continuous))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: NamingRadius.small, style: .continuous)
-                                .strokeBorder(NamingTheme.hairline, lineWidth: 1)
-                        }
                     }
                     .buttonStyle(.plain)
                     .padding(.top, 8)
@@ -118,10 +114,6 @@ struct BaziView: View {
             .padding(.horizontal, 14)
             .padding(.vertical, 14)
             .background(NamingTheme.background, in: RoundedRectangle(cornerRadius: NamingRadius.small, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: NamingRadius.small, style: .continuous)
-                    .strokeBorder(NamingTheme.hairline, lineWidth: 1)
-            }
         }
         .buttonStyle(.plain)
         .padding(.top, 8)

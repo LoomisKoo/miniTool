@@ -115,8 +115,8 @@ struct ProSheet: View {
                         NavigationLink(L10n.t("隐私政策")) {
                             LegalDocumentView(document: .privacy)
                         }
-                        NavigationLink(L10n.t("服务条款")) {
-                            LegalDocumentView(document: .terms)
+                        NavigationLink(L10n.t("支持文档")) {
+                            LegalDocumentView(document: .support)
                         }
                     }
                     .font(.system(size: 12.5))
@@ -184,10 +184,6 @@ struct ProStatusCard: View {
             .padding(16)
             .background(NamingTheme.canvas,
                         in: RoundedRectangle(cornerRadius: NamingRadius.large, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: NamingRadius.large, style: .continuous)
-                    .strokeBorder(NamingTheme.hairline, lineWidth: 1)
-            }
         }
         .buttonStyle(NamingPressButtonStyle())
     }

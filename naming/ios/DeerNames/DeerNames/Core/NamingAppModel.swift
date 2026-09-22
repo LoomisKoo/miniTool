@@ -129,6 +129,9 @@ final class NamingAppModel {
 
     var translit = ""
     var translitResult: TranslitResultState?
+    /// 西名中起：后台算名中（避免主线程卡住 UI）。
+    var translitComputing = false
+    @ObservationIgnored private var translitRunGeneration: UInt = 0
 
     var enInput: String {
         get { enZhName }
@@ -143,6 +146,9 @@ final class NamingAppModel {
     /// 详情页从哪扇门进来（决定卡片上的标签文案）。
     var enDetailMode = "en"
     var enF = EnFilters()
+    /// `browseEnNames()` 的上一次结果（key = 当时的筛选条件）。见那段注释。
+    @ObservationIgnored private var enBrowseMemoKey: EnFilters?
+    @ObservationIgnored private var enBrowseMemoList: [NMEnName] = []
     /// 按性格排的英文名（和中文姓名无关）。
     var enRecCache: [EnRank] = []
     /// 照中文姓名读音贴近排的英文名；`enSoundKey` 记住是按哪个名字排的。
@@ -165,6 +171,8 @@ final class NamingAppModel {
     var enSurAuto = true
     var enSurKeyword = ""
     var enSurLetter = "all"
+    /// 选英文姓：all / native（西文姓）/ cn（华人拉丁拼写）。
+    var enSurKind = "all"
 
     var mineExpandProfile = false
     var mineExpandBazi = false
@@ -788,7 +796,8 @@ final class NamingAppModel {
 
     // MARK: - 外文名 → 中文名
 
-    func runTranslit() {
+    func runTranslit(preset rawInput: String? = nil) {
+        if let rawInput { translit = rawInput }
         let raw = translit.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !raw.isEmpty else {
             toast(L10n.t("先输入一个外文名"))
@@ -802,31 +811,61 @@ final class NamingAppModel {
             given = parts.dropLast().joined(separator: " ")
         }
         if profile == nil {
-            /* 没有性格数据时用中性的默认向量 */
             profile = engine.profileFromAnswers([
                 NMQuestionOption(text: "", w: ["warm": 0.3, "out": 0, "rat": 0.2, "sta": 0.3], nov: 0.4)
             ])
         }
         guard let p = profile else { return }
-        let list = engine.chineseName(given, p, family: family, wantGender: wantGender, count: 10)
-        guard !list.isEmpty else {
-            toast(L10n.t("这个名字没配出合适的组合，换个拼写试试"))
-            return
-        }
-        let tl = engine.translitChars(given, p, surname: NMSurname(c: "卫", py: "wei", tone: 4, m: "", en: "", pop: 3, pys: nil, tones: nil, ro: ""))
-        var tlStyle = ""
-        if let first = tl.first {
-            if let family {
-                let latin = engine.data.latinSurnames[family]?.first ?? ""
-                tlStyle = latin.isEmpty ? first.given : "\(latin) · \(first.given)"
-            } else {
-                tlStyle = first.given
+        let genderSource = given.split(separator: " ").first.map(String.init) ?? given
+        let inferredGender = engine.enLookup(genderSource)?.g
+            ?? engine.guessEnName(genderSource).gender
+        let translitGender = inferredGender ?? (wantGender == "u" ? nil : wantGender)
+
+        translitRunGeneration &+= 1
+        let generation = translitRunGeneration
+        translitComputing = true
+
+        Task {
+            let payload = await Task.detached(priority: .userInitiated) {
+                Self.computeTranslit(given: given, family: family, profile: p, wantGender: translitGender)
+            }.value
+
+            guard generation == translitRunGeneration else { return }
+            translitComputing = false
+
+            guard let payload else {
+                toast(L10n.t("这个名字没配出合适的组合，换个拼写试试"))
+                return
             }
+            translit = raw
+            translitResult = TranslitResultState(latin: given, family: family, surname: payload.main.surname,
+                                                 main: payload.main, alts: payload.alts,
+                                                 translitStyle: payload.translitStyle)
         }
-        translit = raw
-        translitResult = TranslitResultState(latin: given, family: family, surname: list[0].surname,
-                                             main: list[0], alts: Array(list.dropFirst().prefix(8)),
-                                             translitStyle: tlStyle)
+    }
+
+    /// 西名中起：在后台线程跑，避免 `chineseName` / `translitChars` 卡住首帧。
+    private nonisolated static func computeTranslit(given: String, family: String?, profile: NMProfile,
+                                                  wantGender: String?) -> (main: ChineseNameResult,
+                                                                           alts: [ChineseNameResult],
+                                                                           translitStyle: String)? {
+        let engine = NameEngine.shared
+        let list = engine.chineseName(given, profile, family: family, wantGender: wantGender, count: 8)
+        guard let main = list.first else { return nil }
+        let alts = Array(list.dropFirst().prefix(6))
+        let tlStyle = translitStyleLine(engine: engine, given: given, family: family, profile: profile)
+        return (main, alts, tlStyle)
+    }
+
+    private nonisolated static func translitStyleLine(engine: NameEngine, given: String, family: String?,
+                                                      profile: NMProfile) -> String {
+        let tl = engine.translitChars(given, profile, surname: engine.emptySurname())
+        guard let first = tl.first else { return "" }
+        if let family {
+            let latin = engine.data.latinSurnames[family]?.first ?? ""
+            return latin.isEmpty ? first.given : "\(latin) · \(first.given)"
+        }
+        return first.given
     }
 
     func translitAgain() {
@@ -844,7 +883,11 @@ final class NamingAppModel {
         r.main = rest[0]
         r.surname = rest[0].surname
         r.alts = Array(rest.dropFirst().prefix(8))
-        translitResult = r
+        var transaction = Transaction()
+        transaction.animation = nil
+        withTransaction(transaction) {
+            translitResult = r
+        }
     }
 
     func translitPick(_ index: Int) {
@@ -856,13 +899,23 @@ final class NamingAppModel {
         var next = r.alts
         next.remove(at: index)
         r.alts = Array(([old] + next).prefix(8))
-        translitResult = r
+        var transaction = Transaction()
+        transaction.animation = nil
+        withTransaction(transaction) {
+            translitResult = r
+        }
     }
 
     func translitSave() {
+        toggleTranslitSave()
+    }
+
+    func toggleTranslitSave() {
         guard let m = translitResult?.main else { return }
-        if isSaved(m.full) {
-            toast(L10n.t("已经收藏过了"))
+        if let idx = fav.firstIndex(where: { $0.full == m.full }) {
+            fav.remove(at: idx)
+            schedulePersist()
+            toast(L10n.t("已取消收藏"))
             return
         }
         let chars = m.chars
@@ -1103,8 +1156,12 @@ final class NamingAppModel {
 
     func browseEnNames() -> [NMEnName] {
         let f = enF
+        /* 上一次的结果直接复用：1450 多条要逐条过筛选（带关键词时每条还拼一遍检索串），
+         * 而选名页 body 每重算一次就调它一次 —— 点一行、打一个字都会重算。
+         * 缓存字段用 `@ObservationIgnored`：它是在 body 里被写入的，不能被观察。 */
+        if enBrowseMemoKey == f { return enBrowseMemoList }
         let kw = f.keyword.trimmingCharacters(in: .whitespaces).lowercased()
-        return engine.data.namesEn.filter { it in
+        let list = engine.data.namesEn.filter { it in
             if f.g != "all" && it.g != "u" && it.g != f.g { return false }
             if f.era != "all" && it.era != f.era { return false }
             if !enMatchVibe(it, f.vibe) { return false }
@@ -1119,6 +1176,9 @@ final class NamingAppModel {
             }
             return true
         }
+        enBrowseMemoKey = f
+        enBrowseMemoList = list
+        return list
     }
 
     func enCelebs(_ it: NMEnName) -> [[String]] {
@@ -1250,6 +1310,15 @@ final class NamingAppModel {
         return ""
     }
 
+    /// 卡片等处用的英文姓条目（含释义）；手输冷门姓则只有拼写。
+    func enSurnameEntry(_ n: String) -> NMSurnameEn {
+        let key = n.trimmingCharacters(in: .whitespaces)
+        if let hit = engine.enSurnames(kind: "all").first(where: { $0.n.lowercased() == key.lowercased() }) {
+            return hit
+        }
+        return NMSurnameEn(n: key, zh: enSurnameZh(key), head: "", m: "", isNative: false)
+    }
+
     /// 打完的英文姓名：`Emma Wilson`（没填姓就只有名）。
     func enFullName(_ given: String) -> String {
         let s = enSurname.trimmingCharacters(in: .whitespaces)
@@ -1276,9 +1345,9 @@ final class NamingAppModel {
         cardImage = NamingCardRenderer.render(cardDataEn(g, mode: "enStudio"))
     }
 
-    /// 选姓页的候选（关键词 + 首字母筛选）。
+    /// 选姓页的候选（关键词 + 首字母 + 类型：西文姓 / 华人拼写）。
     func enSurnameList() -> [NMSurnameEn] {
-        engine.enSurnameSearch(enSurKeyword, letter: enSurLetter)
+        engine.enSurnameSearch(enSurKeyword, letter: enSurLetter, kind: enSurKind)
     }
 
 
@@ -1350,7 +1419,7 @@ final class NamingAppModel {
                               full: enFullName(it.n),
                               desc: engine.describe(p), radar: engine.radar(p, NameVector(trait: it.tr, style: it.st, chars: [])),
                               bazi: nil, baziNote: "", answered: true, enName: it, mode: mode,
-                              enSurname: sur.isEmpty ? nil : NMSurnameEn(n: sur, zh: enSurnameZh(sur), head: ""),
+                              enSurname: sur.isEmpty ? nil : enSurnameEntry(sur),
                               zhSource: useZh, zhSourcePy: zhPy,
                               watermark: !cardNoWatermark)
     }

@@ -138,20 +138,15 @@ struct EnStudioView: View {
             }
 
             /* 选完直接在这儿显示完整信息（含同名人物），不用再点「查看详情」跳页；
-             * 收藏在这儿、生成卡片挪到底部固定栏。 */
+             * 收藏跟名字同一行最右边、生成卡片挪到底部固定栏。 */
             if let g = model.enGivenPick {
-                EnNameCard(it: g) {
-                    HStack(spacing: 10) {
-                        FavoritePill(title: model.isSavedEn(model.enFullName(g.n)) ? L10n.t("已收藏") : L10n.t("收藏"),
-                                     active: !model.isSavedEn(model.enFullName(g.n))) {
-                            withAnimation(NamingMotion.pick) {
-                                model.toggleEnFav(g, src: "enStudio")
-                            }
-                        }
-                        Spacer(minLength: 0)
-                    }
-                    .padding(.top, 14)
-                }
+                EnNameCard(it: g,
+                           favoriteSaved: model.isSavedEn(model.enFullName(g.n)),
+                           onToggleFavorite: {
+                               withAnimation(NamingMotion.pick) {
+                                   model.toggleEnFav(g, src: "enStudio")
+                               }
+                           })
                 EnNamesakeCard(celebs: model.enCelebs(g))
             }
         }
@@ -171,7 +166,9 @@ struct EnStudioView: View {
                 Text(key)
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(NamingTheme.ink)
-                    .frame(width: L10n.isEnglish ? 46 : 24, alignment: .leading)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+                    .frame(width: NamingTheme.slotLabelWidth, alignment: .leading)
                 VStack(alignment: .leading, spacing: 3) {
                     if let value, !value.isEmpty {
                         Text(value)
@@ -260,11 +257,70 @@ struct EnListCard: View {
     }
 }
 
-/* 英文名列表里的一行：序号（或选中勾）+ 名字 + 「译名 · 语源 · 名人」+ 年代标签。
- * 「按性格取名」「中名西取」「选姓 / 选名」几处共用一份，改版式只用改这里。 */
+/* 英文列表行（「选名 / 选姓」「按性格取名」「中名西取」共用）：序号 + 主标 + 小字 + 右端。
+ * 右端固定两种：选中时是一个勾，没选中时是它的胶囊标签（年代 / 类型）。
+ *
+ * **行版式只此一处**，`EnNameRow` / `EnSurnameRow` 只是把各自的数据拼成人话再传进来 ——
+ * 想改列表样式只改这里，别再往两个 wrapper 里抄一遍。 */
+struct EnPickerRow: View {
+    let title: String
+    /// 行内小字（拼好的字符串，不传就是没有）。
+    let meta: String
+    /// 没选中时右端胶囊里的字（年代 / 类型）。
+    let tag: String
+    /// 序号（从 1 起）。选名 / 选姓页不排号，传 nil 就连那 22pt 都不占。
+    var index: Int? = nil
+    var selected = false
+    var onTap: () -> Void
+
+    var body: some View {
+        /* 不用 Button：列表里密布胶囊（年代 / 类型标签）时，**系统按钮层会在卡片上
+         * 残留半透明圆角块** —— 就是那块跟着胶囊大小、位置走的「遮罩」。
+         * 点按自己接手势；原来 `.plain` 本来也没有按压反馈，手感不变。 */
+        HStack(spacing: 10) {
+            if let index {
+                Text("\(index + 1)")
+                    .font(.system(size: 12))
+                    .foregroundStyle(NamingTheme.primaryDeep)
+                    .frame(width: 22)
+            }
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(selected ? NamingTheme.primaryDeep : NamingTheme.ink)
+                if !meta.isEmpty {
+                    Text(meta)
+                        .font(.system(size: 12))
+                        .foregroundStyle(NamingTheme.muted)
+                        .lineLimit(1)
+                }
+            }
+            Spacer(minLength: 0)
+            if selected {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(NamingTheme.primaryDeep)
+            } else {
+                Text(tag)
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(NamingTheme.primaryDeep)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 4)
+                    .background(NamingTheme.primary.opacity(0.12), in: Capsule())
+            }
+        }
+        .padding(.vertical, 12)
+        .contentShape(Rectangle())
+        .onTapGesture(perform: onTap)
+        .namingNoHoverHighlight()
+        .accessibilityAddTraits(.isButton)
+    }
+}
+
+/* 英文名列表里的一行：名字 + 「译名 · 语源 · 名人」+ 年代标签。
+ * 版式在 `EnPickerRow`，这里只管把 `NMEnName` 拼成小字。 */
 struct EnNameRow: View {
     let it: NMEnName
-    /// 序号（从 1 起）。选名页不排号，传 nil 时就显示圆点 / 勾。
     var index: Int? = nil
     var extra: String? = nil
     var selected = false
@@ -286,41 +342,53 @@ struct EnNameRow: View {
     }
 
     var body: some View {
-        Button(action: onTap) {
-            HStack(spacing: 10) {
-                if let index {
-                    Text("\(index + 1)")
-                        .font(.system(size: 12))
-                        .foregroundStyle(NamingTheme.primaryDeep)
-                        .frame(width: 22)
-                }
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(it.n)
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(selected ? NamingTheme.primaryDeep : NamingTheme.ink)
-                    Text(meta)
-                        .font(.system(size: 12))
-                        .foregroundStyle(NamingTheme.muted)
-                        .lineLimit(1)
-                }
-                Spacer(minLength: 0)
-                if selected {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(NamingTheme.primaryDeep)
-                } else {
-                    Text(NamingAppModel.enEraLabel[it.era] ?? "")
-                        .font(.system(size: 11.5))
-                        .foregroundStyle(NamingTheme.primaryDeep)
-                        .padding(.horizontal, 9)
-                        .padding(.vertical, 4)
-                        .background(NamingTheme.primary.opacity(0.12), in: Capsule())
-                }
-            }
-            .padding(.vertical, 12)
-            .contentShape(Rectangle())
+        EnPickerRow(title: it.n,
+                    meta: meta,
+                    tag: NamingAppModel.enEraLabel[it.era] ?? "",
+                    index: index,
+                    selected: selected,
+                    onTap: onTap)
+    }
+}
+
+/* 英文姓列表里的一行：姓 + 「释义 · 音译 / 对应中文姓」+ 类型标签。
+ * 版式同样在 `EnPickerRow`，这里只管把 `NMSurnameEn` 拼成小字。 */
+struct EnSurnameRow: View {
+    let s: NMSurnameEn
+    var index: Int? = nil
+    var selected = false
+    var onTap: () -> Void
+
+    /// 语源 / 中文姓释义，英文界面下查覆盖表。
+    private var meaning: String {
+        guard !s.m.isEmpty else { return "" }
+        if s.isNative {
+            return L10n.d("enSurnames", s.n, s.m)
         }
-        .buttonStyle(.plain)
+        let c = s.zh.first.map(String.init) ?? s.zh
+        return L10n.d("surnames", c, s.m)
+    }
+
+    /* 拼行的小字。**不能写在 body 里**：ViewBuilder 会把 `if !meta.isEmpty { ... }`
+     * 当成条件视图，而字符串拼接返回 `()`，报 "Type '()' cannot conform to 'View'"。 */
+    private var meta: String {
+        var parts: [String] = []
+        if !meaning.isEmpty { parts.append(meaning) }
+        if !s.zh.isEmpty {
+            parts.append(s.isNative
+                         ? (L10n.isEnglish ? "" : s.zh)
+                         : L10n.f("对应「%@」", s.zh))
+        }
+        return parts.filter { !$0.isEmpty }.joined(separator: " · ")
+    }
+
+    var body: some View {
+        EnPickerRow(title: s.n,
+                    meta: meta,
+                    tag: s.isNative ? L10n.t("西文姓") : L10n.t("华人拼写"),
+                    index: index,
+                    selected: selected,
+                    onTap: onTap)
     }
 }
 
@@ -329,37 +397,44 @@ struct EnNameRow: View {
  * 详情页、选名页、自选姓名页共用一份。
  *
  * 卡头**不写「当前选中」**：卡片本身就是名字，多一行标题只是噪音；右上角只留「换一个」。
- * 底下要给按钮（收藏等）就传 `footer`。 */
+ * 收藏心形跟名字同一行最右边；底下要给别的按钮就传 `footer`。 */
 struct EnNameCard<Footer: View>: View {
     let it: NMEnName
     /// 选名 / 选姓页右上角的「换一个」（详情页传 nil 就不显示）。
     var onShuffle: (() -> Void)? = nil
+    /// 收藏：传了就在名字行最右边出心形。
+    var favoriteSaved: Bool? = nil
+    var onToggleFavorite: (() -> Void)? = nil
     @ViewBuilder var footer: () -> Footer
 
     @Environment(NamingAppModel.self) private var model
 
-    init(it: NMEnName, onShuffle: (() -> Void)? = nil, @ViewBuilder footer: @escaping () -> Footer) {
+    init(it: NMEnName, onShuffle: (() -> Void)? = nil,
+         favoriteSaved: Bool? = nil, onToggleFavorite: (() -> Void)? = nil,
+         @ViewBuilder footer: @escaping () -> Footer) {
         self.it = it
         self.onShuffle = onShuffle
+        self.favoriteSaved = favoriteSaved
+        self.onToggleFavorite = onToggleFavorite
         self.footer = footer
     }
 
     var body: some View {
         NamingCard {
-            if let onShuffle {
-                HStack {
-                    Spacer(minLength: 0)
-                    ShuffleChip(text: L10n.t("换一个"), action: onShuffle)
-                }
-                .padding(.bottom, 10)
-            }
-            HStack(alignment: .firstTextBaseline, spacing: 10) {
+            HStack(alignment: .center, spacing: 10) {
                 /* 主标是完整姓名（姓填了才带）：Emma Wilson。 */
                 Text(model.enFullName(it.n))
                     .font(.system(size: 26, weight: .bold))
                     .foregroundStyle(NamingTheme.ink)
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
+                Spacer(minLength: 0)
+                if let onShuffle {
+                    ShuffleChip(text: L10n.t("换一个"), action: onShuffle)
+                }
+                if let favoriteSaved, let onToggleFavorite {
+                    FavoriteHeart(saved: favoriteSaved, action: onToggleFavorite)
+                }
             }
             /* 副标：音标（+ 中文界面的中文音译）。
              * 「赛奇 阿德耶米」这种音译是给中文读者认读音的，英文界面下就是一串看不懂的
@@ -409,8 +484,11 @@ struct EnNameCard<Footer: View>: View {
 
 extension EnNameCard where Footer == EmptyView {
     /// 底下没有按钮时（详情页 / 选名页）的写法：`EnNameCard(it: it)`。
-    init(it: NMEnName, onShuffle: (() -> Void)? = nil) {
-        self.init(it: it, onShuffle: onShuffle, footer: { EmptyView() })
+    init(it: NMEnName, onShuffle: (() -> Void)? = nil,
+         favoriteSaved: Bool? = nil, onToggleFavorite: (() -> Void)? = nil) {
+        self.init(it: it, onShuffle: onShuffle,
+                  favoriteSaved: favoriteSaved, onToggleFavorite: onToggleFavorite,
+                  footer: { EmptyView() })
     }
 }
 
@@ -457,13 +535,17 @@ struct EnSurnameField: View {
                     }
                     .buttonStyle(.plain)
                 }
-                Button(L10n.t("从库里挑")) { model.go(.enSur) }
+                /* 胶囊按钮在卡片里也会留下系统按钮层的残留灰块（见 `namingNoHoverHighlight`）。 */
+                Text(L10n.t("从库里挑"))
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(NamingTheme.primaryDeep)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
                     .background(NamingTheme.primary.opacity(0.12), in: Capsule())
-                    .buttonStyle(.plain)
+                    .contentShape(Capsule())
+                    .onTapGesture { model.go(.enSur) }
+                    .namingNoHoverHighlight()
+                    .accessibilityAddTraits(.isButton)
             }
 
             /* 中文音译：库里查得到才显示（手输的冷门姓没有）。 */
@@ -531,36 +613,17 @@ struct EnSurnameField: View {
  * 状态放在这里，三扇门各自有一份，互不干扰。 */
 
 private struct EnModePage<Content: View>: View {
-    @State private var showTop = false
-
     let topID: String
     @ViewBuilder var content: () -> Content
 
     var body: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                VStack(spacing: 14) {
-                    Color.clear.frame(height: 0).id(topID)
-                    content()
-                }
-                .padding(20)
-                .namingScrollProbe()
+        ScrollView {
+            VStack(spacing: 14) {
+                content()
             }
-            .namingPageBackground()
-            .namingScrollTopDetector(threshold: 300) { showTop = $0 }
-            .overlay(alignment: .bottomTrailing) {
-                if showTop {
-                    ScrollTopButton {
-                        withAnimation(NamingMotion.appear) {
-                            proxy.scrollTo(topID, anchor: .top)
-                        }
-                    }
-                    .padding(.trailing, 18)
-                    .padding(.bottom, 16)
-                    .transition(.opacity)
-                }
-            }
-            .animation(NamingMotion.fade, value: showTop)
+            .padding(20)
         }
+        .namingScrollSurface()
+        .namingPageBackground()
     }
 }

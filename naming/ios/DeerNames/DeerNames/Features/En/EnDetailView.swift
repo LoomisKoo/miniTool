@@ -13,18 +13,13 @@ struct EnDetailView: View {
             VStack(spacing: 16) {
                 if let it = model.enPicked {
                     let saved = model.isSavedEn(model.enFullName(it.n))
-                    EnNameCard(it: it) {
-                        HStack(spacing: 10) {
-                            FavoritePill(title: saved ? L10n.t("已收藏") : L10n.t("收藏"),
-                                         active: !saved) {
-                                withAnimation(NamingMotion.pick) {
-                                    model.toggleEnFav(it, src: model.enDetailMode)
-                                }
-                            }
-                            Spacer(minLength: 0)
-                        }
-                        .padding(.top, 14)
-                    }
+                    EnNameCard(it: it,
+                               favoriteSaved: saved,
+                               onToggleFavorite: {
+                                   withAnimation(NamingMotion.pick) {
+                                       model.toggleEnFav(it, src: model.enDetailMode)
+                                   }
+                               })
                     EnNamesakeCard(celebs: model.enCelebs(it))
                     EnglishSpeechCard(name: model.enFullName(it.n))
                 } else {

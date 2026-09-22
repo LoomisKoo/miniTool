@@ -152,6 +152,12 @@ final class NameEngine {
     /// 音节 → 候选拼音的缓存（音译/贴音打分要反复用，正则在里面，必须缓存）。
     var syllCandidateCache: [String: [(py: String, cost: Double)]] = [:]
 
+    /// 英文姓库（`enSurnames(kind:)`）的解析结果缓存，按 kind 存。
+    /// 每次调用都要把一千多个 key 排序、再逐条组装成 `NMSurnameEn`，而选姓页
+    /// **body 每重算一次会调它好几遍**（点一行、滚一下都会重算），卡顿就出在这儿；
+    /// 姓库是不可变的，算一次就够。
+    var enSurnameCache: [String: [NMSurnameEn]] = [:]
+
     init(_ data: EngineData) {
         self.data = data
 

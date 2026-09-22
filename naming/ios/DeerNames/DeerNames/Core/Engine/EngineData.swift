@@ -84,15 +84,17 @@ struct NMCeleb: Codable, Hashable {
     let bio: String
 }
 
-/// 英文姓氏 —— `latinSurnames` 的 key 是拉丁拼写，值是 `[中文音译, 音头字]`。
-///
-/// 表里既有英语姓（Wilson / Baker），也有华人姓氏的拉丁拼写（Chen / Wong）：
-/// 后者本来是为「西名中起」配的姓，自选英文名时同样认，所以中英两边都能用。
+/// 英文姓氏 —— `latinSurnames` 的 key 是拉丁拼写，值是 `[中文音译, 音头字, 释义?]`。
+/// 两种都进选姓库：西文姓（Smith + 语源）/ 华人拼写（Chen→陈，释义回落中文姓）。
 struct NMSurnameEn: Hashable, Identifiable {
     let n: String
     let zh: String
-    /// 音头字（Wilson → 威）。目前只有「西名中起」用得上，界面还没展示。
+    /// 音头字（Wilson → 威）。目前只有「西名中起」用得上。
     let head: String
+    /// 语源 / 中文姓释义。
+    let m: String
+    /// true = 西文姓；false = 华人姓拉丁拼写。
+    let isNative: Bool
 
     var id: String { n }
     /// 首字母，选姓页按它筛选。

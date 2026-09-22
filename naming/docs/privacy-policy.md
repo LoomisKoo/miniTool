@@ -20,7 +20,7 @@ Pro 购买由 Apple App Store 处理。我们不接触你的支付信息。应�
 
 应用可能通过 Apple StoreKit 处理应用内购买，并通过系统语音服务提供读音试听。语音内容由设备或系统服务处理，具体行为受 Apple 的条款和隐私政策约束。
 
-应用内的隐私政策和服务条款页面托管在 GitHub。打开这些页面需要网络连接。
+应用内的隐私政策和支持页面托管在 GitHub Pages（`loomiskoo.github.io/DeerNames-pages`）。打开这些页面需要网络连接。
 
 ### 4. 数据安全与删除
 
@@ -52,7 +52,7 @@ Pro purchases are processed by Apple App Store. We do not receive your payment d
 
 The app may use Apple StoreKit for purchases and system speech services for pronunciation playback. Those services are subject to Apple’s own terms and privacy policy.
 
-The privacy policy and terms pages are hosted on GitHub and require an internet connection to open.
+The privacy policy and support pages are hosted on GitHub Pages and require an internet connection to open.
 
 ### Data deletion and contact
 

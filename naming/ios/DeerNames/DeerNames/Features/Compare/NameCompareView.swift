@@ -113,10 +113,10 @@ struct NameCompareView: View {
             }
 
             Button {
-                guard pro.require(.nameReport) else { return }
                 model.go(.report)
             } label: {
-                Label(L10n.t("生成完整对比报告"), systemImage: "doc.text.magnifyingglass")
+                Label(pro.isPro ? L10n.t("生成完整对比报告") : L10n.t("查看对比报告预览"),
+                      systemImage: pro.isPro ? "doc.text.magnifyingglass" : "eye")
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)

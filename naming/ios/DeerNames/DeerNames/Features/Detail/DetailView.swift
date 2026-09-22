@@ -47,10 +47,19 @@ struct DetailView: View {
                 .font(.system(size: 12))
                 .foregroundStyle(NamingTheme.primaryDeep)
                 .padding(.bottom, 10)
-            Text(L10n.zhPrimary(c.full, Pinyin.titleCase(Pinyin.name(c.surname, c.chars))))
-                .font(.system(size: 40, weight: .bold))
-                .foregroundStyle(NamingTheme.ink)
-                .frame(maxWidth: .infinity)
+            HStack(alignment: .center, spacing: 0) {
+                Color.clear.frame(width: 40, height: 40)
+                Text(L10n.zhPrimary(c.full, Pinyin.titleCase(Pinyin.name(c.surname, c.chars))))
+                    .font(.system(size: 40, weight: .bold))
+                    .foregroundStyle(NamingTheme.ink)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
+                FavoriteHeart(saved: saved) {
+                    withAnimation(NamingMotion.pick) {
+                        model.toggleSave()
+                    }
+                }
+            }
             Text(L10n.zhSecondary(c.full, Pinyin.titleCase(Pinyin.name(c.surname, c.chars))))
                 .font(.system(size: 14))
                 .foregroundStyle(NamingTheme.muted)
@@ -69,17 +78,12 @@ struct DetailView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.top, 8)
 
-            /* 四个按钮（Another / More names / Save / Choose surname）英文下并排放不下。
+            /* 三个按钮（Another / More names / Choose surname）英文下并排放不下。
              * 早先改成了横滑，但滑动的行只会露出半个按钮，看着像坏了 —— 改成换行：
-             * 放不下就整颗挪到下一行，每个按钮都完整。 */
+             * 放不下就整颗挪到下一行，每个按钮都完整。收藏心形在名字行右侧。 */
             FlowLayout(spacing: 10, lineSpacing: 10) {
                 pill(L10n.t("换名"), primary: true) { model.again() }
                 pill(L10n.t("备选名")) { model.sheet = .pool }
-                pill(saved ? L10n.t("已收藏") : L10n.t("收藏"), favorite: !saved) {
-                    withAnimation(NamingMotion.pick) {
-                        model.toggleSave()
-                    }
-                }
                 pill(L10n.t("选姓氏")) { model.sheet = .surname }
             }
             .padding(.top, 16)
@@ -232,12 +236,12 @@ struct DetailView: View {
         .padding(.vertical, 6)
     }
 
-    private func pill(_ title: String, primary: Bool = false, favorite: Bool = false,
+    private func pill(_ title: String, primary: Bool = false,
                       action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title)
                 .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(primary ? .white : (favorite ? .white : NamingTheme.ink))
+                .foregroundStyle(primary ? .white : NamingTheme.ink)
                 /* 按钮文字永不换行（挤不下就让整行横滑）。 */
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
@@ -246,8 +250,6 @@ struct DetailView: View {
                 .background {
                     if primary {
                         NamingTheme.gradient
-                    } else if favorite {
-                        NamingTheme.primaryDeep
                     } else {
                         NamingTheme.pearl
                     }

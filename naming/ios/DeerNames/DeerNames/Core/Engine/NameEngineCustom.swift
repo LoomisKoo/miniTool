@@ -155,21 +155,80 @@ extension NameEngine {
 
     // MARK: - 英文姓氏（latinSurnames）
 
-    /// 172 个英文姓，按字母序。字典序不保序，所以每次从字典建一份排好序的。
-    func enSurnames() -> [NMSurnameEn] {
-        data.latinSurnames.keys.sorted().map { key in
+    /// 完整英文姓库：西文姓（Smith）+ 华人拉丁拼写（Chen），两种场景都用。
+    /// - 中国人取英文名：可按自己中文姓匹配拼写，也可改用西文姓
+    /// - 外国人取英文名：用自己的西文姓
+    ///
+    /// 结果按 kind 缓存（见 `enSurnameCache`）：这一份要排序 + 组装一千多条，
+    /// 选姓页一次 body 就要用好几遍，别每次都重算。
+    func enSurnames(kind: String = "all") -> [NMSurnameEn] {
+        if let hit = enSurnameCache[kind] { return hit }
+
+        let all: [NMSurnameEn] = data.latinSurnames.keys.sorted().compactMap { key -> NMSurnameEn? in
             let v = data.latinSurnames[key] ?? []
-            return NMSurnameEn(n: key, zh: v.first ?? "", head: v.count > 1 ? v[1] : "")
+            let zh = v.first ?? ""
+            let head = v.count > 1 ? v[1] : ""
+            let rawM = v.count > 2 ? v[2] : ""
+            /* 有语源第三项、或音译≥2字 → 西文姓；否则按华人拼写（Chen→陈）。 */
+            let native = zh.count >= 2 || !rawM.isEmpty
+            var m = rawM
+            if m.isEmpty {
+                let c = zh.first.map(String.init) ?? ""
+                if !c.isEmpty, let sur = data.surnames.first(where: { $0.c == c }) {
+                    m = sur.m
+                } else if let sur = data.surnames.first(where: {
+                    $0.en.compare(key, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
+                }) {
+                    m = sur.m
+                }
+            }
+            return NMSurnameEn(n: key, zh: zh, head: head, m: m, isNative: native)
+        }
+
+        let result: [NMSurnameEn]
+        switch kind {
+        case "native": result = all.filter { $0.isNative }
+        case "cn": result = all.filter { !$0.isNative }
+        default: result = all
+        }
+        enSurnameCache[kind] = result
+        return result
+    }
+
+    /// 选姓页筛选：关键词匹配拉丁拼写、中文/音译或释义。
+    ///
+    /// 搜中文时先把它展开成候选拉丁拼写再匹配：一个汉字常有不止一种写法
+    /// （黄 → Huang 通用 + Wong 港式，王 → Wang + Wong）。条目自带的中文音译栏只写了
+    /// 其中一种（Wong 那栏是「王」），光靠它匹配会漏掉另一半 —— 搜「黄」就只剩 Huang。
+    func enSurnameSearch(_ keyword: String, letter: String, kind: String = "all") -> [NMSurnameEn] {
+        let raw = keyword.trimmingCharacters(in: .whitespaces)
+        let kw = raw.lowercased()
+        var zhSpellings: Set<String> = []
+        if raw.range(of: "\\p{Han}", options: .regularExpression) != nil {
+            zhSpellings = latinSpellings(ofChineseSurname: raw)
+        }
+        return enSurnames(kind: kind).filter { s in
+            if letter != "all" && s.letter != letter { return false }
+            if kw.isEmpty { return true }
+            if s.n.lowercased().contains(kw)
+                || s.zh.lowercased().contains(kw)
+                || s.m.lowercased().contains(kw) { return true }
+            return zhSpellings.contains(s.n.lowercased())
         }
     }
 
-    /// 选姓页的筛选：关键词匹配拉丁拼写或中文音译（"wil" / "威" 都能搜）。
-    func enSurnameSearch(_ keyword: String, letter: String) -> [NMSurnameEn] {
-        let kw = keyword.trimmingCharacters(in: .whitespaces).lowercased()
-        return enSurnames().filter { s in
-            if letter != "all" && s.letter != letter { return false }
-            if kw.isEmpty { return true }
-            return s.n.lowercased().contains(kw) || s.zh.contains(kw)
+    /// 中文姓 → 它在英文姓库里的所有写法：条目自带的通用拼写、罗马字、港式（粤语），
+    /// 再反查 172 条英文姓库（音译栏等于这个汉字的全收）。
+    private func latinSpellings(ofChineseSurname raw: String) -> Set<String> {
+        var out: Set<String> = []
+        for s in data.surnames where s.c.contains(raw) {
+            for v in [s.en, s.ro, s.yue ?? ""] where !v.isEmpty {
+                out.insert(v.lowercased())
+            }
+            for (k, v) in data.latinSurnames where v.first == s.c {
+                out.insert(k.lowercased())
+            }
         }
+        return out
     }
 }

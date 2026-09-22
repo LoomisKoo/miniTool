@@ -5,6 +5,9 @@ struct AboutView: View {
     @AppStorage(L10n.storageKey) private var appLanguage = ""
 
     private var usesEnglish: Bool { L10n.isEnglish }
+    private var appVersion: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0.0"
+    }
 
     var body: some View {
         ScrollView {
@@ -40,7 +43,7 @@ struct AboutView: View {
                     .foregroundStyle(NamingTheme.ink)
                 }
 
-                Text("Version 1.0.0")
+                Text("Version \(appVersion)")
                     .font(.system(size: 12))
                     .foregroundStyle(NamingTheme.muted)
             }

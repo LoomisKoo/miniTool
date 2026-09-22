@@ -61,10 +61,6 @@ struct EntryRow: View {
             }
             .padding(16)
             .background(NamingTheme.canvas, in: RoundedRectangle(cornerRadius: NamingRadius.large, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: NamingRadius.large, style: .continuous)
-                    .strokeBorder(NamingTheme.hairline, lineWidth: 1)
-            }
             .shadow(color: .black.opacity(0.06), radius: 3, y: 2)
         }
         .buttonStyle(.plain)

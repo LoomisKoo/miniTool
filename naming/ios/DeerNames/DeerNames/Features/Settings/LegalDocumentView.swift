@@ -3,24 +3,25 @@ import WebKit
 
 enum LegalDocument: String, Identifiable {
     case privacy
-    case terms
+    case support
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
         case .privacy: return L10n.t("隐私政策")
-        case .terms: return L10n.t("服务条款")
+        case .support: return L10n.t("支持文档")
         }
     }
 
+    /// 与 App Store Connect、`naming/ios/APPSTORE.md`、GitHub Pages 仓库根目录 HTML 同源。
     var url: URL {
-        let path: String
         switch self {
-        case .privacy: path = "privacy-policy.md"
-        case .terms: path = "terms-of-service.md"
+        case .privacy:
+            return URL(string: "https://loomiskoo.github.io/DeerNames-pages/privacy.html")!
+        case .support:
+            return URL(string: "https://loomiskoo.github.io/DeerNames-pages/support.html")!
         }
-        return URL(string: "https://github.com/LoomisKoo/miniTool/blob/main/naming/docs/\(path)")!
     }
 }
 
@@ -40,12 +41,25 @@ struct LegalWebView: UIViewRepresentable {
     func makeUIView(context: Context) -> WKWebView {
         let view = WKWebView(frame: .zero)
         view.allowsBackForwardNavigationGestures = true
-        view.load(URLRequest(url: url))
+        context.coordinator.load(url, in: view)
         return view
     }
 
     func updateUIView(_ view: WKWebView, context: Context) {
-        guard view.url != url else { return }
-        view.load(URLRequest(url: url))
+        guard context.coordinator.loadedURL != url else { return }
+        context.coordinator.load(url, in: view)
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    final class Coordinator {
+        var loadedURL: URL?
+
+        func load(_ url: URL, in view: WKWebView) {
+            loadedURL = url
+            view.load(URLRequest(url: url))
+        }
     }
 }

@@ -18,10 +18,6 @@ struct TranslitView: View {
                         .font(.system(size: 16))
                         .padding(12)
                         .background(NamingTheme.background, in: RoundedRectangle(cornerRadius: NamingRadius.small, style: .continuous))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: NamingRadius.small, style: .continuous)
-                                .strokeBorder(NamingTheme.hairline, lineWidth: 1)
-                        }
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
                         .onSubmit { if model.translitResult == nil { model.runTranslit() } }
@@ -30,8 +26,7 @@ struct TranslitView: View {
                         HStack(spacing: 8) {
                             ForEach(examples, id: \.self) { x in
                                 ChipButton(text: x, active: false) {
-                                    model.translit = x
-                                    model.runTranslit()
+                                    model.runTranslit(preset: x)
                                 }
                             }
                         }
@@ -42,21 +37,38 @@ struct TranslitView: View {
                         .padding(.top, 10)
                 }
 
-                if let r = model.translitResult {
+                if model.translitComputing {
+                    NamingCard {
+                        HStack(spacing: 10) {
+                            ProgressView()
+                            Text(L10n.t("正在配中文名…"))
+                                .font(.system(size: 14))
+                                .foregroundStyle(NamingTheme.muted)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 8)
+                    }
+                } else if let r = model.translitResult {
                     resultSection(r)
+                        .transaction { transaction in
+                            transaction.animation = nil
+                        }
                 }
             }
             .padding(20)
         }
+        .namingScrollSurface()
         .namingPageBackground()
         .navigationTitle(L10n.t("西名中起"))
         .navigationBarTitleDisplayMode(.inline)
         .namingDock {
-            DockPrimaryButton(title: model.translitResult == nil ? L10n.t("生成姓名") : L10n.t("收藏")) {
-                if model.translitResult == nil {
-                    model.runTranslit()
-                } else {
-                    model.translitSave()
+            if model.translitComputing {
+                DockPrimaryButton(title: L10n.t("生成姓名"), enabled: false) {}
+            } else if model.translitResult == nil {
+                DockPrimaryButton(title: L10n.t("生成姓名")) { model.runTranslit() }
+            } else if let r = model.translitResult {
+                DockPrimaryButton(title: L10n.t("生成卡片")) {
+                    model.openCardZh(nameResult(r.main))
                 }
             }
         }
@@ -66,21 +78,36 @@ struct TranslitView: View {
     private func resultSection(_ r: TranslitResultState) -> some View {
         let m = r.main
         let rel = NameEngine.shared.readability(r.surname, m.chars)
+        let py = Pinyin.titleCase(Pinyin.name(r.surname, m.chars))
 
         NamingCard {
-            Text(L10n.f("照 %@ 取的中文名", r.latin))
-                .font(.system(size: 12))
-                .foregroundStyle(NamingTheme.primaryDeep)
-                .padding(.bottom, 10)
-            Text(L10n.zhPrimary(m.full, Pinyin.titleCase(Pinyin.name(r.surname, m.chars))))
-                .font(.system(size: 38, weight: .bold))
-                .foregroundStyle(NamingTheme.ink)
-                .frame(maxWidth: .infinity)
-            Text(L10n.zhSecondary(m.full, Pinyin.titleCase(Pinyin.name(r.surname, m.chars))) + " · " + r.latin)
-                .font(.system(size: 13))
-                .foregroundStyle(NamingTheme.muted)
-                .frame(maxWidth: .infinity)
-                .padding(.top, 6)
+            let saved = model.isSaved(m.full)
+            VStack(spacing: 6) {
+                Text(py)
+                    .font(.system(size: 13))
+                    .foregroundStyle(NamingTheme.muted)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                Text(m.full)
+                    .font(.system(size: 38, weight: .bold))
+                    .foregroundStyle(NamingTheme.ink)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.top, 2)
+                Text(r.latin)
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(NamingTheme.ink.opacity(0.72))
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.top, 2)
+            }
+            .padding(.horizontal, 36)
+            .overlay(alignment: .topTrailing) {
+                FavoriteHeart(saved: saved) {
+                    withAnimation(NamingMotion.pick) { model.toggleTranslitSave() }
+                }
+            }
+            .padding(.bottom, 4)
             Text(model.whyFor(nameResult(m)))
                 .font(.system(size: 14))
                 .foregroundStyle(NamingTheme.ink.opacity(0.85))
@@ -89,8 +116,8 @@ struct TranslitView: View {
                 .padding(.top, 12)
             HStack(spacing: 10) {
                 pill(L10n.t("换一组姓名")) { model.translitAgain() }
-                pill(L10n.t("存卡片")) { model.openCardZh(nameResult(m)) }
             }
+            .frame(maxWidth: .infinity)
             .padding(.top, 14)
         }
 

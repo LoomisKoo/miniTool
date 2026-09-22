@@ -269,6 +269,7 @@
 "给的是中国人真会取的名字（两三个字，姓照原名的音头配，也可能是欧阳、司马这样的复姓），不是「格蕾丝」这类只贴读音的音译。" = "You get names Chinese people really use (two or three characters, with the surname matched to the sound of the original — including compound surnames like 欧阳 or 司马), not a sound-only transliteration such as 格蕾丝.";
 "西名中起" = "Chinese name from a foreign name";
 "生成姓名" = "Generate";
+"正在配中文名…" = "Finding a Chinese name…";
 "照 %@ 取的中文名" = "A Chinese name inspired by %@";
 "换一组姓名" = "Another set";
 "存卡片" = "Save card";
@@ -347,6 +348,7 @@
 "智能推荐" = "For you";
 "搜英文 / 译名 / 含义：Ava / 艾娃 / 智慧" = "Search name, translation or meaning: Ava / 艾娃 / wisdom";
 "英文名库" = "English names";
+"英文姓库" = "English surnames";
 "这个分类下没有名字。" = "No names in this category.";
 "可按年代、气质、寓意、语源筛选；点一个名字看介绍，底栏存成卡片。" = "Filter by era, vibe, meaning or origin. Tap a name for details, then save it as a card from the bottom bar.";
 "从中文出发取英文名，可留空" = "Start from a Chinese name (optional)";
@@ -791,15 +793,25 @@
 "推荐结论" = "Recommendation";
 "综合读感、含义与避雷结果后，作为当前候选中的优先选择。" = "Based on sound, meaning, and risk checks, this is the leading choice.";
 "分享这份报告" = "Share this report";
+"查看对比报告预览" = "View comparison preview";
+"免费预览" = "Free preview";
+"你可以先查看候选名字的基础对比；Pro 解锁完整解释、详细避雷和可分享报告。" = "Preview the basic comparison first. Pro unlocks full explanations, detailed checks, and a shareable report.";
+"需进一步检查" = "Needs a closer check";
+"导出高清报告卡片" = "Export HD report card";
+"暂时无法生成报告卡片" = "Could not create the report card";
+"候选对比" = "Candidate comparison";
+"综合读感、含义与避雷结果后的优先选择" = "The leading choice after sound, meaning, and risk checks";
+"读音提醒" = "Pronunciation note";
+"性格匹配" = "Personality fit";
 "读感" = "Readability";
 "音韵" = "Sound";
 "顺口" = "Smooth";
 "读感顺口" = "Reads smoothly";
 "英文读音体检" = "English pronunciation check";
 "隐私政策" = "Privacy Policy";
-"服务条款" = "Terms of Service";
+"支持文档" = "Support";
 "我们如何处理你的信息" = "How we handle your information";
-"使用应用前请阅读" = "Please read before using the app";
+"使用应用时遇到问题" = "Having trouble using the app?";
 "帮助不熟悉英语发音的人，先听再决定是否适合自己。" = "Listen first if you are not familiar with English pronunciation.";
 "昵称跨语言详解" = "Cross-language nickname guide";
 "直译、意境适配、气质说明与适用场景" = "Literal translation, mood adaptation, tone, and use cases";
@@ -813,3 +825,25 @@
 "个人主页" = "Profile";
 "日常社交" = "Everyday social";
 "英文界面" = "English UI";
+
+"首字母" = "Initial";
+
+/* 选名 / 选姓筛选 sheet 的分组标题 */
+"性别" = "Gender";
+"年代" = "Era";
+"寓意" = "Meaning";
+"语源" = "Origin";
+
+"音译：%@" = "Transliteration: %@";
+
+"西文姓" = "Western surname";
+
+"华人拼写" = "Chinese romanization";
+
+"全部类型" = "All types";
+
+"姓氏类型" = "Surname type";
+
+"对应「%@」" = "Matches 「%@」";
+
+"搜姓氏：Wil / 威 / 陈" = "Search: Wil / 威 / 陈";

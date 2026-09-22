@@ -2,69 +2,103 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover">
-  <meta name="theme-color" content="#111116">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <meta name="theme-color" content="#070608">
+  <meta name="color-scheme" content="dark">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>观影座舱</title>
   <link rel="stylesheet" href="./style.css">
 </head>
 <body>
   <main id="app">
     <section id="homeView" class="view home-view">
-      <div class="home-bg" aria-hidden="true"></div>
-      <header class="top-nav home-nav">
-        <div class="brand"><span class="brand-dot"></span>观影座舱</div>
-      </header>
-      <div class="home-scroll">
-        <div class="hero-copy">
-          <h1>先坐一遍，<em>再买票。</em></h1>
-        </div>
+      <div class="home-stage" aria-hidden="true">
+        <div class="home-beam"></div>
+        <div class="home-screen"><span class="home-screen-glow"></span></div>
+      </div>
 
-        <section class="panel">
-          <div class="panel-head"><h2>影厅格式</h2></div>
-          <button id="hallSelectBtn" class="hall-current">
-            <span class="hall-current-art"></span>
-            <span class="hall-current-text">
+      <div class="home-scroll">
+        <header class="home-hero">
+          <h1>观影座舱</h1>
+          <p class="hero-sub">先坐一遍，再买票</p>
+        </header>
+
+        <div class="ticket">
+          <button id="hallSelectBtn" class="ticket-row" type="button">
+            <span class="ticket-kicker">影厅</span>
+            <span class="ticket-main">
               <strong id="hallSelectText">普通激光厅</strong>
               <em id="hallSelectSub">清晰 · 均衡 · 性价比</em>
             </span>
-            <span id="hallSelectPrice" class="hall-current-price">舒适观看</span>
-            <span class="chev">›</span>
+            <span id="hallSelectPrice" class="ticket-tag">舒适观看</span>
+            <span class="chev" aria-hidden="true"></span>
           </button>
-          <div id="hallDetail" class="hall-detail"></div>
-        </section>
-        <section class="panel">
-          <div class="panel-head"><h2>观影位置</h2></div>
-          <div id="homeSeatPicker" class="home-seat-picker"></div>
-        </section>
 
-        <section class="panel">
-          <div class="panel-head"><h2>视力模拟</h2></div>
-          <div class="vision-settings">
-            <div class="vision-row">
+          <div id="homeSeatPicker" class="ticket-seat"></div>
+
+          <div class="ticket-body">
+            <div class="body-row">
+              <span class="body-name">身高</span>
+              <div class="height-step">
+                <button id="heightDown" type="button" aria-label="降低身高">−</button>
+                <b id="heightValue">175cm</b>
+                <button id="heightUp" type="button" aria-label="增加身高">＋</button>
+              </div>
+            </div>
+            <div class="vision-block">
+              <span class="body-name">邻座</span>
+              <button id="crowdBtn" class="crowd-switch" type="button" aria-pressed="false">空座</button>
+            </div>
+          </div>
+
+          <div class="ticket-vision">
+            <div class="vision-block">
               <span class="vision-name">近视</span>
               <div id="homeNearPicker" class="vision-picker"></div>
             </div>
-            <div class="vision-row">
+            <div class="vision-block">
               <span class="vision-name">散光</span>
               <div id="homeAstigPicker" class="vision-picker"></div>
             </div>
           </div>
-        </section>
+
+          <div id="hallDetail" class="hall-detail"></div>
+        </div>
       </div>
+
       <div class="home-cta">
-        <button id="enterBtn" class="primary-btn">进入影厅</button>
+        <button id="enterBtn" class="primary-btn" type="button">进入影厅</button>
       </div>
     </section>
 
-    <section id="theatreView" class="view theatre-view hidden">
+    <section id="theatreView" class="view theatre-view">
       <canvas id="theatreCanvas" aria-label="电影院观感模拟画面"></canvas>
       <div class="theatre-shade"></div>
       <header class="top-nav theatre-nav">
-        <button id="backBtn" class="icon-btn" aria-label="返回">←</button>
-          <button id="hallSwitchBtn" class="hall-switch-btn">
-          <strong id="theatreTitle">普通激光厅</strong>
-          </button>
-        <button id="orientationBtn" class="round-btn" aria-label="切换横竖屏">↔</button>
+        <button id="backBtn" class="icon-btn" aria-label="返回" type="button">←</button>
+        <button id="hallSwitchBtn" class="hall-switch-btn" type="button">
+          <strong id="theatreTitle">观影座舱</strong>
+          <span id="theatreHallName">普通激光厅</span>
+        </button>
+        <button id="lightBtn" class="icon-round light-btn" aria-label="开灯" aria-pressed="false" type="button">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+            <path fill="currentColor" d="M12 2a7 7 0 0 0-4 12.7V17a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.3A7 7 0 0 0 12 2zm-2 16h4v1a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1v-1zm1 3h2v1h-2v-1z"/>
+          </svg>
+        </button>
+        <button id="crowdTheatreBtn" class="icon-round" aria-label="显示周围的人" aria-pressed="false" type="button">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+            <circle cx="9" cy="8" r="3" fill="currentColor"/>
+            <circle cx="17" cy="9" r="2.4" fill="currentColor" opacity=".72"/>
+            <path fill="currentColor" d="M3.5 19.5c.4-3.4 2.2-5.2 5.5-5.2s5.1 1.8 5.5 5.2h-11zm11.2 0c-.2-1.7-.8-3-1.8-3.9.7-.5 1.5-.8 2.5-.8 2.6 0 4.1 1.6 4.6 4.7h-5.3z"/>
+          </svg>
+        </button>
+        <button id="orientationBtn" class="icon-round" aria-label="切换横竖屏" type="button">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+            <rect x="9" y="3" width="6.5" height="11" rx="1.4" fill="none" stroke="currentColor" stroke-width="1.6"/>
+            <path d="M5.5 14.2a7 7 0 0 0 12.6 2.2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+            <path d="M16.2 14.6 18.6 16.4 16.6 18.6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
       </header>
       <div class="theatre-bottom">
         <div class="bottom-head">
@@ -73,73 +107,69 @@
         <div class="seat-line">
           <div id="seatPicker" class="seat-picker"></div>
           <div class="vision-controls">
-            <button id="nearBtn" class="text-btn">近视 <b id="nearValue">0度</b></button>
-            <button id="astigBtn" class="text-btn">散光 <b id="astigValue">0度</b></button>
+            <button id="nearBtn" class="text-btn" type="button">近视 <b id="nearValue">0度</b></button>
+            <button id="astigBtn" class="text-btn" type="button">散光 <b id="astigValue">0度</b></button>
           </div>
         </div>
         <div class="theatre-actions">
-          <button id="sampleBtn" class="secondary-btn">播放视频 <span>▶</span></button>
-          <button id="chooseVideoBtn" class="secondary-btn">选择视频 <span>＋</span></button>
-          <button id="soundTextBtn" class="secondary-btn">试听左右声道 <span>◖</span></button>
+          <button id="sampleBtn" class="secondary-btn" type="button">播放视频 <span>▶</span></button>
+          <button id="chooseVideoBtn" class="secondary-btn" type="button">选择视频 <span>＋</span></button>
+          <button id="soundTextBtn" class="secondary-btn" type="button">试听左右声道 <span>◖</span></button>
         </div>
       </div>
       <div id="toast" class="toast"></div>
     </section>
+
+    <div id="hallPicker" class="sheet">
+      <div class="sheet-card">
+        <div class="sheet-head"><strong>选择影厅</strong><button id="closeHallPicker" class="modal-close" type="button" aria-label="关闭">×</button></div>
+        <div class="sheet-scroll">
+          <div id="hallList" class="hall-list"></div>
+          <div id="hallPickerDetail" class="hall-picker-detail"></div>
+        </div>
+        <div class="sheet-foot"><button id="confirmHall" class="primary-btn modal-confirm" type="button">确定</button></div>
+      </div>
+    </div>
+
+    <div id="seatModal" class="sheet">
+      <div class="sheet-card sheet-card-tall">
+        <div class="sheet-head"><strong>选择座位</strong><button id="closeSeatModal" class="modal-close" type="button" aria-label="关闭">×</button></div>
+        <div class="seat-map-toolbar">
+          <span>座位图</span>
+          <div>
+            <button id="seatZoomOut" aria-label="缩小座位图" type="button">−</button>
+            <b id="seatZoomValue">100%</b>
+            <button id="seatZoomIn" aria-label="放大座位图" type="button">＋</button>
+            <button id="seatZoomReset" type="button">复位</button>
+          </div>
+        </div>
+        <div class="seat-map-shell">
+          <div id="rowLabels" class="row-label-column"></div>
+          <div id="seatTrack" class="seat-track">
+            <div class="seat-map-stage">
+              <div id="screenSign" class="screen-sign">银幕</div>
+              <div class="seat-center-line"></div>
+              <div class="best-zone"></div>
+              <div id="seatMap" class="seat-map"></div>
+            </div>
+            <div id="seatZoomSpacer" class="seat-zoom-spacer" aria-hidden="true"></div>
+          </div>
+        </div>
+        <div class="seat-legend"><span><i class="legend-current"></i>当前座位</span><span><i class="legend-free"></i>可选座位</span></div>
+        <div id="modalHallType" class="modal-hall-type"></div>
+        <button id="confirmSeat" class="primary-btn modal-confirm" type="button">确定</button>
+      </div>
+    </div>
+
+    <div id="visionModal" class="sheet">
+      <div class="sheet-card">
+        <div class="sheet-head"><strong id="visionModalTitle">选择度数</strong><button id="closeVisionModal" class="modal-close" type="button" aria-label="关闭">×</button></div>
+        <div id="visionOptions" class="vision-options"></div>
+      </div>
+    </div>
   </main>
   <input id="videoPicker" type="file" accept="video/*" hidden>
-  <div id="hallPicker" class="hall-picker hidden">
-    <div class="hall-picker-card">
-      <div class="hall-picker-head"><strong>选择影厅</strong><button id="closeHallPicker" class="modal-close">×</button></div>
-      <div class="hall-picker-scroll">
-        <div id="hallList" class="hall-list"></div>
-        <div id="hallPickerDetail" class="hall-picker-detail"></div>
-      </div>
-      <div class="hall-picker-foot"><button id="confirmHall" class="primary-btn modal-confirm">确定</button></div>
-    </div>
-  </div>
-  <div id="seatModal" class="modal hidden">
-    <div class="seat-modal-card">
-      <div class="modal-head">
-        <div>
-          <h2>选择座位</h2>
-        </div>
-        <button id="closeSeatModal" class="modal-close" aria-label="关闭">×</button>
-      </div>
-      <div class="seat-map-toolbar">
-        <span>座位图</span>
-        <div>
-          <button id="seatZoomOut" aria-label="缩小座位图">−</button>
-          <b id="seatZoomValue">100%</b>
-          <button id="seatZoomIn" aria-label="放大座位图">＋</button>
-          <button id="seatZoomReset">复位</button>
-        </div>
-      </div>
-      <div class="seat-map-shell">
-        <div id="rowLabels" class="row-label-column"></div>
-        <div id="seatTrack" class="seat-track">
-          <div class="seat-map-stage">
-            <div id="screenSign" class="screen-sign">银幕</div>
-            <div class="seat-center-line"></div>
-            <div class="best-zone"></div>
-            <div id="seatMap" class="seat-map"></div>
-          </div>
-          <div id="seatZoomSpacer" class="seat-zoom-spacer" aria-hidden="true"></div>
-        </div>
-      </div>
-      <div class="seat-legend"><span><i class="legend-current"></i>当前座位</span><span><i class="legend-free"></i>可选座位</span></div>
-      <div id="modalHallType" class="modal-hall-type"></div>
-      <button id="confirmSeat" class="primary-btn modal-confirm">确定</button>
-    </div>
-  </div>
-  <div id="visionModal" class="modal hidden">
-    <div class="vision-modal-card">
-      <div class="modal-head">
-        <div><h2 id="visionModalTitle">选择度数</h2></div>
-        <button id="closeVisionModal" class="modal-close" aria-label="关闭">×</button>
-      </div>
-      <div id="visionOptions" class="vision-options"></div>
-    </div>
-  </div>
+
   <script src="../wind-chime/vendor/three.min.js"></script>
   <script src="./app.js"></script>
 </body>

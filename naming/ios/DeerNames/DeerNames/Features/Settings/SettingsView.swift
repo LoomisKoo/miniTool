@@ -25,8 +25,8 @@ struct SettingsView: View {
                         LegalDocumentView(document: .privacy)
                     }
                     Divider().overlay(NamingTheme.hairline)
-                    settingsLink(L10n.t("服务条款"), subtitle: L10n.t("使用应用前请阅读"), systemImage: "doc.text") {
-                        LegalDocumentView(document: .terms)
+                    settingsLink(L10n.t("支持文档"), subtitle: L10n.t("使用应用时遇到问题"), systemImage: "questionmark.circle") {
+                        LegalDocumentView(document: .support)
                     }
                 }
 

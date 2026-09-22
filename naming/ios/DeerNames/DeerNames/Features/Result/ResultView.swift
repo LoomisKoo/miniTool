@@ -106,9 +106,9 @@ struct ResultView: View {
                 Text(L10n.t("姓"))
                     .font(.system(size: 14))
                     .foregroundStyle(NamingTheme.muted)
-                    /* 英文是 Surname，给足宽度免得竖着断行。 */
                     .lineLimit(1)
-                    .frame(width: L10n.isEnglish ? 58 : 24, alignment: .leading)
+                    .minimumScaleFactor(0.85)
+                    .frame(width: NamingTheme.slotLabelWidth, alignment: .leading)
                 if let s = model.surname {
                     Text(s.c)
                         .font(.system(size: 18, weight: .semibold))
@@ -132,10 +132,6 @@ struct ResultView: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 15)
             .background(NamingTheme.canvas, in: RoundedRectangle(cornerRadius: NamingRadius.large, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: NamingRadius.large, style: .continuous)
-                    .strokeBorder(model.surname == nil ? NamingTheme.primary.opacity(0.55) : NamingTheme.hairline, lineWidth: 1)
-            }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -223,10 +219,6 @@ struct ResultView: View {
                         }
                         .padding(14)
                         .background(NamingTheme.canvas, in: RoundedRectangle(cornerRadius: NamingRadius.medium, style: .continuous))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: NamingRadius.medium, style: .continuous)
-                                .strokeBorder(model.isSaved(rec.full) ? NamingTheme.primary.opacity(0.6) : NamingTheme.hairline, lineWidth: 1)
-                        }
                     }
                     .buttonStyle(.plain)
                 }

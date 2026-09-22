@@ -6,17 +6,11 @@ import SwiftUI
 struct AllRecsView: View {
     @Environment(NamingAppModel.self) private var model
     @State private var rows: [RecResult] = []
-    @State private var showTop = false
-
-    private let topID = "all-recs-top"
 
     var body: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                VStack(spacing: 14) {
-                    Color.clear.frame(height: 0).id(topID)
-
-                    if model.surname == nil {
+        ScrollView {
+            VStack(spacing: 14) {
+                if model.surname == nil {
                         NamingCard {
                             Text(L10n.t("先选一个姓"))
                                 .font(.system(size: 15, weight: .semibold))
@@ -62,26 +56,11 @@ struct AllRecsView: View {
                             }
                         }
                     }
-                }
-                .padding(20)
-                .namingScrollProbe()
             }
-            .namingPageBackground()
-            .namingScrollTopDetector(threshold: 300) { showTop = $0 }
-            .overlay(alignment: .bottomTrailing) {
-                if showTop {
-                    ScrollTopButton {
-                        withAnimation(NamingMotion.appear) {
-                            proxy.scrollTo(topID, anchor: .top)
-                        }
-                    }
-                    .padding(.trailing, 18)
-                    .padding(.bottom, 16)
-                    .transition(.opacity)
-                }
-            }
-            .animation(NamingMotion.fade, value: showTop)
+            .padding(20)
         }
+        .namingScrollSurface()
+        .namingPageBackground()
         .navigationTitle(L10n.t("全部推荐"))
         .navigationBarTitleDisplayMode(.inline)
         .onAppear { reload() }
@@ -126,10 +105,6 @@ struct AllRecsView: View {
             }
             .padding(14)
             .background(NamingTheme.canvas, in: RoundedRectangle(cornerRadius: NamingRadius.medium, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: NamingRadius.medium, style: .continuous)
-                    .strokeBorder(model.isSaved(rec.full) ? NamingTheme.primary.opacity(0.6) : NamingTheme.hairline, lineWidth: 1)
-            }
         }
         .buttonStyle(NamingPressButtonStyle())
     }

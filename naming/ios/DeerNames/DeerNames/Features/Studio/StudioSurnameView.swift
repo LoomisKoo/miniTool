@@ -1,11 +1,12 @@
 import SwiftUI
 
-/* 选姓氏（工作台）—— 搜索贴顶；选中简介固定在列表上方；筛选进漏斗 sheet，点「完成」才应用。 */
+/* 选姓氏（工作台）—— 搜索贴顶；选中简介固定在列表上方；筛选进漏斗 sheet，点「完成」才应用；
+ * 列表滚远后出现回顶部。 */
 
 struct StudioSurnameView: View {
     @Environment(NamingAppModel.self) private var model
-    @State private var showTop = false
     @State private var showFilters = false
+    @State private var showTop = false
 
     private let columns = [GridItem(.adaptive(minimum: 66), spacing: 10)]
     private let topID = "studio-sur-top"
@@ -33,6 +34,7 @@ struct StudioSurnameView: View {
                 ScrollView {
                     VStack(spacing: 14) {
                         Color.clear.frame(height: 0).id(topID)
+                            .namingScrollTopAnchor()
 
                         let list = model.studioSurs()
                         let all = NameEngine.shared.allSurnames()
@@ -42,6 +44,11 @@ struct StudioSurnameView: View {
                                 .font(.system(size: 12))
                                 .foregroundStyle(NamingTheme.muted)
                             Spacer()
+                            if filterActive {
+                                Text(L10n.t("已筛选"))
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(NamingTheme.primaryDeep)
+                            }
                         }
 
                         if list.isEmpty {
@@ -76,10 +83,6 @@ struct StudioSurnameView: View {
                                             }
                                         }
                                         .clipShape(RoundedRectangle(cornerRadius: NamingRadius.small, style: .continuous))
-                                        .overlay {
-                                            RoundedRectangle(cornerRadius: NamingRadius.small, style: .continuous)
-                                                .strokeBorder(on ? .clear : NamingTheme.hairline, lineWidth: 1)
-                                        }
                                     }
                                     .buttonStyle(.plain)
                                 }
@@ -89,9 +92,10 @@ struct StudioSurnameView: View {
                     .padding(.horizontal, 20)
                     .padding(.top, 14)
                     .padding(.bottom, 20)
-                    .namingScrollProbe()
                 }
-                .namingScrollTopDetector(threshold: 220) { showTop = $0 }
+                .coordinateSpace(name: "namingScroll")
+                .namingScrollSurface()
+                .namingScrollTopVisible($showTop)
                 .overlay(alignment: .bottomTrailing) {
                     if showTop {
                         ScrollTopButton {
@@ -151,10 +155,6 @@ struct StudioSurnameView: View {
             .font(.system(size: 15))
             .padding(11)
             .background(NamingTheme.canvas, in: RoundedRectangle(cornerRadius: NamingRadius.small, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: NamingRadius.small, style: .continuous)
-                    .strokeBorder(NamingTheme.hairline, lineWidth: 1)
-            }
             .autocorrectionDisabled()
             .padding(.horizontal, 20)
             .padding(.top, 8)
@@ -170,25 +170,28 @@ struct StudioSurnameFilterSheet: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 22) {
                     filterBlock(title: L10n.t("类型")) {
                         FilterFlow(items: [("all", L10n.t("全部")), ("single", L10n.t("单姓")),
                                            ("compound", L10n.t("复姓"))],
-                                   current: draft.type) { draft.type = $0 }
+                                   current: draft.type,
+                                   spacing: 10, lineSpacing: 12) { draft.type = $0 }
                     }
                     filterBlock(title: L10n.t("常见度")) {
                         FilterFlow(items: [("all", L10n.t("不限常见度")), ("common", L10n.t("常见")),
                                            ("rare", L10n.t("少见"))],
-                                   current: draft.pop) { draft.pop = $0 }
+                                   current: draft.pop,
+                                   spacing: 10, lineSpacing: 12) { draft.pop = $0 }
                     }
                     filterBlock(title: L10n.t("拼音首字母")) {
                         let all = NameEngine.shared.allSurnames()
                         FilterFlow(items: [("all", L10n.t("全部字母"))]
                                    + model.lettersOf(all.map { $0.py }).map { ($0, $0.uppercased()) },
-                                   current: draft.letter) { draft.letter = $0 }
+                                   current: draft.letter,
+                                   spacing: 10, lineSpacing: 12) { draft.letter = $0 }
                     }
                 }
-                .padding(20)
+                .padding(24)
             }
             .namingPageBackground()
             .navigationTitle(L10n.t("筛选"))
@@ -210,7 +213,7 @@ struct StudioSurnameFilterSheet: View {
 
     private func filterBlock<Content: View>(title: String,
                                             @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 12) {
             Text(title)
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(NamingTheme.muted)

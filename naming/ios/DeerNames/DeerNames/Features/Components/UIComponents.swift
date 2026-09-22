@@ -8,40 +8,25 @@ struct ChipButton: View {
     var action: () -> Void
 
     var body: some View {
-        Button(action: action) {
-            Text(text)
-                .font(.system(size: 13, weight: active ? .semibold : .regular))
-                .foregroundStyle(active ? .white : NamingTheme.ink)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 7)
-                .background {
-                    if active {
-                        NamingTheme.gradient
-                    } else {
-                        NamingTheme.pearl
-                    }
-                }
-                .clipShape(Capsule())
-        }
-        .buttonStyle(NamingPressButtonStyle())
-        .sensoryFeedback(.selection, trigger: active)
-    }
-}
-
-struct FilterRow: View {
-    let items: [(String, String)]
-    let current: String
-    var action: (String) -> Void
-
-    var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(items, id: \.0) { item in
-                    ChipButton(text: item.1, active: current == item.0) { action(item.0) }
+        /* 不用 Button：ScrollView 里密布胶囊时，系统按钮层会残留半透明圆角块（选英文姓页）。 */
+        Text(text)
+            .font(.system(size: 13, weight: active ? .semibold : .regular))
+            .foregroundStyle(active ? .white : NamingTheme.ink)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 9)
+            .background {
+                if active {
+                    NamingTheme.gradient
+                } else {
+                    NamingTheme.pearl
                 }
             }
-            .padding(.vertical, 1)
-        }
+            .clipShape(Capsule())
+            .contentShape(Capsule())
+            .onTapGesture(perform: action)
+            .sensoryFeedback(.selection, trigger: active)
+            /* 悬停高亮会在这页残留成灰块（见 `namingNoHoverHighlight`）。 */
+            .namingNoHoverHighlight()
     }
 }
 
@@ -49,10 +34,12 @@ struct FilterRow: View {
 struct FilterFlow: View {
     let items: [(String, String)]
     let current: String
+    var spacing: CGFloat = 10
+    var lineSpacing: CGFloat = 12
     var action: (String) -> Void
 
     var body: some View {
-        FlowLayout(spacing: 8, lineSpacing: 8) {
+        FlowLayout(spacing: spacing, lineSpacing: lineSpacing) {
             ForEach(items, id: \.0) { item in
                 ChipButton(text: item.1, active: current == item.0) { action(item.0) }
             }
@@ -60,39 +47,36 @@ struct FilterFlow: View {
     }
 }
 
-struct FilterSummaryView: View {
-    let parts: [String]
-    let empty: Bool
-    var onClear: () -> Void
+/* 列表页的搜索框（选英文名 / 选英文姓共用）：输入框 + 尾部清除按钮。
+ *
+ * 不用系统自带的 clear button：它只在部分配置下出现，图标大小和颜色也跟这一套不一致。
+ * 自己画一个，点一下清空输入。 */
+struct NamingSearchField: View {
+    @Binding var text: String
+    let placeholder: String
 
     var body: some View {
-        let active = parts.filter { !$0.isEmpty }
-        if active.isEmpty && !empty {
-            EmptyView()
-        } else {
-            HStack(spacing: 8) {
-                if active.isEmpty {
-                    Text(L10n.t("没有符合条件的结果"))
-                        .font(.system(size: 13))
+        HStack(spacing: 8) {
+            TextField(placeholder, text: $text)
+                .textFieldStyle(.plain)
+                .font(.system(size: 15))
+                .autocorrectionDisabled()
+            /* 没输入时不占位：空框右边挂个灰叉看着像出错。 */
+            if !text.isEmpty {
+                Button {
+                    text = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 15))
                         .foregroundStyle(NamingTheme.muted)
-                } else {
-                    Text(L10n.t("已筛选"))
-                        .font(.system(size: 12))
-                        .foregroundStyle(NamingTheme.muted)
-                    Text(active.joined(separator: " · "))
-                        .font(.system(size: 13))
-                        .foregroundStyle(NamingTheme.ink)
-                        .lineLimit(2)
                 }
-                Spacer(minLength: 0)
-                Button(active.isEmpty ? L10n.t("清除筛选") : L10n.t("清除"), action: onClear)
-                    .font(.system(size: 13))
-                    .foregroundStyle(NamingTheme.primaryDeep)
+                .buttonStyle(.plain)
+                .namingNoHoverHighlight()
+                .accessibilityLabel(L10n.t("清空"))
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 9)
-            .background(NamingTheme.pearl.opacity(0.7), in: RoundedRectangle(cornerRadius: NamingRadius.small, style: .continuous))
         }
+        .padding(11)
+        .background(NamingTheme.canvas, in: RoundedRectangle(cornerRadius: NamingRadius.small, style: .continuous))
     }
 }
 
@@ -161,7 +145,7 @@ struct DockPrimaryButton: View {
 }
 
 /* 底部操作栏：
- * - iOS 26+：`safeAreaBar`，吃系统 scroll edge 模糊
+ * - iOS 26+：`safeAreaBar`，系统 scroll edge 渐变模糊
  * - 以下：`safeAreaInset` + Material 毛玻璃
  * 内置左右 20 / 上下 10 padding，调用方只塞按钮或 Chip 行。 */
 extension View {
@@ -255,84 +239,7 @@ struct NamingToastView: View {
     }
 }
 
-/* MARK: - 滚动辅助
-
- * 浮层里的列表很长（姓氏 300+、备选名一屏屏排），所以需要一个「滚远了就浮出来」的
- * 回到顶部钮。
- *
- * 实现上不依赖命名的 coordinateSpace：滚动内容顶部和 ScrollView 自己各埋一个探针，
- * 都取 .global 坐标，两者之差就是滚了多少 —— 这是 SwiftUI 里最不容易失效的测法
- * （0 高度视图的 background 或命名坐标空间在部分版本上会拿不到更新）。
- * 只有跨越阈值时才回调，避免滚动中不停地刷新视图。 */
-
-private struct NamingScrollContentTopKey: PreferenceKey {
-    static var defaultValue: CGFloat = .greatestFiniteMagnitude
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = min(value, nextValue())
-    }
-}
-
-private struct NamingScrollViewportTopKey: PreferenceKey {
-    static var defaultValue: CGFloat = .greatestFiniteMagnitude
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = min(value, nextValue())
-    }
-}
-
-extension View {
-    /// 挂在滚动内容里（给一个够高的视图，不要给 0 高度的占位），把内容顶部的位置报上去。
-    func namingScrollProbe() -> some View {
-        background {
-            GeometryReader { geo in
-                Color.clear.preference(key: NamingScrollContentTopKey.self,
-                                       value: geo.frame(in: .global).minY)
-            }
-        }
-    }
-
-    /// 挂在 ScrollView 上：滚过 `threshold` 就回调 true，回到顶部回调 false。
-    func namingScrollTopDetector(threshold: CGFloat = 160,
-                                 onChange: @escaping (Bool) -> Void) -> some View {
-        modifier(NamingScrollTopDetector(threshold: threshold, onChange: onChange))
-    }
-}
-
-private struct NamingScrollTopDetector: ViewModifier {
-    let threshold: CGFloat
-    let onChange: (Bool) -> Void
-
-    @State private var contentTop: CGFloat = .greatestFiniteMagnitude
-    @State private var viewportTop: CGFloat = .greatestFiniteMagnitude
-    @State private var shown = false
-
-    func body(content: Content) -> some View {
-        content
-            .background {
-                GeometryReader { geo in
-                    Color.clear.preference(key: NamingScrollViewportTopKey.self,
-                                           value: geo.frame(in: .global).minY)
-                }
-            }
-            .onPreferenceChange(NamingScrollViewportTopKey.self) { y in
-                viewportTop = y
-                update()
-            }
-            .onPreferenceChange(NamingScrollContentTopKey.self) { y in
-                contentTop = y
-                update()
-            }
-    }
-
-    private func update() {
-        guard contentTop < .greatestFiniteMagnitude, viewportTop < .greatestFiniteMagnitude else { return }
-        let hidden = max(0, viewportTop - contentTop)
-        let next = hidden >= threshold
-        guard next != shown else { return }
-        shown = next
-        onChange(next)
-    }
-}
-
+/// 列表滚远后的「回到顶部」浮钮。
 struct ScrollTopButton: View {
     var action: () -> Void
     @State private var pressed = false
@@ -343,16 +250,12 @@ struct ScrollTopButton: View {
             .foregroundStyle(NamingTheme.primaryDeep)
             .frame(width: 42, height: 42)
             .background(NamingTheme.background, in: Circle())
-            .overlay { Circle().strokeBorder(NamingTheme.hairline, lineWidth: 1) }
             .shadow(color: .black.opacity(0.16), radius: 8, y: 3)
             .contentShape(Circle())
             .scaleEffect(pressed ? 0.97 : 1)
             .animation(NamingMotion.press, value: pressed)
-            /* 列表惯性滚动时，ScrollView 的 pan 手势会抢走普通点击（TapGesture 要等
-             * 「按下 + 抬起 + 没移动」才成立，减速中这一串常常被打断），所以：
-             *   1. 用 minimumDistance: 0 的 DragGesture，手指按下就成立；
-             *   2. 用 highPriorityGesture 保证优先于滚动；
-             *   3. 在按下那一刻就触发（而不是等抬起），即使触摸随后被取消也一定能生效。 */
+            .namingNoHoverHighlight()
+            /* 惯性滚动时普通 Tap 常被打断：按下即触发。 */
             .highPriorityGesture(
                 DragGesture(minimumDistance: 0)
                     .onChanged { _ in
@@ -463,22 +366,32 @@ struct ProfileSummaryCard: View {
  * 所以卡头下面不留间距、卡的 padding 也收一档，免得空出一个大壳子。 */
 
 /// 中文姓：拼音 · 英文写法 · 单/复姓 · 常见度 · 气质 + 释义。
-/// 右上角「换一个」随机挑一个（`onShuffle` 传 nil 就不显示）。
+/// 「换一个」与姓同一行（`onShuffle` 传 nil 就不显示）。
 struct ZhSurnameInfoCard: View {
     let s: NMSurname
     var onShuffle: (() -> Void)? = nil
 
     var body: some View {
         NamingCard(padding: 18) {
-            CardTitleRow(title: s.c, subtitle: surLine, bottomInset: 10) {
+            HStack(alignment: .center, spacing: 10) {
+                Text(s.c)
+                    .font(.system(size: 22, weight: .bold))
+                    .foregroundStyle(NamingTheme.ink)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
                 if let onShuffle {
                     ShuffleChip(text: L10n.t("换一个"), action: onShuffle)
                 }
             }
+            Text(surLine)
+                .font(.system(size: 12))
+                .foregroundStyle(NamingTheme.muted)
+                .padding(.top, 6)
             Text(meaning)
                 .font(.system(size: 13.5))
                 .foregroundStyle(NamingTheme.ink.opacity(0.85))
                 .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 10)
         }
     }
 
@@ -498,7 +411,7 @@ struct ZhSurnameInfoCard: View {
     }
 }
 
-/// 英文姓：中文音译。没有正文，所以只留一个矮卡头。
+/// 英文姓：语源 / 中文姓释义；「换一个」与英文姓同一行。
 struct EnSurnameInfoCard: View {
     let n: String
     var onShuffle: (() -> Void)? = nil
@@ -506,15 +419,45 @@ struct EnSurnameInfoCard: View {
     @Environment(NamingAppModel.self) private var model
 
     var body: some View {
-        /* 中文音译只给中文界面看（英文界面下是看不懂的汉字）。 */
-        let zh = L10n.isEnglish ? "" : model.enSurnameZh(n)
+        let entry = model.enSurnameEntry(n)
+        let kind = entry.isNative ? L10n.t("西文姓") : L10n.t("华人拼写")
+        let meaning: String = {
+            if entry.m.isEmpty { return L10n.t("暂无更多介绍") }
+            if entry.isNative { return L10n.d("enSurnames", entry.n, entry.m) }
+            let c = entry.zh.first.map(String.init) ?? entry.zh
+            return L10n.d("surnames", c, entry.m)
+        }()
         NamingCard(padding: 14) {
-            CardTitleRow(title: n, subtitle: zh.isEmpty ? nil : L10n.f("中文常写作：%@", zh),
-                         bottomInset: 0) {
+            HStack(alignment: .center, spacing: 10) {
+                Text(n)
+                    .font(.system(size: 22, weight: .bold))
+                    .foregroundStyle(NamingTheme.ink)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                Text(kind)
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(NamingTheme.primaryDeep)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 4)
+                    .background(NamingTheme.primary.opacity(0.12), in: Capsule())
+                Spacer(minLength: 0)
                 if let onShuffle {
                     ShuffleChip(text: L10n.t("换一个"), action: onShuffle)
                 }
             }
+            if !entry.zh.isEmpty {
+                Text(entry.isNative
+                       ? L10n.f("音译：%@", entry.zh)
+                       : L10n.f("对应「%@」", entry.zh))
+                    .font(.system(size: 12))
+                    .foregroundStyle(NamingTheme.muted)
+                    .padding(.top, 4)
+            }
+            Text(meaning)
+                .font(.system(size: 13.5))
+                .foregroundStyle(NamingTheme.ink.opacity(0.85))
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, entry.zh.isEmpty ? 4 : 8)
         }
     }
 }
@@ -611,11 +554,18 @@ struct FlowLayout: Layout {
     }
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let maxWidth = proposal.width ?? .infinity
+        /* width 未知时不能按「无限宽单行」估高，否则 place 按实宽换行后会画出父视图、盖住下面列表。 */
+        let maxWidth = proposal.width ?? 0
+        if maxWidth <= 0 {
+            let sizes = subviews.map { $0.sizeThatFits(.unspecified) }
+            let height = sizes.reduce(0) { $0 + $1.height }
+                + lineSpacing * CGFloat(max(0, sizes.count - 1))
+            return CGSize(width: sizes.map(\.width).max() ?? 0, height: height)
+        }
         let rows = rows(maxWidth: maxWidth, subviews: subviews)
         let height = rows.reduce(0) { $0 + $1.height }
             + lineSpacing * CGFloat(max(0, rows.count - 1))
-        return CGSize(width: proposal.width ?? (rows.map(\.width).max() ?? 0), height: height)
+        return CGSize(width: maxWidth, height: height)
     }
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
@@ -738,44 +688,39 @@ struct ShuffleChip: View {
     var action: () -> Void
 
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: 4) {
-                Image(systemName: "shuffle")
-                    .font(.system(size: 11, weight: .semibold))
-                Text(text)
-                    .font(.system(size: 13, weight: .medium))
-            }
-            .foregroundStyle(NamingTheme.primaryDeep)
-            .padding(.horizontal, 11)
-            .padding(.vertical, 6)
-            .background(NamingTheme.primary.opacity(0.12), in: Capsule())
+        HStack(spacing: 4) {
+            Image(systemName: "shuffle")
+                .font(.system(size: 11, weight: .semibold))
+            Text(text)
+                .font(.system(size: 13, weight: .medium))
         }
-        .buttonStyle(NamingPressButtonStyle())
+        .foregroundStyle(NamingTheme.primaryDeep)
+        .padding(.horizontal, 11)
+        .padding(.vertical, 6)
+        .background(NamingTheme.primary.opacity(0.12), in: Capsule())
+        .contentShape(Capsule())
+        .onTapGesture(perform: action)
+        .namingNoHoverHighlight()
     }
 }
 
-/// 「收藏 / 已收藏」胶囊 —— 中文自选页、英文名卡片、详情页共用一套样式。
-struct FavoritePill: View {
-    let title: String
-    let active: Bool
+/// 收藏心形按钮 —— 已收藏实心，未收藏空心；不独占一行，和名字并排用。
+struct FavoriteHeart: View {
+    let saved: Bool
+    var size: CGFloat = 20
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 6) {
-                Image(systemName: active ? "heart" : "heart.fill")
-                    .font(.system(size: 12, weight: .semibold))
-                Text(title)
-                    .font(.system(size: 14, weight: .medium))
-            }
-            .foregroundStyle(active ? .white : NamingTheme.ink)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 9)
-            .background(active ? AnyShapeStyle(NamingTheme.primaryDeep) : AnyShapeStyle(NamingTheme.pearl))
-            .clipShape(Capsule())
+            Image(systemName: saved ? "heart.fill" : "heart")
+                .font(.system(size: size))
+                .foregroundStyle(NamingTheme.primaryDeep)
+                .frame(width: 40, height: 40)
+                .contentShape(Rectangle())
         }
         .buttonStyle(NamingPressButtonStyle())
-        .sensoryFeedback(.impact(flexibility: .soft, intensity: 0.6), trigger: active)
+        .accessibilityLabel(saved ? L10n.t("已收藏") : L10n.t("收藏"))
+        .sensoryFeedback(.impact(flexibility: .soft, intensity: 0.6), trigger: saved)
     }
 }
 

@@ -75,6 +75,9 @@ enum NamingTheme {
             endPoint: .bottomTrailing
         )
     }
+
+    /// 自选 / 选姓行左侧「姓 / 名」标签宽度（英文 Surname / Given 需单行）。
+    static var slotLabelWidth: CGFloat { L10n.isEnglish ? 76 : 24 }
 }
 
 extension Color {
@@ -119,14 +122,13 @@ struct NamingCard<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0, content: content)
             .frame(maxWidth: .infinity, alignment: .leading)
+            /* 卡里的行 / 标签都是可点区域：把系统的悬停·按下高亮层关掉，
+             * 否则指针滑过时会残留成一格格灰块（选英文姓页最明显）。 */
+            .namingNoHoverHighlight()
             .padding(padding)
             .background(NamingTheme.canvas, in: RoundedRectangle(cornerRadius: NamingRadius.large, style: .continuous))
             /* 展开动画时内容不能画出圆角，否则会盖住卡头和下一张卡。 */
             .clipShape(RoundedRectangle(cornerRadius: NamingRadius.large, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: NamingRadius.large, style: .continuous)
-                    .strokeBorder(NamingTheme.hairline.opacity(0.9), lineWidth: 1)
-            }
             .shadow(color: .black.opacity(0.08), radius: 3, x: 0, y: 2)
     }
 }
@@ -211,6 +213,67 @@ struct NamingOptionCard: View {
 }
 
 extension View {
+
+    /// 关掉「指针悬停 / 按下」的系统高亮层。
+    ///
+    /// 模拟器里用鼠标在可点区域上滑过、或按着拖动滚动时，系统会给一层
+    /// **半透明灰的圆角块**，指针走了这层灰经常不消失 —— 看着就像列表上
+    /// 盖了块「遮罩」（选英文姓页右侧那一列姓氏标签最明显）。这台设备是
+    /// 纯触屏 iPhone，没有指针，关掉不影响手感。
+    func namingNoHoverHighlight() -> some View {
+        hoverEffectDisabled()
+    }
+
+    /// 列表 ScrollView：去掉系统默认底，避免卡片上出现灰色圆角块。
+    func namingScrollSurface() -> some View {
+        scrollContentBackground(.hidden)
+    }
+
+    /// 滚动超过 threshold 后显示「回顶部」。iOS 18+ 用系统 API；更早只在顶部锚点挂 1×1 探针（勿铺满内容）。
+    func namingScrollTopVisible(_ visible: Binding<Bool>, threshold: CGFloat = 220) -> some View {
+        modifier(NamingScrollTopVisibleModifier(visible: visible, threshold: threshold))
+    }
+}
+
+private struct NamingScrollTopKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
+private struct NamingScrollTopVisibleModifier: ViewModifier {
+    @Binding var visible: Bool
+    var threshold: CGFloat
+
+    func body(content: Content) -> some View {
+        if #available(iOS 18.0, *) {
+            content.onScrollGeometryChange(for: CGFloat.self, of: { $0.contentOffset.y }) { _, y in
+                let next = y > threshold
+                if visible != next { visible = next }
+            }
+        } else {
+            content
+                .onPreferenceChange(NamingScrollTopKey.self) { y in
+                    let next = y < -threshold
+                    if visible != next { visible = next }
+                }
+        }
+    }
+}
+
+extension View {
+    /// 挂在 ScrollView 顶部锚点上（`Color.clear.frame(height: 0).id(...)`），供 iOS 17 回顶部判定。
+    func namingScrollTopAnchor() -> some View {
+        background {
+            GeometryReader { geo in
+                Color.clear.preference(key: NamingScrollTopKey.self,
+                                       value: geo.frame(in: .named("namingScroll")).minY)
+            }
+            .frame(width: 1, height: 1)
+        }
+        .allowsHitTesting(false)
+    }
 
     /// 页面底色。渐变**只走纵向**：斜的渐变色是跟着页面 frame 走的，push / pop 时上一页
     /// 和下一页各画一份、一起横向滑，交界处两层颜色对不上，看着像背景在「变」；纵向渐变

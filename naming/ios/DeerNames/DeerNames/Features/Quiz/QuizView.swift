@@ -55,10 +55,6 @@ struct QuizView: View {
                                 .padding(14)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .background(NamingTheme.canvas, in: RoundedRectangle(cornerRadius: NamingRadius.medium, style: .continuous))
-                                .overlay {
-                                    RoundedRectangle(cornerRadius: NamingRadius.medium, style: .continuous)
-                                        .strokeBorder(NamingTheme.hairline, lineWidth: 1)
-                                }
                             }
                             .buttonStyle(.plain)
                         }

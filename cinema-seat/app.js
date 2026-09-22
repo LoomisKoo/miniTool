@@ -18,16 +18,21 @@
   var nearLevels = [
     { short: '0度', blur: 0, quality: 0 },
     { short: '100度', blur: .45, quality: 4 },
+    { short: '200度', blur: .75, quality: 7 },
     { short: '300度', blur: 1.05, quality: 10 },
+    { short: '400度', blur: 1.4, quality: 14 },
     { short: '600度', blur: 1.9, quality: 20 }
   ];
   var astigLevels = [
     { short: '0度', blur: 0, quality: 0 },
     { short: '50度', blur: .28, quality: 3 },
     { short: '100度', blur: .55, quality: 7 },
-    { short: '200度', blur: .9, quality: 13 }
+    { short: '150度', blur: .72, quality: 10 },
+    { short: '200度', blur: .9, quality: 13 },
+    { short: '300度', blur: 1.15, quality: 16 }
   ];
-  var state = { hall: 0, row: 5, col: 7, near: 0, astig: 0, sample: false };
+  var state = { hall: 0, row: 5, col: 7, near: 0, astig: 0, sample: false, light: false, height: 175, crowd: false };
+  var heightOptions = [150, 155, 160, 165, 170, 175, 180, 185, 190];
   var pendingSeat = { row: 5, col: 7 };
   var pendingHall = 0;
   var seatZoom = 1;
@@ -37,14 +42,95 @@
   var seatVisualH = 0;
   var seatOffsetX = 0;
   var seatOffsetY = 0;
+  var viewLayout = null;
+  function layoutFor(hall) {
+    var giant = hall.family === 'giant';
+    var rowPitch = hall.family === 'comfort' ? 1.32 : (hall.family === 'motion' ? 1.15 : (giant ? 1.05 : 1.18));
+    var roomW = Math.max(giant ? 18 : 12, hall.cols * 0.9 + 1.6);
+    var aspect = hall.id === 'imax-gt' ? 1.43 : (giant ? 1.9 : (hall.family === 'premium' ? 2.39 : 2.2));
+    var frontGap = giant ? 4.8 : 7.6;
+    var backDist = frontGap + (hall.rows - 1) * rowPitch;
+    var targetDeg = giant ? 34 : (hall.family === 'premium' ? 22 : 18);
+    var screenH = 2 * backDist * Math.tan(targetDeg * Math.PI / 360);
+    var screenW = screenH * aspect;
+    var maxW = roomW * (giant ? 0.98 : 0.8);
+    if (screenW > maxW) {
+      screenW = maxW;
+      screenH = screenW / aspect;
+    }
+    if (giant) {
+      var minDeg = 30;
+      var angle = Math.atan((screenH * 0.5) / backDist) * 360 / Math.PI;
+      if (angle < minDeg) {
+        var needDist = (screenH * 0.5) / Math.tan(minDeg * Math.PI / 360);
+        rowPitch = Math.max(1.02, (needDist - frontGap) / Math.max(1, hall.rows - 1));
+        backDist = frontGap + (hall.rows - 1) * rowPitch;
+      }
+    }
+    var screenY = Math.max(3.05, 0.7 + screenH * 0.46);
+    var screenBottom = screenY - screenH / 2;
+    if (screenBottom < 0.95) screenY += 0.95 - screenBottom;
+    var rises = sightlineRises(hall.rows, rowPitch, frontGap, screenY - screenH / 2);
+    var lastRise = rises[rises.length - 1] || 0;
+    return {
+      rowPitch: rowPitch,
+      rises: rises,
+      roomW: roomW,
+      roomD: backDist + 3.2,
+      roomH: Math.max(7.4, screenY + screenH * 0.5 + 1.4, lastRise + 2.8),
+      screenW: screenW,
+      screenH: screenH,
+      screenY: screenY,
+      screenZ: 0,
+      frontRowZ: frontGap
+    };
+  }
+  // 眼睛靠在自己的椅背前。每排抬高到：看银幕下沿时，视线从上一排头顶上方过去。
+  function sightlineRises(rows, pitch, frontGap, screenBottom) {
+    var eyeOff = 0.1;
+    var headOff = 0.1;
+    var eye = 1.2;
+    var crown = 1.34;
+    var clearance = 0.1;
+    var rises = [0];
+    for (var row = 1; row < rows; row++) {
+      var eyeZ = frontGap + row * pitch + eyeOff;
+      var headZ = frontGap + (row - 1) * pitch + headOff;
+      var k = (eyeZ - headZ) / eyeZ;
+      var crownY = rises[row - 1] + crown;
+      var eyeY = (crownY + clearance - screenBottom * k) / (1 - k);
+      rises.push(Math.max(rises[row - 1] + 0.16, eyeY - eye));
+    }
+    return rises;
+  }
+  function rowRise(layout, row) {
+    return layout.rises[row - 1] || 0;
+  }
+  var aimEuler = new THREE.Euler(0, 0, 0, 'YXZ');
+  var lookYaw = 0;
+  var lookPitch = 0;
+  var lookDragging = false;
+  var lookLastX = 0;
+  var lookLastY = 0;
+  var lookPointerId = null;
+  var viewAnimating = false;
+  var sheetTimers = {};
   var canvas = document.getElementById('theatreCanvas');
   var renderer = null, scene = null, camera = null, hallGroup = null;
+  var hemiLight = null, keyLight = null, seatFillLight = null, screenBounce = null;
+  /* 场灯（开灯时亮起的顶灯）：灯体挂在 hallGroup 里，每次 buildTheatre 重建；
+     三盏 PointLight 常驻场景，靠 intensity 开关，不用反复 add/remove。 */
+  var houseLamps = [], houseLights = [];
+  var audienceGroup = null;
   var screenTexture = null, sampleCanvas = null, sampleCtx = null;
   var raf = 0, zoomAnimation = 0, sampleTime = 0, toastTimer = null, audioCtx = null;
   var video = null, videoTexture = null, videoUrl = '';
 
   function byId(id) { return document.getElementById(id); }
   function clamp(n, a, b) { return Math.max(a, Math.min(b, n)); }
+  function prefersReducedMotion() {
+    return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  }
   function currentHall() { return halls[state.hall]; }
   function hallRows() { return currentHall().rows; }
   function hallCols() { return currentHall().cols; }
@@ -63,17 +149,75 @@
       key: state.row === Math.ceil(hallRows() / 2) && state.col === Math.ceil(hallCols() / 2) ? 'best' : ''
     };
   }
+  function fabricMat(color) {
+    return new THREE.MeshStandardMaterial({
+      color: color,
+      roughness: .78,
+      metalness: 0,
+      emissive: 0x000000,
+      emissiveIntensity: 0
+    });
+  }
+  function plasticMat(color) {
+    return new THREE.MeshStandardMaterial({
+      color: color,
+      roughness: .92,
+      metalness: 0,
+      emissive: 0x000000,
+      emissiveIntensity: 0
+    });
+  }
+  function seatedEye(cm) {
+    // 坐姿眼高：压实座面约 0.44m，眼高于座面约 0.52×身高 − 0.15m
+    return 0.29 + cm * 0.0052;
+  }
+  function refreshEye() {
+    if (!renderer || !byId('theatreView').classList.contains('is-open')) return;
+    updateCamera();
+    renderTheatre();
+  }
+  function renderBodyControls() {
+    byId('heightValue').textContent = state.height + 'cm';
+    byId('crowdBtn').classList.toggle('on', state.crowd);
+    byId('crowdBtn').textContent = state.crowd ? '有人' : '空座';
+    byId('crowdBtn').setAttribute('aria-pressed', state.crowd ? 'true' : 'false');
+    var theatreCrowd = byId('crowdTheatreBtn');
+    if (theatreCrowd) {
+      theatreCrowd.classList.toggle('on', state.crowd);
+      theatreCrowd.setAttribute('aria-label', state.crowd ? '隐藏周围的人' : '显示周围的人');
+      theatreCrowd.setAttribute('aria-pressed', state.crowd ? 'true' : 'false');
+    }
+  }
+  function stepHeight(dir) {
+    var index = heightOptions.indexOf(state.height);
+    if (index < 0) index = 0;
+    state.height = heightOptions[clamp(index + dir, 0, heightOptions.length - 1)];
+    renderBodyControls();
+    refreshEye();
+  }
+  function toggleCrowd() {
+    state.crowd = !state.crowd;
+    renderBodyControls();
+    fillAudience();
+    renderTheatre();
+    if (byId('theatreView').classList.contains('is-open')) {
+      showToast(state.crowd ? '已显示周围的人' : '已隐藏周围的人');
+    }
+  }
   function material(color, roughness) {
     return new THREE.MeshStandardMaterial({
-      color: color, roughness: roughness || .82, metalness: .02,
-      emissive: color, emissiveIntensity: .018
+      color: color,
+      roughness: roughness == null ? .88 : roughness,
+      metalness: .02,
+      emissive: 0x000000,
+      emissiveIntensity: 0
     });
   }
 
   function renderHallList() {
     var list = byId('hallList');
     list.innerHTML = '';
-    var activeHall = byId('hallPicker') && !byId('hallPicker').classList.contains('hidden') ? pendingHall : state.hall;
+    var activeHall = byId('hallPicker') && byId('hallPicker').classList.contains('is-open') ? pendingHall : state.hall;
     halls.forEach(function (hall, index) {
       var card = document.createElement('button');
       card.className = 'hall-card' + (index === activeHall ? ' selected' : '');
@@ -143,19 +287,15 @@
     var seat = currentSeat();
     var hall = currentHall();
     var button = document.createElement('button');
-    button.className = 'seat-card';
-    var dotX = (seat.col - .5) / hall.cols * 100;
-    var dotY = (seat.row - .5) / hall.rows * 100;
+    button.className = 'ticket-row';
+    button.type = 'button';
     button.innerHTML =
-      '<span class="seat-card-map">' +
-        '<span class="seat-card-screen"></span>' +
-        '<span class="seat-card-dot" style="left:' + (14 + dotX * .72).toFixed(1) + '%;top:' + (44 + dotY * .4).toFixed(1) + '%"></span>' +
-      '</span>' +
-      '<span class="seat-card-text">' +
+      '<span class="ticket-kicker">座位</span>' +
+      '<span class="ticket-main">' +
         '<strong>' + seat.badge + '</strong>' +
-        '<em>' + seat.name + ' · 共 ' + hall.rows + ' 排 ' + hall.cols + ' 座</em>' +
+        '<em>' + seat.name + ' · ' + hall.rows + '排' + hall.cols + '座</em>' +
       '</span>' +
-      '<span class="chev">›</span>';
+      '<span class="chev" aria-hidden="true"></span>';
     button.addEventListener('click', openSeatModal);
     picker.appendChild(button);
   }
@@ -282,12 +422,25 @@
     if (!labels || !track) return;
     labels.style.transform = 'translateY(-' + track.scrollTop + 'px)';
   }
-  function showDialog(element) {
-    element.classList.remove('hidden');
+  function showSheet(element) {
+    if (!element) return;
+    var id = element.id || 'sheet';
+    if (sheetTimers[id]) {
+      clearTimeout(sheetTimers[id]);
+      sheetTimers[id] = null;
+    }
+    element.classList.add('is-open');
   }
-  function hideDialog(element) {
-    element.classList.add('hidden');
+  function hideSheet(element) {
+    if (!element) return;
+    var id = element.id || 'sheet';
+    element.classList.remove('is-open');
+    if (prefersReducedMotion()) return;
+    if (sheetTimers[id]) clearTimeout(sheetTimers[id]);
+    sheetTimers[id] = setTimeout(function () { sheetTimers[id] = null; }, 300);
   }
+  function showDialog(element) { showSheet(element); }
+  function hideDialog(element) { hideSheet(element); }
   function seatIsFit() {
     return seatFitsView && seatZoom <= seatFitZoom + .001;
   }
@@ -320,31 +473,32 @@
   }
   function openSeatModal() {
     pendingSeat.row = state.row; pendingSeat.col = state.col;
-    showDialog(byId('seatModal'));
-    var track = byId('seatTrack');
-    var stage = byId('seatMap').parentNode;
-    stage.classList.add('no-zoom-transition');
-    byId('rowLabels').classList.add('no-zoom-transition');
-    seatZoom = 1;
-    renderSeatMap();
-    var baseWidth = parseFloat(stage.style.width) || track.clientWidth;
-    var baseHeight = parseFloat(stage.style.height) || (42 + hallRows() * 29);
-    var fitZoom = Math.min(track.clientWidth / baseWidth, track.clientHeight / baseHeight, 1);
-    if (!isFinite(fitZoom) || fitZoom <= 0) fitZoom = 1;
-    seatFitZoom = clamp(fitZoom, .2, 1);
-    // 真实缩放低于最小缩放下限时，画面其实放不下：此时不能当「已整屏放下」处理，否则会锁死滚动。
-    seatFitsView = fitZoom >= seatFitZoom - .001;
-    seatZoom = Number(seatFitZoom.toFixed(2));
-    renderSeatMap();
-    centerSeatTrack(track);
-    syncRowLabels();
+    showSheet(byId('seatModal'));
     requestAnimationFrame(function () {
-      renderSeatMap(false);
+      var track = byId('seatTrack');
+      var stage = byId('seatMap').parentNode;
+      stage.classList.add('no-zoom-transition');
+      byId('rowLabels').classList.add('no-zoom-transition');
+      seatZoom = 1;
+      renderSeatMap();
+      var baseWidth = parseFloat(stage.style.width) || track.clientWidth;
+      var baseHeight = parseFloat(stage.style.height) || (42 + hallRows() * 29);
+      var fitZoom = Math.min(track.clientWidth / baseWidth, track.clientHeight / baseHeight, 1);
+      if (!isFinite(fitZoom) || fitZoom <= 0) fitZoom = 1;
+      seatFitZoom = clamp(fitZoom, .2, 1);
+      seatFitsView = fitZoom >= seatFitZoom - .001;
+      seatZoom = Number(seatFitZoom.toFixed(2));
+      renderSeatMap();
       centerSeatTrack(track);
       syncRowLabels();
       requestAnimationFrame(function () {
-        stage.classList.remove('no-zoom-transition');
-        byId('rowLabels').classList.remove('no-zoom-transition');
+        renderSeatMap(false);
+        centerSeatTrack(track);
+        syncRowLabels();
+        requestAnimationFrame(function () {
+          stage.classList.remove('no-zoom-transition');
+          byId('rowLabels').classList.remove('no-zoom-transition');
+        });
       });
     });
   }
@@ -393,7 +547,7 @@
       return;
     }
     var startTime = performance.now();
-    var duration = 220;
+    var duration = (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) ? 0 : 220;
     var tick = function (now) {
       var progress = clamp((now - startTime) / duration, 0, 1);
       var eased = 1 - Math.pow(1 - progress, 3);
@@ -536,7 +690,9 @@
   function closeSeatModal() { hideDialog(byId('seatModal')); }
   function confirmSeat() {
     state.row = pendingSeat.row; state.col = pendingSeat.col;
+    lookYaw = 0; lookPitch = 0;
     updateTheatreLabels(); renderHomeSeatPicker(); renderSeatPicker();
+    fillAudience();
     renderTheatre(); playSeatCue(); closeSeatModal();
     showToast('已坐到 ' + currentSeat().badge);
   }
@@ -553,8 +709,10 @@
     return clamp(score, 42, 98);
   }
   function updateVisionLabels() {
-    byId('nearValue').textContent = nearLevels[state.near].short;
-    byId('astigValue').textContent = astigLevels[state.astig].short;
+    var near = byId('nearValue');
+    var astig = byId('astigValue');
+    if (near) near.textContent = nearLevels[state.near].short;
+    if (astig) astig.textContent = astigLevels[state.astig].short;
   }
   function visionBlur() {
     return nearLevels[state.near].blur + astigLevels[state.astig].blur;
@@ -567,23 +725,37 @@
   }
   function updateTheatreLabels() {
     var hall = currentHall(), seat = currentSeat();
-    byId('theatreTitle').textContent = hall.name;
+    byId('theatreTitle').textContent = '观影座舱';
+    byId('theatreHallName').textContent = hall.name;
     byId('seatHint').textContent = seat.key === 'best' ? '中央位置，画面与字幕最均衡' : (seat.row < 3 ? '距离银幕较近，沉浸感强但更容易疲劳' : (seat.row >= 7 ? '后排更放松，但银幕占视野比例略低' : '前方座椅逐排升高，视野更接近真实观影'));
     updateVisionLabels();
   }
 
   function openTheatre() {
-    byId('homeView').classList.add('hidden');
-    byId('theatreView').classList.remove('hidden');
-    updateTheatreLabels(); renderSeatPicker(); updateSampleButton(); resizeRenderer(); buildTheatre();
+    if (viewAnimating) return;
+    var theatre = byId('theatreView');
+    updateTheatreLabels(); renderSeatPicker(); updateSampleButton();
+    theatre.classList.add('is-open');
+    var landscape = theatre.classList.contains('orientation-landscape');
+    applyLandscapeRotation(landscape);
+    setSheetLandscape(landscape);
+    resizeRenderer(); buildTheatre();
+    if (prefersReducedMotion()) return;
+    viewAnimating = true;
+    setTimeout(function () { viewAnimating = false; }, 360);
   }
   function closeTheatre() {
-    byId('theatreView').classList.add('hidden');
+    if (viewAnimating) return;
+    var theatre = byId('theatreView');
     state.sample = false; cancelAnimationFrame(raf);
     if (video) video.pause();
-    byId('homeView').classList.remove('hidden');
+    theatre.classList.remove('is-open');
+    setSheetLandscape(false);
     var homeScroll = byId('homeView').querySelector('.home-scroll');
     if (homeScroll) homeScroll.scrollTop = 0;
+    if (prefersReducedMotion()) return;
+    viewAnimating = true;
+    setTimeout(function () { viewAnimating = false; }, 360);
   }
 
   function makeSampleTexture() {
@@ -629,117 +801,257 @@
     var geometry = new THREE.ExtrudeGeometry(shape, {
       depth: depth,
       bevelEnabled: true,
-      bevelSegments: 2,
+      bevelSegments: 12,
       steps: 1,
-      bevelSize: r * .42,
-      bevelThickness: r * .42,
-      curveSegments: 4
+      bevelSize: r * .85,
+      bevelThickness: r * .7,
+      curveSegments: 20
     });
     geometry.translate(0, 0, -depth / 2);
     return geometry;
   }
 
-  function createSeat(x, y, z, scale, color) {
+  var seatGeoCache = {};
+  function seatGeometries(scale) {
+    var key = String(scale);
+    if (seatGeoCache[key]) return seatGeoCache[key];
+    var geos = {
+      cushion: roundedBoxGeometry(.52 * scale, .1 * scale, .5 * scale, .04 * scale),
+      back: roundedBoxGeometry(.5 * scale, .62 * scale, .1 * scale, .04 * scale),
+      head: roundedBoxGeometry(.38 * scale, .14 * scale, .1 * scale, .04 * scale),
+      arm: roundedBoxGeometry(.08 * scale, .18 * scale, .4 * scale, .03 * scale),
+      base: roundedBoxGeometry(.28 * scale, .32 * scale, .28 * scale, .03 * scale)
+    };
+    seatGeoCache[key] = geos;
+    return geos;
+  }
+
+  function createSeat(x, y, z, scale, seatMat, armMat, baseMat) {
     var group = new THREE.Group();
-    var seatMat = material(color || 0x1b1820, .98);
-    var armMat = material(0x111015, 1);
-    var cushion = new THREE.Mesh(roundedBoxGeometry(.54 * scale, .16 * scale, .62 * scale, .08 * scale), seatMat);
-    cushion.rotation.x = -Math.PI / 2;
-    cushion.position.set(0, .62 * scale, 0);
-    var back = new THREE.Mesh(roundedBoxGeometry(.54 * scale, 1.05 * scale, .14 * scale, .08 * scale), seatMat);
-    back.position.set(0, 1.02 * scale, .24 * scale);
-    back.rotation.x = -.08;
-    var armL = new THREE.Mesh(roundedBoxGeometry(.1 * scale, .55 * scale, .7 * scale, .045 * scale), armMat);
-    var armR = armL.clone();
-    armL.position.set(-.34 * scale, .72 * scale, 0); armR.position.set(.34 * scale, .72 * scale, 0);
-    group.add(cushion, back, armL, armR);
+    var geos = seatGeometries(scale);
+    var cushion = new THREE.Mesh(geos.cushion, seatMat);
+    cushion.position.set(0, .43 * scale, -.04 * scale);
+    var back = new THREE.Mesh(geos.back, seatMat);
+    back.position.set(0, .76 * scale, .2 * scale);
+    back.rotation.x = .16;
+    var head = new THREE.Mesh(geos.head, seatMat);
+    head.position.set(0, 1.08 * scale, .16 * scale);
+    head.rotation.x = .16;
+    var armL = new THREE.Mesh(geos.arm, armMat);
+    var armR = new THREE.Mesh(geos.arm, armMat);
+    armL.position.set(-.3 * scale, .5 * scale, -.02 * scale);
+    armR.position.set(.3 * scale, .5 * scale, -.02 * scale);
+    var pedestal = new THREE.Mesh(geos.base, baseMat);
+    pedestal.position.set(0, .19 * scale, 0);
+    group.add(cushion, back, head, armL, armR, pedestal);
     group.position.set(x, y, z);
     return group;
   }
 
-  function addRoomShell(roomW, roomD, roomCenterZ) {
-    var floor = new THREE.Mesh(new THREE.BoxGeometry(roomW, .18, roomD), material(0x111017, 1));
+  function addRoomShell(roomW, roomD, roomCenterZ, roomH) {
+    var h = roomH || 7.4;
+    var floor = new THREE.Mesh(new THREE.BoxGeometry(roomW, .18, roomD), material(0x000000, 1));
     floor.position.set(0, -.1, roomCenterZ);
     hallGroup.add(floor);
-    var wallMat = material(0x18151d, 1);
-    var left = new THREE.Mesh(new THREE.BoxGeometry(.16, 7, roomD), wallMat);
+    var wallMat = material(0x1c1820, .92);
+    var left = new THREE.Mesh(new THREE.BoxGeometry(.16, h, roomD), wallMat);
     var right = left.clone();
-    left.position.set(-roomW / 2, 3.5, roomCenterZ); right.position.set(roomW / 2, 3.5, roomCenterZ);
-    var ceiling = new THREE.Mesh(new THREE.BoxGeometry(roomW, .15, roomD), material(0x0b0a0e, 1));
-    ceiling.position.set(0, 7, roomCenterZ);
+    left.position.set(-roomW / 2, h / 2, roomCenterZ); right.position.set(roomW / 2, h / 2, roomCenterZ);
+    var ceiling = new THREE.Mesh(new THREE.BoxGeometry(roomW, .15, roomD), material(0x100e14, .95));
+    ceiling.position.set(0, h, roomCenterZ);
     hallGroup.add(left, right, ceiling);
+
+    // 顶棚灯带：只有开灯时可见（MeshBasicMaterial 不吃灯光，关灯时要整块藏掉）
+    houseLamps = [];
+    var lampMat = new THREE.MeshBasicMaterial({ color: 0xfff1d8 });
+    var lampZStart = roomCenterZ - roomD / 2 + 2.6;
+    var lampCount = Math.max(3, Math.round(roomD / 5.4));
+    for (var i = 0; i < lampCount; i++) {
+      for (var s = -1; s <= 1; s += 2) {
+        var lamp = new THREE.Mesh(new THREE.BoxGeometry(Math.min(1.9, roomW * .2), .06, .42), lampMat);
+        lamp.position.set(s * roomW * .24, h - 0.12, lampZStart + i * ((roomD - 5.2) / (lampCount - 1 || 1)));
+        lamp.visible = false;
+        houseLamps.push(lamp);
+        hallGroup.add(lamp);
+      }
+    }
+  }
+
+  var audienceMats = null;
+  function audienceMaterials() {
+    if (audienceMats) return audienceMats;
+    audienceMats = {
+      cloth: [0x1a1c22, 0x241820, 0x1c1814].map(function (color) { return fabricMat(color); }),
+      skin: [0xc48a6a, 0x8d5a40, 0xe0b090].map(function (color) { return fabricMat(color); }),
+      hair: [0x1c1816, 0x2c241e, 0x141210, 0x3a2e26].map(function (color) { return fabricMat(color); })
+    };
+    return audienceMats;
+  }
+  function fillAudience() {
+    if (audienceGroup && audienceGroup.parent) audienceGroup.parent.remove(audienceGroup);
+    audienceGroup = null;
+    if (!state.crowd || !hallGroup || !viewLayout) return;
+    var mats = audienceMaterials();
+    var layout = viewLayout;
+    var scale = currentHall().family === 'comfort' ? 1.08 : 1;
+    var bodyGeo = roundedBoxGeometry(.32 * scale, .42 * scale, .18 * scale, .07 * scale);
+    var headGeo = new THREE.SphereGeometry(.078 * scale, 12, 10);
+    // 发帽覆盖到头顶，避免皮肤从顶部露出；头部略微前移，避免嵌进椅背。
+    var hairGeo = new THREE.SphereGeometry(.086 * scale, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.86);
+    audienceGroup = new THREE.Group();
+    var mine = currentSeat();
+    for (var row = 1; row <= hallRows(); row++) {
+      for (var col = 1; col <= hallCols(); col++) {
+        if (row === mine.row && col === mine.col) continue;
+        var pick = (row * 5 + col * 3) % 7;
+        // 观众身高只做轻微差异，避免同排人物出现夸张高低差。
+        var cm = 170 + ((row + col) % 3 - 1) * 3;
+        var eye = seatedEye(cm);
+        var person = new THREE.Group();
+        var body = new THREE.Mesh(bodyGeo, mats.cloth[pick % 3]);
+        // 身体抬高到椅背上沿附近，避免完全被椅背挡住。
+        body.position.set(0, .84 * scale, .08);
+        var head = new THREE.Mesh(headGeo, mats.skin[pick % 3]);
+        head.position.set(0, eye + .02 * scale, -.02);
+        var hair = new THREE.Mesh(hairGeo, mats.hair[pick % mats.hair.length]);
+        hair.position.set(0, eye + .03 * scale, -.008);
+        hair.rotation.x = .7;
+        hair.scale.set(1, .94, 1.06);
+        person.add(body, head, hair);
+        person.position.set(
+          (col - (hallCols() + 1) / 2) * .88,
+          rowRise(layout, row),
+          layout.frontRowZ + (row - 1) * layout.rowPitch
+        );
+        audienceGroup.add(person);
+      }
+    }
+    hallGroup.add(audienceGroup);
   }
 
   function buildTheatre() {
     if (!renderer) initRenderer();
     while (hallGroup && hallGroup.children.length) hallGroup.remove(hallGroup.children[0]);
     var hall = currentHall();
-    var roomW = Math.max(hall.family === 'giant' ? 16 : 11, hall.cols * .88 + 1.2), roomD = 18;
-    var rowPitch = hall.family === 'comfort' ? 1.15 : (hall.family === 'motion' ? 1.08 : 1.04);
-    var riserHeight = hall.family === 'giant' ? .2 : (hall.family === 'comfort' ? .14 : .17);
-    var frontRowZ = 2.4;
-    var backRowZ = frontRowZ + (hallRows() - 1) * rowPitch;
-    roomD = backRowZ + 14;
-    addRoomShell(roomW, roomD, (backRowZ - 9) / 2);
-    var screenW = hall.family === 'giant' ? roomW * .86 : (hall.family === 'wrap' ? roomW * .64 : roomW * .74);
-    var screenH = hall.family === 'giant' ? screenW * .52 : (hall.family === 'premium' ? 5.0 : 4.3);
+    var layout = layoutFor(hall);
+    viewLayout = layout;
+    var roomW = layout.roomW;
+    var roomCenterZ = layout.frontRowZ + (hall.rows - 1) * layout.rowPitch * 0.45;
+    addRoomShell(roomW, layout.roomD, roomCenterZ, layout.roomH);
+    var screenW = layout.screenW;
+    var screenH = layout.screenH;
     drawSample();
-    var screenFrame = new THREE.Mesh(new THREE.BoxGeometry(screenW + .28, screenH + .28, .18), material(0x332a25, .7));
-    screenFrame.position.set(0, 4.05, -10.1);
+    var screenFrame = new THREE.Mesh(new THREE.BoxGeometry(screenW + .28, screenH + .28, .18), material(0x111111, .8));
+    screenFrame.position.set(0, layout.screenY, layout.screenZ - 0.12);
     var screen = new THREE.Mesh(new THREE.PlaneGeometry(screenW, screenH), new THREE.MeshBasicMaterial({ map: screenTexture }));
-    // 相机在 +Z 一侧，银幕需放在边框前方，否则边框实体会把画面遮住。
-    screen.position.set(0, 4.05, -9.99);
+    screen.position.set(0, layout.screenY, layout.screenZ);
     hallGroup.add(screenFrame, screen);
     if (hall.family === 'wrap') {
       var sideMat = new THREE.MeshBasicMaterial({ map: screenTexture, color: 0x77717a });
       var sideL = new THREE.Mesh(new THREE.PlaneGeometry(2.3, 3.4), sideMat);
       var sideR = sideL.clone();
-      sideL.position.set(-roomW / 2 + .12, 3.9, -8.8); sideL.rotation.y = Math.PI / 2;
-      sideR.position.set(roomW / 2 - .12, 3.9, -8.8); sideR.rotation.y = -Math.PI / 2;
+      sideL.position.set(-roomW / 2 + .12, layout.screenY, 1.4); sideL.rotation.y = Math.PI / 2;
+      sideR.position.set(roomW / 2 - .12, layout.screenY, 1.4); sideR.rotation.y = -Math.PI / 2;
       hallGroup.add(sideL, sideR);
     }
-    var baseMat = hall.family === 'comfort' ? 0x30252a : (hall.family === 'motion' ? 0x281d28 : 0x201c25);
+    var seatScale = hall.family === 'comfort' ? 1.08 : 1;
+    var seatMat = fabricMat(0x000000);
+    var armMat = plasticMat(0x000000);
+    var footMat = plasticMat(0x000000);
+    var rowPitch = layout.rowPitch;
+    var frontRowZ = layout.frontRowZ;
     for (var row = 1; row <= hallRows(); row++) {
       var z = frontRowZ + (row - 1) * rowPitch;
-      var rise = (row - 1) * riserHeight;
-      var platform = new THREE.Mesh(new THREE.BoxGeometry(roomW - .5, .16, rowPitch), material(0x1b1720, 1));
-      platform.position.set(0, rise - .02, z);
+      var rise = rowRise(layout, row);
+      var prev = row > 1 ? rowRise(layout, row - 1) : 0;
+      var stepH = Math.max(0.2, rise - prev + 0.08);
+      var platform = new THREE.Mesh(new THREE.BoxGeometry(roomW - .5, stepH, rowPitch), material(0x000000, 1));
+      platform.position.set(0, rise - stepH / 2, z);
       hallGroup.add(platform);
       for (var col = 1; col <= hallCols(); col++) {
         var x = (col - (hallCols() + 1) / 2) * .88;
-        hallGroup.add(createSeat(x, rise, z, hall.family === 'comfort' ? 1.08 : 1, baseMat));
+        hallGroup.add(createSeat(x, rise, z, seatScale, seatMat, armMat, footMat));
       }
     }
     updateCamera();
+    applyHallLight();
+    fillAudience();
     renderTheatre();
+  }
+
+  /* 开灯 / 关灯：只改光强与环境色，不动银幕（银幕是 MeshBasicMaterial，
+     本来就不参与光照，所以开灯不会把画面冲淡）。 */
+  function applyHallLight() {
+    var on = state.light;
+    if (hemiLight) hemiLight.intensity = on ? 1.35 : 0.08;
+    if (keyLight) keyLight.intensity = on ? 1.7 : 0.12;
+    if (seatFillLight) seatFillLight.intensity = on ? 2.8 : 0.08;
+    if (screenBounce) screenBounce.intensity = on ? 0.45 : 0.22;
+    houseLights.forEach(function (light) { light.intensity = on ? 4.2 : 0; });
+    houseLamps.forEach(function (lamp) { lamp.visible = on; });
+    if (scene) scene.background = new THREE.Color(on ? 0x24222c : 0x07070a);
+    var button = byId('lightBtn');
+    if (button) {
+      button.classList.toggle('on', on);
+      button.setAttribute('aria-pressed', on ? 'true' : 'false');
+      button.setAttribute('aria-label', on ? '关灯' : '开灯');
+    }
+  }
+  function toggleHallLight() {
+    state.light = !state.light;
+    if (state.light) ensureTheatreBuilt();
+    applyHallLight();
+    renderTheatre();
+    showToast(state.light ? '已开灯：看清座椅与通道' : '已关灯：观影模式');
+  }
+  /* 只有在影厅已渲染过（home 页没建过 3D）时才需要重建灯体 */
+  function ensureTheatreBuilt() {
+    if (!renderer) initRenderer();
+    if (!houseLamps.length && byId('theatreView').classList.contains('is-open')) buildTheatre();
   }
 
   function updateCamera() {
     if (!camera) return;
     var seat = currentSeat();
+    var layout = viewLayout || layoutFor(currentHall());
+    var rise = rowRise(layout, seat.row);
     var x = (seat.col - (hallCols() + 1) / 2) * .88;
-    var hall = currentHall();
-    var rowPitch = hall.family === 'comfort' ? 1.15 : (hall.family === 'motion' ? 1.08 : 1.04);
-    var riserHeight = hall.family === 'giant' ? .2 : (hall.family === 'comfort' ? .14 : .17);
-    var z = 2.4 + (seat.row - 1) * rowPitch;
-    var y = 1.72 + (seat.row - 1) * riserHeight;
+    var z = layout.frontRowZ + (seat.row - 1) * layout.rowPitch + 0.1;
+    var y = rise + seatedEye(state.height);
     camera.position.set(x, y, z);
-    // 视线落在银幕下缘，前排椅背应从画面下方逐级出现。
-    camera.lookAt(0, 2.45, -10.2);
+    camera.up.set(0, 1, 0);
+    camera.lookAt(0, layout.screenY, layout.screenZ);
+    aimEuler.setFromQuaternion(camera.quaternion, 'YXZ');
+    aimEuler.y -= lookYaw;
+    aimEuler.x -= lookPitch;
+    aimEuler.z = 0;
+    camera.quaternion.setFromEuler(aimEuler);
   }
   function initRenderer() {
     renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, powerPreference: 'low-power' });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.25));
+    if (renderer.outputEncoding !== undefined && THREE.sRGBEncoding) renderer.outputEncoding = THREE.sRGBEncoding;
+    if (renderer.outputColorSpace !== undefined && THREE.SRGBColorSpace) renderer.outputColorSpace = THREE.SRGBColorSpace;
     scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x09090d);
-    camera = new THREE.PerspectiveCamera(58, 1, .1, 80);
+    scene.background = new THREE.Color(0x07070a);
+    camera = new THREE.PerspectiveCamera(46, 1, .04, 120);
     hallGroup = new THREE.Group(); scene.add(hallGroup);
-    scene.add(new THREE.HemisphereLight(0x9da8cc, 0x15121a, 1.2));
-    var key = new THREE.DirectionalLight(0xffead2, 1.4);
-    key.position.set(0, 6, 2); scene.add(key);
-    var seatFill = new THREE.PointLight(0xffcda8, 4.2, 16);
-    seatFill.position.set(0, 2.6, 5); scene.add(seatFill);
+    hemiLight = new THREE.HemisphereLight(0xb7a898, 0x120e12, 0.08);
+    scene.add(hemiLight);
+    keyLight = new THREE.DirectionalLight(0xffe2c4, 0.12);
+    keyLight.position.set(2.2, 6.5, 3.5); scene.add(keyLight);
+    seatFillLight = new THREE.PointLight(0xffc8a0, 0.08, 14, 2);
+    seatFillLight.position.set(0, 3.2, 6); scene.add(seatFillLight);
+    screenBounce = new THREE.DirectionalLight(0xffd7b0, 0.22);
+    screenBounce.position.set(0, 3.8, -8); scene.add(screenBounce);
+    houseLights = [-7, 0, 7].map(function (z) {
+      var light = new THREE.PointLight(0xffe9cc, 0, 26, 2);
+      light.position.set(0, 6.2, z);
+      scene.add(light);
+      return light;
+    });
     makeSampleTexture(); resizeRenderer();
+    applyHallLight();
   }
   function resizeRenderer() {
     if (!renderer) return;
@@ -750,7 +1062,7 @@
     camera.aspect = w / h; camera.updateProjectionMatrix();
   }
   function renderTheatre() {
-    if (!renderer || byId('theatreView').classList.contains('hidden')) return;
+    if (!renderer || !byId('theatreView').classList.contains('is-open')) return;
     updateCamera();
     renderer.render(scene, camera);
   }
@@ -884,20 +1196,28 @@
   }
   // 竖屏视口才需要把内容旋转 90° 摆成「横版」给横着拿手机的用户看；
   // 视口本身已经是横屏（抖音等允许横屏）时内容天然是横的，再转就整个侧躺了。
+  function setSheetLandscape(on) {
+    byId('seatModal').classList.toggle('orientation-landscape', on);
+    byId('visionModal').classList.toggle('orientation-landscape', on);
+    document.body.classList.toggle('orientation-landscape', on);
+    document.documentElement.classList.toggle('orientation-landscape', on);
+    if (!on) {
+      byId('seatModal').classList.remove('rotate-90');
+      byId('visionModal').classList.remove('rotate-90');
+    }
+  }
   function applyLandscapeRotation(isLandscape) {
     var rotate = !!isLandscape && window.innerHeight > window.innerWidth;
     byId('theatreView').classList.toggle('rotate-90', rotate);
-    byId('seatModal').classList.toggle('rotate-90', rotate);
-    byId('visionModal').classList.toggle('rotate-90', rotate);
+    var sheetsToo = isLandscape && byId('theatreView').classList.contains('is-open');
+    byId('seatModal').classList.toggle('rotate-90', sheetsToo && rotate);
+    byId('visionModal').classList.toggle('rotate-90', sheetsToo && rotate);
     return rotate;
   }
   function toggleOrientation() {
     var theatreView = byId('theatreView');
     var isLandscape = theatreView.classList.toggle('orientation-landscape');
-    document.body.classList.toggle('orientation-landscape', isLandscape);
-    document.documentElement.classList.toggle('orientation-landscape', isLandscape);
-    byId('seatModal').classList.toggle('orientation-landscape', isLandscape);
-    byId('visionModal').classList.toggle('orientation-landscape', isLandscape);
+    setSheetLandscape(isLandscape);
     applyLandscapeRotation(isLandscape);
     resizeRenderer();
     renderTheatre();
@@ -909,19 +1229,59 @@
     updateTheatreLabels(); buildTheatre();
     showToast('已切换：' + currentHall().name);
   }
+  function bindLookPan() {
+    if (!canvas) return;
+    canvas.addEventListener('pointerdown', function (event) {
+      if (event.button != null && event.button !== 0) return;
+      lookDragging = true;
+      lookPointerId = event.pointerId;
+      lookLastX = event.clientX;
+      lookLastY = event.clientY;
+      canvas.classList.add('is-dragging');
+      try { canvas.setPointerCapture(event.pointerId); } catch (err) {}
+    });
+    canvas.addEventListener('pointermove', function (event) {
+      if (!lookDragging || event.pointerId !== lookPointerId) return;
+      var dx = event.clientX - lookLastX;
+      var dy = event.clientY - lookLastY;
+      lookLastX = event.clientX;
+      lookLastY = event.clientY;
+      var sens = 0.0032;
+      if (byId('theatreView').classList.contains('rotate-90')) {
+        lookYaw = clamp(lookYaw - dy * sens, -0.42, 0.42);
+        lookPitch = clamp(lookPitch - dx * sens, -0.72, 0.72);
+      } else {
+        lookYaw = clamp(lookYaw - dx * sens, -0.42, 0.42);
+        lookPitch = clamp(lookPitch + dy * sens, -0.72, 0.72);
+      }
+      renderTheatre();
+    });
+    function endLook(event) {
+      if (event.pointerId !== lookPointerId) return;
+      lookDragging = false;
+      lookPointerId = null;
+      canvas.classList.remove('is-dragging');
+    }
+    canvas.addEventListener('pointerup', endLook);
+    canvas.addEventListener('pointercancel', endLook);
+  }
   function bind() {
-    renderHallList(); renderHallDetail(); renderHomeSeatPicker(); renderHomeHall(); renderVisionPickers(); applyVision();
+    renderHallList(); renderHallDetail(); renderHomeSeatPicker(); renderHomeHall(); renderVisionPickers(); renderBodyControls(); applyVision();
+    byId('heightDown').addEventListener('click', function () { stepHeight(-1); });
+    byId('heightUp').addEventListener('click', function () { stepHeight(1); });
+    byId('crowdBtn').addEventListener('click', toggleCrowd);
+    byId('crowdTheatreBtn').addEventListener('click', toggleCrowd);
     byId('enterBtn').addEventListener('click', openTheatre);
     byId('backBtn').addEventListener('click', closeTheatre);
     byId('hallSwitchBtn').addEventListener('click', switchHall);
     byId('hallSelectBtn').addEventListener('click', function () {
       pendingHall = state.hall;
       renderHallList(); renderHallDetail(pendingHall);
-      showDialog(byId('hallPicker'));
+      showSheet(byId('hallPicker'));
     });
-    byId('closeHallPicker').addEventListener('click', function () { hideDialog(byId('hallPicker')); });
+    byId('closeHallPicker').addEventListener('click', function () { hideSheet(byId('hallPicker')); });
     byId('hallPicker').addEventListener('click', function (event) {
-      if (event.target === byId('hallPicker')) hideDialog(byId('hallPicker'));
+      if (event.target === byId('hallPicker')) hideSheet(byId('hallPicker'));
     });
     byId('confirmHall').addEventListener('click', confirmHall);
     byId('closeSeatModal').addEventListener('click', closeSeatModal);
@@ -930,6 +1290,7 @@
     byId('seatZoomIn').addEventListener('click', function () { changeSeatZoom(.25); });
     byId('seatZoomReset').addEventListener('click', resetSeatZoom);
     bindSeatPinch();
+    bindLookPan();
     byId('seatModal').addEventListener('click', function (event) { if (event.target === byId('seatModal')) closeSeatModal(); });
     byId('soundTextBtn').addEventListener('click', playSoundField);
     byId('videoPicker').addEventListener('change', function (event) {
@@ -953,21 +1314,21 @@
     });
     byId('nearBtn').addEventListener('click', function () { openVisionModal('near', nearLevels, '选择近视度数'); });
     byId('astigBtn').addEventListener('click', function () { openVisionModal('astig', astigLevels, '选择散光度数'); });
-    byId('closeVisionModal').addEventListener('click', function () { hideDialog(byId('visionModal')); });
+    byId('closeVisionModal').addEventListener('click', function () { hideSheet(byId('visionModal')); });
     byId('visionModal').addEventListener('click', function (event) {
-      if (event.target === byId('visionModal')) hideDialog(byId('visionModal'));
+      if (event.target === byId('visionModal')) hideSheet(byId('visionModal'));
     });
     byId('orientationBtn').addEventListener('click', toggleOrientation);
+    byId('lightBtn').addEventListener('click', toggleHallLight);
     window.addEventListener('resize', function () {
-      // 视口横竖切换时重新决定要不要旋转（手机横过来 / 桌面拖窗口都会触发）
       var rotatedBefore = isSeatRotated();
       if (document.body.classList.contains('orientation-landscape')) {
         var rotatedNow = applyLandscapeRotation(true);
-        if (rotatedNow !== rotatedBefore && !byId('seatModal').classList.contains('hidden')) {
+        if (rotatedNow !== rotatedBefore && byId('seatModal').classList.contains('is-open')) {
           resetSeatZoom();
         }
       }
-      if (byId('theatreView').classList.contains('hidden')) return;
+      if (!byId('theatreView').classList.contains('is-open')) return;
       resizeRenderer(); renderTheatre();
     });
     document.addEventListener('visibilitychange', function () {

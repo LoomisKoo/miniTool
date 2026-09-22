@@ -6,14 +6,10 @@ import UIKit
  *  - 小名：仍按名字派生 + 词库，支持随机 / 换一批
  * 免费：小名叠字最多 2；社交整页属 Pro。 */
 
-private enum NickScroll {
-    static let topID = "nick-top"
-}
 
 struct NickView: View {
     @Environment(NamingAppModel.self) private var model
     @Environment(ProStore.self) private var pro
-    @State private var showTop = false
 
     // 社交
     @State private var vibes: Set<String> = []
@@ -52,46 +48,29 @@ struct NickView: View {
     }
 
     var body: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                VStack(spacing: 12) {
-                    Color.clear.frame(height: 0).id(NickScroll.topID)
-                    if mode == .social {
-                        socialBody
-                    } else {
-                        childBody
-                    }
-                    if !pro.isPro {
-                        ProLockRow(feature: .nicknameFull)
-                    }
+        ScrollView {
+            VStack(spacing: 12) {
+                if mode == .social {
+                    socialBody
+                } else {
+                    childBody
                 }
-                .padding(20)
-                .namingScrollProbe()
-            }
-            .namingPageBackground()
-            .namingScrollTopDetector(threshold: 280) { showTop = $0 }
-            .overlay(alignment: .bottomTrailing) {
-                if showTop {
-                    ScrollTopButton {
-                        withAnimation(NamingMotion.appear) {
-                            proxy.scrollTo(NickScroll.topID, anchor: .top)
-                        }
-                    }
-                    .padding(.trailing, 18)
-                    .padding(.bottom, 16)
-                    .transition(.opacity)
+                if !pro.isPro {
+                    ProLockRow(feature: .nicknameFull)
                 }
             }
-            .animation(NamingMotion.fade, value: showTop)
-            .navigationTitle(mode.title)
-            .navigationBarTitleDisplayMode(.inline)
-            .onAppear { bootstrap() }
-            .onChange(of: mode) { _, _ in bootstrap() }
-            .sheet(item: $explanationItem) { item in
-                NickExplanationSheet(item: item)
-                    .environment(model)
-                    .environment(pro)
-            }
+            .padding(20)
+        }
+        .namingScrollSurface()
+        .namingPageBackground()
+        .navigationTitle(mode.title)
+        .navigationBarTitleDisplayMode(.inline)
+        .onAppear { bootstrap() }
+        .onChange(of: mode) { _, _ in bootstrap() }
+        .sheet(item: $explanationItem) { item in
+            NickExplanationSheet(item: item)
+                .environment(model)
+                .environment(pro)
         }
     }
 
@@ -334,10 +313,6 @@ struct NickView: View {
                 .frame(height: 44)
                 .background(NamingTheme.primary.opacity(0.12),
                             in: RoundedRectangle(cornerRadius: NamingRadius.medium, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: NamingRadius.medium, style: .continuous)
-                        .strokeBorder(NamingTheme.primary.opacity(0.25), lineWidth: 1)
-                }
             }
             .buttonStyle(NamingPressButtonStyle())
         }
@@ -415,6 +390,8 @@ struct NickView: View {
                             .lineLimit(2)
                     }
                 }
+                .contentShape(Rectangle())
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .buttonStyle(.plain)
             .frame(maxWidth: .infinity, alignment: .leading)

@@ -98,6 +98,9 @@ struct SpeechCheckCard: View {
             }
             .font(.system(size: 13, weight: .medium))
             .foregroundStyle(NamingTheme.primaryDeep)
+            .padding(.horizontal, 4)
+            .padding(.vertical, 6)
+            .contentShape(Rectangle())
         }
         .buttonStyle(NamingPressButtonStyle())
         .sensoryFeedback(.impact(flexibility: .soft, intensity: 0.5), trigger: lang)
@@ -126,6 +129,9 @@ struct EnglishSpeechCard: View {
                     Label(L10n.t("试听"), systemImage: pro.isPro ? "speaker.wave.2.fill" : "lock.fill")
                         .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(NamingTheme.primaryDeep)
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 6)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(NamingPressButtonStyle())
             }
