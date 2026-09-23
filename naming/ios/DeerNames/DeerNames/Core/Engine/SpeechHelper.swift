@@ -1,5 +1,6 @@
 import AVFoundation
 import Foundation
+import Observation
 
 /* 读音体检 + 试听。
  *
@@ -26,6 +27,18 @@ enum SpeechSpeakResult {
     case started
     case nothingToRead
     case noVoice
+}
+
+/// 当前正在朗读的那一条（供喇叭图标做动画）。
+@Observable
+@MainActor
+final class SpeechPlaybackTracker {
+    static let shared = SpeechPlaybackTracker()
+    private(set) var activeID: String?
+
+    fileprivate func setActive(_ id: String?) {
+        activeID = id
+    }
 }
 
 enum SpeechHelper {
@@ -92,6 +105,10 @@ enum SpeechHelper {
         return SpeechCheck(syllables: syllables, polyphones: hints, readability: rel, toneWave: tones)
     }
 
+    static func playbackID(text: String, language: String) -> String {
+        "\(language)|\(speakable(text))"
+    }
+
     @MainActor
     static func speak(_ text: String, language: String = "zh-CN") -> SpeechSpeakResult {
         let spoken = speakable(text)
@@ -109,7 +126,8 @@ enum SpeechHelper {
         utterance.voice = resolvedVoice
         utterance.rate = AVSpeechUtteranceDefaultSpeechRate * 0.92
 
-        engine.speak(utterance)
+        let id = playbackID(text: text, language: language)
+        engine.speak(utterance, trackID: id)
         return .started
     }
 
@@ -137,7 +155,10 @@ private final class SpeechSynthesisEngine: NSObject, AVSpeechSynthesizerDelegate
         synthesizer.delegate = self
     }
 
-    func speak(_ utterance: AVSpeechUtterance) {
+    private var pendingTrackID: String?
+
+    func speak(_ utterance: AVSpeechUtterance, trackID: String) {
+        pendingTrackID = trackID
         if synthesizer.isSpeaking {
             synthesizer.stopSpeaking(at: .immediate)
         }
@@ -145,6 +166,29 @@ private final class SpeechSynthesisEngine: NSObject, AVSpeechSynthesizerDelegate
     }
 
     func stop() {
+        pendingTrackID = nil
+        SpeechPlaybackTracker.shared.setActive(nil)
         synthesizer.stopSpeaking(at: .immediate)
+    }
+
+    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didStart utterance: AVSpeechUtterance) {
+        Task { @MainActor in
+            SpeechPlaybackTracker.shared.setActive(self.pendingTrackID)
+        }
+    }
+
+    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+        Task { @MainActor in
+            self.pendingTrackID = nil
+            SpeechPlaybackTracker.shared.setActive(nil)
+        }
+    }
+
+    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer,
+                                       didCancel utterance: AVSpeechUtterance) {
+        Task { @MainActor in
+            self.pendingTrackID = nil
+            SpeechPlaybackTracker.shared.setActive(nil)
+        }
     }
 }

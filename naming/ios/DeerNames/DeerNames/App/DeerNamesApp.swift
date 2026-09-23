@@ -18,10 +18,8 @@ struct DeerNamesApp: App {
                              ? Locale.autoupdatingCurrent
                              : Locale(identifier: appLanguage))
                 .environment(pro)
-                .task {
-                    await pro.start()
-                    pro.ensureDevUnlock()
-                }
+                .environment(SpeechPlaybackTracker.shared)
+                .task { await pro.start() }
                 .onChange(of: pro.isPro) { _, unlocked in
                     model.cardNoWatermark = unlocked
                 }

@@ -36,7 +36,7 @@
 ### 本地联调
 
 1. Xcode 跑 DEBUG 包 → 设置 →「DEBUG：解锁 Pro」
-2. App Store Connect 建好 `com.deernames.pro.lifetime` 后，真机/沙盒可走真实购买
+2. App Store Connect 建好 `com.loomiskoo.deernames.pro.lifetime` 后，真机/沙盒可走真实购买
 3. 详情页 pill「小名昵称」；读音卡「试听」；生成卡片看水印
 
 ---
@@ -47,7 +47,7 @@
 | --- | --- |
 | 收费模式 | **一次性买断（非消耗型 IAP）**，不做订阅 |
 | 开通范围 | 仅 iOS App（走 Apple IAP）。H5 端（小红书 / 抖音 / 快手）**保持全免费**，见 §9 |
-| 商品 | 1 个：`com.deernames.pro.lifetime` |
+| 商品 | 1 个：`com.loomiskoo.deernames.pro.lifetime` |
 | 建议定价 | ¥38 终身，首发 ¥25（≥2 周） |
 | 家庭共享 | **开启**（Family Sharing），取名类 app 家庭传播强 |
 | 权威入口 | 「我的」页置顶 Pro 卡片 + 各付费墙弹层内 |
@@ -234,7 +234,7 @@
 
 | 项 | 值 |
 | --- | --- |
-| Product ID | `com.deernames.pro.lifetime` |
+| Product ID | `com.loomiskoo.deernames.pro.lifetime` |
 | 类型 | 非消耗型（Non-Consumable） |
 | 参考名 | 仙鹿起名 Pro（终身） |
 | 价格 | ¥38（首发 ¥25） |
@@ -268,7 +268,7 @@ Features/Pro/
 ```swift
 @Observable
 final class ProStore {
-    static let productID = "com.deernames.pro.lifetime"
+    static let productID = "com.loomiskoo.deernames.pro.lifetime"
 
     var isPro = false
     var product: Product?

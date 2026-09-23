@@ -2,13 +2,62 @@ import SwiftUI
 
 /* 详情页里的「读音体检」卡：拼音 / 多音字提示永远可见；试听按钮需 Pro。 */
 
+struct SpeechSpeakButton: View {
+    let text: String
+    var language: String = "zh-CN"
+    /// 成功开始朗读后回调（例如中文详情里切换普 / 英）。
+    var onStarted: (() -> Void)? = nil
+
+    @Environment(ProStore.self) private var pro
+    @Environment(NamingAppModel.self) private var model
+    @Environment(SpeechPlaybackTracker.self) private var playback
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var trackID: String {
+        SpeechHelper.playbackID(text: text, language: language)
+    }
+
+    private var isPlaying: Bool {
+        playback.activeID == trackID
+    }
+
+    var body: some View {
+        Button {
+            guard pro.require(.speechListen) else { return }
+            switch SpeechHelper.speak(text, language: language) {
+            case .started:
+                onStarted?()
+            case .nothingToRead:
+                model.toast(L10n.t("这段没有可以朗读的字，颜文字和符号读不出来。"))
+            case .noVoice:
+                model.toast(L10n.t("系统里没有可用的朗读语音。"))
+            }
+        } label: {
+            Image(systemName: pro.isPro ? "speaker.wave.2.fill" : "lock.fill")
+                .font(.system(size: 16, weight: .medium))
+                .foregroundStyle(NamingTheme.primaryDeep)
+                .frame(width: 32, height: 32)
+                .contentShape(Rectangle())
+                .symbolEffect(.bounce, options: isPlaying ? .repeating : .default, value: isPlaying)
+                .scaleEffect(isPlaying && !reduceMotion ? 1.06 : 1)
+                .animation(
+                    isPlaying && !reduceMotion
+                        ? .easeInOut(duration: 0.55).repeatForever(autoreverses: true)
+                        : .default,
+                    value: isPlaying
+                )
+        }
+        .buttonStyle(NamingPressButtonStyle())
+        .accessibilityLabel(L10n.t("试听"))
+    }
+}
+
 struct SpeechCheckCard: View {
     let surname: NMSurname?
     let chars: [String]
     let speakText: String
 
     @Environment(ProStore.self) private var pro
-    @Environment(NamingAppModel.self) private var model
     @State private var lang = "zh-CN"
 
     private var check: SpeechCheck {
@@ -18,7 +67,9 @@ struct SpeechCheckCard: View {
     var body: some View {
         NamingCard {
             CardTitleRow(title: L10n.t("读音体检"), bottomInset: 8) {
-                speakButton
+                SpeechSpeakButton(text: speakText, language: lang) {
+                    lang = lang == "zh-CN" ? "en-US" : "zh-CN"
+                }
             }
 
             // 音节行
@@ -72,71 +123,6 @@ struct SpeechCheckCard: View {
 
             Text(L10n.t("仅供参考，不是唯一正确读音。"))
                 .font(.system(size: 11.5))
-                .foregroundStyle(NamingTheme.muted)
-                .padding(.top, 8)
-        }
-    }
-
-    private var speakButton: some View {
-        Button {
-            guard pro.require(.speechListen) else { return }
-            switch SpeechHelper.speak(speakText, language: lang) {
-            case .started:
-                /* 下次点切换一下语种，方便试两种。粤语未确认，暂不提供。 */
-                lang = lang == "zh-CN" ? "en-US" : "zh-CN"
-            case .nothingToRead:
-                model.toast(L10n.t("这段没有可以朗读的字，颜文字和符号读不出来。"))
-            case .noVoice:
-                model.toast(L10n.t("系统里没有可用的朗读语音。"))
-            }
-        } label: {
-            HStack(spacing: 4) {
-                Image(systemName: pro.isPro ? "speaker.wave.2.fill" : "lock.fill")
-                Text(pro.isPro
-                     ? L10n.f("试听 · %@", lang == "zh-CN" ? L10n.t("普通话") : "English")
-                     : L10n.t("试听"))
-            }
-            .font(.system(size: 13, weight: .medium))
-            .foregroundStyle(NamingTheme.primaryDeep)
-            .padding(.horizontal, 4)
-            .padding(.vertical, 6)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(NamingPressButtonStyle())
-        .sensoryFeedback(.impact(flexibility: .soft, intensity: 0.5), trigger: lang)
-    }
-}
-
-struct EnglishSpeechCard: View {
-    let name: String
-    @Environment(ProStore.self) private var pro
-    @Environment(NamingAppModel.self) private var model
-
-    var body: some View {
-        NamingCard {
-            CardTitleRow(title: L10n.t("英文读音体检")) {
-                Button {
-                    guard pro.require(.speechListen) else { return }
-                    switch SpeechHelper.speak(name, language: "en-US") {
-                    case .started:
-                        break
-                    case .nothingToRead:
-                        model.toast(L10n.t("这段没有可以朗读的字，颜文字和符号读不出来。"))
-                    case .noVoice:
-                        model.toast(L10n.t("系统里没有可用的朗读语音。"))
-                    }
-                } label: {
-                    Label(L10n.t("试听"), systemImage: pro.isPro ? "speaker.wave.2.fill" : "lock.fill")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(NamingTheme.primaryDeep)
-                        .padding(.horizontal, 4)
-                        .padding(.vertical, 6)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(NamingPressButtonStyle())
-            }
-            Text(L10n.t("帮助不熟悉英语发音的人，先听再决定是否适合自己。"))
-                .font(.system(size: 13))
                 .foregroundStyle(NamingTheme.muted)
                 .padding(.top, 8)
         }

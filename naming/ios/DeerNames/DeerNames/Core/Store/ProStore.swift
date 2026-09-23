@@ -4,14 +4,15 @@ import StoreKit
 
 /* StoreKit 2 买断制。商品尚未在 App Store Connect 建好时：
  *  - `product` 为空，付费墙显示「暂不可用」；
- *  - DEBUG / 模拟器下默认开通 Pro，方便联调。 */
+ *  - DEBUG 下可在设置里手动开关 Pro（`debugToggleUnlock`），默认未开通。 */
 
 @Observable
 @MainActor
 final class ProStore {
-    static let productID = "com.deernames.pro.lifetime"
+    static let productID = "com.loomiskoo.deernames.pro.lifetime"
     nonisolated private static let cacheKey = "naming.pro.unlocked.v1"
     nonisolated private static let debugKey = "naming.pro.debugUnlock.v1"
+    nonisolated private static let devDefaultOffKey = "naming.pro.devDefaultOff.v1"
 
     var isPro = false
     var product: Product?
@@ -23,24 +24,14 @@ final class ProStore {
 
     private var listenTask: Task<Void, Never>?
 
-    /// Debug 构建或模拟器：默认当已购处理（设置里仍可 DEBUG 关掉）。
-    static var autoUnlockInDev: Bool {
-        #if DEBUG
-        true
-        #elseif targetEnvironment(simulator)
-        true
-        #else
-        false
-        #endif
-    }
-
     init() {
-        if Self.autoUnlockInDev {
-            /* 首次进开发环境默认开；用户在设置里关掉后尊重 debugKey = false。 */
-            if UserDefaults.standard.object(forKey: Self.debugKey) == nil {
-                UserDefaults.standard.set(true, forKey: Self.debugKey)
-            }
+#if DEBUG
+        /* 曾默认开 Pro 时会把 debugKey 写成 true；改策略后清一次，避免一直当已购。 */
+        if !UserDefaults.standard.bool(forKey: Self.devDefaultOffKey) {
+            UserDefaults.standard.set(false, forKey: Self.debugKey)
+            UserDefaults.standard.set(true, forKey: Self.devDefaultOffKey)
         }
+#endif
         isPro = resolvedPro()
     }
 
@@ -126,13 +117,6 @@ final class ProStore {
         isPro = resolvedPro(storeUnlocked: storeUnlocked)
     }
 
-    /// App 启动后调用：开发 / 模拟器环境强制开通（设置里 DEBUG 关掉只影响当前会话，下次启动仍开）。
-    func ensureDevUnlock() {
-        guard Self.autoUnlockInDev else { return }
-        UserDefaults.standard.set(true, forKey: Self.debugKey)
-        isPro = true
-    }
-
 #if DEBUG
     func debugToggleUnlock() {
         let next = !UserDefaults.standard.bool(forKey: Self.debugKey)
@@ -146,9 +130,9 @@ final class ProStore {
     private func resolvedPro(storeUnlocked: Bool? = nil) -> Bool {
         if storeUnlocked == true { return true }
         if UserDefaults.standard.bool(forKey: Self.cacheKey) { return true }
-        if Self.autoUnlockInDev, UserDefaults.standard.bool(forKey: Self.debugKey) {
-            return true
-        }
+#if DEBUG
+        if UserDefaults.standard.bool(forKey: Self.debugKey) { return true }
+#endif
         return false
     }
 

@@ -1,14 +1,17 @@
 import SwiftUI
 
-/* 选姓氏（工作台）—— 搜索贴顶；选中简介固定在列表上方；筛选进漏斗 sheet，点「完成」才应用；
- * 列表滚远后出现回顶部。 */
+/* 选姓氏（工作台）—— 搜索贴顶；**点一行＝弹出详情 sheet，点行右端圆钮＝选中并回自选页**；
+ * 筛选进漏斗 sheet，点「完成」才应用；列表滚远后出现回顶部。
+ *
+ * 版式从「4 列紧凑网格」改成和英文选姓一致的列表行：格子里塞不下「详情 + 选择」两套点击，
+ * 一行只占一格的高度，但横着能放下姓、拼音/常见度/气质、单复姓胶囊和那个选择钮。
+ * 详情 sheet 的壳在 `NamePeekSheet`（挂在根上，页面 body 不读它，列表也不会跟着重算）。 */
 
 struct StudioSurnameView: View {
     @Environment(NamingAppModel.self) private var model
     @State private var showFilters = false
     @State private var showTop = false
 
-    private let columns = [GridItem(.adaptive(minimum: 66), spacing: 10)]
     private let topID = "studio-sur-top"
 
     private var filterActive: Bool {
@@ -20,15 +23,6 @@ struct StudioSurnameView: View {
         VStack(spacing: 0) {
             searchField
             Divider().overlay(NamingTheme.hairline)
-
-            if let s = model.studioSurname {
-                VStack(spacing: 12) {
-                    ZhSurnameInfoCard(s: s) { shufflePick() }
-                    ZhNamesakeCard(items: model.surnameCelebs(s))
-                }
-                .padding(.horizontal, 20)
-                .padding(.top, 12)
-            }
 
             ScrollViewReader { proxy in
                 ScrollView {
@@ -58,33 +52,22 @@ struct StudioSurnameView: View {
                                     .foregroundStyle(NamingTheme.muted)
                             }
                         } else {
-                            LazyVGrid(columns: columns, spacing: 10) {
-                                ForEach(list, id: \.c) { s in
-                                    let on = model.studioSurname?.c == s.c
-                                    Button {
-                                        pickSurname(s)
-                                    } label: {
-                                        VStack(spacing: 3) {
-                                            Text(s.c)
-                                                .font(.system(size: 18, weight: .semibold))
-                                                .foregroundStyle(on ? .white : NamingTheme.ink)
-                                            Text(NameEngine.shared.surnameVibe(s))
-                                                .font(.system(size: 10))
-                                                .foregroundStyle(on ? .white.opacity(0.85) : NamingTheme.muted)
-                                                .lineLimit(1)
+                            /* 整库列表（一千多条），不要投影和圆角裁剪：见 `NamingCard(elevated:)`。 */
+                            NamingCard(elevated: false) {
+                                LazyVStack(spacing: 0) {
+                                    ForEach(Array(list.enumerated()), id: \.offset) { index, s in
+                                        NamingPickerRow(
+                                            title: s.c,
+                                            meta: meta(s),
+                                            tag: NameEngine.shared.isCompound(s) ? L10n.t("复姓") : L10n.t("单姓"),
+                                            selected: model.studioSurname?.c == s.c,
+                                            onTap: { model.peek = .zhSurname(s) },
+                                            onPick: { pickSurname(s) }
+                                        )
+                                        if index != list.count - 1 {
+                                            Divider().overlay(NamingTheme.hairline)
                                         }
-                                        .frame(maxWidth: .infinity)
-                                        .padding(.vertical, 10)
-                                        .background {
-                                            if on {
-                                                NamingTheme.gradient
-                                            } else {
-                                                NamingTheme.canvas
-                                            }
-                                        }
-                                        .clipShape(RoundedRectangle(cornerRadius: NamingRadius.small, style: .continuous))
                                     }
-                                    .buttonStyle(.plain)
                                 }
                             }
                         }
@@ -95,6 +78,8 @@ struct StudioSurnameView: View {
                 }
                 .coordinateSpace(name: "namingScroll")
                 .namingScrollSurface()
+                /* 首屏贴住顶部：见 `namingScrollAnchorTop`。 */
+                .namingScrollAnchorTop()
                 .namingScrollTopVisible($showTop)
                 .overlay(alignment: .bottomTrailing) {
                     if showTop {
@@ -135,17 +120,19 @@ struct StudioSurnameView: View {
         }
     }
 
-    private func pickSurname(_ s: NMSurname) {
-        withAnimation(NamingMotion.pick) { model.studioSurname = s }
+    /// 行内小字：拼音 · 常见度 · 气质（单/复姓单独放右端胶囊，比图标清楚）。
+    private func meta(_ s: NMSurname) -> String {
+        let eng = NameEngine.shared
+        let pop = L10n.t(["", "少见", "较少", "一般", "常见", "大姓"][max(0, min(5, s.pop))])
+        return [eng.surPy(s), pop, eng.surnameVibe(s)]
+            .filter { !$0.isEmpty }
+            .joined(separator: " · ")
     }
 
-    private func shufflePick() {
-        let pool = model.studioSurs()
-        if pool.isEmpty {
-            model.toast(L10n.t("先放宽一下筛选"))
-        } else if let pick = pool.randomElement() {
-            pickSurname(pick)
-        }
+    /// 选中这个姓并回自选页 —— 行右端圆钮走这条（sheet 里的「选这个」走根上的 `model.pickStudioSurname`）。
+    private func pickSurname(_ s: NMSurname) {
+        withAnimation(NamingMotion.pick) { model.studioSurname = s }
+        model.popTo(.studio)
     }
 
     private var searchField: some View {
@@ -159,6 +146,21 @@ struct StudioSurnameView: View {
             .padding(.horizontal, 20)
             .padding(.top, 8)
             .padding(.bottom, 10)
+    }
+}
+
+/* 选姓页点一行，sheet 里的内容：释义 + 同姓人物。
+ * sheet 的壳（标题 / 关闭 / 底部「选这个」）在 `NamePeekSheet`，这里只管内容。 */
+struct StudioSurnamePeekContent: View {
+    let s: NMSurname
+
+    @Environment(NamingAppModel.self) private var model
+
+    var body: some View {
+        VStack(spacing: 14) {
+            ZhSurnameInfoCard(s: s)
+            ZhNamesakeCard(items: model.surnameCelebs(s))
+        }
     }
 }
 

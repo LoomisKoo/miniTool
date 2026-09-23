@@ -5,21 +5,20 @@ import SwiftUI
  * 2. 华人拉丁拼写（Chen / Wong）：中国人按自己中文姓匹配英文写法
  *
  * 搜索可按拉丁拼写或中文（"wil" / "威" / "陈"）；筛选按类型 + 首字母，收进右上角漏斗。
- * 版式与「选英文名」页**统一**：已选卡摊在列表上面、列表收在一张卡里（卡头带计数），
- * 不占列表上方那块位置，一进页面先看到名字。 */
+ * 版式与「选英文名」页**统一**：列表收在一张卡里（卡头带计数），不占列表上方那块位置，
+ * 一进页面先看到姓。**点整行＝弹出详情 sheet，点行右端圆钮＝选中并返回上一页**；
+ * 行右端原本的「西文姓 / 华人拼写」胶囊压成一个图标，位置省下来放那个圆钮。
+ * sheet 的壳在 `NamePeekSheet`（挂在根上，页面 body 不读它，列表也不会跟着重算）。 */
 
 struct EnSurnameView: View {
     @Environment(NamingAppModel.self) private var model
     @State private var showFilters = false
+    @State private var showTop = false
+
+    private let topID = "en-surname-top"
 
     private var filterActive: Bool {
         model.enSurLetter != "all" || model.enSurKind != "all"
-    }
-
-    /// 正在搜索（关键词非空，光打空格不算）。搜索时列表只出结果，
-    /// 把已选卡让开位置，取消搜索再回来。
-    private var searching: Bool {
-        !model.enSurKeyword.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
     var body: some View {
@@ -27,64 +26,68 @@ struct EnSurnameView: View {
             searchField
             Divider().overlay(NamingTheme.hairline)
 
-            ScrollView {
-                VStack(spacing: 14) {
-                    let list = model.enSurnameList()
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(spacing: 14) {
+                        Color.clear.frame(height: 0).id(topID)
+                            .namingScrollTopAnchor()
 
-                    /* 选中的姓直接摊开显示在这儿（不再要「查看详情」跳页），
-                     * 右上角能换一个；同姓人物是单独一张卡。
-                     *
-                     * 正在搜索时不显示：这时用户要的是搜索结果，已选卡只会把结果往下推。
-                     * 取消搜索（清空关键词）后自己回来。
-                     *
-                     * 这一块一出现就会把列表整体往下推，所以**不写 `.id(...)`**：
-                     * 换姓时卡片原地更新（跟着 `withAnimation` 一起重排），
-                     * 而不是销毁重建 —— 重建会晚一帧落地，看着就是「卡一下」。 */
-                    if !model.enSurname.isEmpty && !searching {
-                        VStack(spacing: 14) {
-                            EnSurnameInfoCard(n: model.enSurname) { shufflePick() }
-                            EnNamesakeCard(celebs: model.enSurnameCelebs(model.enSurname),
-                                           title: L10n.t("同名人物"))
-                        }
-                    }
+                        let list = model.enSurnameList()
 
-                    NamingCard {
-                        CardTitleRow(title: L10n.t("英文姓库"),
-                                     subtitle: "\(list.count) / \(NameEngine.shared.enSurnames().count)") {
-                            if filterActive {
-                                Text(L10n.t("已筛选"))
-                                    .font(.system(size: 12))
-                                    .foregroundStyle(NamingTheme.primaryDeep)
+                        /* 这张卡里装着整个姓库（一千多条），所以不要投影和圆角裁剪：见 `NamingCard(elevated:)`。 */
+                        NamingCard(elevated: false) {
+                            CardTitleRow(title: L10n.t("英文姓库"),
+                                         subtitle: "\(list.count) / \(NameEngine.shared.enSurnames().count)") {
+                                if filterActive {
+                                    Text(L10n.t("已筛选"))
+                                        .font(.system(size: 12))
+                                        .foregroundStyle(NamingTheme.primaryDeep)
+                                }
                             }
-                        }
-                        if list.isEmpty {
-                            Text(L10n.t("没筛到这个姓，放宽一下条件。"))
-                                .font(.system(size: 13.5))
-                                .foregroundStyle(NamingTheme.muted)
-                        } else {
-                            LazyVStack(spacing: 0) {
-                                ForEach(Array(list.enumerated()), id: \.offset) { index, s in
-                                    EnSurnameRow(
-                                        s: s,
-                                        selected: model.enSurname.lowercased() == s.n.lowercased()
-                                    ) {
-                                        withAnimation(NamingMotion.pick) {
-                                            model.setEnSurnameManually(s.n)
+                            if list.isEmpty {
+                                Text(L10n.t("没筛到这个姓，放宽一下条件。"))
+                                    .font(.system(size: 13.5))
+                                    .foregroundStyle(NamingTheme.muted)
+                            } else {
+                                LazyVStack(spacing: 0) {
+                                    ForEach(Array(list.enumerated()), id: \.offset) { index, s in
+                                        EnSurnameRow(
+                                            s: s,
+                                            selected: model.enSurname.lowercased() == s.n.lowercased(),
+                                            onTap: { model.peek = .enSurname(s) },
+                                            onPick: { pick(s) }
+                                        )
+                                        if index != list.count - 1 {
+                                            Divider().overlay(NamingTheme.hairline)
                                         }
-                                    }
-                                    if index != list.count - 1 {
-                                        Divider().overlay(NamingTheme.hairline)
                                     }
                                 }
                             }
                         }
                     }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 14)
+                    .padding(.bottom, 20)
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 14)
-                .padding(.bottom, 20)
+                .coordinateSpace(name: "namingScroll")
+                .namingScrollSurface()
+                /* 首屏贴住顶部：见 `namingScrollAnchorTop`。 */
+                .namingScrollAnchorTop()
+                .namingScrollTopVisible($showTop)
+                .overlay(alignment: .bottomTrailing) {
+                    if showTop {
+                        ScrollTopButton {
+                            withAnimation(NamingMotion.appear) {
+                                proxy.scrollTo(topID, anchor: .top)
+                            }
+                        }
+                        .padding(.trailing, 18)
+                        .padding(.bottom, 16)
+                        .transition(.opacity)
+                    }
+                }
+                .animation(NamingMotion.fade, value: showTop)
             }
-            .namingScrollSurface()
         }
         .namingPageBackground()
         .namingNoHoverHighlight()
@@ -111,13 +114,10 @@ struct EnSurnameView: View {
         }
     }
 
-    /// 「换一个」：在**当前筛选结果**里随机挑，整个换姓动作放在一个动画事务里。
-    private func shufflePick() {
-        guard let pick = model.enSurnameList().randomElement() else {
-            model.toast(L10n.t("先放宽一下筛选"))
-            return
-        }
-        withAnimation(NamingMotion.pick) { model.setEnSurnameManually(pick.n) }
+    /// 行右端圆钮：选中这个姓，直接回上一页 —— 挑完就走，不用再按底部栏。
+    private func pick(_ s: NMSurnameEn) {
+        withAnimation(NamingMotion.pick) { model.setEnSurnameManually(s.n) }
+        model.pop()
     }
 
     private var searchField: some View {
@@ -127,6 +127,21 @@ struct EnSurnameView: View {
             .padding(.horizontal, 20)
             .padding(.top, 8)
             .padding(.bottom, 10)
+    }
+}
+
+/* 选姓页点一行，sheet 里的内容：释义 + 同姓人物。
+ * sheet 的壳（标题 / 关闭 / 底部「选这个」）在 `NamePeekSheet`，这里只管内容。 */
+struct EnSurnamePeekContent: View {
+    let s: NMSurnameEn
+
+    @Environment(NamingAppModel.self) private var model
+
+    var body: some View {
+        VStack(spacing: 14) {
+            EnSurnameInfoCard(n: s.n)
+            EnNamesakeCard(celebs: model.enSurnameCelebs(s.n), title: L10n.t("同名人物"))
+        }
     }
 }
 

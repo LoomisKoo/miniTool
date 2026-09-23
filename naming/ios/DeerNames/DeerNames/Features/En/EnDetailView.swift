@@ -21,7 +21,6 @@ struct EnDetailView: View {
                                    }
                                })
                     EnNamesakeCard(celebs: model.enCelebs(it))
-                    EnglishSpeechCard(name: model.enFullName(it.n))
                 } else {
                     NamingCard {
                         Text(L10n.t("没选中名字。"))

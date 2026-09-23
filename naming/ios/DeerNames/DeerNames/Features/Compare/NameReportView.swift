@@ -1,6 +1,31 @@
 import SwiftUI
 import UIKit
 
+// MARK: - 报告数据（屏上展示与导出卡片共用）
+
+private struct NameReportSnapshot {
+    struct Context {
+        var hasProfile: Bool
+        var profileDescribe: String
+        var baziPillars: String?
+        var baziSummary: String?
+    }
+
+    struct Candidate {
+        let full: String
+        let score: Int
+        let py: String
+        let why: String
+        let radar: [RadarItem]?
+        let sections: [NameReportSection]
+    }
+
+    var context: Context
+    var comparison: NameReportComparison?
+    var candidates: [Candidate]
+    var bestFull: String?
+}
+
 /// Pro 对比报告：把横向比较结果整理成可以分享给家人的结论。
 struct NameReportView: View {
     @Environment(NamingAppModel.self) private var model
@@ -13,14 +38,28 @@ struct NameReportView: View {
     }
 
     private var best: NameResult? {
-        names.max {
-            qualityScore($0) < qualityScore($1)
+        let bazi = model.currentBazi()
+        return names.max {
+            NameReportAnalyzer.qualityScore($0, profile: model.profile, bazi: bazi)
+                < NameReportAnalyzer.qualityScore($1, profile: model.profile, bazi: bazi)
         }
+    }
+
+    private var snapshot: NameReportSnapshot {
+        buildSnapshot(names: names, best: best)
     }
 
     var body: some View {
         ScrollView {
             VStack(spacing: 14) {
+                if pro.isPro || !names.isEmpty {
+                    contextCard(snapshot.context)
+                }
+
+                if pro.isPro, let comparison = snapshot.comparison {
+                    comparisonCard(comparison)
+                }
+
                 if let best {
                     NamingCard {
                         Text(L10n.t("推荐结论"))
@@ -30,7 +69,7 @@ struct NameReportView: View {
                             .font(.system(size: 30, weight: .bold))
                             .foregroundStyle(NamingTheme.ink)
                             .padding(.top, 4)
-                        Text(L10n.t("综合读感、含义与避雷结果后，作为当前候选中的优先选择。"))
+                        Text(L10n.t("综合读感、含义、性格与生辰参考后，作为当前候选中的优先选择。"))
                             .font(.system(size: 13.5))
                             .foregroundStyle(NamingTheme.muted)
                             .fixedSize(horizontal: false, vertical: true)
@@ -39,8 +78,8 @@ struct NameReportView: View {
                 }
 
                 if pro.isPro {
-                    ForEach(names, id: \.full) { name in
-                        detailCard(name)
+                    ForEach(snapshot.candidates, id: \.full) { item in
+                        candidateCard(item)
                     }
                     if !names.isEmpty {
                         reportAction
@@ -80,6 +119,125 @@ struct NameReportView: View {
         .buttonStyle(NamingPressButtonStyle())
     }
 
+    private func comparisonCard(_ comparison: NameReportComparison) -> some View {
+        NamingCard {
+            CardTitleRow(L10n.t("横向对照"))
+            ForEach(comparison.picks) { pick in
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text(pick.dimension)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(NamingTheme.muted)
+                        Spacer(minLength: 8)
+                        Text(pick.winner)
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(NamingTheme.primaryDeep)
+                    }
+                    Text(pick.detail)
+                        .font(.system(size: 12.5))
+                        .foregroundStyle(NamingTheme.ink.opacity(0.85))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.top, 12)
+            }
+            ForEach(comparison.summary, id: \.self) { line in
+                Text(line)
+                    .font(.system(size: 13))
+                    .foregroundStyle(NamingTheme.ink.opacity(0.88))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 10)
+            }
+        }
+    }
+
+    private func contextCard(_ ctx: NameReportSnapshot.Context) -> some View {
+        NamingCard {
+            CardTitleRow(L10n.t("参考条件"))
+            if ctx.hasProfile {
+                Text(L10n.t("性格画像"))
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(NamingTheme.muted)
+                    .padding(.top, 4)
+                Text(ctx.profileDescribe)
+                    .font(.system(size: 13.5))
+                    .foregroundStyle(NamingTheme.ink.opacity(0.88))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 4)
+            } else {
+                Text(L10n.t("尚未完成性格测试，性格匹配度仅供参考。"))
+                    .font(.system(size: 13))
+                    .foregroundStyle(NamingTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 4)
+            }
+
+            if let pillars = ctx.baziPillars, !pillars.isEmpty {
+                Divider().overlay(NamingTheme.hairline).padding(.vertical, 10)
+                Text(L10n.t("生辰八字"))
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(NamingTheme.muted)
+                Text(pillars)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(NamingTheme.primaryDeep)
+                    .padding(.top, 4)
+                if let summary = ctx.baziSummary, !summary.isEmpty {
+                    Text(summary)
+                        .font(.system(size: 13))
+                        .foregroundStyle(NamingTheme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, 4)
+                }
+            }
+        }
+    }
+
+    private func candidateCard(_ item: NameReportSnapshot.Candidate) -> some View {
+        NamingCard {
+            HStack {
+                Text(item.full)
+                    .font(.system(size: 21, weight: .bold))
+                    .foregroundStyle(NamingTheme.ink)
+                Spacer()
+                Text("\(item.score)/100")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(NamingTheme.primaryDeep)
+            }
+            Text(item.py)
+                .font(.system(size: 12))
+                .foregroundStyle(NamingTheme.muted)
+                .padding(.top, 2)
+            Text(item.why)
+                .font(.system(size: 13.5))
+                .foregroundStyle(NamingTheme.ink.opacity(0.85))
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 8)
+
+            if let radar = item.radar, !radar.isEmpty {
+                Text(L10n.t("性格画像"))
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(NamingTheme.primaryDeep)
+                    .padding(.top, 14)
+                ReportRadarBlock(items: radar)
+                    .padding(.top, 8)
+            }
+
+            ForEach(item.sections, id: \.title) { section in
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(section.title)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(NamingTheme.primaryDeep)
+                        .padding(.top, 12)
+                    ForEach(section.lines, id: \.self) { line in
+                        Text(line)
+                            .font(.system(size: 13))
+                            .foregroundStyle(NamingTheme.ink.opacity(0.88))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+        }
+    }
+
     private var previewCard: some View {
         NamingCard {
             Text(L10n.t("免费预览"))
@@ -114,7 +272,7 @@ struct NameReportView: View {
 
     @MainActor
     private func renderReportCard() {
-        guard let image = NameReportCardRenderer.render(names: names, best: best) else {
+        guard let image = NameReportCardRenderer.render(snapshot: snapshot) else {
             model.toast(L10n.t("暂时无法生成报告卡片"))
             return
         }
@@ -131,116 +289,97 @@ struct NameReportView: View {
                         in: RoundedRectangle(cornerRadius: NamingRadius.medium, style: .continuous))
     }
 
-    private func detailCard(_ name: NameResult) -> some View {
-        let readability = NameEngine.shared.readability(name.surname, name.chars)
-        let euphony = name.euphony ?? NameEngine.shared.euphony(name.surname, name.chars)
-        return NamingCard {
-            HStack {
-                Text(name.full)
-                    .font(.system(size: 21, weight: .bold))
-                    .foregroundStyle(NamingTheme.ink)
-                Spacer()
-                Text("\(qualityScore(name))/100")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(NamingTheme.primaryDeep)
-            }
-            Text(model.whyFor(name))
-                .font(.system(size: 13.5))
-                .foregroundStyle(NamingTheme.ink.opacity(0.85))
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.top, 8)
+    private func buildSnapshot(names: [NameResult], best: NameResult?) -> NameReportSnapshot {
+        let profile = model.profile
+        let bazi = model.currentBazi()
+        let ctx = NameReportSnapshot.Context(
+            hasProfile: profile?.hasAnswered ?? false,
+            profileDescribe: profile?.hasAnswered == true
+                ? NameEngine.shared.describe(profile!)
+                : "",
+            baziPillars: (bazi?.ok == true && !(bazi?.pillarStr.isEmpty ?? true)) ? bazi?.pillarStr : nil,
+            baziSummary: (bazi?.ok == true) ? bazi?.summary : nil
+        )
 
-            VStack(alignment: .leading, spacing: 7) {
-                reportLine(L10n.t("读感"), readability.ok ? L10n.t("顺口") : readability.issues.joined(separator: L10n.t("、")))
-                reportLine(L10n.t("音韵"), NameEngine.shared.euphonyLabel(euphony))
-                reportLine(L10n.t("拼音"), Pinyin.titleCase(Pinyin.name(name.surname, name.chars)))
-                let speech = SpeechHelper.inspect(surname: name.surname, chars: name.chars)
-                if !speech.polyphones.isEmpty {
-                    reportLine(L10n.t("读音提醒"),
-                               speech.polyphones.map { "\($0.ch)：\($0.namePy)" }.joined(separator: " · "))
-                }
-                if let profile = model.profile, profile.hasAnswered {
-                    let radar = NameEngine.shared.radar(profile, name.vec)
-                    let fit = radar.isEmpty ? 0 : radar.map(\.name).reduce(0, +) / radar.count
-                    reportLine(L10n.t("性格匹配"), "\(fit)%")
-                }
-            }
-            .padding(.top, 12)
+        let chart = bazi?.ok == true ? bazi : nil
+        let candidates = names.map { candidateSlice($0, bazi: chart) }
+        let comparison = NameReportAnalyzer.compareCandidates(
+            names: names,
+            profile: model.profile,
+            bazi: chart
+        )
 
-            Text(L10n.t("字义拆解") + " · " +
-                 name.chars.map { "\($0)：\(NameEngine.shared.charNote($0).text)" }
-                    .joined(separator: L10n.t("；")))
-                .font(.system(size: 12.5))
-                .foregroundStyle(NamingTheme.muted)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.top, 10)
-        }
+        return NameReportSnapshot(
+            context: ctx,
+            comparison: comparison,
+            candidates: candidates,
+            bestFull: best?.full
+        )
     }
 
-    private func reportLine(_ title: String, _ value: String) -> some View {
-        HStack(alignment: .top, spacing: 10) {
-            Text(title)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(NamingTheme.muted)
-                .frame(width: 42, alignment: .leading)
-            Text(value)
-                .font(.system(size: 13))
-                .foregroundStyle(NamingTheme.ink)
-        }
-    }
-
-    private func qualityScore(_ name: NameResult) -> Int {
-        let read = NameEngine.shared.readability(name.surname, name.chars)
-        let sound = name.euphony ?? NameEngine.shared.euphony(name.surname, name.chars)
-        var score = Int((sound * 55).rounded())
-        if read.ok { score += 25 }
-        let speech = SpeechHelper.inspect(surname: name.surname, chars: name.chars)
-        if speech.polyphones.isEmpty { score += 10 }
+    private func candidateSlice(_ name: NameResult, bazi: BaziInfo?) -> NameReportSnapshot.Candidate {
+        let sections = NameReportAnalyzer.analyze(
+            name: name,
+            profile: model.profile,
+            bazi: bazi
+        )
+        var radar: [RadarItem]?
         if let profile = model.profile, profile.hasAnswered {
-            let radar = NameEngine.shared.radar(profile, name.vec)
-            if !radar.isEmpty {
-                score += radar.map(\.name).reduce(0, +) / radar.count / 10
-            }
+            radar = NameReportAnalyzer.radarItems(profile: profile, vec: name.vec)
         }
-        return min(100, max(0, score))
+        return NameReportSnapshot.Candidate(
+            full: name.full,
+            score: NameReportAnalyzer.qualityScore(name, profile: model.profile, bazi: bazi),
+            py: Pinyin.titleCase(Pinyin.name(name.surname, name.chars)),
+            why: model.whyFor(name),
+            radar: radar,
+            sections: sections
+        )
     }
 
     private var reportText: String {
+        let snap = snapshot
         var lines = [L10n.t("仙鹿起名 · 取名对比报告"), ""]
-        if let best { lines += [L10n.f("优先推荐：%@", best.full), ""] }
-        for name in names {
-            let read = NameEngine.shared.readability(name.surname, name.chars)
-            lines.append("\(name.full) · \(Pinyin.titleCase(Pinyin.name(name.surname, name.chars)))")
-            lines.append(model.whyFor(name))
-            lines.append(read.ok ? L10n.t("读感顺口") : read.issues.joined(separator: L10n.t("、")))
-            let speech = SpeechHelper.inspect(surname: name.surname, chars: name.chars)
-            if !speech.polyphones.isEmpty {
-                lines.append(L10n.t("读音提醒") + "："
-                             + speech.polyphones.map { "\($0.ch)：\($0.namePy)" }.joined(separator: " · "))
+        lines.append(L10n.t("参考条件"))
+        if snap.context.hasProfile {
+            lines.append(L10n.t("性格画像") + "：" + snap.context.profileDescribe)
+        }
+        if let p = snap.context.baziPillars {
+            lines.append(L10n.t("生辰八字") + "：" + p)
+            if let s = snap.context.baziSummary { lines.append(s) }
+        }
+        lines.append("")
+        if let comparison = snap.comparison {
+            lines.append(L10n.t("横向对照"))
+            for pick in comparison.picks {
+                lines.append("\(pick.dimension)：\(pick.winner) — \(pick.detail)")
             }
-            lines.append(L10n.t("字义拆解") + "："
-                         + name.chars.map { "\($0)：\(NameEngine.shared.charNote($0).text)" }
-                            .joined(separator: L10n.t("；")))
+            lines.append(contentsOf: comparison.summary)
+            lines.append("")
+        }
+        if let best = snap.bestFull { lines += [L10n.f("优先推荐：%@", best), ""] }
+        for item in snap.candidates {
+            lines.append("\(item.full) · \(item.py) · \(item.score)/100")
+            lines.append(item.why)
+            for section in item.sections {
+                lines.append(section.title)
+                lines.append(contentsOf: section.lines)
+            }
             lines.append("")
         }
         return lines.joined(separator: "\n")
     }
 }
 
-enum NameReportCardRenderer {
+private enum NameReportCardRenderer {
     @MainActor
-    static func render(names: [NameResult], best: NameResult?) -> UIImage? {
-        let view = NameReportCard(names: names, best: best)
-            .frame(width: 675, height: 900)
-        let renderer = ImageRenderer(content: view)
-        renderer.scale = 1
-        return renderer.uiImage
+    static func render(snapshot: NameReportSnapshot) -> UIImage? {
+        NamingImageExport.render(NameReportCard(snapshot: snapshot))
     }
 }
 
 private struct NameReportCard: View {
-    let names: [NameResult]
-    let best: NameResult?
+    let snapshot: NameReportSnapshot
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -253,58 +392,137 @@ private struct NameReportCard: View {
                     .font(.system(size: 13))
                     .foregroundStyle(NamingTheme.primaryDeep)
             }
-            .padding(.bottom, 26)
+            .padding(.bottom, 20)
 
-            Text(L10n.t("推荐结论"))
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(NamingTheme.primaryDeep)
-            Text(best?.full ?? "")
-                .font(.system(size: 38, weight: .bold))
-                .foregroundStyle(NamingTheme.ink)
-                .padding(.top, 6)
-            Text(L10n.t("综合读感、含义与避雷结果后的优先选择"))
-                .font(.system(size: 14))
-                .foregroundStyle(NamingTheme.muted)
-                .padding(.top, 6)
-
-            Divider()
-                .overlay(NamingTheme.hairline)
-                .padding(.vertical, 24)
-
-            Text(L10n.t("候选对比"))
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(NamingTheme.ink)
-
-            VStack(spacing: 0) {
-                ForEach(names, id: \.full) { name in
-                    let read = NameEngine.shared.readability(name.surname, name.chars)
-                    HStack(spacing: 12) {
-                        VStack(alignment: .leading, spacing: 5) {
-                            Text(name.full)
-                                .font(.system(size: 20, weight: .semibold))
-                                .foregroundStyle(NamingTheme.ink)
-                            Text(Pinyin.titleCase(Pinyin.name(name.surname, name.chars)))
-                                .font(.system(size: 12.5))
-                                .foregroundStyle(NamingTheme.muted)
-                        }
-                        Spacer()
-                        Text(read.ok ? L10n.t("读感顺口") : L10n.t("需进一步检查"))
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(read.ok ? NamingTheme.mint : NamingTheme.primaryDeep)
-                    }
-                    .padding(.vertical, 15)
-                    if name.full != names.last?.full {
-                        Divider().overlay(NamingTheme.hairline)
+            panel {
+                Text(L10n.t("参考条件"))
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(NamingTheme.ink)
+                if snapshot.context.hasProfile {
+                    Text(L10n.t("性格画像"))
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(NamingTheme.muted)
+                        .padding(.top, 8)
+                    Text(snapshot.context.profileDescribe)
+                        .font(.system(size: 13))
+                        .foregroundStyle(NamingTheme.ink.opacity(0.88))
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, 4)
+                }
+                if let pillars = snapshot.context.baziPillars {
+                    Text(L10n.t("生辰八字"))
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(NamingTheme.muted)
+                        .padding(.top, 10)
+                    Text(pillars)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(NamingTheme.primaryDeep)
+                        .padding(.top, 4)
+                    if let summary = snapshot.context.baziSummary {
+                        Text(summary)
+                            .font(.system(size: 12.5))
+                            .foregroundStyle(NamingTheme.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.top, 4)
                     }
                 }
             }
+            .padding(.bottom, 16)
 
-            Spacer(minLength: 0)
+            if let comparison = snapshot.comparison {
+                panel {
+                    Text(L10n.t("横向对照"))
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(NamingTheme.ink)
+                    ForEach(comparison.picks) { pick in
+                        HStack(alignment: .firstTextBaseline) {
+                            Text(pick.dimension)
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(NamingTheme.muted)
+                            Spacer(minLength: 6)
+                            Text(pick.winner)
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(NamingTheme.primaryDeep)
+                        }
+                        .padding(.top, 8)
+                        Text(pick.detail)
+                            .font(.system(size: 10.5))
+                            .foregroundStyle(NamingTheme.ink.opacity(0.85))
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.top, 3)
+                    }
+                    ForEach(comparison.summary, id: \.self) { line in
+                        Text(line)
+                            .font(.system(size: 11))
+                            .foregroundStyle(NamingTheme.ink.opacity(0.88))
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.top, 8)
+                    }
+                }
+                .padding(.bottom, 16)
+            }
+
+            if let best = snapshot.bestFull {
+                Text(L10n.t("推荐结论"))
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(NamingTheme.primaryDeep)
+                Text(best)
+                    .font(.system(size: 34, weight: .bold))
+                    .foregroundStyle(NamingTheme.ink)
+                    .padding(.top, 6)
+                Text(L10n.t("综合读感、含义、性格与生辰参考后的优先选择"))
+                    .font(.system(size: 13))
+                    .foregroundStyle(NamingTheme.muted)
+                    .padding(.top, 6)
+                    .padding(.bottom, 18)
+            }
+
+            ForEach(snapshot.candidates, id: \.full) { item in
+                panel {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text(item.full)
+                            .font(.system(size: 20, weight: .bold))
+                            .foregroundStyle(NamingTheme.ink)
+                        Spacer(minLength: 8)
+                        Text("\(item.score)/100")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(NamingTheme.primaryDeep)
+                    }
+                    Text(item.py)
+                        .font(.system(size: 12))
+                        .foregroundStyle(NamingTheme.muted)
+                        .padding(.top, 2)
+                    Text(item.why)
+                        .font(.system(size: 12.5))
+                        .foregroundStyle(NamingTheme.ink.opacity(0.85))
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, 8)
+                    if let radar = item.radar, !radar.isEmpty {
+                        ReportRadarBlock(items: radar, chartSize: 112)
+                            .padding(.top, 10)
+                    }
+                    ForEach(item.sections, id: \.title) { section in
+                        Text(section.title)
+                            .font(.system(size: 11.5, weight: .semibold))
+                            .foregroundStyle(NamingTheme.primaryDeep)
+                            .padding(.top, 10)
+                        ForEach(section.lines, id: \.self) { line in
+                            Text(line)
+                                .font(.system(size: 11))
+                                .foregroundStyle(NamingTheme.ink.opacity(0.86))
+                                .fixedSize(horizontal: false, vertical: true)
+                                .padding(.top, 4)
+                        }
+                    }
+                }
+                .padding(.bottom, 12)
+            }
 
             Text(L10n.t("仙鹿起名 Pro · 名字对比报告"))
                 .font(.system(size: 12))
                 .foregroundStyle(NamingTheme.muted)
                 .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.top, 8)
         }
         .padding(34)
         .background(
@@ -315,4 +533,12 @@ private struct NameReportCard: View {
             )
         )
     }
+
+    private func panel<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 0, content: content)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(14)
+            .background(NamingTheme.canvas, in: RoundedRectangle(cornerRadius: NamingRadius.large, style: .continuous))
+    }
+
 }

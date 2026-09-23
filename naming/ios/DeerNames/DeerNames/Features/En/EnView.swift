@@ -161,40 +161,45 @@ struct EnStudioView: View {
     /// 自选页的一行：左边是「名」，右边是当前选择（没选就是占位提示）。
     private func slotRow(key: String, value: String?, extra: String?,
                          placeholder: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 12) {
-                Text(key)
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(NamingTheme.ink)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.85)
-                    .frame(width: NamingTheme.slotLabelWidth, alignment: .leading)
-                VStack(alignment: .leading, spacing: 3) {
-                    if let value, !value.isEmpty {
-                        Text(value)
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundStyle(NamingTheme.ink)
-                        if let extra, !extra.isEmpty {
-                            Text(extra)
-                                .font(.system(size: 12))
+        HStack(spacing: 12) {
+            Button(action: action) {
+                HStack(spacing: 12) {
+                    Text(key)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(NamingTheme.ink)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                        .frame(width: NamingTheme.slotLabelWidth, alignment: .leading)
+                    VStack(alignment: .leading, spacing: 3) {
+                        if let value, !value.isEmpty {
+                            Text(value)
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundStyle(NamingTheme.ink)
+                            if let extra, !extra.isEmpty {
+                                Text(extra)
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(NamingTheme.muted)
+                            }
+                        } else {
+                            Text(placeholder)
+                                .font(.system(size: 14))
                                 .foregroundStyle(NamingTheme.muted)
                         }
-                    } else {
-                        Text(placeholder)
-                            .font(.system(size: 14))
-                            .foregroundStyle(NamingTheme.muted)
                     }
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(NamingTheme.muted)
                 }
-                Spacer(minLength: 0)
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(NamingTheme.muted)
+                .contentShape(Rectangle())
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 16)
-            .contentShape(Rectangle())
+            .buttonStyle(.plain)
+            if let value, !value.isEmpty {
+                SpeechSpeakButton(text: value, language: "en-US")
+            }
         }
-        .buttonStyle(.plain)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 16)
     }
 
     private func tag(_ text: String) -> some View {
@@ -246,9 +251,8 @@ struct EnListCard: View {
                 LazyVStack(spacing: 0) {
                     ForEach(Array(list.enumerated()), id: \.offset) { index, rank in
                         EnNameRow(it: rank.name, index: index,
-                                  extra: rank.phon.map { L10n.f(" · 音近 %@", "\(Int(($0 * 100).rounded()))%") }) {
-                            onTap(rank.name)
-                        }
+                                  extra: rank.phon.map { L10n.f(" · 音近 %@", "\(Int(($0 * 100).rounded()))%") },
+                                  onTap: { onTap(rank.name) })
                         if index != list.count - 1 { Divider().overlay(NamingTheme.hairline) }
                     }
                 }
@@ -257,74 +261,16 @@ struct EnListCard: View {
     }
 }
 
-/* 英文列表行（「选名 / 选姓」「按性格取名」「中名西取」共用）：序号 + 主标 + 小字 + 右端。
- * 右端固定两种：选中时是一个勾，没选中时是它的胶囊标签（年代 / 类型）。
- *
- * **行版式只此一处**，`EnNameRow` / `EnSurnameRow` 只是把各自的数据拼成人话再传进来 ——
- * 想改列表样式只改这里，别再往两个 wrapper 里抄一遍。 */
-struct EnPickerRow: View {
-    let title: String
-    /// 行内小字（拼好的字符串，不传就是没有）。
-    let meta: String
-    /// 没选中时右端胶囊里的字（年代 / 类型）。
-    let tag: String
-    /// 序号（从 1 起）。选名 / 选姓页不排号，传 nil 就连那 22pt 都不占。
-    var index: Int? = nil
-    var selected = false
-    var onTap: () -> Void
-
-    var body: some View {
-        /* 不用 Button：列表里密布胶囊（年代 / 类型标签）时，**系统按钮层会在卡片上
-         * 残留半透明圆角块** —— 就是那块跟着胶囊大小、位置走的「遮罩」。
-         * 点按自己接手势；原来 `.plain` 本来也没有按压反馈，手感不变。 */
-        HStack(spacing: 10) {
-            if let index {
-                Text("\(index + 1)")
-                    .font(.system(size: 12))
-                    .foregroundStyle(NamingTheme.primaryDeep)
-                    .frame(width: 22)
-            }
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title)
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(selected ? NamingTheme.primaryDeep : NamingTheme.ink)
-                if !meta.isEmpty {
-                    Text(meta)
-                        .font(.system(size: 12))
-                        .foregroundStyle(NamingTheme.muted)
-                        .lineLimit(1)
-                }
-            }
-            Spacer(minLength: 0)
-            if selected {
-                Image(systemName: "checkmark")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(NamingTheme.primaryDeep)
-            } else {
-                Text(tag)
-                    .font(.system(size: 11.5))
-                    .foregroundStyle(NamingTheme.primaryDeep)
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 4)
-                    .background(NamingTheme.primary.opacity(0.12), in: Capsule())
-            }
-        }
-        .padding(.vertical, 12)
-        .contentShape(Rectangle())
-        .onTapGesture(perform: onTap)
-        .namingNoHoverHighlight()
-        .accessibilityAddTraits(.isButton)
-    }
-}
-
 /* 英文名列表里的一行：名字 + 「译名 · 语源 · 名人」+ 年代标签。
- * 版式在 `EnPickerRow`，这里只管把 `NMEnName` 拼成小字。 */
+ * 版式在共用件 `NamingPickerRow`，这里只管把 `NMEnName` 拼成小字。 */
 struct EnNameRow: View {
     let it: NMEnName
     var index: Int? = nil
     var extra: String? = nil
     var selected = false
     var onTap: () -> Void
+    /// 右端「选这个」：选中并返回上一页（推荐列表里不传）。
+    var onPick: (() -> Void)? = nil
 
     @Environment(NamingAppModel.self) private var model
 
@@ -342,22 +288,25 @@ struct EnNameRow: View {
     }
 
     var body: some View {
-        EnPickerRow(title: it.n,
-                    meta: meta,
-                    tag: NamingAppModel.enEraLabel[it.era] ?? "",
-                    index: index,
-                    selected: selected,
-                    onTap: onTap)
+        NamingPickerRow(title: it.n,
+                        meta: meta,
+                        tag: NamingAppModel.enEraLabel[it.era] ?? "",
+                        index: index,
+                        selected: selected,
+                        onTap: onTap,
+                        onPick: onPick)
     }
 }
 
 /* 英文姓列表里的一行：姓 + 「释义 · 音译 / 对应中文姓」+ 类型标签。
- * 版式同样在 `EnPickerRow`，这里只管把 `NMSurnameEn` 拼成小字。 */
+ * 版式同样在 `NamingPickerRow`，这里只管把 `NMSurnameEn` 拼成小字。 */
 struct EnSurnameRow: View {
     let s: NMSurnameEn
     var index: Int? = nil
     var selected = false
     var onTap: () -> Void
+    /// 右端「选这个」：选中并返回上一页（推荐列表里不传）。
+    var onPick: (() -> Void)? = nil
 
     /// 语源 / 中文姓释义，英文界面下查覆盖表。
     private var meaning: String {
@@ -383,12 +332,13 @@ struct EnSurnameRow: View {
     }
 
     var body: some View {
-        EnPickerRow(title: s.n,
-                    meta: meta,
-                    tag: s.isNative ? L10n.t("西文姓") : L10n.t("华人拼写"),
-                    index: index,
-                    selected: selected,
-                    onTap: onTap)
+        NamingPickerRow(title: s.n,
+                        meta: meta,
+                        tag: s.isNative ? L10n.t("西文姓") : L10n.t("华人拼写"),
+                        index: index,
+                        selected: selected,
+                        onTap: onTap,
+                        onPick: onPick)
     }
 }
 
@@ -397,10 +347,11 @@ struct EnSurnameRow: View {
  * 详情页、选名页、自选姓名页共用一份。
  *
  * 卡头**不写「当前选中」**：卡片本身就是名字，多一行标题只是噪音；右上角只留「换一个」。
- * 收藏心形跟名字同一行最右边；底下要给别的按钮就传 `footer`。 */
+ * 收藏心形跟名字同一行最右边；底下要给别的按钮就传 `footer`。
+ * （选名 / 选姓页改成「点行弹详情」之后暂时没人传 `onShuffle`，留着给要随机挑的场合。） */
 struct EnNameCard<Footer: View>: View {
     let it: NMEnName
-    /// 选名 / 选姓页右上角的「换一个」（详情页传 nil 就不显示）。
+    /// 右上角的「换一个」。
     var onShuffle: (() -> Void)? = nil
     /// 收藏：传了就在名字行最右边出心形。
     var favoriteSaved: Bool? = nil
@@ -443,12 +394,16 @@ struct EnNameCard<Footer: View>: View {
                 L10n.isEnglish ? "" : model.enFullZh(it.zh),
                 it.ph.isEmpty ? "" : " /\(it.ph)/"
             ].filter { !$0.isEmpty }
-            if !subParts.isEmpty {
-                Text(subParts.joined())
-                    .font(.system(size: 13))
-                    .foregroundStyle(NamingTheme.muted)
-                    .padding(.top, 4)
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                if !subParts.isEmpty {
+                    Text(subParts.joined())
+                        .font(.system(size: 13))
+                        .foregroundStyle(NamingTheme.muted)
+                }
+                Spacer(minLength: 0)
+                SpeechSpeakButton(text: model.enFullName(it.n), language: "en-US")
             }
+            .padding(.top, 4)
             HStack(spacing: 8) {
                 tag(NamingAppModel.enEraLabel[it.era] ?? "")
                 tag(it.g == "f" ? L10n.t("偏女") : it.g == "m" ? L10n.t("偏男") : L10n.t("中性"))

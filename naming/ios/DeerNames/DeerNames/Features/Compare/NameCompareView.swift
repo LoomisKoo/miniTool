@@ -131,6 +131,13 @@ struct NameCompareView: View {
     private func comparisonRow(_ name: NameResult) -> some View {
         let read = NameEngine.shared.readability(name.surname, name.chars)
         let sound = name.euphony ?? NameEngine.shared.euphony(name.surname, name.chars)
+        let profile = model.profile
+        let radar = (profile?.hasAnswered == true)
+            ? NameEngine.shared.radar(profile!, name.vec)
+            : []
+        let fit = radar.isEmpty ? nil : radar.map(\.name).reduce(0, +) / radar.count
+        let bazi = model.currentBazi()
+        let baziNote = (bazi?.ok == true) ? BaziEngine.explainName(name.chars, bazi) : ""
         return VStack(alignment: .leading, spacing: 7) {
             HStack {
                 Text(name.full)
@@ -150,6 +157,17 @@ struct NameCompareView: View {
                  : read.issues.joined(separator: L10n.t("、")))
                 .font(.system(size: 12))
                 .foregroundStyle(read.ok ? NamingTheme.muted : NamingTheme.primaryDeep)
+            if let fit {
+                Text(L10n.f("性格匹配 %ld%%", fit))
+                    .font(.system(size: 12))
+                    .foregroundStyle(NamingTheme.muted)
+            }
+            if !baziNote.isEmpty {
+                Text(L10n.t("生辰用字") + "：" + baziNote)
+                    .font(.system(size: 12))
+                    .foregroundStyle(NamingTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 

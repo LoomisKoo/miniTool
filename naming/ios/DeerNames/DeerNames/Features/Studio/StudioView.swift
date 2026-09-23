@@ -22,7 +22,8 @@ struct StudioView: View {
                 if let preview = model.studioPreview() {
                     NamingCard {
                         HStack(alignment: .center, spacing: 0) {
-                            Color.clear.frame(width: 40, height: 40)
+                            SpeechSpeakButton(text: preview.full, language: "zh-CN")
+                                .frame(width: 40, height: 40)
                             Text(L10n.zhPrimary(preview.full, Pinyin.titleCase(preview.py)))
                                 .font(.system(size: 34, weight: .bold))
                                 .foregroundStyle(NamingTheme.ink)
@@ -138,13 +139,24 @@ struct StudioView: View {
         let list = model.studioSimilar()
         if !list.isEmpty {
             NamingCard {
-                CardTitleRow(L10n.t("相似的名字"), subtitle: L10n.t("点一下换过来"))
+                CardTitleRow(title: L10n.t("相似的名字")) {
+                    Button {
+                        withAnimation(NamingMotion.pick) {
+                            model.studioSimilarNextBatch()
+                        }
+                    } label: {
+                        Text(L10n.t("换一组"))
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(NamingTheme.primaryDeep)
+                    }
+                    .buttonStyle(.plain)
+                }
                 VStack(spacing: 0) {
                     ForEach(list) { s in
-                        Button {
-                            model.studioUse(s)
-                        } label: {
-                            HStack(alignment: .top, spacing: 10) {
+                        HStack(alignment: .top, spacing: 10) {
+                            Button {
+                                model.studioUse(s)
+                            } label: {
                                 VStack(alignment: .leading, spacing: 5) {
                                     HStack(spacing: 8) {
                                         Text(s.n)
@@ -163,12 +175,13 @@ struct StudioView: View {
                                         .multilineTextAlignment(.leading)
                                         .fixedSize(horizontal: false, vertical: true)
                                 }
-                                Spacer(minLength: 0)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .contentShape(Rectangle())
                             }
-                            .padding(.vertical, 10)
-                            .contentShape(Rectangle())
+                            .buttonStyle(.plain)
+                            SpeechSpeakButton(text: s.n, language: "zh-CN")
                         }
-                        .buttonStyle(.plain)
+                        .padding(.vertical, 10)
                         if s.id != list.last?.id {
                             Divider().overlay(NamingTheme.hairline)
                         }

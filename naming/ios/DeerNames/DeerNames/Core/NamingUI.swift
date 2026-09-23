@@ -38,6 +38,25 @@ enum NamingMotion {
     }
 }
 
+/// 分享 / 报告卡片导出：固定版心宽度，按屏幕倍率渲染，避免存相册发糊。
+enum NamingImageExport {
+    static let cardWidth: CGFloat = 675
+
+    static var renderScale: CGFloat {
+        max(2, min(3, UIScreen.main.scale))
+    }
+
+    @MainActor
+    static func render<V: View>(_ content: V, width: CGFloat = cardWidth) -> UIImage? {
+        let view = content
+            .frame(width: width)
+            .fixedSize(horizontal: false, vertical: true)
+        let renderer = ImageRenderer(content: view)
+        renderer.scale = renderScale
+        return renderer.uiImage
+    }
+}
+
 /* 按下立刻缩小到 0.97 —— 等抬起再变色会「死」。
  * 不跟 `.plain` 抢语义：需要无背景反馈的交互控件统一挂这个。 */
 struct NamingPressButtonStyle: ButtonStyle {
@@ -115,21 +134,44 @@ enum NamingRadius {
     static let large: CGFloat = 20
 }
 
+/* 白底圆角卡：卡头 + 内容（常见是一张装了整列数据的卡）。
+ *
+ * `elevated: false`：不要投影和圆角裁剪。一张卡里塞进上千行（选名 / 选姓页）时传 false ——
+ * 投影要为整块**几万点高**的内容做一次离屏渲染，首帧慢，而且容易只画出一部分。
+ * 卡底色的圆角还在（那是背景形状画的），视觉差别只有那道 3pt 的浅投影。 */
 struct NamingCard<Content: View>: View {
     var padding: CGFloat = 24
+    var elevated = true
     @ViewBuilder var content: () -> Content
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0, content: content)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            /* 内容**顶部对齐**（不是默认的居中）：卡的高度是先按估算量出来的，装的列表越长
+             * 估算越容易偏小，居中会把顶部裁掉 —— 「一进来卡头和最前面几条看不见、点一下
+             * 才出现」就是这么来的（估算修正后内容整体往下挪，看着还像列表被重排）。
+             * 顶对齐之后这点误差全落在卡片底部，屏幕里看不见。 */
+            .frame(maxWidth: .infinity, alignment: .topLeading)
             /* 卡里的行 / 标签都是可点区域：把系统的悬停·按下高亮层关掉，
              * 否则指针滑过时会残留成一格格灰块（选英文姓页最明显）。 */
             .namingNoHoverHighlight()
             .padding(padding)
             .background(NamingTheme.canvas, in: RoundedRectangle(cornerRadius: NamingRadius.large, style: .continuous))
-            /* 展开动画时内容不能画出圆角，否则会盖住卡头和下一张卡。 */
-            .clipShape(RoundedRectangle(cornerRadius: NamingRadius.large, style: .continuous))
-            .shadow(color: .black.opacity(0.08), radius: 3, x: 0, y: 2)
+            .modifier(NamingCardElevation(elevated: elevated))
+    }
+}
+
+private struct NamingCardElevation: ViewModifier {
+    var elevated: Bool
+
+    func body(content: Content) -> some View {
+        if elevated {
+            content
+                /* 展开动画时内容不能画出圆角，否则会盖住卡头和下一张卡。 */
+                .clipShape(RoundedRectangle(cornerRadius: NamingRadius.large, style: .continuous))
+                .shadow(color: .black.opacity(0.08), radius: 3, x: 0, y: 2)
+        } else {
+            content
+        }
     }
 }
 
@@ -232,6 +274,29 @@ extension View {
     /// 滚动超过 threshold 后显示「回顶部」。iOS 18+ 用系统 API；更早只在顶部锚点挂 1×1 探针（勿铺满内容）。
     func namingScrollTopVisible(_ visible: Binding<Bool>, threshold: CGFloat = 220) -> some View {
         modifier(NamingScrollTopVisibleModifier(visible: visible, threshold: threshold))
+    }
+
+    /* 长列表页的首屏定位：把滚动内容锚在**顶部**。
+     *
+     * 光有初始位置不够。页面是被 push 上来的，导航栏高度、底部栏 inset 这些都是在
+     * **首帧之后**才补上的；系统默认会顺手把 content offset 挪一下（保持视觉位置不动），
+     * 于是最上面那几条被裁到屏幕上方，而且往下拉也拉不回来 —— 再动一下才归位，
+     * 表现就是「一进来顶部的数据没了，列表像被裁了一截」。锚在 top 之后，尺寸/安全区
+     * 变化时内容也贴住顶部，首屏就是第一条。
+     * （`for: .sizeChanges` 这一档 iOS 18 起才有；更早只有初始位置那一档。） */
+    func namingScrollAnchorTop() -> some View {
+        defaultScrollAnchor(.top)
+            .modifier(NamingScrollSizeAnchorModifier())
+    }
+}
+
+private struct NamingScrollSizeAnchorModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 18.0, *) {
+            content.defaultScrollAnchor(.top, for: .sizeChanges)
+        } else {
+            content
+        }
     }
 }
 

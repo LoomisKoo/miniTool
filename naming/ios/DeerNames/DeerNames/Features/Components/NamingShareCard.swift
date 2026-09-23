@@ -28,11 +28,7 @@ struct NamingCardData {
 enum NamingCardRenderer {
     @MainActor
     static func render(_ data: NamingCardData) -> UIImage? {
-        let view = NamingShareCard(data: data)
-            .frame(width: 675, height: 900)
-        let renderer = ImageRenderer(content: view)
-        renderer.scale = 1
-        return renderer.uiImage
+        NamingImageExport.render(NamingShareCard(data: data).frame(height: 900))
     }
 }
 
@@ -185,17 +181,20 @@ struct NamingShareCard: View {
 
             Spacer(minLength: 8)
 
-            VStack(spacing: 4) {
+            VStack(spacing: 5) {
                 Text(L10n.t("仙鹿起名"))
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(NamingTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
                 if data.watermark {
                     Text(L10n.t("免费版 · 升级 Pro 去水印"))
                         .font(.system(size: 11))
                         .foregroundStyle(NamingTheme.primaryDeep.opacity(0.85))
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            .padding(.bottom, 22)
+            /* ImageRenderer 贴 900pt 底边时容易裁掉字脚，多留一点内边距。 */
+            .padding(.bottom, 30)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(
@@ -211,11 +210,7 @@ struct NamingShareCard: View {
         )
         .overlay {
             if data.watermark {
-                Text(L10n.t("仙鹿起名"))
-                    .font(.system(size: 42, weight: .bold))
-                    .foregroundStyle(NamingTheme.ink.opacity(0.05))
-                    .rotationEffect(.degrees(-28))
-                    .allowsHitTesting(false)
+                CardWatermarkPattern(text: L10n.t("仙鹿起名"))
             }
         }
     }
@@ -346,5 +341,32 @@ struct NamingShareCard: View {
             Circle().fill(color).frame(width: 8, height: 8)
             Text(text)
         }
+    }
+}
+
+/// 免费版分享图：斜向平铺水印（比单个大字更难裁掉又更显眼）。
+private struct CardWatermarkPattern: View {
+    let text: String
+
+    var body: some View {
+        GeometryReader { geo in
+            let stepX: CGFloat = 148
+            let stepY: CGFloat = 108
+            let cols = max(1, Int(geo.size.width / stepX) + 2)
+            let rows = max(1, Int(geo.size.height / stepY) + 2)
+            ForEach(0..<rows, id: \.self) { row in
+                ForEach(0..<cols, id: \.self) { col in
+                    Text(text)
+                        .font(.system(size: 30, weight: .bold))
+                        .foregroundStyle(NamingTheme.ink.opacity(0.045))
+                        .rotationEffect(.degrees(-28))
+                        .position(
+                            x: CGFloat(col) * stepX + (row.isMultiple(of: 2) ? stepX * 0.35 : 0),
+                            y: CGFloat(row) * stepY + stepY * 0.45
+                        )
+                }
+            }
+        }
+        .allowsHitTesting(false)
     }
 }

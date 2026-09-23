@@ -22,6 +22,28 @@ enum NamingScreen: Hashable {
 
 enum NamingTab: Hashable { case home, mine }
 
+/* 「点一行看详情」sheet 里正在看的那一条。
+ *
+ * 三张选名 / 选姓页（英文选名 / 英文选姓 / 选姓氏）点一行都只弹这一张介绍 sheet，
+ * 内容不一样，所以包成一个 enum。
+ *
+ * 为什么不是各页自己的 `@State`：页面 body 不读这个值，所以开 / 关浮层**不会让列表重算**
+ * （`@State` 一定会）—— 点一行只有根上那张 `NamePeekSheet` 重算一次，一千多行的列表
+ * 连 body 都不会跑。 */
+enum NamePeek: Identifiable {
+    case enName(NMEnName)
+    case enSurname(NMSurnameEn)
+    case zhSurname(NMSurname)
+
+    var id: String {
+        switch self {
+        case .enName(let x): return "enName-\(x.n)"
+        case .enSurname(let x): return "enSurname-\(x.n)"
+        case .zhSurname(let x): return "zhSurname-\(x.c)"
+        }
+    }
+}
+
 enum NamingSheetKind: String, Identifiable, Hashable {
     case surname, pool, banNames
     var id: String { rawValue }
@@ -122,6 +144,8 @@ final class NamingAppModel {
 
     var studioSurname: NMSurname?
     var studioSlots: [String] = []
+    /// 「相似的名字」当前展示第几组（点「换一组」递增）。
+    var studioSimilarBatch = 0
     var studioSurKeyword = ""
     var studioCharKeyword = ""
     var studioSurF = StudioFilters()
@@ -186,6 +210,8 @@ final class NamingAppModel {
 
     // 浮层 / 提示 / 卡片
     var sheet: NamingSheetKind?
+    /// 选名 / 选姓 / 选姓氏页「点一行看详情」浮层的内容（nil = 没开）。见 `NamePeek`。
+    var peek: NamePeek?
     var toastText: String?
     var cardImage: UIImage?
     /// 设置浮层（齿轮在 NavigationStack 根视图的导航栏上，状态就放在这里）。
@@ -974,6 +1000,13 @@ final class NamingAppModel {
         py.lowercased().first.map(String.init) ?? ""
     }
 
+    /// 选姓氏页行右端的圆钮 / 详情浮层里的「选这个」：选中 + 回自选页。
+    func pickStudioSurname(_ s: NMSurname) {
+        studioSimilarBatch = 0
+        studioSurname = s
+        popTo(.studio)
+    }
+
     func lettersOf(_ list: [String]) -> [String] {
         var seen = Set<String>()
         var out: [String] = []
@@ -987,11 +1020,17 @@ final class NamingAppModel {
     func toggleStudioChar(_ c: String) {
         if let at = studioSlots.firstIndex(of: c) {
             studioSlots.remove(at: at)
+            studioSimilarBatch = 0
         } else if studioSlots.count >= maxStudioChars {
             toast(L10n.f("最多 %ld 个字", maxStudioChars))
         } else {
             studioSlots.append(c)
+            studioSimilarBatch = 0
         }
+    }
+
+    func studioSimilarNextBatch() {
+        studioSimilarBatch += 1
     }
 
     func studioPreview() -> (full: String, py: String, read: Readability, tips: [String])? {
@@ -1026,8 +1065,19 @@ final class NamingAppModel {
         } else {
             all = computeSimilar(cur)
             similarCache = (key, all)
+            studioSimilarBatch = 0
         }
-        return Array(all.prefix(limit))
+        return sliceSimilarBatch(all, batch: studioSimilarBatch, limit: limit)
+    }
+
+    private func sliceSimilarBatch(_ all: [SimilarName], batch: Int, limit: Int) -> [SimilarName] {
+        guard !all.isEmpty else { return [] }
+        let start = (batch * limit) % all.count
+        var out: [SimilarName] = []
+        for i in 0..<min(limit, all.count) {
+            out.append(all[(start + i) % all.count])
+        }
+        return out
     }
 
     private func computeSimilar(_ cur: NameVector) -> [SimilarName] {
@@ -1062,6 +1112,7 @@ final class NamingAppModel {
         let chars = Array(s.n).map(String.init)
         guard chars.count <= maxStudioChars else { return }
         studioSlots = chars
+        studioSimilarBatch = 0
     }
 
     /* 只是给视图算好的一份缓存，不是界面状态：不参与观察，避免在 body 里写它触发重绘。 */
@@ -1213,6 +1264,12 @@ final class NamingAppModel {
     func pickEnGivenName(_ it: NMEnName) {
         enGivenPick = it
         popTo(.enStudio)
+    }
+
+    /// 选姓页行右端的圆钮 / 详情浮层里的「选这个」：选中 + 回自选页。
+    func pickEnSurname(_ n: String) {
+        setEnSurnameManually(n)
+        pop()
     }
 
     // MARK: - 英文姓
