@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 本地预览观影座舱（开发用，零依赖）
+ * 本地预览影厅模拟器（开发用，零依赖）
  *   node serve.mjs           # http://127.0.0.1:9881/cinema-seat/
  *   node serve.mjs 9000      # 换个端口
  *
@@ -50,5 +50,5 @@ http.createServer((req, res) => {
     res.end(buf);
   });
 }).listen(PORT, () => {
-  console.log(`观影座舱预览 · http://127.0.0.1:${PORT}/cinema-seat/`);
+  console.log(`影厅模拟器预览 · http://127.0.0.1:${PORT}/cinema-seat/`);
 });

@@ -1,4 +1,4 @@
-/* 观影座舱：真正的低面数 3D 影厅与第一人称座位视角 */
+/* 影厅模拟器：真正的低面数 3D 影厅与第一人称座位视角 */
 (function () {
   'use strict';
 
@@ -37,6 +37,7 @@
   var pendingHall = 0;
   var seatZoom = 1;
   var seatFitZoom = 1;
+  var SEAT_ZOOM_MIN = 0.52;
   var seatFitsView = true;
   var seatVisualW = 0;
   var seatVisualH = 0;
@@ -67,9 +68,20 @@
         backDist = frontGap + (hall.rows - 1) * rowPitch;
       }
     }
-    var screenY = Math.max(3.05, 0.7 + screenH * 0.46);
-    var screenBottom = screenY - screenH / 2;
-    if (screenBottom < 0.95) screenY += 0.95 - screenBottom;
+    /* 银幕竖向位置：巨幕/IMAX/CGS 下缘贴近地面；杜比/普通厅脚下留出台面（约 1.1–1.25m） */
+    var screenBottomMin = giant ? 0.45
+      : (hall.family === 'premium' ? 1.12
+        : (hall.family === 'wrap' ? 1.05
+          : (hall.family === 'motion' ? 1.15
+            : (hall.family === 'comfort' ? 1.2 : 1.22))));
+    var screenY;
+    if (giant) {
+      screenY = screenBottomMin + screenH * 0.5;
+    } else {
+      screenY = Math.max(2.75, 0.82 + screenH * 0.44);
+      var screenBottom = screenY - screenH * 0.5;
+      if (screenBottom < screenBottomMin) screenY += screenBottomMin - screenBottom;
+    }
     var rises = sightlineRises(hall.rows, rowPitch, frontGap, screenY - screenH / 2);
     var lastRise = rises[rises.length - 1] || 0;
     return {
@@ -109,6 +121,11 @@
   var aimEuler = new THREE.Euler(0, 0, 0, 'YXZ');
   var lookYaw = 0;
   var lookPitch = 0;
+  /* 约 ±95° 水平，便于看到同排左右观众；垂直仍留抬头看银幕余量 */
+  var LOOK_YAW_LIMIT = 1.65;
+  var LOOK_PITCH_LIMIT = 1.35;
+  /* 竖屏下垂直 FOV；横屏按相同水平 FOV 反算垂直 FOV，避免宽高比一变视角差很多 */
+  var CAMERA_VFOV_PORTRAIT = 46;
   var lookDragging = false;
   var lookLastX = 0;
   var lookLastY = 0;
@@ -123,6 +140,8 @@
   var houseLamps = [], houseLights = [];
   var audienceGroup = null;
   var screenTexture = null, sampleCanvas = null, sampleCtx = null;
+  var sampleImageTexture = null, sampleImageReady = false;
+  var SAMPLE_SCREEN_URL = 'assets/sample-screen.jpg';
   var raf = 0, zoomAnimation = 0, sampleTime = 0, toastTimer = null, audioCtx = null;
   var video = null, videoTexture = null, videoUrl = '';
 
@@ -144,7 +163,6 @@
       row: state.row,
       col: state.col,
       badge: state.row + '排' + String(state.col).padStart(2, '0') + '座',
-      name: state.col < 4 ? '左侧位置' : (state.col > 9 ? '右侧位置' : '中央位置'),
       pan: clamp((state.col - center) / center, -1, 1),
       key: state.row === Math.ceil(hallRows() / 2) && state.col === Math.ceil(hallCols() / 2) ? 'best' : ''
     };
@@ -158,6 +176,27 @@
       emissiveIntensity: 0
     });
   }
+  /* 影院黑绒椅：中性深色 albedo + 高粗糙 + sheen，开灯时仍偏黑、边缘有织物高光 */
+  function seatFabricMat(color) {
+    var base = {
+      color: color,
+      roughness: .97,
+      metalness: 0,
+      emissive: 0x000000,
+      emissiveIntensity: 0
+    };
+    if (THREE.MeshPhysicalMaterial) {
+      var mat = new THREE.MeshPhysicalMaterial(base);
+      mat.sheen = 0.38;
+      mat.sheenRoughness = 0.78;
+      mat.sheenColor = new THREE.Color(0x141418);
+      return mat;
+    }
+    return new THREE.MeshStandardMaterial(base);
+  }
+  function hallCarpetMat(color) {
+    return seatFabricMat(color);
+  }
   function plasticMat(color) {
     return new THREE.MeshStandardMaterial({
       color: color,
@@ -170,6 +209,17 @@
   function seatedEye(cm) {
     // 坐姿眼高：压实座面约 0.44m，眼高于座面约 0.52×身高 − 0.15m
     return 0.29 + cm * 0.0052;
+  }
+  /* 观众靠椅背：略低于正坐，头顶仍露出椅背上沿（椅背顶约 y≈1.06） */
+  function audienceSlouchPose(cm, scale) {
+    var eye = seatedEye(cm);
+    return {
+      bodyY: 0.74 * scale,
+      bodyZ: 0.07 * scale,
+      headY: eye - 0.05 * scale,
+      headZ: 0.05 * scale,
+      headTilt: 0.28
+    };
   }
   function refreshEye() {
     if (!renderer || !byId('theatreView').classList.contains('is-open')) return;
@@ -293,8 +343,9 @@
       '<span class="ticket-kicker">座位</span>' +
       '<span class="ticket-main">' +
         '<strong>' + seat.badge + '</strong>' +
-        '<em>' + seat.name + ' · ' + hall.rows + '排' + hall.cols + '座</em>' +
+        '<em>' + hall.rows + '排 · 每排' + hall.cols + '座</em>' +
       '</span>' +
+      '<span class="ticket-tag" aria-hidden="true"></span>' +
       '<span class="chev" aria-hidden="true"></span>';
     button.addEventListener('click', openSeatModal);
     picker.appendChild(button);
@@ -310,6 +361,24 @@
     picker.appendChild(button);
   }
 
+  function syncSeatMapShellHeight(visualH) {
+    var track = byId('seatTrack');
+    var shell = track && track.parentNode;
+    if (!shell || !shell.classList.contains('seat-map-shell')) return;
+    var vh = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
+    var cap = Math.min(vh * 0.38, 360);
+    var floor = 132;
+    var target = Math.ceil(visualH) + 8;
+    shell.style.height = Math.round(Math.min(cap, Math.max(floor, target))) + 'px';
+  }
+  function resetSeatMapShellHeight() {
+    var track = byId('seatTrack');
+    var shell = track && track.parentNode;
+    if (shell && shell.classList.contains('seat-map-shell')) shell.style.height = '';
+  }
+  function lockSeatMapShellHeight() {
+    syncSeatMapShellHeight(seatVisualH);
+  }
   function renderSeatMap(rebuildSeats) {
     var map = byId('seatMap');
     var labels = byId('rowLabels');
@@ -323,15 +392,12 @@
     var screenRatio = currentHall().family === 'giant' ? .9 : (currentHall().family === 'premium' ? .8 : .72);
     var stage = map.parentNode;
     var track = stage.parentNode;
-    // clientWidth/Height 不受横屏 rotate(90deg) 影响
-    var trackWidth = track.clientWidth || 300;
-    var trackHeight = track.clientHeight || 180;
     // 舞台按内容宽度，避免被拉满后银幕视觉偏左
     var baseStageWidth = seatTotal + 68;
     var screenWidth = Math.max(150, Math.round(seatTotal * screenRatio));
     var screenSign = byId('screenSign');
     var rowTop = (screenSign ? screenSign.offsetHeight : 21) + 16;
-    var baseStageHeight = rowTop + hallRows() * 29;
+    var baseStageHeight = rowTop + hallRows() * 29 + 10;
     var groupStart = (baseStageWidth - hallCols() * seatUnit) / 2;
     var bestStartRow = Math.floor(hallRows() * .3) + 1;
     var bestEndRow = Math.floor(hallRows() * .7);
@@ -345,6 +411,9 @@
     var visualH = baseStageHeight * seatZoom;
     seatVisualW = visualW;
     seatVisualH = visualH;
+    // clientWidth/Height 不受横屏 rotate(90deg) 影响
+    var trackWidth = track.clientWidth || 300;
+    var trackHeight = track.clientHeight || Math.max(132, Math.ceil(visualH));
     seatOffsetX = visualW < trackWidth ? (trackWidth - visualW) / 2 : 0;
     seatOffsetY = visualH < trackHeight ? (trackHeight - visualH) / 2 : 0;
     var labelPadding = 4;
@@ -441,8 +510,31 @@
   }
   function showDialog(element) { showSheet(element); }
   function hideDialog(element) { hideSheet(element); }
+  function seatDefaultZoom() {
+    return Math.min(1, Math.max(seatFitZoom, SEAT_ZOOM_MIN));
+  }
+  function scrollSeatIntoView() {
+    var track = byId('seatTrack');
+    var stage = byId('seatMap') && byId('seatMap').parentNode;
+    if (!track || !stage) return;
+    var seatUnit = 25;
+    var baseWidth = parseFloat(stage.style.width) || track.clientWidth;
+    var rowTop = parseFloat(stage.style.getPropertyValue('--seat-top')) || 38;
+    var groupStart = (baseWidth - hallCols() * seatUnit) / 2;
+    var cx = (groupStart + (pendingSeat.col - 0.5) * seatUnit) * seatZoom + seatOffsetX;
+    var cy = (rowTop + (pendingSeat.row - 0.5) * 29) * seatZoom + seatOffsetY;
+    var limit = seatScrollLimit(track);
+    track.scrollLeft = clamp(cx - track.clientWidth / 2, 0, limit.x);
+    track.scrollTop = clamp(cy - track.clientHeight / 2, 0, limit.y);
+    syncRowLabels();
+  }
+  function seatContentFitsTrack() {
+    var track = byId('seatTrack');
+    if (!track) return false;
+    return seatVisualW <= track.clientWidth + 2 && seatVisualH <= track.clientHeight + 2;
+  }
   function seatIsFit() {
-    return seatFitsView && seatZoom <= seatFitZoom + .001;
+    return seatFitsView && seatZoom <= seatFitZoom + .001 && seatContentFitsTrack();
   }
   // 滚动边界必须按缩放后的实际可视尺寸算：舞台的布局盒是未缩放尺寸，
   // 直接读 scrollWidth/scrollHeight 会比可视内容大，能一路拖到座位全部移出视野。
@@ -473,6 +565,7 @@
   }
   function openSeatModal() {
     pendingSeat.row = state.row; pendingSeat.col = state.col;
+    resetSeatMapShellHeight();
     showSheet(byId('seatModal'));
     requestAnimationFrame(function () {
       var track = byId('seatTrack');
@@ -483,18 +576,27 @@
       renderSeatMap();
       var baseWidth = parseFloat(stage.style.width) || track.clientWidth;
       var baseHeight = parseFloat(stage.style.height) || (42 + hallRows() * 29);
-      var fitZoom = Math.min(track.clientWidth / baseWidth, track.clientHeight / baseHeight, 1);
+      var fitSlack = 10;
+      var fitZoom = Math.min(
+        (track.clientWidth - fitSlack) / baseWidth,
+        (track.clientHeight - fitSlack) / baseHeight,
+        1
+      );
       if (!isFinite(fitZoom) || fitZoom <= 0) fitZoom = 1;
       seatFitZoom = clamp(fitZoom, .2, 1);
       seatFitsView = fitZoom >= seatFitZoom - .001;
-      seatZoom = Number(seatFitZoom.toFixed(2));
+      seatZoom = Number(seatDefaultZoom().toFixed(2));
       renderSeatMap();
-      centerSeatTrack(track);
-      syncRowLabels();
+      if (seatIsFit()) centerSeatTrack(track);
+      else scrollSeatIntoView();
       requestAnimationFrame(function () {
         renderSeatMap(false);
-        centerSeatTrack(track);
-        syncRowLabels();
+        if (seatIsFit()) centerSeatTrack(track);
+        else scrollSeatIntoView();
+        lockSeatMapShellHeight();
+        renderSeatMap(false);
+        if (seatIsFit()) centerSeatTrack(track);
+        else scrollSeatIntoView();
         requestAnimationFrame(function () {
           stage.classList.remove('no-zoom-transition');
           byId('rowLabels').classList.remove('no-zoom-transition');
@@ -522,7 +624,7 @@
     }
     var contentX = (track.scrollLeft + focalX - oldOffsetX) / oldZoom;
     var contentY = (track.scrollTop + focalY - oldOffsetY) / oldZoom;
-    var next = clamp(Number(nextZoom.toFixed(2)), Math.min(.45, seatFitZoom), 1.8);
+    var next = clamp(Number(nextZoom.toFixed(2)), SEAT_ZOOM_MIN, 1.8);
     var rebuildSeats = (seatZoom < 1.35) !== (next < 1.35);
     var applyFrame = function (zoom, rebuild) {
       seatZoom = zoom;
@@ -572,10 +674,10 @@
       zoomAnimation = 0;
     }
     var wasZoomedIn = seatZoom >= 1.35;
-    seatZoom = Number(seatFitZoom.toFixed(2));
+    seatZoom = Number(seatDefaultZoom().toFixed(2));
     renderSeatMap(wasZoomedIn);
-    centerSeatTrack(track);
-    syncRowLabels();
+    if (seatIsFit()) centerSeatTrack(track);
+    else scrollSeatIntoView();
   }
   function changeSeatZoom(delta) {
     var track = byId('seatTrack'), rect = track.getBoundingClientRect();
@@ -590,32 +692,35 @@
   var panStartY = 0;
   var panLastX = 0;
   var panLastY = 0;
+  var seatMapSuppressClick = false;
   var PAN_THRESHOLD = 6;
   function isSeatLandscape() {
     return document.body.classList.contains('orientation-landscape')
       || byId('seatModal').classList.contains('orientation-landscape');
   }
-  // 只有竖屏视口下才真的加了 .rotate-90（见 applyLandscapeRotation）
+  // 竖屏视口下横屏模式会加 .rotate-stage（见 applyLandscapeRotation）
   function isSeatRotated() {
     return byId('seatModal').classList.contains('rotate-90');
   }
   function seatTrackScrollable() {
     var track = byId('seatTrack');
     if (!track) return false;
-    return track.scrollWidth > track.clientWidth + 1 || track.scrollHeight > track.clientHeight + 1;
+    var limit = seatScrollLimit(track);
+    return limit.x > 1 || limit.y > 1;
   }
-  // 整屏 rotate(90deg) 时 touch-action 为 none，原生滚动失效，只能靠手动接管指针；
-  // 视口本身就是横屏时不旋转，走浏览器原生滚动/点击。
-  // 是否可拖拽取决于内容是否真的溢出，而不是「当前缩放是否大于适配缩放」。
+  // 舞台用 transform 缩放，原生 scrollWidth 不可靠；放大后可拖拽平移（横屏旋转时轴互换）。
   function canPanSeatMap() {
-    return isSeatRotated() && seatTrackScrollable();
+    return seatTrackScrollable();
   }
   function pointerDistance(a, b) {
     return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
   }
   function bindSeatPinch() {
     var track = byId('seatTrack');
-    track.addEventListener('scroll', syncRowLabels, { passive: true });
+    track.addEventListener('scroll', function () {
+      clampSeatScroll(track);
+      syncRowLabels();
+    }, { passive: true });
     track.addEventListener('pointerdown', function (event) {
       pinchPointers[event.pointerId] = event;
       if (Object.keys(pinchPointers).length === 2) {
@@ -653,6 +758,7 @@
         if (!panActive) {
           if (Math.hypot(event.clientX - panStartX, event.clientY - panStartY) < PAN_THRESHOLD) return;
           panActive = true;
+          seatMapSuppressClick = true;
           panLastX = panStartX;
           panLastY = panStartY;
           try { track.setPointerCapture(event.pointerId); } catch (err) {}
@@ -662,17 +768,27 @@
         var dy = event.clientY - panLastY;
         panLastX = event.clientX;
         panLastY = event.clientY;
-        track.scrollLeft += dy;
-        track.scrollTop -= dx;
+        if (isSeatRotated()) {
+          track.scrollLeft += dy;
+          track.scrollTop -= dx;
+        } else {
+          track.scrollLeft -= dx;
+          track.scrollTop -= dy;
+        }
         clampSeatScroll(track);
         syncRowLabels();
       }
     });
     track.addEventListener('wheel', function (event) {
-      if (!canPanSeatMap()) return;
+      if (!seatTrackScrollable()) return;
       event.preventDefault();
-      track.scrollLeft += event.deltaY;
-      track.scrollTop -= event.deltaX;
+      if (isSeatRotated()) {
+        track.scrollLeft += event.deltaY;
+        track.scrollTop -= event.deltaX;
+      } else {
+        track.scrollLeft += event.deltaX;
+        track.scrollTop += event.deltaY;
+      }
       clampSeatScroll(track);
       syncRowLabels();
     }, { passive: false });
@@ -686,8 +802,17 @@
         if (Object.keys(pinchPointers).length < 2) pinchStartDistance = 0;
       });
     });
+    track.addEventListener('click', function (event) {
+      if (!seatMapSuppressClick) return;
+      seatMapSuppressClick = false;
+      event.preventDefault();
+      event.stopPropagation();
+    }, true);
   }
-  function closeSeatModal() { hideDialog(byId('seatModal')); }
+  function closeSeatModal() {
+    hideDialog(byId('seatModal'));
+    resetSeatMapShellHeight();
+  }
   function confirmSeat() {
     state.row = pendingSeat.row; state.col = pendingSeat.col;
     lookYaw = 0; lookPitch = 0;
@@ -724,10 +849,6 @@
     canvas.style.filter = 'blur(' + blur + 'px)' + ghost;
   }
   function updateTheatreLabels() {
-    var hall = currentHall(), seat = currentSeat();
-    byId('theatreTitle').textContent = '观影座舱';
-    byId('theatreHallName').textContent = hall.name;
-    byId('seatHint').textContent = seat.key === 'best' ? '中央位置，画面与字幕最均衡' : (seat.row < 3 ? '距离银幕较近，沉浸感强但更容易疲劳' : (seat.row >= 7 ? '后排更放松，但银幕占视野比例略低' : '前方座椅逐排升高，视野更接近真实观影'));
     updateVisionLabels();
   }
 
@@ -758,16 +879,39 @@
     setTimeout(function () { viewAnimating = false; }, 360);
   }
 
+  function applySampleImageTexture(tex) {
+    if (video) return;
+    sampleImageTexture = tex;
+    sampleImageReady = true;
+    tex.minFilter = THREE.LinearFilter;
+    tex.magFilter = THREE.LinearFilter;
+    if (THREE.SRGBColorSpace) tex.colorSpace = THREE.SRGBColorSpace;
+    if (screenTexture && screenTexture !== videoTexture && screenTexture.dispose) screenTexture.dispose();
+    screenTexture = tex;
+    if (byId('theatreView').classList.contains('is-open')) buildTheatre();
+    else renderTheatre();
+  }
   function makeSampleTexture() {
+    if (sampleImageReady && sampleImageTexture) {
+      screenTexture = sampleImageTexture;
+      return;
+    }
     sampleCanvas = document.createElement('canvas');
     sampleCanvas.width = 768; sampleCanvas.height = 432;
     sampleCtx = sampleCanvas.getContext('2d');
+    sampleCtx.fillStyle = '#0a1020';
+    sampleCtx.fillRect(0, 0, sampleCanvas.width, sampleCanvas.height);
     screenTexture = new THREE.CanvasTexture(sampleCanvas);
     screenTexture.needsUpdate = true;
-    drawSample();
+    new THREE.TextureLoader().load(SAMPLE_SCREEN_URL, applySampleImageTexture, undefined, function () {
+      drawSample();
+      screenTexture = new THREE.CanvasTexture(sampleCanvas);
+      screenTexture.needsUpdate = true;
+      if (byId('theatreView').classList.contains('is-open')) buildTheatre();
+    });
   }
   function drawSample() {
-    if (!sampleCtx || video) return;
+    if (!sampleCtx || video || sampleImageReady) return;
     var c = sampleCtx, w = sampleCanvas.width, h = sampleCanvas.height, hall = currentHall();
     c.save();
     c.filter = 'none';
@@ -850,7 +994,7 @@
 
   function addRoomShell(roomW, roomD, roomCenterZ, roomH) {
     var h = roomH || 7.4;
-    var floor = new THREE.Mesh(new THREE.BoxGeometry(roomW, .18, roomD), material(0x000000, 1));
+    var floor = new THREE.Mesh(new THREE.BoxGeometry(roomW, .18, roomD), hallCarpetMat(0x040406));
     floor.position.set(0, -.1, roomCenterZ);
     hallGroup.add(floor);
     var wallMat = material(0x1c1820, .92);
@@ -880,11 +1024,8 @@
   var audienceMats = null;
   function audienceMaterials() {
     if (audienceMats) return audienceMats;
-    audienceMats = {
-      cloth: [0x1a1c22, 0x241820, 0x1c1814].map(function (color) { return fabricMat(color); }),
-      skin: [0xc48a6a, 0x8d5a40, 0xe0b090].map(function (color) { return fabricMat(color); }),
-      hair: [0x1c1816, 0x2c241e, 0x141210, 0x3a2e26].map(function (color) { return fabricMat(color); })
-    };
+    var black = seatFabricMat(0x050508);
+    audienceMats = { cloth: black, skin: black, hair: black };
     return audienceMats;
   }
   function fillAudience() {
@@ -895,7 +1036,7 @@
     var layout = viewLayout;
     var scale = currentHall().family === 'comfort' ? 1.08 : 1;
     var bodyGeo = roundedBoxGeometry(.32 * scale, .42 * scale, .18 * scale, .07 * scale);
-    var headGeo = new THREE.SphereGeometry(.078 * scale, 12, 10);
+    var headGeo = new THREE.SphereGeometry(.082 * scale, 12, 10);
     // 发帽覆盖到头顶，避免皮肤从顶部露出；头部略微前移，避免嵌进椅背。
     var hairGeo = new THREE.SphereGeometry(.086 * scale, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.86);
     audienceGroup = new THREE.Group();
@@ -903,19 +1044,18 @@
     for (var row = 1; row <= hallRows(); row++) {
       for (var col = 1; col <= hallCols(); col++) {
         if (row === mine.row && col === mine.col) continue;
-        var pick = (row * 5 + col * 3) % 7;
         // 观众身高只做轻微差异，避免同排人物出现夸张高低差。
         var cm = 170 + ((row + col) % 3 - 1) * 3;
-        var eye = seatedEye(cm);
+        var pose = audienceSlouchPose(cm, scale);
         var person = new THREE.Group();
-        var body = new THREE.Mesh(bodyGeo, mats.cloth[pick % 3]);
-        // 身体抬高到椅背上沿附近，避免完全被椅背挡住。
-        body.position.set(0, .84 * scale, .08);
-        var head = new THREE.Mesh(headGeo, mats.skin[pick % 3]);
-        head.position.set(0, eye + .02 * scale, -.02);
-        var hair = new THREE.Mesh(hairGeo, mats.hair[pick % mats.hair.length]);
-        hair.position.set(0, eye + .03 * scale, -.008);
-        hair.rotation.x = .7;
+        var body = new THREE.Mesh(bodyGeo, mats.cloth);
+        body.position.set(0, pose.bodyY, pose.bodyZ);
+        var head = new THREE.Mesh(headGeo, mats.skin);
+        head.position.set(0, pose.headY, pose.headZ);
+        head.rotation.x = pose.headTilt;
+        var hair = new THREE.Mesh(hairGeo, mats.hair);
+        hair.position.set(0, pose.headY + .012 * scale, pose.headZ + .006 * scale);
+        hair.rotation.x = pose.headTilt + 0.18;
         hair.scale.set(1, .94, 1.06);
         person.add(body, head, hair);
         person.position.set(
@@ -955,9 +1095,9 @@
       hallGroup.add(sideL, sideR);
     }
     var seatScale = hall.family === 'comfort' ? 1.08 : 1;
-    var seatMat = fabricMat(0x000000);
-    var armMat = plasticMat(0x000000);
-    var footMat = plasticMat(0x000000);
+    var seatMat = seatFabricMat(0x050508);
+    var armMat = plasticMat(0x0a0a0c);
+    var footMat = plasticMat(0x08080a);
     var rowPitch = layout.rowPitch;
     var frontRowZ = layout.frontRowZ;
     for (var row = 1; row <= hallRows(); row++) {
@@ -965,7 +1105,7 @@
       var rise = rowRise(layout, row);
       var prev = row > 1 ? rowRise(layout, row - 1) : 0;
       var stepH = Math.max(0.2, rise - prev + 0.08);
-      var platform = new THREE.Mesh(new THREE.BoxGeometry(roomW - .5, stepH, rowPitch), material(0x000000, 1));
+      var platform = new THREE.Mesh(new THREE.BoxGeometry(roomW - .5, stepH, rowPitch), hallCarpetMat(0x040406));
       platform.position.set(0, rise - stepH / 2, z);
       hallGroup.add(platform);
       for (var col = 1; col <= hallCols(); col++) {
@@ -983,13 +1123,36 @@
      本来就不参与光照，所以开灯不会把画面冲淡）。 */
   function applyHallLight() {
     var on = state.light;
-    if (hemiLight) hemiLight.intensity = on ? 1.35 : 0.08;
-    if (keyLight) keyLight.intensity = on ? 1.7 : 0.12;
-    if (seatFillLight) seatFillLight.intensity = on ? 2.8 : 0.08;
-    if (screenBounce) screenBounce.intensity = on ? 0.45 : 0.22;
-    houseLights.forEach(function (light) { light.intensity = on ? 4.2 : 0; });
+    /* 关灯：中性弱光；开灯：偏白场灯照亮通道，避免暖光把黑绒染成褐 */
+    if (hemiLight) {
+      if (on) {
+        hemiLight.color.setHex(0xc8ccd2);
+        hemiLight.groundColor.setHex(0x060608);
+        hemiLight.intensity = 1.05;
+      } else {
+        hemiLight.color.setHex(0x5c6066);
+        hemiLight.groundColor.setHex(0x030303);
+        hemiLight.intensity = 0.028;
+      }
+    }
+    if (keyLight) {
+      keyLight.color.setHex(on ? 0xe8eaee : 0x8a8e92);
+      keyLight.intensity = on ? 0.88 : 0.03;
+    }
+    if (seatFillLight) {
+      seatFillLight.color.setHex(on ? 0xd0d4d8 : 0x7a7e82);
+      seatFillLight.intensity = on ? 0.78 : 0.012;
+    }
+    if (screenBounce) {
+      screenBounce.color.setHex(on ? 0xb0b6be : 0x9aa0a8);
+      screenBounce.intensity = on ? 0.14 : 0.045;
+    }
+    houseLights.forEach(function (light) {
+      if (on) light.color.setHex(0xf4f6f8);
+      light.intensity = on ? 3.75 : 0;
+    });
     houseLamps.forEach(function (lamp) { lamp.visible = on; });
-    if (scene) scene.background = new THREE.Color(on ? 0x24222c : 0x07070a);
+    if (scene) scene.background = new THREE.Color(on ? 0x2c2a34 : 0x07070a);
     var button = byId('lightBtn');
     if (button) {
       button.classList.toggle('on', on);
@@ -1036,16 +1199,16 @@
     scene.background = new THREE.Color(0x07070a);
     camera = new THREE.PerspectiveCamera(46, 1, .04, 120);
     hallGroup = new THREE.Group(); scene.add(hallGroup);
-    hemiLight = new THREE.HemisphereLight(0xb7a898, 0x120e12, 0.08);
+    hemiLight = new THREE.HemisphereLight(0x5c6066, 0x030303, 0.028);
     scene.add(hemiLight);
-    keyLight = new THREE.DirectionalLight(0xffe2c4, 0.12);
+    keyLight = new THREE.DirectionalLight(0x8a8e92, 0.03);
     keyLight.position.set(2.2, 6.5, 3.5); scene.add(keyLight);
-    seatFillLight = new THREE.PointLight(0xffc8a0, 0.08, 14, 2);
+    seatFillLight = new THREE.PointLight(0x7a7e82, 0.012, 14, 2);
     seatFillLight.position.set(0, 3.2, 6); scene.add(seatFillLight);
-    screenBounce = new THREE.DirectionalLight(0xffd7b0, 0.22);
+    screenBounce = new THREE.DirectionalLight(0x9aa0a8, 0.045);
     screenBounce.position.set(0, 3.8, -8); scene.add(screenBounce);
     houseLights = [-7, 0, 7].map(function (z) {
-      var light = new THREE.PointLight(0xffe9cc, 0, 26, 2);
+      var light = new THREE.PointLight(0xf4f6f8, 0, 26, 2);
       light.position.set(0, 6.2, z);
       scene.add(light);
       return light;
@@ -1053,13 +1216,34 @@
     makeSampleTexture(); resizeRenderer();
     applyHallLight();
   }
+  function cameraHorizontalFovDeg(vertFovDeg, aspect) {
+    var v = vertFovDeg * Math.PI / 180;
+    return 2 * Math.atan(Math.tan(v / 2) * aspect) * 180 / Math.PI;
+  }
+  function cameraVerticalFovFromHorizontal(hFovDeg, aspect) {
+    var h = hFovDeg * Math.PI / 180;
+    return clamp(2 * Math.atan(Math.tan(h / 2) / aspect) * 180 / Math.PI, 24, 75);
+  }
+  function referenceCameraHorizontalFovDeg() {
+    var pw = Math.min(window.innerWidth, window.innerHeight);
+    var ph = Math.max(window.innerWidth, window.innerHeight);
+    return cameraHorizontalFovDeg(CAMERA_VFOV_PORTRAIT, pw / ph);
+  }
+  function applyCameraProjection(w, h) {
+    if (!camera) return;
+    var aspect = w / h;
+    camera.aspect = aspect;
+    camera.fov = cameraVerticalFovFromHorizontal(referenceCameraHorizontalFovDeg(), aspect);
+    camera.updateProjectionMatrix();
+  }
   function resizeRenderer() {
     if (!renderer) return;
+    var canvasEl = canvas;
     var view = byId('theatreView');
-    var w = Math.max(1, view.clientWidth || window.innerWidth);
-    var h = Math.max(1, view.clientHeight || window.innerHeight);
+    var w = Math.max(1, canvasEl.clientWidth || view.clientWidth || window.innerWidth);
+    var h = Math.max(1, canvasEl.clientHeight || view.clientHeight || window.innerHeight);
     renderer.setSize(w, h, false);
-    camera.aspect = w / h; camera.updateProjectionMatrix();
+    applyCameraProjection(w, h);
   }
   function renderTheatre() {
     if (!renderer || !byId('theatreView').classList.contains('is-open')) return;
@@ -1069,7 +1253,7 @@
   function animateSample() {
     if (!state.sample) { raf = 0; return; }
     sampleTime += 16;
-    if (!video) drawSample();
+    if (!video && !sampleImageReady) drawSample();
     renderTheatre();
     raf = requestAnimationFrame(animateSample);
   }
@@ -1094,23 +1278,44 @@
     }
   }
 
-  function selectVideo(file) {
-    if (!file || !file.type || file.type.indexOf('video/') !== 0) {
-      showToast('请选择视频文件');
-      return;
-    }
-    if (videoUrl) URL.revokeObjectURL(videoUrl);
-    videoUrl = URL.createObjectURL(file);
-    if (!video) {
-      video = document.createElement('video');
-      video.muted = false;
-      video.volume = 1;
-      video.loop = true;
-      video.playsInline = true;
-      video.setAttribute('playsinline', '');
-      video.preload = 'auto';
-    }
-    video.src = videoUrl;
+  function xhsMiniTool() {
+    return window.xhs && window.xhs.miniTool ? window.xhs.miniTool : null;
+  }
+
+  function isVideoFile(file) {
+    if (!file) return false;
+    if (file.type && file.type.indexOf('video/') === 0) return true;
+    return /\.(mp4|mov|m4v|webm|3gp)$/i.test(file.name || '');
+  }
+
+  function fileToDataUrl(file) {
+    return new Promise(function (resolve, reject) {
+      var reader = new FileReader();
+      reader.onload = function () { resolve(reader.result); };
+      reader.onerror = function () { reject(new Error('read failed')); };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function ensureVideoEl() {
+    if (video) return video;
+    video = document.createElement('video');
+    video.muted = false;
+    video.volume = 1;
+    video.loop = true;
+    video.playsInline = true;
+    video.setAttribute('playsinline', '');
+    video.preload = 'auto';
+    video.onerror = function () {
+      showToast('视频无法播放，请换更短 mp4 或先用样片');
+    };
+    return video;
+  }
+
+  function applyVideoSrc(src) {
+    ensureVideoEl();
+    if (videoUrl && videoUrl.indexOf('blob:') === 0) URL.revokeObjectURL(videoUrl);
+    videoUrl = src;
     video.onloadeddata = function () {
       if (videoTexture) videoTexture.dispose();
       videoTexture = new THREE.VideoTexture(video);
@@ -1124,8 +1329,36 @@
       video.play().catch(function () {});
       cancelAnimationFrame(raf);
       raf = requestAnimationFrame(animateSample);
+      showToast('视频已载入');
     };
+    video.src = src;
     video.load();
+  }
+
+  function selectVideo(file) {
+    if (!isVideoFile(file)) {
+      showToast('请选择视频文件');
+      return;
+    }
+    var bridge = xhsMiniTool();
+    if (bridge && typeof bridge.writeTempFile === 'function') {
+      showToast('正在载入视频…');
+      fileToDataUrl(file).then(function (dataUrl) {
+        if (typeof dataUrl !== 'string' || dataUrl.indexOf('data:') !== 0) {
+          throw new Error('bad data url');
+        }
+        return bridge.writeTempFile({ data: dataUrl });
+      }).then(function (res) {
+        if (!res || !res.filePath) throw new Error('no path');
+        applyVideoSrc(res.filePath);
+      }).catch(function () {
+        showToast('小红书内载入失败，请用更短视频（建议 30 秒内）');
+      });
+      return;
+    }
+    if (videoUrl && videoUrl.indexOf('blob:') === 0) URL.revokeObjectURL(videoUrl);
+    videoUrl = URL.createObjectURL(file);
+    applyVideoSrc(videoUrl);
   }
 
   function getAudio() {
@@ -1208,17 +1441,34 @@
   }
   function applyLandscapeRotation(isLandscape) {
     var rotate = !!isLandscape && window.innerHeight > window.innerWidth;
-    byId('theatreView').classList.toggle('rotate-90', rotate);
+    byId('theatreView').classList.toggle('rotate-stage', rotate);
+    byId('theatreView').classList.toggle('rotate-90', false);
     var sheetsToo = isLandscape && byId('theatreView').classList.contains('is-open');
     byId('seatModal').classList.toggle('rotate-90', sheetsToo && rotate);
     byId('visionModal').classList.toggle('rotate-90', sheetsToo && rotate);
     return rotate;
   }
+  function toggleTheatreChrome() {
+    var view = byId('theatreView');
+    var collapsed = view.classList.toggle('chrome-collapsed');
+    var btn = byId('chromeToggleBtn');
+    btn.setAttribute('aria-pressed', collapsed ? 'true' : 'false');
+    btn.setAttribute('aria-label', collapsed ? '显示控制栏' : '隐藏控制栏');
+    renderTheatre();
+  }
   function toggleOrientation() {
     var theatreView = byId('theatreView');
     var isLandscape = theatreView.classList.toggle('orientation-landscape');
+    theatreView.classList.remove('chrome-collapsed');
+    var chromeBtn = byId('chromeToggleBtn');
+    if (chromeBtn) {
+      chromeBtn.setAttribute('aria-pressed', 'false');
+      chromeBtn.setAttribute('aria-label', '隐藏控制栏');
+    }
     setSheetLandscape(isLandscape);
     applyLandscapeRotation(isLandscape);
+    lookYaw = 0;
+    lookPitch = 0;
     resizeRenderer();
     renderTheatre();
   }
@@ -1229,10 +1479,19 @@
     updateTheatreLabels(); buildTheatre();
     showToast('已切换：' + currentHall().name);
   }
+  function lookDragSensitivity() {
+    if (!camera || !canvas) return { yaw: 0.002, pitch: 0.002 };
+    var h = Math.max(1, canvas.clientHeight);
+    var w = Math.max(1, canvas.clientWidth);
+    var vFov = camera.fov * Math.PI / 180;
+    var hFov = 2 * Math.atan(Math.tan(vFov / 2) * camera.aspect);
+    return { yaw: hFov / w, pitch: vFov / h };
+  }
   function bindLookPan() {
     if (!canvas) return;
     canvas.addEventListener('pointerdown', function (event) {
       if (event.button != null && event.button !== 0) return;
+      if (event.target !== canvas) return;
       lookDragging = true;
       lookPointerId = event.pointerId;
       lookLastX = event.clientX;
@@ -1246,13 +1505,13 @@
       var dy = event.clientY - lookLastY;
       lookLastX = event.clientX;
       lookLastY = event.clientY;
-      var sens = 0.0032;
-      if (byId('theatreView').classList.contains('rotate-90')) {
-        lookYaw = clamp(lookYaw - dy * sens, -0.42, 0.42);
-        lookPitch = clamp(lookPitch - dx * sens, -0.72, 0.72);
+      var sens = lookDragSensitivity();
+      if (byId('theatreView').classList.contains('rotate-stage')) {
+        lookYaw = clamp(lookYaw - dy * sens.yaw, -LOOK_YAW_LIMIT, LOOK_YAW_LIMIT);
+        lookPitch = clamp(lookPitch + dx * sens.pitch, -LOOK_PITCH_LIMIT, LOOK_PITCH_LIMIT);
       } else {
-        lookYaw = clamp(lookYaw - dx * sens, -0.42, 0.42);
-        lookPitch = clamp(lookPitch + dy * sens, -0.72, 0.72);
+        lookYaw = clamp(lookYaw - dx * sens.yaw, -LOOK_YAW_LIMIT, LOOK_YAW_LIMIT);
+        lookPitch = clamp(lookPitch - dy * sens.pitch, -LOOK_PITCH_LIMIT, LOOK_PITCH_LIMIT);
       }
       renderTheatre();
     });
@@ -1273,7 +1532,6 @@
     byId('crowdTheatreBtn').addEventListener('click', toggleCrowd);
     byId('enterBtn').addEventListener('click', openTheatre);
     byId('backBtn').addEventListener('click', closeTheatre);
-    byId('hallSwitchBtn').addEventListener('click', switchHall);
     byId('hallSelectBtn').addEventListener('click', function () {
       pendingHall = state.hall;
       renderHallList(); renderHallDetail(pendingHall);
@@ -1319,6 +1577,7 @@
       if (event.target === byId('visionModal')) hideSheet(byId('visionModal'));
     });
     byId('orientationBtn').addEventListener('click', toggleOrientation);
+    byId('chromeToggleBtn').addEventListener('click', toggleTheatreChrome);
     byId('lightBtn').addEventListener('click', toggleHallLight);
     window.addEventListener('resize', function () {
       var rotatedBefore = isSeatRotated();

@@ -6,7 +6,9 @@
   <meta name="theme-color" content="#070608">
   <meta name="color-scheme" content="dark">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <title>观影座舱</title>
+  <title>影厅模拟器</title>
+  <link rel="icon" href="./assets/icon.jpg">
+  <link rel="apple-touch-icon" href="./assets/icon.jpg">
   <link rel="stylesheet" href="./style.css">
 </head>
 <body>
@@ -17,12 +19,14 @@
         <div class="home-screen"><span class="home-screen-glow"></span></div>
       </div>
 
-      <div class="home-scroll">
-        <header class="home-hero">
-          <h1>观影座舱</h1>
-          <p class="hero-sub">先坐一遍，再买票</p>
-        </header>
+      <header class="home-top-bar">
+        <div class="home-top-copy">
+          <h1 class="nav-title">影厅模拟器</h1>
+          <p class="nav-sub">体验不同影厅不同位置的观感</p>
+        </div>
+      </header>
 
+      <div class="home-scroll">
         <div class="ticket">
           <button id="hallSelectBtn" class="ticket-row" type="button">
             <span class="ticket-kicker">影厅</span>
@@ -72,15 +76,15 @@
     </section>
 
     <section id="theatreView" class="view theatre-view">
-      <canvas id="theatreCanvas" aria-label="电影院观感模拟画面"></canvas>
-      <div class="theatre-shade"></div>
+      <div class="theatre-stage">
+        <canvas id="theatreCanvas" aria-label="电影院观感模拟画面"></canvas>
+      </div>
       <header class="top-nav theatre-nav">
-        <button id="backBtn" class="icon-btn" aria-label="返回" type="button">←</button>
-        <button id="hallSwitchBtn" class="hall-switch-btn" type="button">
-          <strong id="theatreTitle">观影座舱</strong>
-          <span id="theatreHallName">普通激光厅</span>
-        </button>
-        <button id="lightBtn" class="icon-round light-btn" aria-label="开灯" aria-pressed="false" type="button">
+        <button id="backBtn" class="icon-btn theatre-back-btn" aria-label="返回" type="button">←</button>
+        <div class="theatre-nav-side-foot">
+        <div class="theatre-nav-collapsible">
+          <div class="theatre-nav-tools">
+          <button id="lightBtn" class="icon-round light-btn" aria-label="开灯" aria-pressed="false" type="button">
           <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
             <path fill="currentColor" d="M12 2a7 7 0 0 0-4 12.7V17a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.3A7 7 0 0 0 12 2zm-2 16h4v1a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1v-1zm1 3h2v1h-2v-1z"/>
           </svg>
@@ -99,11 +103,16 @@
             <path d="M16.2 14.6 18.6 16.4 16.6 18.6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
         </button>
-      </header>
-      <div class="theatre-bottom">
-        <div class="bottom-head">
-          <strong id="seatHint">中央位置，画面与字幕最均衡</strong>
+          </div>
         </div>
+        <button id="chromeToggleBtn" class="icon-round chrome-toggle-btn" type="button" aria-label="隐藏控制栏" aria-pressed="false">
+          <svg class="chrome-toggle-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+            <path fill="currentColor" d="M7.4 9.6 12 14.2l4.6-4.6 1.4 1.4L12 17 6 11l1.4-1.4z"/>
+          </svg>
+        </button>
+        </div>
+      </header>
+      <div class="theatre-bottom theatre-chrome-panel">
         <div class="seat-line">
           <div id="seatPicker" class="seat-picker"></div>
           <div class="vision-controls">
@@ -135,7 +144,10 @@
       <div class="sheet-card sheet-card-tall">
         <div class="sheet-head"><strong>选择座位</strong><button id="closeSeatModal" class="modal-close" type="button" aria-label="关闭">×</button></div>
         <div class="seat-map-toolbar">
-          <span>座位图</span>
+          <div class="seat-map-toolbar-title">
+            <span id="modalHallType" class="modal-hall-type"></span>
+            <span class="seat-map-toolbar-label">座位图</span>
+          </div>
           <div>
             <button id="seatZoomOut" aria-label="缩小座位图" type="button">−</button>
             <b id="seatZoomValue">100%</b>
@@ -156,7 +168,6 @@
           </div>
         </div>
         <div class="seat-legend"><span><i class="legend-current"></i>当前座位</span><span><i class="legend-free"></i>可选座位</span></div>
-        <div id="modalHallType" class="modal-hall-type"></div>
         <button id="confirmSeat" class="primary-btn modal-confirm" type="button">确定</button>
       </div>
     </div>
