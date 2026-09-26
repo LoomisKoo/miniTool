@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="theme-color" content="#1a1814" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<title>电子票根生成器</title>
+<link rel="icon" href="assets/icon.svg" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="src/style.css?v=20260926p" />
+</head>
+<body>
+<div class="app">
+  <div class="workspace">
+    <main class="stage">
+      <div class="tilt-scene" id="tiltScene">
+        <div class="tilt-card" id="tiltCard">
+          <div class="ticket-host" id="ticketHost"></div>
+        </div>
+      </div>
+    </main>
+
+    <aside class="controls">
+      <button type="button" class="style-trigger style-trigger--slim" id="styleTrigger" aria-haspopup="dialog" aria-controls="styleSheet">
+        <span class="st-thumb" id="triggerThumbBox" aria-hidden="true"><span class="st-thumb-host" id="triggerThumb"></span></span>
+        <span class="st-text">
+          <span class="st-cat" id="triggerCat">电影票</span>
+          <span class="st-name" id="triggerName">双联撕裂</span>
+        </span>
+        <span class="st-action"><i data-lucide="chevron-right"></i></span>
+      </button>
+
+      <label class="upload upload--slim" title="选择本地图片" aria-label="选择本地图片">
+        <input type="file" id="photoInput" accept="image/*" hidden />
+        <span class="upload-btn"><i data-lucide="image-plus"></i></span>
+      </label>
+    </aside>
+  </div>
+
+  <nav class="dock" aria-label="主操作">
+    <button type="button" class="dock-btn" id="fieldsBtn" aria-haspopup="dialog" aria-controls="fieldsSheet">
+      <i data-lucide="text"></i>
+      <span>信息</span>
+    </button>
+    <button type="button" class="dock-btn" id="fxBtn" aria-haspopup="dialog" aria-controls="fxSheet">
+      <i data-lucide="sparkles"></i>
+      <span>特效</span>
+    </button>
+    <button type="button" class="dock-btn dock-btn--primary" id="exportBtn">
+      <i data-lucide="download"></i>
+      <span>导出</span>
+    </button>
+  </nav>
+</div>
+
+<!-- 票根类型 -->
+<div class="sheet" id="styleSheet" role="dialog" aria-modal="true" aria-label="选择票根类型" aria-hidden="true">
+  <div class="sheet-panel">
+    <header class="sheet-head">
+      <div>
+        <p class="sheet-kicker">票根类型</p>
+        <h2 class="sheet-title" id="sheetTitle">电影票</h2>
+      </div>
+      <button type="button" class="sheet-close" id="sheetClose" aria-label="关闭">
+        <i data-lucide="x"></i>
+      </button>
+    </header>
+    <div class="cat-tabs" id="catTabs" role="tablist"></div>
+    <div class="style-grid" id="styleGrid" role="listbox" aria-label="票根样式列表"></div>
+  </div>
+</div>
+
+<!-- 票面信息 -->
+<div class="sheet sheet-fields" id="fieldsSheet" role="dialog" aria-modal="true" aria-label="票面信息" aria-hidden="true">
+  <button type="button" class="fx-scrim" id="fieldsScrim" aria-label="关闭" tabindex="-1"></button>
+  <div class="sheet-panel fields-panel">
+    <header class="sheet-head sheet-head--compact">
+      <div>
+        <p class="sheet-kicker">票面信息</p>
+        <h2 class="sheet-title">文案编辑</h2>
+      </div>
+      <button type="button" class="sheet-close" id="fieldsClose" aria-label="关闭">
+        <i data-lucide="x"></i>
+      </button>
+    </header>
+    <div class="fields-body">
+      <div class="fields" id="fields"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 特效 -->
+<div class="sheet sheet-fx" id="fxSheet" role="dialog" aria-modal="true" aria-label="票根特效" aria-hidden="true">
+  <button type="button" class="fx-scrim" id="fxScrim" aria-label="关闭特效面板" tabindex="-1"></button>
+  <div class="sheet-panel fx-panel">
+    <header class="sheet-head sheet-head--compact">
+      <div>
+        <h2 class="sheet-title">特效</h2>
+      </div>
+      <button type="button" class="sheet-close" id="fxClose" aria-label="关闭">
+        <i data-lucide="x"></i>
+      </button>
+    </header>
+
+    <div class="fx-layer-row">
+      <span class="fx-layer-title">作用范围</span>
+      <div class="fx-layer-bar" role="radiogroup" aria-label="作用范围" id="fxLayerBar"></div>
+    </div>
+    <p class="fx-layer-hint" id="fxLayerHint"></p>
+    <div class="fx-tabs" role="tablist" id="fxTabs"></div>
+
+    <div class="fx-body">
+      <div class="fx-catalog" id="fxCatalog" role="listbox" aria-label="特效素材"></div>
+      <div class="fx-used-wrap">
+        <div class="fx-used-head">
+          <span>已用</span>
+          <button type="button" class="fx-link" id="fxClearAll">清空</button>
+        </div>
+        <div class="fx-used" id="fxUsed"></div>
+      </div>
+      <div class="fx-params" id="fxParams">
+        <p class="fx-params-empty">点素材预览，或点已用项调整</p>
+      </div>
+    </div>
+    <div class="fx-footer is-hidden" id="fxFooter">
+      <button type="button" class="fx-add-btn" id="fxCommitBtn">添加此特效</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/lucide@0.468.0"></script>
+<script src="https://cdn.jsdelivr.net/npm/html-to-image@1.11.11/dist/html-to-image.js"></script>
+<script src="src/templates.js?v=20260926p"></script>
+<script src="src/effects.js?v=20260926p"></script>
+<script src="src/app.js?v=20260926p"></script>
+</body>
+</html>
