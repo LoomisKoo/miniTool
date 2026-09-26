@@ -10,7 +10,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="src/style.css?v=20260926x" />
+<link rel="stylesheet" href="src/style.css?v=20260926z" />
 </head>
 <body>
 <div class="app">
@@ -90,6 +90,32 @@
   </div>
 </div>
 
+<!-- 照片构图 -->
+<div class="sheet sheet-photo" id="photoSheet" role="dialog" aria-modal="true" aria-label="调整照片构图" aria-hidden="true">
+  <button type="button" class="fx-scrim" id="photoScrim" aria-label="关闭" tabindex="-1"></button>
+  <div class="sheet-panel photo-panel">
+    <header class="sheet-head sheet-head--compact">
+      <div>
+        <p class="sheet-kicker">票面照片</p>
+        <h2 class="sheet-title" id="photoSheetTitle">调整构图</h2>
+      </div>
+      <button type="button" class="sheet-close" id="photoClose" aria-label="关闭">
+        <i data-lucide="x"></i>
+      </button>
+    </header>
+    <div class="photo-adjust-body">
+      <p class="photo-adjust-hint">单指拖动平移，双指捏合缩放；双击放大，再双击还原</p>
+      <div class="photo-adjust-viewport" id="photoAdjustViewport">
+        <img class="photo-img photo-adjust-img" id="photoAdjustImg" alt="" draggable="false" />
+      </div>
+      <div class="photo-adjust-actions">
+        <button type="button" class="photo-adjust-btn" id="photoResetBtn">重置</button>
+        <button type="button" class="photo-adjust-btn photo-adjust-btn--accent" id="photoReplaceBtn">更换照片</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- 特效 -->
 <div class="sheet sheet-fx" id="fxSheet" role="dialog" aria-modal="true" aria-label="票根特效" aria-hidden="true">
   <button type="button" class="fx-scrim" id="fxScrim" aria-label="关闭特效面板" tabindex="-1"></button>
@@ -131,8 +157,8 @@
 
 <script src="https://unpkg.com/lucide@0.468.0"></script>
 <script src="https://cdn.jsdelivr.net/npm/html-to-image@1.11.11/dist/html-to-image.js"></script>
-<script src="src/templates.js?v=20260926x"></script>
-<script src="src/effects.js?v=20260926x"></script>
-<script src="src/app.js?v=20260926x"></script>
+<script src="src/templates.js?v=20260926z"></script>
+<script src="src/effects.js?v=20260926z"></script>
+<script src="src/app.js?v=20260926z"></script>
 </body>
 </html>

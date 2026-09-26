@@ -37,12 +37,38 @@
   const fxLayerHint = $('fxLayerHint');
   const fxFooter = $('fxFooter');
   const fxCommitBtn = $('fxCommitBtn');
+  const photoSheet = $('photoSheet');
+  const photoScrim = $('photoScrim');
+  const photoClose = $('photoClose');
+  const photoSheetTitle = $('photoSheetTitle');
+  const photoAdjustViewport = $('photoAdjustViewport');
+  const photoAdjustImg = $('photoAdjustImg');
+  const photoResetBtn = $('photoResetBtn');
+  const photoReplaceBtn = $('photoReplaceBtn');
 
   let catId = Kit.CATEGORIES[0].id;
   let styleId = Kit.CATEGORIES[0].styles[0].id;
   /** @type {Record<number, string>} 用户上传的 data URL，按槽位 0/1 */
   const customPhotos = {};
+  /** @type {Record<number, { x: number, y: number, scale: number }>} */
+  const photoFit = {};
+  /** @type {Record<number, number>} 上传图宽高比 Iw/Ih */
+  const photoAspect = {};
   let activePickSlot = 0;
+  let adjustSlot = 0;
+  let photoOpen = false;
+  let photoCloseTimer = 0;
+  let photoDrag = null;
+  let photoPinch = null;
+  /** @type {Map<number, { x: number, y: number }>} */
+  const photoPointers = new Map();
+  const PHOTO_DOUBLE_TAP_MS = 320;
+  const PHOTO_DOUBLE_TAP_PX = 16;
+  const PHOTO_DOUBLE_ZOOM = 2;
+  let photoLastTapAt = 0;
+  let photoLastTapX = 0;
+  let photoLastTapY = 0;
+  let photoSuppressDblClick = false;
   const formData = {};
 
   /* —— 特效状态 —— */
@@ -69,6 +95,270 @@
     return activePhotos()[0];
   }
 
+  const DEFAULT_PHOTO_FIT = { x: 50, y: 50, scale: 1 };
+
+  function clampPct(n) {
+    return Math.min(100, Math.max(0, n));
+  }
+
+  /** cover + scale 下各轴是否还有可平移余量 */
+  function photoPanAxes(slot, fit, imageAspect) {
+    const frameR = frameAspectRatio(slot);
+    if (!Number.isFinite(imageAspect) || imageAspect <= 0 || !Number.isFinite(frameR) || frameR <= 0) {
+      return { canPanX: false, canPanY: false };
+    }
+    const R = imageAspect / frameR;
+    const S = fit.scale > 0 ? fit.scale : 1;
+    const eps = 1.002;
+    return {
+      canPanX: R * S > eps,
+      canPanY: S / R > eps,
+    };
+  }
+
+  function clampPhotoFit(slot, fit, imageAspect) {
+    const { canPanX, canPanY } = photoPanAxes(slot, fit, imageAspect);
+    return {
+      x: canPanX ? clampPct(fit.x) : 50,
+      y: canPanY ? clampPct(fit.y) : 50,
+      scale: Math.min(2.6, Math.max(1, fit.scale || 1)),
+    };
+  }
+
+  function slotImageAspect(slot) {
+    if (photoAspect[slot] > 0) return photoAspect[slot];
+    return frameAspectRatio(slot);
+  }
+
+  function ensurePhotoAspect(slot) {
+    if (photoAspect[slot] > 0) return Promise.resolve(photoAspect[slot]);
+    const url = customPhotos[slot];
+    if (!url) return Promise.resolve(frameAspectRatio(slot));
+    return loadImageAspect(url).then((a) => {
+      photoAspect[slot] = a;
+      return a;
+    });
+  }
+
+  function getPhotoFit(slot) {
+    const f = photoFit[slot];
+    const raw = {
+      x: Number.isFinite(f?.x) ? f.x : DEFAULT_PHOTO_FIT.x,
+      y: Number.isFinite(f?.y) ? f.y : DEFAULT_PHOTO_FIT.y,
+      scale: Number.isFinite(f?.scale) ? f.scale : DEFAULT_PHOTO_FIT.scale,
+    };
+    return clampPhotoFit(slot, raw, slotImageAspect(slot));
+  }
+
+  function setPhotoFit(slot, partial) {
+    const merged = Object.assign({}, getPhotoFit(slot), partial);
+    photoFit[slot] = clampPhotoFit(slot, merged, slotImageAspect(slot));
+  }
+
+  function resetPhotoFit(slot) {
+    delete photoFit[slot];
+  }
+
+  function clearPhotoSlot(slot) {
+    delete customPhotos[slot];
+    resetPhotoFit(slot);
+    delete photoAspect[slot];
+  }
+
+  function applyFitToImg(img, fit) {
+    if (!img) return;
+    img.style.objectFit = 'cover';
+    img.style.objectPosition = `${fit.x}% ${fit.y}%`;
+    img.style.transform = `scale(${fit.scale})`;
+    img.style.transformOrigin = `${fit.x}% ${fit.y}%`;
+  }
+
+  function photoFitImgsForSlot(slot) {
+    const imgs = [];
+    if (photoAdjustImg && slot === adjustSlot) imgs.push(photoAdjustImg);
+    const ticket = ticketHost.firstElementChild;
+    if (ticket) {
+      ticket.querySelectorAll(`.photo-frame[data-photo-slot="${slot}"] .photo-img`).forEach((img) => {
+        imgs.push(img);
+      });
+    }
+    return imgs;
+  }
+
+  function clearPhotoFitAnim(imgs) {
+    imgs.forEach((img) => img.classList.remove('is-photo-fit-anim'));
+  }
+
+  function animatePhotoFitForSlot(slot, targetPartial) {
+    const from = getPhotoFit(slot);
+    const merged = clampPhotoFit(
+      slot,
+      Object.assign({}, from, targetPartial),
+      slotImageAspect(slot)
+    );
+    const imgs = photoFitImgsForSlot(slot);
+    clearPhotoFitAnim(imgs);
+    imgs.forEach((img) => applyFitToImg(img, from));
+
+    const isRest =
+      merged.scale <= 1.02 && Math.abs(merged.x - 50) < 1.5 && Math.abs(merged.y - 50) < 1.5;
+    if (isRest) delete photoFit[slot];
+    else photoFit[slot] = merged;
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        imgs.forEach((img) => {
+          img.classList.add('is-photo-fit-anim');
+          applyFitToImg(img, merged);
+        });
+        window.setTimeout(() => clearPhotoFitAnim(imgs), 340);
+      });
+    });
+  }
+
+  function applyPhotoFit(ticket) {
+    if (!ticket) return;
+    ticket.querySelectorAll('.photo-frame').forEach((frame) => {
+      const img = frame.querySelector('.photo-img');
+      if (!img) return;
+      const slot = Number(frame.dataset.photoSlot);
+      const si = Number.isFinite(slot) ? slot : 0;
+      applyFitToImg(img, getPhotoFit(si));
+    });
+  }
+
+  function photoFrameAspect(slot) {
+    const ticket = ticketHost.firstElementChild;
+    if (!ticket) return '1 / 1';
+    const frame =
+      ticket.querySelector(`.photo-frame[data-photo-slot="${slot}"]`) ||
+      ticket.querySelectorAll('.photo-frame')[slot];
+    if (!frame) return '1 / 1';
+    const cs = getComputedStyle(frame);
+    if (cs.aspectRatio && cs.aspectRatio !== 'auto') return cs.aspectRatio;
+    const r = frame.getBoundingClientRect();
+    if (r.width > 0 && r.height > 0) return `${r.width} / ${r.height}`;
+    return '1 / 1';
+  }
+
+  function parseAspectRatioValue(arStr) {
+    if (!arStr) return 1;
+    const parts = String(arStr)
+      .split('/')
+      .map((s) => parseFloat(s.trim()));
+    if (parts.length === 2 && parts[0] > 0 && parts[1] > 0) return parts[0] / parts[1];
+    const n = parseFloat(arStr);
+    return Number.isFinite(n) && n > 0 ? n : 1;
+  }
+
+  function frameAspectRatio(slot) {
+    return parseAspectRatioValue(photoFrameAspect(slot));
+  }
+
+  function layoutPhotoAdjustViewport() {
+    if (!photoAdjustViewport) return;
+    const ratio = frameAspectRatio(adjustSlot);
+    const body = photoAdjustViewport.closest('.photo-adjust-body');
+    const maxW = Math.min(body ? body.clientWidth - 4 : 320, 360);
+    const maxH = Math.min(window.innerHeight * 0.36, 280);
+    let w = maxW;
+    let h = w / ratio;
+    if (h > maxH) {
+      h = maxH;
+      w = h * ratio;
+    }
+    photoAdjustViewport.style.width = `${Math.max(120, Math.round(w))}px`;
+    photoAdjustViewport.style.height = `${Math.max(80, Math.round(h))}px`;
+  }
+
+  function loadImageAspect(dataUrl) {
+    return new Promise((resolve, reject) => {
+      const probe = new Image();
+      probe.onload = () => {
+        if (probe.naturalWidth > 0 && probe.naturalHeight > 0) {
+          resolve(probe.naturalWidth / probe.naturalHeight);
+        } else {
+          reject(new Error('bad image'));
+        }
+      };
+      probe.onerror = () => reject(new Error('load fail'));
+      probe.src = dataUrl;
+    });
+  }
+
+  /** 图片与票框宽高比差异明显时需要构图 */
+  function needsPhotoCompose(slot, imageAspect) {
+    const frameR = frameAspectRatio(slot);
+    if (!Number.isFinite(imageAspect) || imageAspect <= 0) return false;
+    const rel = Math.abs(Math.log(imageAspect / frameR));
+    return rel > 0.14;
+  }
+
+  function syncPhotoAdjustPreview() {
+    if (!photoAdjustViewport || !photoAdjustImg) return;
+    layoutPhotoAdjustViewport();
+    photoAdjustImg.src = activePhotos()[adjustSlot] || '';
+    applyFitToImg(photoAdjustImg, getPhotoFit(adjustSlot));
+  }
+
+  function syncPhotoAdjustFromFit() {
+    syncPhotoAdjustPreview();
+    applyPhotoFit(ticketHost.firstElementChild);
+  }
+
+  function openPhotoSheet(slot) {
+    if (!photoSheet || photoOpen) return;
+    if (fieldsOpen) closeFieldsSheet();
+    if (fxOpen) closeFxSheet();
+    adjustSlot = slot;
+    activePickSlot = slot;
+    if (photoCloseTimer) {
+      clearTimeout(photoCloseTimer);
+      photoCloseTimer = 0;
+    }
+    photoOpen = true;
+    const panel = photoSheet.querySelector('.photo-panel');
+    if (photoSheetTitle) {
+      const n = Kit.photoSlotCount(styleId);
+      photoSheetTitle.textContent = n > 1 ? `调整构图 · 图 ${slot + 1}` : '调整构图';
+    }
+    syncPhotoAdjustPreview();
+    ensurePhotoAspect(slot).then(() => {
+      setPhotoFit(slot, getPhotoFit(slot));
+      syncPhotoAdjustFromFit();
+    });
+    setSheetPush(panel, true);
+    photoSheet.classList.remove('is-closing');
+    photoSheet.classList.add('is-open');
+    photoSheet.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('photo-open');
+    document.documentElement.classList.add('photo-open');
+    resetTilt();
+    if (window.lucide) lucide.createIcons({ nodes: [photoSheet] });
+  }
+
+  function closePhotoSheet() {
+    if (!photoSheet || !photoSheet.classList.contains('is-open')) return;
+    photoOpen = false;
+    photoDrag = null;
+    photoPinch = null;
+    photoPointers.clear();
+    photoLastTapAt = 0;
+    photoSuppressDblClick = false;
+    if (photoAdjustViewport) photoAdjustViewport.classList.remove('is-dragging');
+    setSheetPush(null, false);
+    photoSheet.classList.add('is-closing');
+    photoSheet.classList.remove('is-open');
+    if (photoCloseTimer) clearTimeout(photoCloseTimer);
+    photoCloseTimer = setTimeout(() => {
+      photoCloseTimer = 0;
+      photoSheet.classList.remove('is-closing');
+      photoSheet.setAttribute('aria-hidden', 'true');
+      document.body.classList.remove('photo-open');
+      document.documentElement.classList.remove('photo-open');
+    }, 340);
+  }
+
   function syncPhotoSlots() {
     if (!photoSlots) return;
     const slotCount = Kit.photoSlotCount(styleId);
@@ -78,7 +368,7 @@
       const url = customPhotos[i];
       if (url) {
         parts.push(`<div class="photo-slot photo-slot--filled">
-          <button type="button" class="photo-slot-btn photo-slot-btn--thumb" data-pick="${i}" aria-label="更换照片">
+          <button type="button" class="photo-slot-btn photo-slot-btn--thumb" data-adjust="${i}" aria-label="调整构图">
             <img src="${escapeAttr(url)}" alt="" draggable="false" />
           </button>
           <button type="button" class="photo-slot-clear" data-clear="${i}" aria-label="移除照片">
@@ -349,13 +639,25 @@
 
   function selectStyle(id) {
     const kept = [];
+    const keptFit = [];
+    const keptAspect = [];
     if (customPhotos[0]) kept[0] = customPhotos[0];
     if (customPhotos[1]) kept[1] = customPhotos[1];
+    if (photoFit[0]) keptFit[0] = photoFit[0];
+    if (photoFit[1]) keptFit[1] = photoFit[1];
+    if (photoAspect[0]) keptAspect[0] = photoAspect[0];
+    if (photoAspect[1]) keptAspect[1] = photoAspect[1];
     styleId = id;
     Object.keys(customPhotos).forEach((k) => delete customPhotos[k]);
+    Object.keys(photoFit).forEach((k) => delete photoFit[k]);
+    Object.keys(photoAspect).forEach((k) => delete photoAspect[k]);
     const slots = Kit.photoSlotCount(styleId);
     if (kept[0]) customPhotos[0] = kept[0];
     if (slots >= 2 && kept[1]) customPhotos[1] = kept[1];
+    if (keptFit[0]) photoFit[0] = keptFit[0];
+    if (slots >= 2 && keptFit[1]) photoFit[1] = keptFit[1];
+    if (keptAspect[0]) photoAspect[0] = keptAspect[0];
+    if (slots >= 2 && keptAspect[1]) photoAspect[1] = keptAspect[1];
     hydrateFieldsFromStyle(currentStyle(), false);
     closeSheet();
     renderAll();
@@ -413,6 +715,7 @@
     if (e.key === 'Escape' && sheetOpen) closeSheet();
     if (e.key === 'Escape' && fxOpen) closeFxSheet();
     if (e.key === 'Escape' && fieldsOpen) closeFieldsSheet();
+    if (e.key === 'Escape' && photoOpen) closePhotoSheet();
   });
 
   function renderFields() {
@@ -455,6 +758,7 @@
     delete ticketHost.dataset.natW;
     delete ticketHost.dataset.natH;
     applyUserFx();
+    applyPhotoFit(ticketHost.firstElementChild);
     if (window.lucide) lucide.createIcons({ nodes: [ticketHost] });
     requestAnimationFrame(() => fitTicket(true));
   }
@@ -910,8 +1214,15 @@
   }
 
   function onFxTouchMove(e) {
-    if (!fxOpen && !fieldsOpen) return;
-    if (e.target.closest && (e.target.closest('.fx-body') || e.target.closest('.fields-body'))) return;
+    if (!fxOpen && !fieldsOpen && !photoOpen) return;
+    if (
+      e.target.closest &&
+      (e.target.closest('.fx-body') ||
+        e.target.closest('.fields-body') ||
+        e.target.closest('.photo-adjust-body'))
+    ) {
+      return;
+    }
     e.preventDefault();
   }
 
@@ -969,6 +1280,172 @@
   if (fieldsBtn) fieldsBtn.addEventListener('click', () => (fieldsOpen ? closeFieldsSheet() : openFieldsSheet()));
   if (fieldsClose) fieldsClose.addEventListener('click', closeFieldsSheet);
   if (fieldsScrim) fieldsScrim.addEventListener('click', closeFieldsSheet);
+  if (photoClose) photoClose.addEventListener('click', closePhotoSheet);
+  if (photoScrim) photoScrim.addEventListener('click', closePhotoSheet);
+  if (photoResetBtn) {
+    photoResetBtn.addEventListener('click', () => {
+      resetPhotoFit(adjustSlot);
+      syncPhotoAdjustFromFit();
+    });
+  }
+  if (photoReplaceBtn) {
+    photoReplaceBtn.addEventListener('click', () => {
+      activePickSlot = adjustSlot;
+      photoInput.value = '';
+      photoInput.click();
+    });
+  }
+
+  function photoPointerDistance() {
+    const pts = [...photoPointers.values()];
+    if (pts.length < 2) return 0;
+    return Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+  }
+
+  function beginPhotoPinch() {
+    const dist = photoPointerDistance();
+    if (dist < 6) return;
+    photoDrag = null;
+    photoPinch = {
+      startDist: dist,
+      origScale: getPhotoFit(adjustSlot).scale,
+    };
+  }
+
+  function beginPhotoPan(e) {
+    const fit = getPhotoFit(adjustSlot);
+    const ar = slotImageAspect(adjustSlot);
+    const pan = photoPanAxes(adjustSlot, fit, ar);
+    photoDrag = {
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startY: e.clientY,
+      origX: fit.x,
+      origY: fit.y,
+      canPanX: pan.canPanX,
+      canPanY: pan.canPanY,
+      rect: photoAdjustViewport.getBoundingClientRect(),
+      moved: 0,
+    };
+    photoAdjustViewport.classList.add('is-dragging');
+  }
+
+  function isPhotoFitRestState(slot) {
+    const f = getPhotoFit(slot);
+    return f.scale <= 1.02 && Math.abs(f.x - 50) < 1.5 && Math.abs(f.y - 50) < 1.5;
+  }
+
+  function togglePhotoDoubleZoom(clientX, clientY) {
+    if (isPhotoFitRestState(adjustSlot)) {
+      const rect = photoAdjustViewport.getBoundingClientRect();
+      let x = 50;
+      let y = 50;
+      if (rect.width > 0 && rect.height > 0) {
+        x = clampPct(((clientX - rect.left) / rect.width) * 100);
+        y = clampPct(((clientY - rect.top) / rect.height) * 100);
+      }
+      animatePhotoFitForSlot(adjustSlot, { scale: PHOTO_DOUBLE_ZOOM, x, y });
+    } else {
+      animatePhotoFitForSlot(adjustSlot, DEFAULT_PHOTO_FIT);
+    }
+  }
+
+  function tryPhotoDoubleTap(clientX, clientY) {
+    const now = Date.now();
+    const dt = now - photoLastTapAt;
+    const dist = Math.hypot(clientX - photoLastTapX, clientY - photoLastTapY);
+    if (dt > 0 && dt < PHOTO_DOUBLE_TAP_MS && dist < PHOTO_DOUBLE_TAP_PX * 2.5) {
+      photoLastTapAt = 0;
+      photoSuppressDblClick = true;
+      togglePhotoDoubleZoom(clientX, clientY);
+      return;
+    }
+    photoLastTapAt = now;
+    photoLastTapX = clientX;
+    photoLastTapY = clientY;
+  }
+
+  if (photoAdjustViewport) {
+    photoAdjustViewport.addEventListener('pointerdown', (e) => {
+      if (!photoOpen) return;
+      if (e.button != null && e.button !== 0) return;
+      clearPhotoFitAnim(photoFitImgsForSlot(adjustSlot));
+      photoPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      try {
+        photoAdjustViewport.setPointerCapture(e.pointerId);
+      } catch (_) {}
+      if (photoPointers.size === 1) {
+        beginPhotoPan(e);
+      } else if (photoPointers.size === 2) {
+        beginPhotoPinch();
+      }
+      e.preventDefault();
+    });
+    photoAdjustViewport.addEventListener('pointermove', (e) => {
+      if (!photoOpen || !photoPointers.has(e.pointerId)) return;
+      photoPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (photoPinch && photoPointers.size >= 2) {
+        const dist = photoPointerDistance();
+        if (dist < 6) return;
+        const scale = Math.min(2.6, Math.max(1, photoPinch.origScale * (dist / photoPinch.startDist)));
+        setPhotoFit(adjustSlot, { scale });
+        syncPhotoAdjustFromFit();
+        return;
+      }
+      if (!photoDrag || photoPointers.size !== 1 || e.pointerId !== photoDrag.pointerId) return;
+      photoDrag.moved = Math.max(
+        photoDrag.moved,
+        Math.hypot(e.clientX - photoDrag.startX, e.clientY - photoDrag.startY)
+      );
+      const dx = ((e.clientX - photoDrag.startX) / photoDrag.rect.width) * 100;
+      const dy = ((e.clientY - photoDrag.startY) / photoDrag.rect.height) * 100;
+      const next = { scale: getPhotoFit(adjustSlot).scale };
+      if (photoDrag.canPanX) next.x = clampPct(photoDrag.origX - dx);
+      if (photoDrag.canPanY) next.y = clampPct(photoDrag.origY - dy);
+      setPhotoFit(adjustSlot, next);
+      syncPhotoAdjustFromFit();
+    });
+    const endPhotoGesture = (e) => {
+      if (!photoPointers.has(e.pointerId)) return;
+      const drag = photoDrag && e.pointerId === photoDrag.pointerId ? photoDrag : null;
+      photoPointers.delete(e.pointerId);
+      if (drag) {
+        if (drag.moved < PHOTO_DOUBLE_TAP_PX) {
+          tryPhotoDoubleTap(e.clientX, e.clientY);
+        }
+        photoDrag = null;
+      }
+      if (photoPointers.size < 2) photoPinch = null;
+      if (photoPointers.size === 0) {
+        photoAdjustViewport.classList.remove('is-dragging');
+      }
+    };
+    photoAdjustViewport.addEventListener('pointerup', endPhotoGesture);
+    photoAdjustViewport.addEventListener('pointercancel', endPhotoGesture);
+    photoAdjustViewport.addEventListener('dblclick', (e) => {
+      if (!photoOpen) return;
+      if (photoSuppressDblClick) {
+        photoSuppressDblClick = false;
+        e.preventDefault();
+        return;
+      }
+      e.preventDefault();
+      togglePhotoDoubleZoom(e.clientX, e.clientY);
+    });
+    photoAdjustViewport.addEventListener(
+      'wheel',
+      (e) => {
+        if (!photoOpen) return;
+        e.preventDefault();
+        const fit = getPhotoFit(adjustSlot);
+        const next = Math.min(2.6, Math.max(1, fit.scale - e.deltaY * 0.002));
+        setPhotoFit(adjustSlot, { scale: next });
+        syncPhotoAdjustFromFit();
+      },
+      { passive: false }
+    );
+  }
+
   document.addEventListener('touchmove', onFxTouchMove, { passive: false });
   if (fxClearAll) {
     fxClearAll.addEventListener('click', () => {
@@ -1041,15 +1518,22 @@
         e.preventDefault();
         e.stopPropagation();
         const idx = Number(clearBtn.dataset.clear);
-        delete customPhotos[idx];
+        clearPhotoSlot(idx);
         renderTicketOnly();
         renderTrigger();
         syncPhotoSlots();
         return;
       }
-      const pickBtn = e.target.closest('[data-pick], [data-add]');
+      const adjustBtn = e.target.closest('[data-adjust]');
+      if (adjustBtn) {
+        const idx = Number(adjustBtn.dataset.adjust);
+        if (!Number.isFinite(idx)) return;
+        openPhotoSheet(idx);
+        return;
+      }
+      const pickBtn = e.target.closest('[data-add]');
       if (!pickBtn) return;
-      activePickSlot = Number(pickBtn.dataset.pick ?? pickBtn.dataset.add);
+      activePickSlot = Number(pickBtn.dataset.add);
       if (!Number.isFinite(activePickSlot)) return;
       photoInput.value = '';
       photoInput.click();
@@ -1063,10 +1547,29 @@
     // blob: 地址 html-to-image 无法内联，会导致导出直接失败
     const reader = new FileReader();
     reader.onload = () => {
-      customPhotos[activePickSlot] = String(reader.result);
-      renderTicketOnly();
-      renderTrigger();
-      syncPhotoSlots();
+      const url = String(reader.result);
+      const slot = activePickSlot;
+      customPhotos[slot] = url;
+      resetPhotoFit(slot);
+      loadImageAspect(url)
+        .then((imageAspect) => {
+          photoAspect[slot] = imageAspect;
+          renderTicketOnly();
+          renderTrigger();
+          syncPhotoSlots();
+          if (photoOpen && adjustSlot === slot) {
+            syncPhotoAdjustFromFit();
+            return;
+          }
+          if (needsPhotoCompose(slot, imageAspect)) {
+            requestAnimationFrame(() => openPhotoSheet(slot));
+          }
+        })
+        .catch(() => {
+          renderTicketOnly();
+          renderTrigger();
+          syncPhotoSlots();
+        });
     };
     reader.onerror = () => {
       alert('图片读取失败，请重试');
@@ -1077,7 +1580,7 @@
   /* —— CSS 3D tilt —— */
   let raf = 0;
   function onMove(e) {
-    if (fxOpen) return;
+    if (fxOpen || photoOpen) return;
     const rect = tiltScene.getBoundingClientRect();
     const x = (e.clientX - rect.left) / rect.width;
     const y = (e.clientY - rect.top) / rect.height;
@@ -1102,6 +1605,7 @@
   window.addEventListener('resize', () => {
     resetTilt();
     fitTicket(true);
+    if (photoOpen) layoutPhotoAdjustViewport();
     renderTrigger();
     // 只有宽度真的变了才重建列表（移动端地址栏收起也会触发 resize）
     if (sheetOpen && styleGrid.clientWidth !== lastGridWidth) {

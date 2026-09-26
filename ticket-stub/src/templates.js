@@ -1378,8 +1378,9 @@
       .replace(/"/g, '&quot;');
   }
 
-  function photoBox(photoUrl, extraClass) {
-    return `<div class="photo-frame ${extraClass || ''}">
+  function photoBox(photoUrl, extraClass, slot) {
+    const si = slot == null ? 0 : slot;
+    return `<div class="photo-frame ${extraClass || ''}" data-photo-slot="${si}">
       <img class="photo-img" src="${esc(photoUrl)}" alt="票面照片" draggable="false" />
       <div class="fx-user-slot fx-user-slot--photo" data-fx-slot="photo" aria-hidden="true"></div>
     </div>`;
@@ -2115,7 +2116,7 @@
       return `<article class="tk tk-stamp-sheet tk-perf">
         <div class="sh-head"><span>SPECIMEN SET</span><span>${esc(d.seat)}</span></div>
         <div class="sh-grid">
-          <div class="sh-cell sh-cell--photo">${photoBox(p0, 'sh-photo')}</div>
+          <div class="sh-cell sh-cell--photo">${photoBox(p0, 'sh-photo', 0)}</div>
           <div class="sh-cell">
             <span class="sh-val">60</span>
             <h3 class="tk-title">${esc(d.title)}</h3>
@@ -2126,7 +2127,7 @@
             <p class="sh-meta">${esc(d.datetime)}</p>
             <p class="tk-mood">${esc(d.mood)}</p>
           </div>
-          <div class="sh-cell sh-cell--photo">${photoBox(p1, 'sh-photo')}</div>
+          <div class="sh-cell sh-cell--photo">${photoBox(p1, 'sh-photo', 1)}</div>
         </div>
         <span class="fx-layer fx-glitter fx-glitter--rose" aria-hidden="true"></span>
       </article>`;
@@ -2211,7 +2212,7 @@
       const p1 = photos[1];
       return `<article class="tk tk-stamp-four ${photoClass(p0)}">
         <div class="sf4">
-          ${photoBox(p0, 'sf4-photo')}
+          ${photoBox(p0, 'sf4-photo', 0)}
           <span class="sf4-val">40</span>
         </div>
         <div class="sf4">
@@ -2225,7 +2226,7 @@
           <span class="sf4-val">60</span>
         </div>
         <div class="sf4">
-          ${photoBox(p1, 'sf4-photo')}
+          ${photoBox(p1, 'sf4-photo', 1)}
           <p class="sf4-k">${esc(d.seat)}</p>
         </div>
         <span class="fx-layer fx-glitter" aria-hidden="true"></span>
@@ -2573,10 +2574,10 @@
       return `<article class="tk tk-cinema-sheet">
         <div class="sh2-head"><span>SHEET · 4 UP</span><span>${esc(d.datetime)}</span></div>
         <div class="sh2-grid">
-          <div class="sh2-cell">${photoBox(p0)}<h3 class="tk-title">${esc(d.title)}</h3></div>
+          <div class="sh2-cell">${photoBox(p0, '', 0)}<h3 class="tk-title">${esc(d.title)}</h3></div>
           <div class="sh2-cell"><p class="sh2-note">CINEMA</p><p class="sh2-note">${esc(d.place)}</p><p class="sh2-note">${esc(d.seat)}</p></div>
           <div class="sh2-cell"><p class="sh2-note">SHOWTIME</p><p class="sh2-note">${esc(d.datetime)}</p><p class="sh2-note">ADMIT ONE</p></div>
-          <div class="sh2-cell">${photoBox(p1)}<p class="tk-mood">${esc(d.mood)}</p></div>
+          <div class="sh2-cell">${photoBox(p1, '', 1)}<p class="tk-mood">${esc(d.mood)}</p></div>
         </div>
       </article>`;
     },
@@ -2699,12 +2700,12 @@
       const p1 = photos[1];
       return `<article class="tk tk-city-collage">
         <div class="cl-scrap cl-scrap--a">
-          ${photoBox(p0)}
+          ${photoBox(p0, '', 0)}
           <h3 class="tk-title">${esc(d.title)}</h3>
           <p class="tk-place">${esc(d.place)}</p>
         </div>
         <div class="cl-scrap cl-scrap--b">
-          ${photoBox(p1)}
+          ${photoBox(p1, '', 1)}
           <p class="cl-rows"><span>${esc(d.datetime)}</span><span>${esc(d.seat)}</span></p>
         </div>
         <div class="cl-scrap cl-scrap--c">
@@ -2758,8 +2759,8 @@
         const p0 = Array.isArray(photo) ? photo[0] : photo;
         const p1 = Array.isArray(photo) ? photo[1] : photo;
         const hero = layout === 'duo'
-          ? `<div class="tp-hero tp-hero--duo">${photoBox(p0)}${photoBox(p1)}</div>`
-          : `<div class="tp-hero">${photoBox(p0)}</div>`;
+          ? `<div class="tp-hero tp-hero--duo">${photoBox(p0, '', 0)}${photoBox(p1, '', 1)}</div>`
+          : `<div class="tp-hero">${photoBox(p0, '', 0)}</div>`;
         return `<article class="tk tk-trip tk-trip--top tk-hdiv tk-trip--${pal}">
           ${hero}
           <div class="tp-lower">${info}${strip}</div>
