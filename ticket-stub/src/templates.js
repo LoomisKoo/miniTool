@@ -2109,11 +2109,13 @@
       </article>`;
     },
 
-    'stamp-sheet'(d, photo) {
+    'stamp-sheet'(d, photos) {
+      const p0 = photos[0];
+      const p1 = photos[1];
       return `<article class="tk tk-stamp-sheet tk-perf">
         <div class="sh-head"><span>SPECIMEN SET</span><span>${esc(d.seat)}</span></div>
         <div class="sh-grid">
-          <div class="sh-cell sh-cell--photo">${photoBox(photo, 'sh-photo')}</div>
+          <div class="sh-cell sh-cell--photo">${photoBox(p0, 'sh-photo')}</div>
           <div class="sh-cell">
             <span class="sh-val">60</span>
             <h3 class="tk-title">${esc(d.title)}</h3>
@@ -2124,7 +2126,7 @@
             <p class="sh-meta">${esc(d.datetime)}</p>
             <p class="tk-mood">${esc(d.mood)}</p>
           </div>
-          <div class="sh-cell sh-cell--photo">${photoBox(photo, 'sh-photo')}</div>
+          <div class="sh-cell sh-cell--photo">${photoBox(p1, 'sh-photo')}</div>
         </div>
         <span class="fx-layer fx-glitter fx-glitter--rose" aria-hidden="true"></span>
       </article>`;
@@ -2204,10 +2206,12 @@
       </article>`;
     },
 
-    'stamp-four'(d, photo) {
-      return `<article class="tk tk-stamp-four ${photoClass(photo)}">
+    'stamp-four'(d, photos) {
+      const p0 = photos[0];
+      const p1 = photos[1];
+      return `<article class="tk tk-stamp-four ${photoClass(p0)}">
         <div class="sf4">
-          ${photoBox(photo, 'sf4-photo')}
+          ${photoBox(p0, 'sf4-photo')}
           <span class="sf4-val">40</span>
         </div>
         <div class="sf4">
@@ -2221,7 +2225,7 @@
           <span class="sf4-val">60</span>
         </div>
         <div class="sf4">
-          ${photoBox(photo, 'sf4-photo')}
+          ${photoBox(p1, 'sf4-photo')}
           <p class="sf4-k">${esc(d.seat)}</p>
         </div>
         <span class="fx-layer fx-glitter" aria-hidden="true"></span>
@@ -2527,8 +2531,10 @@
   // —— 结构不同的这一批：每个版式的 DOM 都不一样 ——
 
   Object.assign(renderers, {
-    'cinema-twoup'(d, photo) {
-      const pane = (flag, tag) => `<div class="tw-pane${flag}">
+    'cinema-twoup'(d, photos) {
+      const p0 = photos[0];
+      const p1 = photos[1];
+      const pane = (flag, tag, photo) => `<div class="tw-pane${flag}">
         <span class="tw-head">${tag}</span>
         ${photoBox(photo, 'tw-photo')}
         <h3 class="tk-title">${esc(d.title)}</h3>
@@ -2536,8 +2542,8 @@
         <div class="tw-row"><span>${esc(d.datetime)}</span><span>${esc(d.seat)}</span></div>
       </div>`;
       return `<article class="tk tk-cinema-twoup tk-2div">
-        ${pane('', 'ADMIT ONE')}
-        ${pane(' tw-pane--b', 'ADMIT TWO')}
+        ${pane('', 'ADMIT ONE', p0)}
+        ${pane(' tw-pane--b', 'ADMIT TWO', p1)}
         <span class="fx-layer fx-glitter" aria-hidden="true"></span>
       </article>`;
     },
@@ -2561,14 +2567,16 @@
       </article>`;
     },
 
-    'cinema-sheet'(d, photo) {
+    'cinema-sheet'(d, photos) {
+      const p0 = photos[0];
+      const p1 = photos[1];
       return `<article class="tk tk-cinema-sheet">
         <div class="sh2-head"><span>SHEET · 4 UP</span><span>${esc(d.datetime)}</span></div>
         <div class="sh2-grid">
-          <div class="sh2-cell">${photoBox(photo)}<h3 class="tk-title">${esc(d.title)}</h3></div>
+          <div class="sh2-cell">${photoBox(p0)}<h3 class="tk-title">${esc(d.title)}</h3></div>
           <div class="sh2-cell"><p class="sh2-note">CINEMA</p><p class="sh2-note">${esc(d.place)}</p><p class="sh2-note">${esc(d.seat)}</p></div>
           <div class="sh2-cell"><p class="sh2-note">SHOWTIME</p><p class="sh2-note">${esc(d.datetime)}</p><p class="sh2-note">ADMIT ONE</p></div>
-          <div class="sh2-cell">${photoBox(photo)}<p class="tk-mood">${esc(d.mood)}</p></div>
+          <div class="sh2-cell">${photoBox(p1)}<p class="tk-mood">${esc(d.mood)}</p></div>
         </div>
       </article>`;
     },
@@ -2667,8 +2675,10 @@
       </article>`;
     },
 
-    'concert-roundtrip'(d, photo) {
-      const half = (tag, seat) => `<div class="rt2-half">
+    'concert-roundtrip'(d, photos) {
+      const p0 = photos[0];
+      const p1 = photos[1];
+      const half = (tag, seat, photo) => `<div class="rt2-half">
         ${photoBox(photo)}
         <div>
           <span class="rt2-tag">${tag}</span>
@@ -2678,21 +2688,23 @@
         </div>
       </div>`;
       return `<article class="tk tk-concert-roundtrip">
-        ${half('OUTBOUND · 去', esc(d.seat))}
-        ${half('RETURN · 返', esc(d.seat))}
+        ${half('OUTBOUND · 去', esc(d.seat), p0)}
+        ${half('RETURN · 返', esc(d.seat), p1)}
         <span class="fx-layer fx-glitter" aria-hidden="true"></span>
       </article>`;
     },
 
-    'city-collage'(d, photo) {
+    'city-collage'(d, photos) {
+      const p0 = photos[0];
+      const p1 = photos[1];
       return `<article class="tk tk-city-collage">
         <div class="cl-scrap cl-scrap--a">
-          ${photoBox(photo)}
+          ${photoBox(p0)}
           <h3 class="tk-title">${esc(d.title)}</h3>
           <p class="tk-place">${esc(d.place)}</p>
         </div>
         <div class="cl-scrap cl-scrap--b">
-          ${photoBox(photo)}
+          ${photoBox(p1)}
           <p class="cl-rows"><span>${esc(d.datetime)}</span><span>${esc(d.seat)}</span></p>
         </div>
         <div class="cl-scrap cl-scrap--c">
@@ -2743,9 +2755,11 @@
 
       // 顶部整幅图：一张宽图 或 两张方图；下方是「信息 + 图案带」，分界处左右各咬一个半圆
       if (layout === 'top' || layout === 'duo') {
+        const p0 = Array.isArray(photo) ? photo[0] : photo;
+        const p1 = Array.isArray(photo) ? photo[1] : photo;
         const hero = layout === 'duo'
-          ? `<div class="tp-hero tp-hero--duo">${photoBox(photo)}${photoBox(photo)}</div>`
-          : `<div class="tp-hero">${photoBox(photo)}</div>`;
+          ? `<div class="tp-hero tp-hero--duo">${photoBox(p0)}${photoBox(p1)}</div>`
+          : `<div class="tp-hero">${photoBox(p0)}</div>`;
         return `<article class="tk tk-trip tk-trip--top tk-hdiv tk-trip--${pal}">
           ${hero}
           <div class="tp-lower">${info}${strip}</div>
@@ -3194,6 +3208,26 @@
     },
   });
 
+  const DUAL_PHOTO_STYLE_IDS = new Set([
+    'cinema-twoup',
+    'stamp-four',
+    'cinema-sheet',
+    'stamp-sheet',
+    'concert-roundtrip',
+    'city-collage',
+  ]);
+
+  const TRIP_LAYOUT_BY_ID = Object.fromEntries([
+    ...TRAVEL_TRIPS.map((t) => [t[0], t[4]]),
+    ...CONCERT_TRIPS.map((t) => [t[0], t[4]]),
+  ]);
+
+  function photoSlotCount(styleId) {
+    if (DUAL_PHOTO_STYLE_IDS.has(styleId)) return 2;
+    if (TRIP_LAYOUT_BY_ID[styleId] === 'duo') return 2;
+    return 1;
+  }
+
   function findStyle(styleId) {
     for (const cat of CATEGORIES) {
       const s = cat.styles.find((x) => x.id === styleId);
@@ -3208,15 +3242,25 @@
     return DEFAULT_PHOTOS[found.cat.id] || DEFAULT_PHOTO;
   }
 
-  function renderTicket(styleId, data, photoUrl) {
+  function normalizePhotoUrls(photos, styleId) {
+    const n = photoSlotCount(styleId);
+    const def = defaultPhotoFor(styleId);
+    const list = Array.isArray(photos) ? photos : photos != null && photos !== '' ? [photos] : [];
+    return Array.from({ length: n }, (_, i) => list[i] || def);
+  }
+
+  function renderTicket(styleId, data, photos) {
+    const urls = normalizePhotoUrls(photos, styleId);
     const fn = renderers[styleId] || renderers['cinema-tear'];
-    return fn(data, photoUrl || defaultPhotoFor(styleId));
+    if (photoSlotCount(styleId) > 1) return fn(data, urls);
+    return fn(data, urls[0]);
   }
 
   global.TicketKit = {
     DEFAULT_PHOTO,
     DEFAULT_PHOTOS,
     defaultPhotoFor,
+    photoSlotCount,
     CATEGORIES,
     findStyle,
     renderTicket,

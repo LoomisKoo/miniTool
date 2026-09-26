@@ -20,6 +20,7 @@
   const fieldsScrim = $('fieldsScrim');
   const ticketHost = $('ticketHost');
   const photoInput = $('photoInput');
+  const photoSlots = $('photoSlots');
   const exportBtn = $('exportBtn');
   const tiltScene = $('tiltScene');
   const tiltCard = $('tiltCard');
@@ -39,7 +40,9 @@
 
   let catId = Kit.CATEGORIES[0].id;
   let styleId = Kit.CATEGORIES[0].styles[0].id;
-  let customPhoto = null; // 用户上传后优先；未上传则按分类默认图
+  /** @type {Record<number, string>} 用户上传的 data URL，按槽位 0/1 */
+  const customPhotos = {};
+  let activePickSlot = 0;
   const formData = {};
 
   /* —— 特效状态 —— */
@@ -56,16 +59,45 @@
     top: '前景：盖在全部内容之上，适合印章和水印',
   };
 
-  function activePhoto() {
-    return customPhoto || Kit.defaultPhotoFor(styleId);
+  function activePhotos() {
+    const n = Kit.photoSlotCount(styleId);
+    const def = Kit.defaultPhotoFor(styleId);
+    return Array.from({ length: n }, (_, i) => customPhotos[i] || def);
   }
 
-  function syncPhotoHint() {
-    /* 上传入口仅图标，不再展示文件名 */
+  function activePhoto() {
+    return activePhotos()[0];
+  }
+
+  function syncPhotoSlots() {
+    if (!photoSlots) return;
+    const slotCount = Kit.photoSlotCount(styleId);
+    const visible = slotCount;
+    const parts = [];
+    for (let i = 0; i < visible; i += 1) {
+      const url = customPhotos[i];
+      if (url) {
+        parts.push(`<div class="photo-slot photo-slot--filled">
+          <button type="button" class="photo-slot-btn photo-slot-btn--thumb" data-pick="${i}" aria-label="更换照片">
+            <img src="${escapeAttr(url)}" alt="" draggable="false" />
+          </button>
+          <button type="button" class="photo-slot-clear" data-clear="${i}" aria-label="移除照片">
+            <i data-lucide="x"></i>
+          </button>
+        </div>`);
+      } else {
+        parts.push(`<button type="button" class="photo-slot photo-slot--empty photo-slot-btn" data-add="${i}" aria-label="添加照片">
+          <i data-lucide="image-plus"></i>
+        </button>`);
+      }
+    }
+    photoSlots.innerHTML = parts.join('');
+    if (window.lucide) lucide.createIcons({ nodes: [photoSlots] });
   }
 
   let fieldsOpen = false;
   let fieldsCloseTimer = 0;
+  let styleCloseTimer = 0;
   let pushFitTimer = 0;
 
   /** 抖音式：预览区高度收到 sheet 顶，底部贴齐 sheet 顶部 */
@@ -316,7 +348,14 @@
   }
 
   function selectStyle(id) {
+    const kept = [];
+    if (customPhotos[0]) kept[0] = customPhotos[0];
+    if (customPhotos[1]) kept[1] = customPhotos[1];
     styleId = id;
+    Object.keys(customPhotos).forEach((k) => delete customPhotos[k]);
+    const slots = Kit.photoSlotCount(styleId);
+    if (kept[0]) customPhotos[0] = kept[0];
+    if (slots >= 2 && kept[1]) customPhotos[1] = kept[1];
     hydrateFieldsFromStyle(currentStyle(), false);
     closeSheet();
     renderAll();
@@ -327,6 +366,11 @@
 
   function openSheet() {
     if (sheetOpen) return;
+    if (styleCloseTimer) {
+      clearTimeout(styleCloseTimer);
+      styleCloseTimer = 0;
+    }
+    styleSheet.classList.remove('is-closing');
     sheetOpen = true;
     styleSheet.classList.add('is-open');
     styleSheet.setAttribute('aria-hidden', 'false');
@@ -337,17 +381,24 @@
   }
 
   function closeSheet() {
-    if (!sheetOpen) return;
+    if (!sheetOpen && !styleSheet.classList.contains('is-open')) return;
+    if (styleSheet.classList.contains('is-closing')) return;
     sheetOpen = false;
-    styleSheet.classList.remove('is-open');
-    styleSheet.setAttribute('aria-hidden', 'true');
     document.body.classList.remove('sheet-open');
+    styleSheet.classList.add('is-closing');
+    styleSheet.classList.remove('is-open');
     // 停掉观察器与待渲染队列，避免面板关闭后还挂着已卸载的节点
     if (gridObserver) {
       gridObserver.disconnect();
       gridObserver = null;
     }
     flushThumbQueue();
+    if (styleCloseTimer) clearTimeout(styleCloseTimer);
+    styleCloseTimer = setTimeout(() => {
+      styleCloseTimer = 0;
+      styleSheet.classList.remove('is-closing');
+      styleSheet.setAttribute('aria-hidden', 'true');
+    }, 340);
   }
 
   styleTrigger.addEventListener('click', openSheet);
@@ -400,7 +451,7 @@
   }
 
   function renderTicketOnly() {
-    ticketHost.innerHTML = Kit.renderTicket(styleId, ticketData(), activePhoto());
+    ticketHost.innerHTML = Kit.renderTicket(styleId, ticketData(), activePhotos());
     delete ticketHost.dataset.natW;
     delete ticketHost.dataset.natH;
     applyUserFx();
@@ -658,8 +709,13 @@
       <input type="range" min="5" max="100" value="${Math.round((p.opacity || 0.5) * 100)}" data-param="opacity" /></div>`);
 
     if (item.hasDensity) {
-      parts.push(`<div class="fx-field"><label>疏密</label>
+      parts.push(`<div class="fx-field"><label>密度 ${Math.round((p.density || 1) * 100)}%</label>
         <input type="range" min="50" max="200" value="${Math.round((p.density || 1) * 100)}" data-param="density" /></div>`);
+    }
+    if (item.hasGlitter) {
+      parts.push(`<div class="fx-field"><label>颗粒大小 ${Math.round((p.glitterSize || 1) * 100)}%</label>
+        <input type="range" min="50" max="200" value="${Math.round((p.glitterSize || 1) * 100)}" data-param="glitterSize" /></div>`);
+      parts.push('<div class="fx-field"><label>形状</label><div class="fx-seg fx-seg--wrap" id="fxGlitterShape"></div></div>');
     }
     if (item.movable) {
       parts.push(`<div class="fx-field"><label>水平位置 ${Math.round(p.x || 50)}%</label>
@@ -678,7 +734,7 @@
     fxParams.querySelectorAll('[data-param]').forEach((el) => {
       el.addEventListener('input', () => {
         const key = el.dataset.param;
-        if (key === 'opacity' || key === 'density' || key === 'scale') {
+        if (key === 'opacity' || key === 'density' || key === 'scale' || key === 'glitterSize') {
           p[key] = Number(el.value) / 100;
         } else if (key === 'rotate' || key === 'x' || key === 'y' || key === 'fontSize') {
           p[key] = Number(el.value);
@@ -693,9 +749,26 @@
           if (label && key === 'x') label.textContent = `水平位置 ${Math.round(p.x)}%`;
           if (label && key === 'y') label.textContent = `垂直位置 ${Math.round(p.y)}%`;
           if (label && key === 'fontSize') label.textContent = `字号 ${Math.round(p.fontSize)}`;
+          if (label && key === 'density') label.textContent = `密度 ${Math.round(p.density * 100)}%`;
+          if (label && key === 'glitterSize') label.textContent = `颗粒大小 ${Math.round(p.glitterSize * 100)}%`;
         }
       });
     });
+
+    const glitterShapeRow = $('fxGlitterShape');
+    if (glitterShapeRow && Fx.GLITTER_SHAPES) {
+      const cur = p.glitterShape || 'dot';
+      glitterShapeRow.innerHTML = Fx.GLITTER_SHAPES.map(
+        (s) => `<button type="button" class="fx-seg-btn${cur === s.id ? ' is-active' : ''}" data-gshape="${s.id}">${s.label}</button>`
+      ).join('');
+      glitterShapeRow.querySelectorAll('[data-gshape]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          p.glitterShape = btn.dataset.gshape;
+          renderTicketOnly();
+          refreshFxUI();
+        });
+      });
+    }
 
     const borderToggle = $('fxBorderToggle');
     if (borderToggle) {
@@ -911,7 +984,7 @@
     renderCats();
     renderTrigger();
     renderFields();
-    syncPhotoHint();
+    syncPhotoSlots();
     renderTicketOnly();
     if (sheetOpen) renderStyleGrid();
     if (fxOpen) refreshFxUI();
@@ -961,6 +1034,28 @@
     tiltCard.style.height = `${Math.ceil(h * fitScale)}px`;
   }
 
+  if (photoSlots) {
+    photoSlots.addEventListener('click', (e) => {
+      const clearBtn = e.target.closest('[data-clear]');
+      if (clearBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        const idx = Number(clearBtn.dataset.clear);
+        delete customPhotos[idx];
+        renderTicketOnly();
+        renderTrigger();
+        syncPhotoSlots();
+        return;
+      }
+      const pickBtn = e.target.closest('[data-pick], [data-add]');
+      if (!pickBtn) return;
+      activePickSlot = Number(pickBtn.dataset.pick ?? pickBtn.dataset.add);
+      if (!Number.isFinite(activePickSlot)) return;
+      photoInput.value = '';
+      photoInput.click();
+    });
+  }
+
   photoInput.addEventListener('change', () => {
     const file = photoInput.files && photoInput.files[0];
     if (!file) return;
@@ -968,9 +1063,10 @@
     // blob: 地址 html-to-image 无法内联，会导致导出直接失败
     const reader = new FileReader();
     reader.onload = () => {
-      customPhoto = String(reader.result);
+      customPhotos[activePickSlot] = String(reader.result);
       renderTicketOnly();
       renderTrigger();
+      syncPhotoSlots();
     };
     reader.onerror = () => {
       alert('图片读取失败，请重试');

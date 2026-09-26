@@ -36,6 +36,14 @@
     { id: 'pill', label: '胶囊' },
   ];
 
+  const GLITTER_SHAPES = [
+    { id: 'dot', label: '细点' },
+    { id: 'spark', label: '圆点' },
+    { id: 'star', label: '星点' },
+    { id: 'cross', label: '十字' },
+    { id: 'diamond', label: '菱形' },
+  ];
+
   const COLORS = [
     '#1a1612', '#5c4033', '#8b1a1a', '#a67c2a', '#2f5d50',
     '#1e3a5f', '#6b2d5c', '#f6f1e8', '#c4b5a0', '#e8c27a',
@@ -73,8 +81,8 @@
     { id: 'txt-diag', tab: 'text', name: '斜向水印', hint: '满铺感', kind: 'fill', css: 'ufx-diagtext', defaultOpacity: 0.18, hasText: true, defaultText: 'ARCHIVE', hasColor: true, defaultColor: '#1a1612', font: 'steel', hasDensity: true },
 
     // —— 光效 ——
-    { id: 'lit-glitter', tab: 'light', name: '闪粉', hint: '炫', kind: 'fill', css: 'ufx-glitter', defaultOpacity: 0.5 },
-    { id: 'lit-rose', tab: 'light', name: '玫瑰金粉', hint: '炫', kind: 'fill', css: 'ufx-glitter-rose', defaultOpacity: 0.42 },
+    { id: 'lit-glitter', tab: 'light', name: '闪粉', hint: '炫', kind: 'fill', css: 'ufx-glitter', defaultOpacity: 0.5, hasDensity: true, hasGlitter: true, defaultGlitterShape: 'dot' },
+    { id: 'lit-rose', tab: 'light', name: '玫瑰金粉', hint: '炫', kind: 'fill', css: 'ufx-glitter-rose', defaultOpacity: 0.42, hasDensity: true, hasGlitter: true, defaultGlitterShape: 'dot' },
     { id: 'lit-vignette', tab: 'light', name: '暗角', hint: '做旧', kind: 'fill', css: 'ufx-vignette', defaultOpacity: 0.55 },
     { id: 'lit-leak', tab: 'light', name: '漏光', hint: '胶片', kind: 'fill', css: 'ufx-leak', defaultOpacity: 0.4, hasColor: true, defaultColor: '#e8a060' },
     { id: 'lit-neon', tab: 'light', name: '霓虹雾', hint: '炫', kind: 'fill', css: 'ufx-neon', defaultOpacity: 0.45, hasColor: true, defaultColor: '#ff4d8d' },
@@ -120,6 +128,8 @@
       borderStyle: 'solid',
       borderShape: 'round',
       fontSize: item.textControls ? 16 : 15,
+      glitterShape: item.defaultGlitterShape || 'dot',
+      glitterSize: 1,
     };
     if (item.textMode === 'datetime') {
       params.text = resolveText(item, params, ticketData);
@@ -188,8 +198,14 @@
       const color = p.color || item.defaultColor || 'currentColor';
       const font = fontFamily(p.font || item.font || 'steel');
       const text = item.hasText ? resolveText(item, p, ticketData) : '';
-      return `<div class="ufx-item ufx-fill ${item.css || ''}${selected}" data-fx-id="${esc(inst.id)}"
-        style="opacity:${op};color:${esc(color)};--ufx-density:${dens};--ufx-text:'${esc(text).replace(/'/g, '\\\'')}';font-family:${font}"
+      const gShape = p.glitterShape || item.defaultGlitterShape || 'dot';
+      const gSize = p.glitterSize != null ? p.glitterSize : 1;
+      const shapeCls = item.hasGlitter ? ` ufx-glitter--shape-${esc(gShape)}` : '';
+      const glitterBase = item.id === 'lit-rose' ? 130 : 110;
+      const glitterPx = Math.round(glitterBase * gSize);
+      const glitterVar = item.hasGlitter ? `--ufx-glitter-size:${glitterPx}px;` : '';
+      return `<div class="ufx-item ufx-fill ${item.css || ''}${shapeCls}${selected}" data-fx-id="${esc(inst.id)}"
+        style="opacity:${op};color:${esc(color)};--ufx-density:${dens};${glitterVar}--ufx-text:'${esc(text).replace(/'/g, '\\\'')}';font-family:${font}"
         aria-hidden="true"></div>`;
     }
 
@@ -272,6 +288,7 @@
     COLORS,
     BORDER_STYLES,
     BORDER_SHAPES,
+    GLITTER_SHAPES,
     CATALOG,
     createInstance,
     mount,
