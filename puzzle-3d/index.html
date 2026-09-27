@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<!-- 静态服务器（python -m http.server）不发缓存头，浏览器会启发式缓存 HTML，
+     导致 ?v= 版本号形同虚设：页面拿到旧的 HTML，就一直加载旧模块。 -->
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+<meta http-equiv="Pragma" content="no-cache" />
+<meta http-equiv="Expires" content="0" />
+<meta name="theme-color" content="#14172e" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<title>3D 拼图</title>
+<link rel="icon" href="assets/icon.svg" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700&family=Nunito:wght@500;600;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="src/style.css?v=20260927-53" />
+</head>
+<body>
+<div class="phone">
+  <div class="app">
+    <main class="stage">
+      <div id="viewport" class="viewport"></div>
+      <p class="toast" id="statusHint" role="status" aria-live="polite"></p>
+    </main>
+
+    <section class="tray-bar" aria-label="待选拼块">
+      <div class="tray-meta">
+        <span class="tray-label">拼块</span>
+        <span class="tray-count" id="trayCount">0</span>
+        <button type="button" class="tray-mode" id="trayModeBtn" aria-label="切换待选显示形式" aria-pressed="false" title="切换显示形式">
+          <svg class="mode-ico mode-ico--list" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="2" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><rect x="13" y="4" width="7" height="7" rx="2" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><rect x="4" y="13" width="7" height="7" rx="2" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><rect x="13" y="13" width="7" height="7" rx="2" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <svg class="mode-ico mode-ico--stack" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3.5" y="9" width="8" height="8" rx="2" transform="rotate(-14 7.5 13)" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><rect x="12" y="4" width="8" height="8" rx="2" transform="rotate(12 16 8)" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><rect x="12.5" y="13" width="7" height="7" rx="2" transform="rotate(-4 16 16.5)" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span class="tray-mode-text">排列</span>
+        </button>
+        <button type="button" class="tray-chip" id="scatterBtn" title="收回所有拼块并重新洗牌" disabled>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 7h3.2c1.9 0 3 .8 4 2.4l3.6 5.2c1 1.6 2.1 2.4 4 2.4H21M3 17h3.2c1.2 0 2.1-.3 2.8-1M15 8c.7-.7 1.6-1 2.8-1H21M18.5 4.5 21 7l-2.5 2.5M18.5 14.5 21 17l-2.5 2.5" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          重来
+        </button>
+      </div>
+      <div class="tray" id="tray"></div>
+    </section>
+
+    <nav class="dock" aria-label="主操作">
+      <button type="button" class="dock-btn" id="settingsBtn">
+        <span class="dock-ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="4" fill="currentColor" fill-opacity="0.22"/><rect x="3" y="4" width="18" height="16" rx="4" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><circle cx="9" cy="9.5" r="1.8" fill="currentColor"/><path d="M3.5 17.5l5-4.6 3.6 3.1 2.9-2.4 5.5 4.6" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span>选图</span>
+      </button>
+      <button type="button" class="dock-btn" id="rotateBtn" disabled>
+        <span class="dock-ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.6-5.9" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><path d="M20.2 3.8v4.6h-4.6" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="2.4" fill="currentColor"/></svg></span><span>旋转</span>
+      </button>
+      <button type="button" class="dock-btn" id="hintBtn" aria-pressed="false" disabled>
+        <span class="dock-ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3a6 6 0 0 1 3.6 10.8c-.6.5-.9 1.1-.9 1.8V17H9.3v-1.4c0-.7-.3-1.3-.9-1.8A6 6 0 0 1 12 3Z" fill="currentColor" fill-opacity="0.22"/><path d="M12 3a6 6 0 0 1 3.6 10.8c-.6.5-.9 1.1-.9 1.8V17H9.3v-1.4c0-.7-.3-1.3-.9-1.8A6 6 0 0 1 12 3Z" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><path d="M9.8 20.5h4.4" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span>提示</span>
+      </button>
+      <button type="button" class="dock-btn" id="solveBtn" disabled>
+        <span class="dock-ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 20 15 9" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><path d="m13.5 7.5 3 3 2-2-3-3-2 2Z" fill="currentColor" fill-opacity="0.22"/><path d="m13.5 7.5 3 3 2-2-3-3-2 2Z" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 3.5v3M6.5 5h3M19 13.5v3M17.5 15h3M11 2.5v.01M21 8.5v.01" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span>揭晓</span>
+      </button>
+    </nav>
+  </div>
+</div>
+
+<div class="sheet" id="settingsSheet" aria-hidden="true">
+  <button type="button" class="sheet-scrim" id="settingsScrim" aria-label="关闭"></button>
+  <div class="sheet-panel" role="dialog" aria-label="拼图设置">
+    <header class="sheet-head sheet-head--compact">
+      <h2>拼图设置 <span class="grid-total" id="gridSummary">24 块</span></h2>
+      <button type="button" class="sheet-close" id="settingsClose" aria-label="关闭">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+    </header>
+    <div class="sheet-body">
+      <div class="crop-frame" id="cropFrame">
+        <img class="crop-img" id="cropImg" alt="" draggable="false" />
+        <canvas class="crop-grid" id="cropGrid" aria-hidden="true"></canvas>
+      </div>
+      <p class="crop-tip">拖动移动 · 双指缩放 · 双击放大</p>
+      <div class="grid-row">
+        <div class="mini-stepper">
+          <button type="button" class="mini-btn" id="colsMinus" aria-label="列减">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M6 12h12" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg>
+          </button>
+          <span class="mini-num"><b class="mini-val" id="colsLabel">4</b><span class="mini-label">列</span></span>
+          <button type="button" class="mini-btn" id="colsPlus" aria-label="列加">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M6 12h12M12 6v12" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg>
+          </button>
+        </div>
+        <span class="grid-x" aria-hidden="true">×</span>
+        <div class="mini-stepper">
+          <button type="button" class="mini-btn" id="rowsMinus" aria-label="行减">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M6 12h12" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg>
+          </button>
+          <span class="mini-num"><b class="mini-val" id="rowsLabel">6</b><span class="mini-label">行</span></span>
+          <button type="button" class="mini-btn" id="rowsPlus" aria-label="行加">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M6 12h12M12 6v12" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg>
+          </button>
+        </div>
+        <label class="swap-img" title="换一张图片" aria-label="换图">
+          <input type="file" id="fileInput" accept="image/*" hidden />
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <rect x="3.5" y="4.5" width="17" height="15" rx="3" stroke="currentColor" stroke-width="1.9"/>
+            <circle cx="9" cy="10" r="1.7" stroke="currentColor" stroke-width="1.7"/>
+            <path d="M4 17l4.8-4.4 3.4 3 3-2.6L20 17" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </label>
+      </div>
+      <input type="hidden" id="colsInput" value="4" />
+      <input type="hidden" id="rowsInput" value="6" />
+      <button type="button" class="sheet-apply" id="applyGridBtn">开始拼图</button>
+    </div>
+  </div>
+</div>
+
+<script src="vendor/three.min.js"></script>
+<script type="module" src="src/app.js?v=20260927-53"></script>
+</body>
+</html>
