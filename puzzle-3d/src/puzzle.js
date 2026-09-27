@@ -60,12 +60,11 @@ export function suggestGrid(iw, ih, preferTotal = 24) {
 }
 
 /**
- * 经典拼图扣：窄颈 + 更圆的蘑菇头（贝塞尔近似圆弧）。
+ * 经典拼图扣：微凹的肩 + 细颈 + 近正圆的圆头（贝塞尔近似圆弧）。
  * sign=+1 向外凸，-1 向内凹。
  *
- * 各段端点与原始设计一致；段与段交界处做 C1 修正：
- * 原设计相邻两段的切向相差 12°~16°，放大后颈肩处会出现明显折角，
- * 这里把交界两侧的控制点方向拉成同向（保留各自长度），形状几乎不变但切向连续。
+ * 段与段交界处做 C1 修正：把交界两侧的控制点方向拉成同向（保留各自长度），
+ * 放大后颈肩处不会出现折角。
  */
 function appendClassicKnob(api, x0, y0, x1, y1, sign) {
   const dx = x1 - x0;
@@ -81,17 +80,17 @@ function appendClassicKnob(api, x0, y0, x1, y1, sign) {
     y: y0 + uy * len * u + ny * len * n,
   });
 
-  // 肩更靠外，头更圆鼓
-  const a = P(0.355, 0);
-  api.lineTo(a.x, a.y);
-
+  // 参考经典模切：肩部向块内微微下凹，细颈，接近正圆的饱满圆头。
+  // 曲线关于边中点对称，相邻块反向描同一条边时轮廓完全重合
   const segs = [
-    { c1: P(0.375, 0), c2: P(0.395, 0.03), p: P(0.415, 0.055) }, // 入颈（收腰）
-    { c1: P(0.43, 0.09), c2: P(0.4, 0.125), p: P(0.385, 0.145) }, // 颈 → 圆头左下
-    { c1: P(0.35, 0.175), c2: P(0.4, 0.245), p: P(0.5, 0.245) }, // 左弧 → 顶端
-    { c1: P(0.6, 0.245), c2: P(0.65, 0.175), p: P(0.615, 0.145) }, // 顶端 → 右弧
-    { c1: P(0.6, 0.125), c2: P(0.57, 0.09), p: P(0.585, 0.055) }, // 右下 → 出颈
-    { c1: P(0.605, 0.03), c2: P(0.625, 0), p: P(0.645, 0) }, // 出颈回肩
+    { c1: P(0.12, 0), c2: P(0.3, -0.03), p: P(0.4, -0.01) }, // 肩部微凹
+    { c1: P(0.45, 0.005), c2: P(0.46, 0.04), p: P(0.445, 0.07) }, // 入颈（最细处）
+    { c1: P(0.435, 0.09), c2: P(0.39, 0.12), p: P(0.39, 0.17) }, // 颈 → 圆头左侧
+    { c1: P(0.39, 0.228), c2: P(0.442, 0.272), p: P(0.5, 0.272) }, // 左弧 → 顶端
+    { c1: P(0.558, 0.272), c2: P(0.61, 0.228), p: P(0.61, 0.17) }, // 顶端 → 右弧
+    { c1: P(0.61, 0.12), c2: P(0.565, 0.09), p: P(0.555, 0.07) }, // 圆头右侧 → 颈
+    { c1: P(0.54, 0.04), c2: P(0.55, 0.005), p: P(0.6, -0.01) }, // 出颈
+    { c1: P(0.7, -0.03), c2: P(0.88, 0), p: P(1, 0) }, // 肩部回到角点
   ];
 
   for (let i = 1; i < segs.length; i++) {
@@ -110,8 +109,8 @@ function appendClassicKnob(api, x0, y0, x1, y1, sign) {
     segs[i].c1 = { x: join.x + bx * ln, y: join.y + by * ln };
   }
 
+  segs[segs.length - 1].p = { x: x1, y: y1 };
   for (const s of segs) api.bezierCurveTo(s.c1.x, s.c1.y, s.c2.x, s.c2.y, s.p.x, s.p.y);
-  api.lineTo(x1, y1);
 }
 
 function edgeWithTab(api, x0, y0, x1, y1, dir, first) {
@@ -165,6 +164,22 @@ function piecePathCentered(ctx, hw, tabs) {
   ctx.beginPath();
   tracePieceEdges(api, hw, tabs);
   ctx.closePath();
+}
+
+/** 在源图像素坐标（y 向下、单格边长 s）下追加第 (r, c) 块的轮廓，path 可以是 ctx 或 Path2D */
+export function tracePieceAt(path, r, c, s, tabs) {
+  const cx = (c + 0.5) * s;
+  const cy = (r + 0.5) * s;
+  tracePieceEdges(
+    {
+      moveTo: (x, y) => path.moveTo(cx + x, cy - y),
+      lineTo: (x, y) => path.lineTo(cx + x, cy - y),
+      bezierCurveTo: (a, b, c2, d, e, f) => path.bezierCurveTo(cx + a, cy - b, cx + c2, cy - d, cx + e, cy - f),
+    },
+    s / 2,
+    tabs
+  );
+  path.closePath();
 }
 
 export function buildJigsawShape(cell, tabs, knobSamples = 10) {
@@ -451,6 +466,23 @@ export function getPieceThumb(piece, size = 72) {
   // 纸片边缘一圈极淡的暗边：source-atop 只画在拼块内部，不会描到外面
   actx.globalCompositeOperation = 'source-atop';
   actx.lineJoin = 'round';
+  // 圆边浮雕：填充块外的一圈框，只留它的模糊投影透进块内（source-atop 丢掉框本身），
+  // 左上内沿柔和提亮、右下内沿柔和压暗，与 3D 拼块同一光向
+  const far = layout.hw * 4;
+  const innerGlow = (color, dir) => {
+    actx.save();
+    actx.shadowColor = color;
+    actx.shadowBlur = 3 * k;
+    actx.shadowOffsetX = 1.1 * k * dir;
+    actx.shadowOffsetY = 1.1 * k * dir;
+    actx.fillStyle = '#000';
+    piecePathCentered(actx, layout.hw, piece.tabs);
+    actx.rect(-far, -far, far * 2, far * 2);
+    actx.fill('evenodd');
+    actx.restore();
+  };
+  innerGlow('rgba(255, 255, 255, 0.55)', 1);
+  innerGlow('rgba(40, 25, 10, 0.3)', -1);
   actx.strokeStyle = 'rgba(30, 20, 40, 0.14)';
   actx.lineWidth = (1.6 * k) / layout.scale;
   piecePathCentered(actx, layout.hw, piece.tabs);

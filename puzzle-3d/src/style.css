@@ -595,7 +595,10 @@ html, body {
 .mini-label {
   font-size: 12px;
   font-weight: 700;
+  line-height: 1;
   color: var(--muted);
+  /* 汉字字面比数字多出基线下的一截，上提后两者底边齐平 */
+  transform: translateY(-0.12em);
 }
 .mini-btn {
   display: grid;

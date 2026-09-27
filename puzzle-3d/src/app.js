@@ -1,4 +1,4 @@
-import { cutPuzzle, loadImage, MAX_DIM, MAX_TOTAL, SOFT_TOTAL, buildJigsawShape, suggestGrid, getPieceThumb, getPieceFrame, hitTestPiece, rotatedShapeKey, cropRect, thumbBodyMetrics } from './puzzle.js?v=20260927-53';
+import { cutPuzzle, loadImage, MAX_DIM, MAX_TOTAL, SOFT_TOTAL, buildJigsawShape, suggestGrid, getPieceThumb, getPieceFrame, hitTestPiece, rotatedShapeKey, cropRect, thumbBodyMetrics, tracePieceAt, buildTabMap, tabsFor } from './puzzle.js?v=20260927-59';
 import { celebrate } from './confetti.js?v=20260927-53';
 const THREE = window.THREE;
 if (!THREE) throw new Error('Three.js 未加载');
@@ -127,7 +127,8 @@ function fitShadowCamera(size) {
   if (!key || !size) return;
   const vs = viewSize();
   const centerX = scenePan(size).x;
-  const dir = new THREE.Vector3(6, 7, 4).normalize();
+  // 左上方来光：圆边浮雕左上亮、右下暗，投影落在右下，与托盘缩略图同一光向
+  const dir = new THREE.Vector3(-5, 8, -4).normalize();
   const reach = Math.max(vs.w, vs.h) * 0.75 + size.cell * 2;
   key.position.set(centerX + dir.x * reach * 1.6, dir.y * reach * 1.6 + 2, dir.z * reach * 1.6);
   key.target.position.set(centerX, 0, 0);
@@ -253,7 +254,7 @@ function initScene() {
   scene.add(ambient);
   // 低角度主光：擦过拼块侧壁，产生明显明暗与浮雕感
   const key = new THREE.DirectionalLight(0xfff7f2, 1.32);
-  key.position.set(6, 7, 4);
+  key.position.set(-5, 8, -4);
   key.castShadow = true;
   // VSM 会把阴影图再模糊两遍，分辨率不必给太高（模糊本身会补掉锯齿）；
   // 3072² 在手机上光是阴影 pass 就够呛，2048² 视觉上看不出差别
@@ -472,6 +473,7 @@ function disposeMesh(obj) {
       const mats = Array.isArray(n.material) ? n.material : [n.material];
       for (const m of mats) {
         if (m.map) m.map.dispose();
+        if (m.normalMap) m.normalMap.dispose();
         m.dispose();
       }
     }
@@ -762,6 +764,89 @@ function makeMatPanel(w, h) {
 }
 
 /**
+ * 拼块顶面的圆边浮雕：沿每块真实轮廓烘一张全局法线图，外加边缘压暗的印刷图。
+ * 几何倒角会让刀缝忽宽忽窄，所以圆边只做在贴图里；贴图与顶面共用全局 UV，
+ * 打散、旋转、放入槽位后高光都跟着块走。
+ */
+function bakePieceRelief(pz) {
+  if (pz._relief) return pz._relief;
+  const src = pz.sourceCanvas;
+  const k = Math.min(1, 2048 / Math.max(src.width, src.height));
+  const W = Math.round(src.width * k);
+  const H = Math.round(src.height * k);
+  const s = pz.pieces[0].cellPx * k;
+  const B = Math.max(3, s * 0.09); // 圆边宽度（像素）
+
+  const outline = new Path2D();
+  for (const p of pz.pieces) tracePieceAt(outline, p.r, p.c, s, p.tabs);
+
+  // 高度场：轮廓处 0，向内按四分之一圆弧升到 1。
+  // darken 取最小值，N 条由宽到窄的描边叠出等距分层，相邻块共用的边描两遍也不影响
+  const hc = document.createElement('canvas');
+  hc.width = W;
+  hc.height = H;
+  const hctx = hc.getContext('2d', { willReadFrequently: true });
+  hctx.fillStyle = '#fff';
+  hctx.fillRect(0, 0, W, H);
+  hctx.globalCompositeOperation = 'darken';
+  hctx.lineJoin = 'round';
+  const N = 14;
+  for (let i = N; i >= 1; i--) {
+    const x = (i - 0.5) / N;
+    const g = Math.round(255 * Math.sqrt(1 - (1 - x) * (1 - x)));
+    hctx.strokeStyle = `rgb(${g},${g},${g})`;
+    hctx.lineWidth = (2 * B * i) / N;
+    hctx.stroke(outline);
+  }
+  const hd = hctx.getImageData(0, 0, W, H).data;
+
+  const nc = document.createElement('canvas');
+  nc.width = W;
+  nc.height = H;
+  const nctx = nc.getContext('2d');
+  const nimg = nctx.createImageData(W, H);
+  const sc = document.createElement('canvas');
+  sc.width = W;
+  sc.height = H;
+  const sctx = sc.getContext('2d');
+  const simg = sctx.createImageData(W, H);
+  const nd = nimg.data;
+  const sd = simg.data;
+  const S = B * 0.25;
+  const h = (x, y) => hd[(Math.min(H - 1, Math.max(0, y)) * W + Math.min(W - 1, Math.max(0, x))) * 4] / 255;
+  for (let y = 0, i = 0; y < H; y++) {
+    for (let x = 0; x < W; x++, i += 4) {
+      // 贴图 flipY：画布向下 = 切线空间 -Y
+      let nx = -(h(x + 1, y) - h(x - 1, y)) * S + (Math.random() - 0.5) * 0.05;
+      let ny = (h(x, y + 1) - h(x, y - 1)) * S + (Math.random() - 0.5) * 0.05;
+      const len = Math.hypot(nx, ny, 1);
+      nd[i] = ((nx / len) * 0.5 + 0.5) * 255;
+      nd[i + 1] = ((ny / len) * 0.5 + 0.5) * 255;
+      nd[i + 2] = ((1 / len) * 0.5 + 0.5) * 255;
+      nd[i + 3] = 255;
+      const ao = 255 * (0.8 + 0.2 * hd[i] / 255);
+      sd[i] = ao;
+      sd[i + 1] = ao;
+      sd[i + 2] = ao;
+      sd[i + 3] = 255;
+    }
+  }
+  nctx.putImageData(nimg, 0, 0);
+  sctx.putImageData(simg, 0, 0);
+
+  const color = document.createElement('canvas');
+  color.width = src.width;
+  color.height = src.height;
+  const cctx = color.getContext('2d', { alpha: false });
+  cctx.drawImage(src, 0, 0);
+  cctx.globalCompositeOperation = 'multiply';
+  cctx.drawImage(sc, 0, 0, src.width, src.height);
+
+  pz._relief = { color, normal: nc };
+  return pz._relief;
+}
+
+/**
  * 所有拼块共用一张源图纹理和同一组材质：每块各建一张整图纹理的话，
  * 块从托盘同时变可见（如「拼好」）时要在一帧里上传 N 张大图，会明显卡顿。
  */
@@ -770,33 +855,38 @@ function getPieceMaterials(many) {
   if (pieceMatCache && pieceMatCache.puzzle === puzzle && pieceMatCache.many === many) {
     return pieceMatCache.mats;
   }
-  const tex = new THREE.CanvasTexture(puzzle.sourceCanvas);
+  const relief = bakePieceRelief(puzzle);
+  const anisotropy = Math.min(8, state.renderer.capabilities.getMaxAnisotropy());
+  const tex = new THREE.CanvasTexture(relief.color);
   if (tex.colorSpace !== undefined) tex.colorSpace = THREE.SRGBColorSpace;
   tex.flipY = true;
   tex.generateMipmaps = true;
   tex.minFilter = THREE.LinearMipmapLinearFilter;
   tex.magFilter = THREE.LinearFilter;
-  tex.anisotropy = Math.min(8, state.renderer.capabilities.getMaxAnisotropy());
+  tex.anisotropy = anisotropy;
   tex.needsUpdate = true;
+  const normalTex = new THREE.CanvasTexture(relief.normal);
+  normalTex.flipY = true;
+  normalTex.anisotropy = anisotropy;
+  normalTex.needsUpdate = true;
 
   const bump = getPaperBump();
-  // 印刷面：哑光纸 + 极薄涂层，保留一点点高光但不塑料
+  // 印刷面：哑光纸 + 极薄涂层；法线图给出圆边浮雕（纸纹也烘在里面，bumpMap 会被它覆盖）
   const topMat = many
     ? new THREE.MeshStandardMaterial({
         map: tex,
-        bumpMap: bump,
-        bumpScale: 0.006,
-        roughness: 0.5,
+        normalMap: normalTex,
+        roughness: 0.46,
         metalness: 0,
       })
     : new THREE.MeshPhysicalMaterial({
         map: tex,
-        bumpMap: bump,
-        bumpScale: 0.006,
-        roughness: 0.52,
+        normalMap: normalTex,
+        roughness: 0.46,
         metalness: 0,
-        clearcoat: 0.16,
-        clearcoatRoughness: 0.68,
+        clearcoat: 0.3,
+        clearcoatRoughness: 0.5,
+        clearcoatNormalMap: normalTex,
         sheen: 0.35,
         sheenRoughness: 0.8,
         sheenColor: new THREE.Color(0xfffaf2),
@@ -811,7 +901,7 @@ function getPieceMaterials(many) {
   });
   // splitPieceFaces 分组：0 顶面印刷 / 1 侧壁纸板 / 2 背面纸板
   const mats = [topMat, coreMat, coreMat];
-  pieceMatCache = { puzzle, many, mats, tex };
+  pieceMatCache = { puzzle, many, mats, tex, normalTex };
   return mats;
 }
 
@@ -821,6 +911,7 @@ function warmPieceMaterials() {
   if (!r || !pieceMatCache) return;
   try {
     r.initTexture?.(pieceMatCache.tex);
+    r.initTexture?.(pieceMatCache.normalTex);
     const hidden = [];
     state.pieceMeshes.forEach((m) => {
       if (!m.visible) { m.visible = true; hidden.push(m); }
@@ -2207,6 +2298,20 @@ function renderCrop(animate = false) {
   }
 }
 
+/** 预览用的整板拼块轮廓（单位格边长 1），与 cutPuzzle 同一张凹凸表 */
+let cropOutlineCache = null;
+function cropOutlinePath(cols, rows) {
+  const c = cropOutlineCache;
+  if (c && c.cols === cols && c.rows === rows) return c.path;
+  const map = buildTabMap(cols, rows);
+  const path = new Path2D();
+  for (let r = 0; r < rows; r++) {
+    for (let col = 0; col < cols; col++) tracePieceAt(path, r, col, 1, tabsFor(r, col, cols, rows, map));
+  }
+  cropOutlineCache = { cols, rows, path };
+  return path;
+}
+
 /** 遮罩 + 网格：窗口外压暗，窗口内画出每块拼块的分界 */
 function drawCropGrid(win) {
   const d = cropDraft;
@@ -2230,24 +2335,37 @@ function drawCropGrid(win) {
   ctx.fillStyle = 'rgba(12, 14, 30, 0.62)';
   ctx.fill('evenodd');
 
-  ctx.beginPath();
-  for (let i = 1; i < cols; i++) {
-    const x = ox + (cw * i) / cols;
-    ctx.moveTo(x, oy);
-    ctx.lineTo(x, oy + ch);
-  }
-  for (let j = 1; j < rows; j++) {
-    const y = oy + (ch * j) / rows;
-    ctx.moveTo(ox, y);
-    ctx.lineTo(ox + cw, y);
-  }
-  ctx.lineWidth = 1;
-  ctx.strokeStyle = 'rgba(0, 0, 0, 0.16)';
-  ctx.stroke();
+  // 与拼盘同一套凹凸与造型：单位格路径缓存，按窗口缩放绘制
+  const outline = cropOutlinePath(cols, rows);
+  const s = cw / cols;
   ctx.save();
-  ctx.translate(-0.5, -0.5);
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.75)';
-  ctx.stroke();
+  ctx.beginPath();
+  ctx.rect(ox, oy, cw, ch);
+  ctx.clip();
+  // 圆边浮雕：路径画到画布外，只让投影落回来，缝的右下侧（块的左上内沿）提亮、左上侧压暗
+  const far = 10000;
+  const glow = (color, dir) => {
+    ctx.save();
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 2.5 * dpr;
+    ctx.shadowOffsetX = (far + 1.2 * dir) * dpr;
+    ctx.shadowOffsetY = 1.2 * dir * dpr;
+    ctx.setTransform(dpr * s, 0, 0, dpr * s, (ox - far) * dpr, oy * dpr);
+    ctx.lineWidth = 1.6 / s;
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = '#000';
+    ctx.stroke(outline);
+    ctx.restore();
+  };
+  // 与拼盘一致：边缘压暗 + 左上高光右下暗影 + 半透明梅紫拼缝
+  glow('rgba(0, 0, 0, 0.22)', 0);
+  glow('rgba(255, 255, 255, 0.35)', 1);
+  glow('rgba(30, 18, 5, 0.3)', -1);
+  ctx.lineJoin = 'round';
+  ctx.setTransform(dpr * s, 0, 0, dpr * s, ox * dpr, oy * dpr);
+  ctx.lineWidth = 1 / s;
+  ctx.strokeStyle = 'rgba(91, 84, 112, 0.6)';
+  ctx.stroke(outline);
   ctx.restore();
 
   ctx.strokeStyle = 'rgba(255, 181, 71, 0.95)';
