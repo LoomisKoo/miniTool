@@ -169,8 +169,9 @@ function fitCamera() {
   const vFov = (camera.fov * Math.PI) / 180;
   const tan = Math.tan(vFov / 2) || 0.3;
   const vs = viewSize();
-  const margin = 1.12;
-  const pad = 0.3;
+  // 留白只够放下底板倒角和投影：再大拼版就离底部拼块栏太远
+  const margin = 1.03;
+  const pad = 0.15;
   // 横竖两个方向都要框住，取较大的距离
   const distV = (vs.h * margin * 0.5 + pad) / tan;
   const distH = (vs.w * margin * 0.5 + pad) / (tan * aspect);
@@ -2184,6 +2185,7 @@ function solveAll() {
 
 /* ==================== 完成后：成品图 / 保存 / 分享 ==================== */
 const APP_NAME = '熊猫拼图';
+const APP_NAME_EN = 'Panda Puzzle';
 let doneMs = 0;
 
 /** 记下完成方式；亲手拼完时把用时定格，之后再保存/分享都用这一刻的用时 */
@@ -2281,7 +2283,7 @@ function composePoster(board) {
   ctx.textAlign = 'left';
   ctx.fillStyle = '#ffb547';
   ctx.font = `800 30px ${font}`;
-  ctx.fillText(APP_NAME, pad, y);
+  ctx.fillText(`${APP_NAME} · ${APP_NAME_EN}`, pad, y);
   ctx.textAlign = 'right';
   ctx.fillStyle = 'rgba(226, 222, 255, 0.55)';
   ctx.font = `700 26px ${font}`;
@@ -2327,13 +2329,7 @@ async function saveDoneImage() {
     }
     return;
   }
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'panda-puzzle.jpg';
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setHint('已下载图片');
+  setHint('请在小红书内打开后保存');
 }
 
 async function shareDoneImage() {
@@ -2359,17 +2355,7 @@ async function shareDoneImage() {
     }
     return;
   }
-  try {
-    const blob = await (await fetch(url)).blob();
-    const file = new File([blob], 'panda-puzzle.jpg', { type: 'image/jpeg' });
-    if (navigator.canShare && navigator.canShare({ files: [file] })) {
-      await navigator.share({ files: [file], title: APP_NAME });
-      return;
-    }
-  } catch (err) {
-    if (err && err.name === 'AbortError') return;
-  }
-  setHint('请在小红书内打开后分享，或先保存到相册');
+  setHint('请在小红书内打开后分享');
 }
 
 function rotateSelected() {

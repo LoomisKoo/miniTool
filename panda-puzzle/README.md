@@ -5,7 +5,7 @@
 ## 本地预览
 
 ```bash
-cd puzzle-3d
+cd panda-puzzle
 python3 -m http.server 8765
 # 打开 http://127.0.0.1:8765
 ```

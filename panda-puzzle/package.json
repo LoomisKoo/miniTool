@@ -1,0 +1,13 @@
+{
+  "name": "panda-puzzle",
+  "description": "熊猫拼图 (Panda Puzzle)",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "build:xhs": "node build.mjs xiaohongshu"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
+  }
+}
