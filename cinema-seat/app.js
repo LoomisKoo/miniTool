@@ -124,8 +124,9 @@
   /* 约 ±95° 水平，便于看到同排左右观众；垂直仍留抬头看银幕余量 */
   var LOOK_YAW_LIMIT = 1.65;
   var LOOK_PITCH_LIMIT = 1.35;
-  /* 竖屏下垂直 FOV；横屏按相同水平 FOV 反算垂直 FOV，避免宽高比一变视角差很多 */
-  var CAMERA_VFOV_PORTRAIT = 46;
+  /* 按人眼视野：水平约 100°（双眼清晰+部分余光），垂直上限 80° 防止竖屏过度畸变 */
+  var CAMERA_HFOV_HUMAN = 100;
+  var CAMERA_VFOV_MAX = 80;
   var lookDragging = false;
   var lookLastX = 0;
   var lookLastY = 0;
@@ -141,7 +142,7 @@
   var audienceGroup = null;
   var screenTexture = null, sampleCanvas = null, sampleCtx = null;
   var sampleImageTexture = null, sampleImageReady = false;
-  var SAMPLE_SCREEN_URL = 'assets/sample-screen.jpg';
+  var SAMPLE_SCREEN_URL = (typeof window !== 'undefined' && window.__CINEMA_SAMPLE_URL__) || 'assets/sample-screen.jpg';
   var raf = 0, zoomAnimation = 0, sampleTime = 0, toastTimer = null, audioCtx = null;
   var video = null, videoTexture = null, videoUrl = '';
 
@@ -1216,24 +1217,15 @@
     makeSampleTexture(); resizeRenderer();
     applyHallLight();
   }
-  function cameraHorizontalFovDeg(vertFovDeg, aspect) {
-    var v = vertFovDeg * Math.PI / 180;
-    return 2 * Math.atan(Math.tan(v / 2) * aspect) * 180 / Math.PI;
-  }
   function cameraVerticalFovFromHorizontal(hFovDeg, aspect) {
     var h = hFovDeg * Math.PI / 180;
-    return clamp(2 * Math.atan(Math.tan(h / 2) / aspect) * 180 / Math.PI, 24, 75);
-  }
-  function referenceCameraHorizontalFovDeg() {
-    var pw = Math.min(window.innerWidth, window.innerHeight);
-    var ph = Math.max(window.innerWidth, window.innerHeight);
-    return cameraHorizontalFovDeg(CAMERA_VFOV_PORTRAIT, pw / ph);
+    return clamp(2 * Math.atan(Math.tan(h / 2) / aspect) * 180 / Math.PI, 24, CAMERA_VFOV_MAX);
   }
   function applyCameraProjection(w, h) {
     if (!camera) return;
     var aspect = w / h;
     camera.aspect = aspect;
-    camera.fov = cameraVerticalFovFromHorizontal(referenceCameraHorizontalFovDeg(), aspect);
+    camera.fov = cameraVerticalFovFromHorizontal(CAMERA_HFOV_HUMAN, aspect);
     camera.updateProjectionMatrix();
   }
   function resizeRenderer() {
@@ -1439,8 +1431,15 @@
       byId('visionModal').classList.remove('rotate-90');
     }
   }
+  // 竖屏握持点「横屏」应旋转舞台；仅当设备已物理横屏时不转（避免侧躺）
+  function isPhysicalLandscapeViewport() {
+    var vv = window.visualViewport;
+    var w = (vv && vv.width) || window.innerWidth;
+    var h = (vv && vv.height) || window.innerHeight;
+    return w > h;
+  }
   function applyLandscapeRotation(isLandscape) {
-    var rotate = !!isLandscape && window.innerHeight > window.innerWidth;
+    var rotate = !!isLandscape && !isPhysicalLandscapeViewport();
     byId('theatreView').classList.toggle('rotate-stage', rotate);
     byId('theatreView').classList.toggle('rotate-90', false);
     var sheetsToo = isLandscape && byId('theatreView').classList.contains('is-open');
@@ -1457,8 +1456,11 @@
     renderTheatre();
   }
   function toggleOrientation() {
+    setOrientation(!byId('theatreView').classList.contains('orientation-landscape'));
+  }
+  function setOrientation(isLandscape) {
     var theatreView = byId('theatreView');
-    var isLandscape = theatreView.classList.toggle('orientation-landscape');
+    theatreView.classList.toggle('orientation-landscape', isLandscape);
     theatreView.classList.remove('chrome-collapsed');
     var chromeBtn = byId('chromeToggleBtn');
     if (chromeBtn) {
@@ -1579,8 +1581,15 @@
     byId('orientationBtn').addEventListener('click', toggleOrientation);
     byId('chromeToggleBtn').addEventListener('click', toggleTheatreChrome);
     byId('lightBtn').addEventListener('click', toggleHallLight);
-    window.addEventListener('resize', function () {
+    var viewportLandscape = isPhysicalLandscapeViewport();
+    if (viewportLandscape) setOrientation(true);
+    function onViewportChange() {
       var rotatedBefore = isSeatRotated();
+      var nowLandscape = isPhysicalLandscapeViewport();
+      if (nowLandscape !== viewportLandscape) {
+        viewportLandscape = nowLandscape;
+        setOrientation(nowLandscape);
+      }
       if (document.body.classList.contains('orientation-landscape')) {
         var rotatedNow = applyLandscapeRotation(true);
         if (rotatedNow !== rotatedBefore && byId('seatModal').classList.contains('is-open')) {
@@ -1589,7 +1598,12 @@
       }
       if (!byId('theatreView').classList.contains('is-open')) return;
       resizeRenderer(); renderTheatre();
-    });
+    }
+    window.addEventListener('resize', onViewportChange);
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', onViewportChange);
+      window.visualViewport.addEventListener('scroll', onViewportChange);
+    }
     document.addEventListener('visibilitychange', function () {
       if (document.hidden) cancelAnimationFrame(raf);
       else if (state.sample) raf = requestAnimationFrame(animateSample);
