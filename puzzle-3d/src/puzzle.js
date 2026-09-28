@@ -365,10 +365,9 @@ function thumbFrameFor(body) {
 }
 
 /** 缩略图的取景换算：共用标尺定缩放，按自身包围盒居中 */
-function thumbLayout(piece, px) {
+function thumbLayout(piece, px, pxPerCss = px / thumbContentPx(px)) {
   const body = piece.cellPx;
   const frame = thumbFrameFor(body);
-  const pxPerCss = px / thumbContentPx(px);
   const avail = Math.max(1, px - THUMB_MARGIN * 2 * pxPerCss);
   const scale = avail / (frame.r * 2);
   // 每块按自己的包围盒（含蘑菇扣）居中，凸起只在一侧的块才不会看起来偏一边
@@ -422,14 +421,31 @@ function applyThumbLayout(ctx, px, layout) {
  */
 export function getPieceThumb(piece, size = 72) {
   if (piece.thumb) return piece.thumb;
-  const px = thumbCanvasPx(size);
+  piece.thumb = renderPieceThumb(piece, size).toDataURL('image/png');
+  return piece.thumb;
+}
+
+/**
+ * 与托盘缩略图同一取景、同一 CSS 尺寸，但画布放大 hi 倍：
+ * 飞行替身要放大到槽位那么大，用小图放大会糊、有锯齿。
+ */
+export function getPieceThumbHi(piece, size, hi) {
+  const cached = piece._thumbHi;
+  if (cached && cached.hi >= hi && !cached.canvas.isConnected) return cached.canvas;
+  const canvas = renderPieceThumb(piece, size, hi);
+  piece._thumbHi = { hi, canvas };
+  return canvas;
+}
+
+function renderPieceThumb(piece, size, hi = 1) {
+  const k = thumbPxPerCss(size) * hi;
+  const px = Math.round(thumbCanvasPx(size) * hi);
   const t = document.createElement('canvas');
   t.width = px;
   t.height = px;
   const ctx = t.getContext('2d', { alpha: true });
   ctx.clearRect(0, 0, px, px);
-  const layout = thumbLayout(piece, px);
-  const k = thumbPxPerCss(size);
+  const layout = thumbLayout(piece, px, k);
 
   // 阴影只投一层：两遍阴影会在拼块边缘叠出一圈很硬的深色描边。
   // 关键：shadowBlur 走的是画布像素，不受 CTM 缩放影响；而托盘里的拼块本体只有
@@ -495,8 +511,7 @@ export function getPieceThumb(piece, size = 72) {
   ctx.shadowOffsetY = 1.6 * k;
   ctx.drawImage(art, 0, 0);
   ctx.restore();
-  piece.thumb = t.toDataURL('image/png');
-  return piece.thumb;
+  return t;
 }
 
 /**

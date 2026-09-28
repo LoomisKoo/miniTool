@@ -15,7 +15,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700&family=Nunito:wght@500;600;700;800&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="src/style.css?v=20260927-59" />
+<link rel="stylesheet" href="src/style.css?v=20260928-7" />
 </head>
 <body>
 <div class="phone">
@@ -29,15 +29,14 @@
       <div class="tray-meta">
         <span class="tray-label">拼块</span>
         <span class="tray-count" id="trayCount">0</span>
+        <button type="button" class="tray-icon tray-icon--lead" id="rotateBtn" aria-label="旋转" title="旋转选中的拼块" disabled><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3.5" y="9.5" width="11" height="11" rx="2.5" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/><path d="M9 4.5h3a6.5 6.5 0 0 1 6.5 6.5v2" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><path d="M15.8 10.8 18.5 13.5l2.7-2.7" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        <button type="button" class="tray-icon" id="hintBtn" aria-label="提示" title="提示" aria-pressed="false" disabled><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3a6 6 0 0 1 3.6 10.8c-.6.5-.9 1.1-.9 1.8V17H9.3v-1.4c0-.7-.3-1.3-.9-1.8A6 6 0 0 1 12 3Z" fill="currentColor" fill-opacity="0.22"/><path d="M12 3a6 6 0 0 1 3.6 10.8c-.6.5-.9 1.1-.9 1.8V17H9.3v-1.4c0-.7-.3-1.3-.9-1.8A6 6 0 0 1 12 3Z" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><path d="M9.8 20.5h4.4" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
         <button type="button" class="tray-mode" id="trayModeBtn" aria-label="切换待选显示形式" aria-pressed="false" title="切换显示形式">
           <svg class="mode-ico mode-ico--list" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="2" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><rect x="13" y="4" width="7" height="7" rx="2" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><rect x="4" y="13" width="7" height="7" rx="2" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><rect x="13" y="13" width="7" height="7" rx="2" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>
           <svg class="mode-ico mode-ico--stack" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3.5" y="9" width="8" height="8" rx="2" transform="rotate(-14 7.5 13)" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><rect x="12" y="4" width="8" height="8" rx="2" transform="rotate(12 16 8)" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><rect x="12.5" y="13" width="7" height="7" rx="2" transform="rotate(-4 16 16.5)" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          <span class="tray-mode-text">排列</span>
         </button>
-        <button type="button" class="tray-chip" id="scatterBtn" title="收回所有拼块并重新洗牌" disabled>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 7h3.2c1.9 0 3 .8 4 2.4l3.6 5.2c1 1.6 2.1 2.4 4 2.4H21M3 17h3.2c1.2 0 2.1-.3 2.8-1M15 8c.7-.7 1.6-1 2.8-1H21M18.5 4.5 21 7l-2.5 2.5M18.5 14.5 21 17l-2.5 2.5" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          重来
-        </button>
+        <button type="button" class="tray-icon" id="scatterBtn" aria-label="打乱未拼的拼块" title="打乱未拼的拼块" disabled><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 7h3.2c1.9 0 3 .8 4 2.4l3.6 5.2c1 1.6 2.1 2.4 4 2.4H21M3 17h3.2c1.2 0 2.1-.3 2.8-1M15 8c.7-.7 1.6-1 2.8-1H21M18.5 4.5 21 7l-2.5 2.5M18.5 14.5 21 17l-2.5 2.5" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        <button type="button" class="tray-icon" id="restartBtn" aria-label="重来" title="重来" disabled><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.6-5.9" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><path d="M3.8 3.8v4.6h4.6" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
       </div>
       <div class="tray" id="tray"></div>
     </section>
@@ -46,14 +45,14 @@
       <button type="button" class="dock-btn" id="settingsBtn">
         <span class="dock-ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="4" fill="currentColor" fill-opacity="0.22"/><rect x="3" y="4" width="18" height="16" rx="4" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><circle cx="9" cy="9.5" r="1.8" fill="currentColor"/><path d="M3.5 17.5l5-4.6 3.6 3.1 2.9-2.4 5.5 4.6" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span>选图</span>
       </button>
-      <button type="button" class="dock-btn" id="rotateBtn" disabled>
-        <span class="dock-ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.6-5.9" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><path d="M20.2 3.8v4.6h-4.6" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="2.4" fill="currentColor"/></svg></span><span>旋转</span>
-      </button>
-      <button type="button" class="dock-btn" id="hintBtn" aria-pressed="false" disabled>
-        <span class="dock-ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3a6 6 0 0 1 3.6 10.8c-.6.5-.9 1.1-.9 1.8V17H9.3v-1.4c0-.7-.3-1.3-.9-1.8A6 6 0 0 1 12 3Z" fill="currentColor" fill-opacity="0.22"/><path d="M12 3a6 6 0 0 1 3.6 10.8c-.6.5-.9 1.1-.9 1.8V17H9.3v-1.4c0-.7-.3-1.3-.9-1.8A6 6 0 0 1 12 3Z" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><path d="M9.8 20.5h4.4" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span>提示</span>
-      </button>
       <button type="button" class="dock-btn" id="solveBtn" disabled>
         <span class="dock-ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 20 15 9" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><path d="m13.5 7.5 3 3 2-2-3-3-2 2Z" fill="currentColor" fill-opacity="0.22"/><path d="m13.5 7.5 3 3 2-2-3-3-2 2Z" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 3.5v3M6.5 5h3M19 13.5v3M17.5 15h3M11 2.5v.01M21 8.5v.01" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span>揭晓</span>
+      </button>
+      <button type="button" class="dock-btn" id="saveBtn" disabled>
+        <span class="dock-ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><path d="M4.5 15.5v2A2.5 2.5 0 0 0 7 20h10a2.5 2.5 0 0 0 2.5-2.5v-2" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg></span><span>保存</span>
+      </button>
+      <button type="button" class="dock-btn" id="shareBtn" disabled>
+        <span class="dock-ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="17.5" cy="6" r="2.6" stroke="currentColor" stroke-width="1.9"/><circle cx="6.5" cy="12" r="2.6" stroke="currentColor" stroke-width="1.9"/><circle cx="17.5" cy="18" r="2.6" stroke="currentColor" stroke-width="1.9"/><path d="m8.8 10.7 6.4-3.4M8.8 13.3l6.4 3.4" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg></span><span>分享</span>
       </button>
     </nav>
   </div>
@@ -110,7 +109,19 @@
   </div>
 </div>
 
+<div class="confirm" id="restartConfirm" aria-hidden="true">
+  <button type="button" class="confirm-scrim" id="restartCancelScrim" aria-label="取消"></button>
+  <div class="confirm-panel" role="alertdialog" aria-labelledby="restartTitle" aria-describedby="restartDesc">
+    <h3 id="restartTitle">确定要重来吗？</h3>
+    <p id="restartDesc">已拼好的拼块会全部收回，用时重新计算。</p>
+    <div class="confirm-actions">
+      <button type="button" class="confirm-btn" id="restartCancel">再想想</button>
+      <button type="button" class="confirm-btn confirm-btn--accent" id="restartOk">重来</button>
+    </div>
+  </div>
+</div>
+
 <script src="vendor/three.min.js"></script>
-<script type="module" src="src/app.js?v=20260927-60"></script>
+<script type="module" src="src/app.js?v=20260928-11"></script>
 </body>
 </html>

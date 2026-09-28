@@ -1,4 +1,4 @@
-import { cutPuzzle, loadImage, MAX_DIM, MAX_TOTAL, SOFT_TOTAL, buildJigsawShape, suggestGrid, getPieceThumb, getPieceFrame, hitTestPiece, rotatedShapeKey, cropRect, thumbBodyMetrics, tracePieceAt, buildTabMap, tabsFor } from './puzzle.js?v=20260927-59';
+import { cutPuzzle, loadImage, MAX_DIM, MAX_TOTAL, SOFT_TOTAL, buildJigsawShape, suggestGrid, getPieceThumb, getPieceThumbHi, getPieceFrame, hitTestPiece, rotatedShapeKey, cropRect, thumbBodyMetrics, tracePieceAt, buildTabMap, tabsFor } from './puzzle.js?v=20260928-1';
 import { celebrate } from './confetti.js?v=20260927-53';
 const THREE = window.THREE;
 if (!THREE) throw new Error('Three.js 未加载');
@@ -75,6 +75,14 @@ const els = {
   settingsSheet: document.getElementById('settingsSheet'),
   settingsClose: document.getElementById('settingsClose'),
   settingsScrim: document.getElementById('settingsScrim'),
+  restart: document.getElementById('restartBtn'),
+  restartConfirm: document.getElementById('restartConfirm'),
+  restartDesc: document.getElementById('restartDesc'),
+  restartOk: document.getElementById('restartOk'),
+  restartCancel: document.getElementById('restartCancel'),
+  restartCancelScrim: document.getElementById('restartCancelScrim'),
+  saveBtn: document.getElementById('saveBtn'),
+  shareBtn: document.getElementById('shareBtn'),
 };
 
 let sourceImage = null;
@@ -109,6 +117,8 @@ const state = {
   trayEnterFrom: null, // 从底盘收回托盘的块：起飞点用它在 3D 里的屏幕投影
   hintGroup: null, // 底盘上的空槽提示（L1 候选 / L2 正解）
   hintOn: false, // 提示开关：开着时选中哪块就标出它原本的槽位
+  startAt: 0, // 本局开始时间（生成 / 重来时重置），用于成品图上的用时
+  doneKind: null, // 完成方式：'win' 亲手拼完 / 'reveal' 一键揭晓；未完成为 null
 };
 
 /** 取景范围：拼图本体（待选拼块已在底部托盘，不再进 3D 场景） */
@@ -1036,29 +1046,27 @@ async function rebuildScene(puzzleData) {
   }
 
   // 空槽引导线（有块放上后隐藏，由拼块自带缝边显示）
+  // 轮廓按整格 cell 画：放好的块会被撑到 cell（见 applyPieceYaw），两者才严丝合缝
   const seamRoot = new THREE.Group();
   seamRoot.name = 'seams';
   for (const p of puzzleData.pieces) {
-    const { shape } = buildJigsawShape(size.holeCell || size.cell, p.tabs, knobSamples(size));
+    const { shape } = buildJigsawShape(size.cell, p.tabs, knobSamples(size));
     // 内侧一圈略小的轮廓，用来画凹槽的受光边（否则会和主线完全重合看不到）
-    const { shape: shapeInner } = buildJigsawShape(
-      (size.holeCell || size.cell) * 0.94,
-      p.tabs,
-      knobSamples(size)
-    );
+    const { shape: shapeInner } = buildJigsawShape(size.cell * 0.94, p.tabs, knobSamples(size));
     const g = new THREE.Group();
     g.userData.pieceId = p.id;
     const sp = slotWorldPos(p.r, p.c, size);
     g.position.set(sp.x, PLACED_Y + 0.001, sp.z);
-    // 拼块分界线：浅梅紫细线勾出每块轮廓，压在粉色棋盘格上清楚但不刺眼
-    addShapeOutline(g, shape, 0.004, 0xa99fbc, 0.6, {
-      depthTest: false,
+    // 拼块分界线：浅梅紫细线勾出每块轮廓，压在粉色棋盘格上清楚但不刺眼。
+    // 必须不透明：相邻空槽在公共边上各画一次，半透明会叠深；
+    // 一侧已放块时只剩一条，颜色就明显变浅发白，和全空拼盘不一致
+    // 开深度测试：线贴着底板，放好的块有厚度，会把压在它身上的那段线挡住
+    addShapeOutline(g, shape, 0.006, 0xb3aac2, 1, {
       renderOrder: 20,
       segments: 48,
     });
     // 内侧一条白色亮线，模拟凹槽的受光边
-    addShapeOutline(g, shapeInner, 0.002, 0xffffff, 0.35, {
-      depthTest: false,
+    addShapeOutline(g, shapeInner, 0.004, 0xffffff, 0.35, {
       renderOrder: 19,
       segments: 48,
     });
@@ -1268,25 +1276,30 @@ function thumbBodyCenter(cx, cy, a, s, m) {
  * 飞行替身：克隆缩略图，以主体中心为原点，从 from 飞到 to（屏幕坐标 x/y、角度 a、缩放 s）。
  * 固定定位挂在 body 上，不会被托盘的 overflow 裁掉。
  */
-function flyGhost(img, m, from, to, { delay = 0, onLand, fadeOut = true, w = img.offsetWidth, h = img.offsetHeight } = {}) {
-  const ox = w / 2 + m.offX;
-  const oy = h / 2 + m.offY;
+function flyGhost(img, m, from, to, { piece, delay = 0, onLand, fadeOut = true, w = img.offsetWidth, h = img.offsetHeight } = {}) {
+  // 按飞行中最大的那一端排版，再缩小到起点：will-change 的图层按初始尺寸栅格化，
+  // 若按托盘小尺寸排版再 scale 放大，全程都是放大的小图，糊且有锯齿
+  const big = Math.max(1, from.s, to.s);
+  const ox = (w / 2 + m.offX) * big;
+  const oy = (h / 2 + m.offY) * big;
   let a1 = to.a;
   a1 = from.a + ((((a1 - from.a) % 360) + 540) % 360) - 180; // 走最短的那一圈
-  const ghost = img.cloneNode();
+  const ghost = piece ? getPieceThumbHi(piece, THUMB_PX, Math.min(4, Math.ceil(big))) : img.cloneNode();
   ghost.className = 'place-ghost';
   Object.assign(ghost.style, {
-    width: `${w}px`,
-    height: `${h}px`,
+    width: `${w * big}px`,
+    height: `${h * big}px`,
     left: `${from.x - ox}px`,
     top: `${from.y - oy}px`,
+    opacity: '',
+    transition: 'none',
     transformOrigin: `${ox}px ${oy}px`,
-    transform: `translate(0px, 0px) rotate(${from.a}deg) scale(${from.s})`,
+    transform: `translate(0px, 0px) rotate(${from.a}deg) scale(${from.s / big})`,
   });
   document.body.appendChild(ghost);
   void ghost.offsetWidth;
   ghost.style.transition = `transform ${PLACE_FLY_MS}ms cubic-bezier(0.22, 1, 0.36, 1) ${delay}ms`;
-  ghost.style.transform = `translate(${to.x - from.x}px, ${to.y - from.y}px) rotate(${a1}deg) scale(${to.s})`;
+  ghost.style.transform = `translate(${to.x - from.x}px, ${to.y - from.y}px) rotate(${a1}deg) scale(${to.s / big})`;
   setTimeout(() => {
     onLand?.();
     if (!fadeOut) { ghost.remove(); return; }
@@ -1417,6 +1430,7 @@ function flyBackToTray(e, delay) {
     { x: from.x, y: from.y, a: (from.rot || 0) * 90, s: from.cellPx / Math.max(1, m.body) },
     { x: end.x, y: end.y, a: a1, s: to.scale },
     {
+      piece,
       delay,
       fadeOut: !inside,
       onLand: () => {
@@ -1486,6 +1500,7 @@ function renderTray() {
   // 同时记下每块原位，重建后据此做滑动动画
   const prevSpots = captureTraySpots();
   els.tray.innerHTML = '';
+  syncRotateButton();
   if (!puzzle) {
     els.trayCount.textContent = '0';
     const empty = document.createElement('div');
@@ -1674,8 +1689,7 @@ function setTrayMode(mode) {
   if (els.trayMode) {
     els.trayMode.classList.toggle('is-stack', stack);
     els.trayMode.setAttribute('aria-pressed', stack ? 'true' : 'false');
-    const t = els.trayMode.querySelector('.tray-mode-text');
-    if (t) t.textContent = stack ? '散落' : '排列';
+    els.trayMode.title = stack ? '当前：散落，点击切换为排列' : '当前：排列，点击切换为散落';
   }
   renderTray();
 }
@@ -1699,6 +1713,13 @@ function clearSlotHints() {
   for (const g of state.seamRoot?.children || []) {
     if (g.children[1]) g.children[1].visible = true;
   }
+}
+
+/** 旋转只对「已选中、还在托盘里」的拼块有效，其余情况置灰 */
+function syncRotateButton() {
+  if (!els.rotate) return;
+  const piece = puzzle && selectedId != null ? puzzle.pieces[selectedId] : null;
+  els.rotate.disabled = !piece || piece.placed;
 }
 
 function syncHintButton() {
@@ -1730,7 +1751,6 @@ function showHint() {
   // 内侧那条受光亮线在实色块上会变成第二道边框，提示期间先藏起来
   const seam = state.seamRoot?.children.find((g) => g.userData.pieceId === piece.id);
   if (seam?.children[1]) seam.children[1].visible = false;
-  setHint('就是这一格，方向已转好');
 }
 
 /** 直接设定朝向（不走动画），并同步托盘缩略图（不重建列表，避免滚动位置被重置） */
@@ -1750,10 +1770,9 @@ function toggleHint() {
   if (!state.hintOn) {
     clearSlotHints();
     setHint('已关闭提示');
-  } else if (selectedId != null && !puzzle.pieces[selectedId]?.placed) {
-    showHint();
   } else {
-    setHint('提示已开启');
+    showHint();
+    setHint('已开启提示');
   }
 }
 
@@ -1780,6 +1799,7 @@ function selectPiece(id) {
   const piece = puzzle.pieces[id];
   if (!piece || piece.placed) return;
   selectedId = id;
+  syncRotateButton();
   clearSlotHints();
   // 只更新选中态，不重建列表：重建会把滚动位置重置（叠放时看起来就是"点一下就滚了"）
   updateTraySelection(id);
@@ -1870,7 +1890,7 @@ function flyFromSnap(snap, piece, pos, size, onLand, delay = 0) {
     { x: b0.x, y: b0.y, a: a0, s: snap.scale0 },
     { x: end.x, y: end.y, a: (piece.rot || 0) * 90, s: end.cellPx / Math.max(1, m.body) },
     // 拼好时托盘已经重建，原 <img> 脱离文档后 offsetWidth 为 0，必须用拍照时记下的尺寸
-    { delay, onLand, w: snap.w, h: snap.h }
+    { piece, delay, onLand, w: snap.w, h: snap.h }
   );
 }
 
@@ -1934,10 +1954,12 @@ function placeOnSlot(slot) {
     // 每块都在自己的原位且朝向归正，才算真正拼对；等最后一块落地再庆祝
     const perfect = puzzle.pieces.every((p) => p.slotIndex === p.id && ((p.rot || 0) % 4) === 0);
     if (perfect) {
+      const wait = flying ? PLACE_FLY_MS + 60 : 0;
       setTimeout(() => {
         setHint('太棒了，拼图完成！');
         celebrate();
-      }, flying ? PLACE_FLY_MS + 60 : 0);
+      }, wait);
+      setDone('win');
     } else {
       setHint('都放上了，但有几块位置不对');
     }
@@ -1963,6 +1985,11 @@ function pickFromPileOrSlot(e) {
     const piece = puzzle.pieces[id];
     if (piece.placed) {
       // 拿起
+      // 起飞点要在改状态、挪走之前取：placed 为 true 才会按槽位记下大小和朝向，
+      // 挪到 (0,-10,0) 之后投影也没意义了
+      state.trayEnterFrom = captureBoardSpots([piece]);
+      exitRevealMode();
+      resetDone();
       const slot = state.slotMeshes.find((s) => s.userData.occupiedBy === id);
       if (slot) {
         slot.userData.occupiedBy = null;
@@ -1972,8 +1999,6 @@ function pickFromPileOrSlot(e) {
       piece.slotIndex = -1;
       piece.rot = piece.rot || 0;
       const mesh = pieceHits[0].object;
-      // 起飞点要在挪走之前取：挪到 (0,-10,0) 之后投影就没意义了
-      state.trayEnterFrom = captureBoardSpots([piece]);
       mesh.visible = false;
       mesh.position.set(0, -10, 0);
       state.board.remove(mesh);
@@ -1997,6 +2022,13 @@ function pickFromPileOrSlot(e) {
   }
 }
 
+/** 揭晓后再拿起拼块：换回底板和空槽分割线，和打散后的拼盘保持同一风格 */
+function exitRevealMode() {
+  if (state.boardBase) state.boardBase.visible = true;
+  if (state.matPlate) state.matPlate.visible = false;
+  if (state.seamRoot) state.seamRoot.visible = true;
+}
+
 let pickStart = null;
 function bindPick(el) {
   el.addEventListener('pointerdown', (e) => {
@@ -2012,6 +2044,8 @@ function scatterAll() {
   if (state.completedImage) state.completedImage.visible = false;
   if (state.seamRoot) state.seamRoot.visible = true;
   clearTweens();
+  resetDone();
+  state.startAt = performance.now();
 
   // 先记下每块在底盘上的屏幕位置，收进托盘时就从那儿飞下来
   state.trayEnterFrom = captureBoardSpots(puzzle.pieces);
@@ -2046,7 +2080,34 @@ function scatterAll() {
   state.pan = scenePan();
   state.zoom = 1;
   fitCamera();
-  setHint('已重新洗牌');
+  setHint('已重来，全部拼块已收回');
+}
+
+/** 只打乱托盘里还没拼的块，已放上拼版的不动 */
+function shuffleUnplaced() {
+  if (!puzzle) return;
+  if (puzzle.pieces.every((p) => p.placed)) {
+    setHint('没有待拼的拼块');
+    return;
+  }
+  selectedId = null;
+  clearOutline();
+  clearSlotHints();
+  shuffleTray();
+  renderTray();
+}
+
+function openRestartConfirm() {
+  if (!puzzle) return;
+  const placed = puzzle.pieces.filter((p) => p.placed).length;
+  els.restartDesc.textContent = placed
+    ? `已拼好的 ${placed} 块会全部取消并收回，用时重新计算。`
+    : '所有拼块会重新洗牌，用时重新计算。';
+  els.restartConfirm.setAttribute('aria-hidden', 'false');
+}
+
+function closeRestartConfirm() {
+  els.restartConfirm.setAttribute('aria-hidden', 'true');
 }
 
 function solveAll() {
@@ -2116,7 +2177,199 @@ function solveAll() {
   });
   setHint('已揭晓完整画面');
   // 等最后一块飞到位再撒花
-  setTimeout(celebrate, snaps.size ? PLACE_FLY_MS + stagger + 60 : 0);
+  const wait = snaps.size ? PLACE_FLY_MS + stagger + 60 : 0;
+  setTimeout(celebrate, wait);
+  setDone(state.doneKind === 'win' ? 'win' : 'reveal');
+}
+
+/* ==================== 完成后：成品图 / 保存 / 分享 ==================== */
+const APP_NAME = '熊猫拼图';
+let doneMs = 0;
+
+/** 记下完成方式；亲手拼完时把用时定格，之后再保存/分享都用这一刻的用时 */
+function setDone(kind) {
+  if (kind === 'win' && state.doneKind !== 'win') doneMs = performance.now() - state.startAt;
+  state.doneKind = kind;
+}
+
+function resetDone() {
+  state.doneKind = null;
+}
+
+function formatDuration(ms) {
+  const s = Math.max(1, Math.round(ms / 1000));
+  const m = Math.floor(s / 60);
+  return m ? `${m} 分 ${String(s % 60).padStart(2, '0')} 秒` : `${s} 秒`;
+}
+
+function doneStatsText() {
+  const n = puzzle.pieces.length;
+  const base = `${puzzle.cols}×${puzzle.rows} · ${n} 块`;
+  if (state.doneKind === 'win') return `${base} · 用时 ${formatDuration(doneMs)}`;
+  if (state.doneKind === 'reveal') return base;
+  return `${base} · 已拼 ${puzzle.pieces.filter((p) => p.placed).length}/${n}`;
+}
+
+/**
+ * 用一台独立的俯视相机拍整幅拼图，不改玩家当前的视角和渲染倍率。
+ * 渲染后在同一任务内读回画布，不需要 preserveDrawingBuffer；拍完立刻用原相机重绘一帧。
+ */
+function captureBoard() {
+  const { renderer, scene, camera } = state;
+  const size = puzzle?._size;
+  if (!renderer || !size) return null;
+  const el = renderer.domElement;
+  const pad = size.cell * 0.45;
+  const hw = size.w / 2 + pad;
+  const hh = size.h / 2 + pad;
+  const shot = camera.clone();
+  const tan = Math.tan((shot.fov * Math.PI) / 360) || 0.3;
+  shot.aspect = el.width / el.height;
+  const dist = Math.max(hh / tan, hw / (tan * shot.aspect));
+  shot.position.set(0, dist, 0);
+  shot.up.set(0, 0, -1);
+  shot.lookAt(0, 0, 0);
+  shot.near = Math.max(0.1, dist * 0.02);
+  shot.far = dist * 4;
+  shot.updateProjectionMatrix();
+  renderer.render(scene, shot);
+
+  const v = new THREE.Vector3();
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const [x, z] of [[-hw, -hh], [hw, -hh], [hw, hh], [-hw, hh]]) {
+    v.set(x, PLACED_Y, z).project(shot);
+    const px = ((v.x + 1) / 2) * el.width;
+    const py = ((1 - v.y) / 2) * el.height;
+    x0 = Math.min(x0, px); x1 = Math.max(x1, px);
+    y0 = Math.min(y0, py); y1 = Math.max(y1, py);
+  }
+  x0 = Math.max(0, Math.floor(x0));
+  y0 = Math.max(0, Math.floor(y0));
+  x1 = Math.min(el.width, Math.ceil(x1));
+  y1 = Math.min(el.height, Math.ceil(y1));
+  const out = document.createElement('canvas');
+  out.width = Math.max(1, x1 - x0);
+  out.height = Math.max(1, y1 - y0);
+  out.getContext('2d').drawImage(el, x0, y0, out.width, out.height, 0, 0, out.width, out.height);
+  renderer.render(scene, camera);
+  return out;
+}
+
+/** 成品图：拼图居中，底部一行小字署名；导出 JPEG（postNote 走 base64，体积要小） */
+function composePoster(board) {
+  const W = 1080;
+  const pad = 56;
+  const footH = 96;
+  const k = Math.min((W - pad * 2) / board.width, 1400 / board.height);
+  const bw = Math.round(board.width * k);
+  const bh = Math.round(board.height * k);
+  const H = pad + bh + footH;
+  const c = document.createElement('canvas');
+  c.width = W;
+  c.height = H;
+  const ctx = c.getContext('2d');
+  const bg = ctx.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0, '#1b1f3d');
+  bg.addColorStop(1, '#14172e');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+  ctx.drawImage(board, (W - bw) / 2, pad, bw, bh);
+
+  const font = '"PingFang SC", "Yuanti SC", system-ui, sans-serif';
+  const y = pad + bh + footH / 2 + 10;
+  ctx.textBaseline = 'alphabetic';
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#ffb547';
+  ctx.font = `800 30px ${font}`;
+  ctx.fillText(APP_NAME, pad, y);
+  ctx.textAlign = 'right';
+  ctx.fillStyle = 'rgba(226, 222, 255, 0.55)';
+  ctx.font = `700 26px ${font}`;
+  ctx.fillText(doneStatsText(), W - pad, y);
+  return c.toDataURL('image/jpeg', 0.92);
+}
+
+/** 随时可保存/分享：每次按当前拼版现拍，没拼完也能导出进度 */
+function getPoster() {
+  if (!puzzle) return '';
+  const board = captureBoard();
+  return board ? composePoster(board) : '';
+}
+
+function xhsBridge() {
+  return window.xhs && window.xhs.miniTool;
+}
+
+let doneBusy = false;
+async function withBusy(fn) {
+  if (doneBusy) return;
+  doneBusy = true;
+  try {
+    await fn();
+  } finally {
+    doneBusy = false;
+  }
+}
+
+async function saveDoneImage() {
+  const url = getPoster();
+  if (!url) return;
+  const bridge = xhsBridge();
+  if (bridge && typeof bridge.saveImageToPhotosAlbum === 'function') {
+    try {
+      const filePath = typeof bridge.writeTempFile === 'function'
+        ? (await bridge.writeTempFile({ data: url })).filePath
+        : url;
+      await bridge.saveImageToPhotosAlbum({ filePath });
+      setHint('已保存到相册');
+    } catch {
+      setHint('保存失败，请检查相册权限');
+    }
+    return;
+  }
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'panda-puzzle.jpg';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setHint('已下载图片');
+}
+
+async function shareDoneImage() {
+  const url = getPoster();
+  if (!url) return;
+  const n = puzzle.pieces.length;
+  const bridge = xhsBridge();
+  if (bridge && typeof bridge.postNote === 'function') {
+    const kind = state.doneKind;
+    const placed = puzzle.pieces.filter((p) => p.placed).length;
+    const how = kind === 'win'
+      ? `用时 ${formatDuration(doneMs)} 拼完`
+      : kind === 'reveal' ? '拼出了完整画面' : `已经拼了 ${placed}/${n} 块`;
+    try {
+      await bridge.postNote({
+        title: kind ? `我拼好了一幅 ${n} 块拼图` : `我在拼一幅 ${n} 块拼图`,
+        content: `用「${APP_NAME}」把照片切成 ${n} 块 3D 纸板拼图，${how}！`,
+        pageType: 'photo_publish',
+        mediaInfo: { image_resources: [{ url }] },
+      });
+    } catch {
+      setHint('打开发布页失败，可先保存到相册');
+    }
+    return;
+  }
+  try {
+    const blob = await (await fetch(url)).blob();
+    const file = new File([blob], 'panda-puzzle.jpg', { type: 'image/jpeg' });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], title: APP_NAME });
+      return;
+    }
+  } catch (err) {
+    if (err && err.name === 'AbortError') return;
+  }
+  setHint('请在小红书内打开后分享，或先保存到相册');
 }
 
 function rotateSelected() {
@@ -2524,12 +2777,16 @@ async function generatePuzzle() {
   try {
     puzzle = await cutPuzzle(sourceImage, cols, rows, cropView);
     await rebuildScene(puzzle);
+    resetDone();
+    state.startAt = performance.now();
     selectedId = null;
     clearSlotHints();
     renderTray();
     els.solve.disabled = false;
     els.scatter.disabled = false;
-    if (els.rotate) els.rotate.disabled = false;
+    els.restart.disabled = false;
+    els.saveBtn.disabled = false;
+    els.shareBtn.disabled = false;
     if (els.hintBtn) els.hintBtn.disabled = false;
     setHint(`${cols * rows} 块拼图，开始吧`);
     closeSettings();
@@ -2553,7 +2810,14 @@ els.file.addEventListener('change', async () => {
   }
 });
 
-els.scatter.addEventListener('click', scatterAll);
+els.scatter.addEventListener('click', shuffleUnplaced);
+els.restart.addEventListener('click', openRestartConfirm);
+els.restartCancel.addEventListener('click', closeRestartConfirm);
+els.restartCancelScrim.addEventListener('click', closeRestartConfirm);
+els.restartOk.addEventListener('click', () => {
+  closeRestartConfirm();
+  scatterAll();
+});
 els.solve.addEventListener('click', solveAll);
 els.rotate?.addEventListener('click', rotateSelected);
 els.hintBtn?.addEventListener('click', toggleHint);
@@ -2595,6 +2859,8 @@ window.addEventListener('resize', () => {
 els.settingsBtn.addEventListener('click', openSettings);
 els.settingsClose.addEventListener('click', closeSettings);
 els.settingsScrim.addEventListener('click', closeSettings);
+els.saveBtn.addEventListener('click', () => withBusy(saveDoneImage));
+els.shareBtn.addEventListener('click', () => withBusy(shareDoneImage));
 
 initScene();
 syncStepperUI();
