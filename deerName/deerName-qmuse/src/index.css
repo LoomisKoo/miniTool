@@ -1378,10 +1378,14 @@ body.has-dock-quiz .to-top { bottom: calc(var(--safe-bottom) + 92px); }
 
 /* ── 浮层：选姓氏 / 备选名 ───────────────
  * 这两个都是「给当前这一页换一个选择」，不是新内容，所以做成底部浮层：
- * 选完就地生效，不往页面栈里插页。关闭走反向动画（面板下滑 + 遮罩淡出）。 */
-.sheet { position: fixed; inset: 0; z-index: 60; }
+ * 选完就地生效，不往页面栈里插页。关闭走反向动画（面板下滑 + 遮罩淡出）。
+ *
+ * 这里必须写 top/right/bottom/left 四个物理属性，不能写 `inset`（Chrome 87+）。
+ * 旧容器内核把 `inset` 当成未知属性丢掉后，只有绝对定位子元素的浮层会塌成
+ * 0×0 或落到文档流后面，表现为「点了按钮没反应」。 */
+.sheet { position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 60; }
 .sheet-mask {
-  position: absolute; inset: 0;
+  position: absolute; top: 0; right: 0; bottom: 0; left: 0;
   background: var(--scrim);
   animation: sheetFade 0.2s ease both;
 }
@@ -1481,7 +1485,7 @@ html.sheet-open, body.sheet-open { overflow: hidden; }
 
 /* ── 分享卡片弹层 ─────────────────────── */
 .modal {
-  position: fixed; inset: 0; z-index: 80;
+  position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 80;
   /* 背景压暗的同时留一层暖光把卡片托起来，不再是一块死黑 */
   background:
     radial-gradient(118% 62% at 50% 10%, rgba(214, 168, 95, .30), rgba(214, 168, 95, 0) 62%),

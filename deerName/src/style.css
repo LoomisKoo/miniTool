@@ -244,6 +244,7 @@ main {
   width: 40px; height: 40px; border-radius: 50%;
   border: 1px solid var(--hairline);
   display: flex; align-items: center; justify-content: center;
+  background: var(--canvas);                       /* 基线：不依赖 color-mix() */
   background: color-mix(in srgb, var(--canvas) 78%, transparent);
   backdrop-filter: saturate(180%) blur(20px);
   -webkit-backdrop-filter: saturate(180%) blur(20px);
@@ -464,7 +465,44 @@ body.has-dock-picked .to-top { bottom: calc(var(--safe-bottom) + 202px); }
   background: var(--grad); color: #fff;
 }
 
-/* 键盘焦点：移动端无 outline，桌面 Tab 可见 */
+/* 键盘焦点：移动端无 outline，桌面 Tab 可见。
+ * 基线（Chrome 61）不认 :focus-visible，整条选择器列表会被判为无效、焦点样式
+ * 全部丢失，所以先用 :focus 兜底；新内核再用 :focus:not(:focus-visible) 把
+ * 「点按产生的焦点」去掉，只保留键盘 Tab 的描边。 */
+.primary-btn:focus,
+.ghost-btn:focus,
+.pill:focus,
+.chip:focus,
+.mini-btn:focus,
+.entry:focus,
+.option:focus,
+.hd-btn:focus,
+.link-btn:focus,
+.sheet-close:focus,
+.modal-act:focus,
+.tab:focus,
+.fav-open:focus,
+.fav-del:focus {
+  outline: 2px solid var(--accent-focus);
+  outline-offset: 2px;
+}
+.primary-btn:focus:not(:focus-visible),
+.ghost-btn:focus:not(:focus-visible),
+.pill:focus:not(:focus-visible),
+.chip:focus:not(:focus-visible),
+.mini-btn:focus:not(:focus-visible),
+.entry:focus:not(:focus-visible),
+.option:focus:not(:focus-visible),
+.hd-btn:focus:not(:focus-visible),
+.link-btn:focus:not(:focus-visible),
+.sheet-close:focus:not(:focus-visible),
+.modal-act:focus:not(:focus-visible),
+.tab:focus:not(:focus-visible),
+.fav-open:focus:not(:focus-visible),
+.fav-del:focus:not(:focus-visible) {
+  outline: none;
+}
+/* 新内核：键盘焦点走这一份 */
 .primary-btn:focus-visible,
 .ghost-btn:focus-visible,
 .pill:focus-visible,
@@ -1216,6 +1254,8 @@ body.has-dock-quiz .to-top { bottom: calc(var(--safe-bottom) + 92px); }
   gap: 8px; margin-top: 10px;
 }
 .char-cell {
+  /* 基线：旧内核没有 aspect-ratio（Chrome 88+），靠内边距把格子撑成大致方形 */
+  min-height: 44px; padding: 9px 0;
   aspect-ratio: 1; border-radius: var(--r-sm);
   border: none; background: var(--bg);
   font-size: 18px; color: var(--ink);
@@ -1379,10 +1419,16 @@ body.has-dock-quiz .to-top { bottom: calc(var(--safe-bottom) + 92px); }
 
 /* ── 浮层：选姓氏 / 备选名 ───────────────
  * 这两个都是「给当前这一页换一个选择」，不是新内容，所以做成底部浮层：
- * 选完就地生效，不往页面栈里插页。关闭走反向动画（面板下滑 + 遮罩淡出）。 */
-.sheet { position: fixed; inset: 0; z-index: 60; }
+ * 选完就地生效，不往页面栈里插页。关闭走反向动画（面板下滑 + 遮罩淡出）。
+ *
+ * 注意：这里必须写 top/right/bottom/left 四个物理属性，不能写 `inset`。
+ * 容器 WebView 基线是 Chrome 61（见 xiaohongshu/minitool-zip-builder/references/
+ * css-compatibility.md），`inset` 要 Chrome 87 才认。一旦它被当成未知属性丢掉，
+ * 定宽定高的全屏浮层会塌成 0×0 或落到文档流后面 —— 表现为「点了按钮没反应」。
+ * 面板本身用的是 left/right/bottom，一直是安全的。 */
+.sheet { position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 60; }
 .sheet-mask {
-  position: absolute; inset: 0;
+  position: absolute; top: 0; right: 0; bottom: 0; left: 0;
   background: var(--scrim);
   animation: sheetFade 0.2s ease both;
 }
@@ -1552,8 +1598,11 @@ html.sheet-open, body.sheet-open { overflow: hidden; }
 }
 
 /* ── 分享卡片弹层 ─────────────────────── */
+/* 同样禁用 `inset`：Chrome 61 不认这个简写，四个偏移全丢之后 .modal 会落到
+ * 文档流末尾（实测 y=864，正好在首屏之下），里面的「关闭 / 保存」按钮就永远
+ * 点不到。四个物理属性写在最前面，兼容性和可读性都更好。 */
 .modal {
-  position: fixed; inset: 0; z-index: 80;
+  position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 80;
   /* 背景整体压暗，但中间留一层暖光把卡片托起来，不再是一块死黑 */
   background:
     radial-gradient(118% 62% at 50% 10%, rgba(214, 168, 95, .30), rgba(214, 168, 95, 0) 62%),
@@ -1566,7 +1615,8 @@ html.sheet-open, body.sheet-open { overflow: hidden; }
 }
 .modal-body { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 16px 24px 12px; }
 .modal-body img {
-  width: min(100%, 420px); max-height: 100%; object-fit: contain;
+  /* 基线：不用 min()（Chrome 61 不认，整条 width 会失效，图片按 900px 原宽撑爆弹层） */
+  width: 100%; max-width: 420px; max-height: 100%; object-fit: contain;
   border-radius: var(--r-lg);
   box-shadow: 0 18px 52px rgba(0, 0, 0, .42), 0 0 0 1px rgba(255, 247, 237, .16),
     0 0 60px rgba(214, 168, 95, .22);
