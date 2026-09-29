@@ -1,0 +1,87 @@
+/* 妙思无小红书式容器顶栏；PC 宽屏居中竖屏栏，窄窗口满宽竖屏 */
+html.deername-qmuse {
+  --nav-h: 0px;
+  --phone: 430px;
+}
+
+#root {
+  width: 100%;
+  min-height: 100%;
+  min-height: 100dvh;
+  display: flex;
+  justify-content: center;
+  overflow-x: clip;
+}
+
+html.deername-qmuse #root > .deername-shell {
+  width: 100%;
+  max-width: 100%;
+  min-height: 100dvh;
+  margin: 0 auto;
+  position: relative;
+  background: var(--bg);
+  overflow-x: clip;
+  /* fixed 顶栏/底栏/浮层相对本栏定位，PC 上不铺满整屏 */
+  transform: translateX(0);
+}
+
+@media (min-width: 641px) {
+  html.deername-qmuse #root > .deername-shell {
+    max-width: var(--phone);
+    box-shadow:
+      0 0 0 1px var(--line-2),
+      0 16px 48px rgba(76, 57, 47, 0.1);
+  }
+}
+
+/* 原 style 按 600px 框算回顶位置，QMuse 壳宽 430px 时改回栏内贴边 */
+html.deername-qmuse .to-top {
+  right: 18px;
+}
+
+html.deername-qmuse body.has-tabbar .hd {
+  display: none;
+}
+
+html.deername-qmuse body.has-tabbar .app {
+  padding-top: var(--safe-top);
+}
+
+html.deername-qmuse,
+html.deername-qmuse body {
+  background: var(--bg) !important;
+  color: var(--ink) !important;
+}
+
+html.deername-qmuse #root button {
+  -webkit-appearance: none !important;
+  appearance: none !important;
+}
+
+html.deername-qmuse #root .primary-btn {
+  background: var(--grad) !important;
+  color: #fff !important;
+  border: 0 !important;
+  box-shadow: var(--shadow-btn) !important;
+}
+
+html.deername-qmuse #root .ghost-btn,
+html.deername-qmuse #root .pill:not(.primary),
+html.deername-qmuse #root .chip:not(.on),
+html.deername-qmuse #root .option:not(.on) {
+  background: var(--surface) !important;
+  color: var(--ink) !important;
+  border-color: var(--line) !important;
+}
+
+html.deername-qmuse #root .pill.primary,
+html.deername-qmuse #root .chip.on,
+html.deername-qmuse #root .option.on {
+  background: var(--grad) !important;
+  color: #fff !important;
+  border-color: transparent !important;
+}
+
+html.deername-qmuse #root .tab.on {
+  color: var(--accent) !important;
+}
