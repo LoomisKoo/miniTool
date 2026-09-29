@@ -1,5 +1,8 @@
 import SceneKit
 import UIKit
+import os
+
+private let scenePerformanceLog = Logger(subsystem: "PandaPuzzle", category: "performance")
 
 /// 手势在主线程写入，渲染线程每帧渲染前读取，避免相机更新和帧不同步
 final class CameraTarget: @unchecked Sendable {
@@ -39,6 +42,7 @@ final class PuzzleSceneController: NSObject {
     private let boardNode = SCNNode()
     private let piecesRoot = SCNNode()
     private var pieceNodes: [Int: SCNNode] = [:]
+    private var pieceTemplates: [Int: SCNNode] = [:]
     private var topMat: SCNMaterial?
     private var cachedBoardPieces: [PuzzlePieceModel] = []
     private var cachedCols = 0
@@ -59,6 +63,7 @@ final class PuzzleSceneController: NSObject {
     private var panZ: Float = 0
     private var viewZoom: Float = 1
     private var fitOrthoScale: Float = 4
+    private var viewAspect: Float = 1
 
     override init() {
         super.init()
@@ -75,6 +80,7 @@ final class PuzzleSceneController: NSObject {
     }
 
     func sync(board: PuzzleBoardState, sourceImage: UIImage, animatePlace: Bool = true) {
+        let syncStarted = CFAbsoluteTimeGetCurrent()
         let cols = board.cols
         let rows = board.rows
         let layoutKey = board.pieces.map {
@@ -90,6 +96,19 @@ final class PuzzleSceneController: NSObject {
             fitCamera(cols: cols, rows: rows)
             pieceNodes.values.forEach { $0.removeFromParentNode() }
             pieceNodes.removeAll()
+            pieceTemplates.removeAll()
+            let templateHW = CGFloat(cellSize) * 0.5
+            for piece in board.pieces {
+                pieceTemplates[piece.id] = makePieceNode(
+                    piece: piece,
+                    hw: templateHW,
+                    cols: cols,
+                    rows: rows
+                )
+            }
+            scenePerformanceLog.info(
+                "prewarm templates count=\(board.pieces.count, privacy: .public) elapsed=\((CFAbsoluteTimeGetCurrent() - syncStarted) * 1000, privacy: .public)ms"
+            )
         }
 
         let w = Float(cols) * cellSize
@@ -145,20 +164,19 @@ final class PuzzleSceneController: NSObject {
             guard let slot = piece.placedSlot else { continue }
             let r = slot / cols
             let c = slot % cols
-            let node = makePieceNode(piece: piece, hw: hw, cols: cols, rows: rows)
+            let node = pieceTemplates[piece.id]?.clone()
+                ?? makePieceNode(piece: piece, hw: hw, cols: cols, rows: rows)
             let target = SCNVector3(
                 ox + Float(c) * cellSize,
                 Float(thickness) / 2 + 0.008,
                 oz + Float(r) * cellSize
             )
             if shouldAnimatePlace {
-                node.position = SCNVector3(target.x + 0.08, target.y + 0.35, target.z - 0.05)
-                node.opacity = 0.15
+                node.position = target
+                node.opacity = 0.2
                 piecesRoot.addChildNode(node)
                 pieceNodes[piece.id] = node
-                let move = SCNAction.move(to: target, duration: 0.28)
-                move.timingMode = .easeOut
-                node.runAction(.group([move, .fadeIn(duration: 0.14)]))
+                node.runAction(.fadeIn(duration: 0.18))
             } else {
                 node.position = target
                 piecesRoot.addChildNode(node)
@@ -166,6 +184,10 @@ final class PuzzleSceneController: NSObject {
             }
             createdNodes += 1
         }
+
+        scenePerformanceLog.info(
+            "sync placed=\(board.placedCount, privacy: .public) created=\(createdNodes, privacy: .public) animate=\(animatePlace, privacy: .public) elapsed=\((CFAbsoluteTimeGetCurrent() - syncStarted) * 1000, privacy: .public)ms"
+        )
 
         if pieceNodes.count < placedIds.count, !pieceBuildQueued {
             pieceBuildQueued = true
@@ -200,6 +222,7 @@ final class PuzzleSceneController: NSObject {
         plane.materials = [material]
 
         let node = SCNNode(geometry: plane)
+        node.name = "revealBoard"
         node.eulerAngles.x = -Float.pi / 2
         node.position = SCNVector3(0, Float(thickness) / 2 + 0.012, 0)
         node.renderingOrder = 30
@@ -234,29 +257,49 @@ final class PuzzleSceneController: NSObject {
         highlightSelection(board: board)
     }
 
+    func animateLift(pieceId: Int, completion: @escaping @MainActor () -> Void) {
+        guard let node = pieceNodes[pieceId],
+              node.action(forKey: "lift") == nil else { return }
+        let shrink = SCNAction.scale(by: 0.9, duration: 0.16)
+        let fade = SCNAction.fadeOut(duration: 0.16)
+        let lift = SCNAction.moveBy(x: 0.04, y: 0.18, z: -0.04, duration: 0.16)
+        let finish = SCNAction.run { _ in
+            Task { @MainActor in completion() }
+        }
+        node.runAction(
+            .sequence([
+                .group([shrink, fade, lift]),
+                finish,
+            ]),
+            forKey: "lift"
+        )
+    }
+
     func highlightSelection(board: PuzzleBoardState) {
         SCNTransaction.begin()
         SCNTransaction.animationDuration = 0.16
         SCNTransaction.animationTimingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
         for node in pieceNodes.values {
-            clearEmission(on: node)
+            clearHighlight(on: node)
         }
         if let sid = board.selectedId, let node = pieceNodes[sid] {
-            setEmission(on: node, color: UIColor(red: 1, green: 0.71, blue: 0.28, alpha: 0.35))
+            setHighlight(on: node)
         }
         SCNTransaction.commit()
     }
 
-    private func clearEmission(on node: SCNNode) {
-        node.geometry?.firstMaterial?.emission.contents = UIColor.black
-        for child in node.childNodes { clearEmission(on: child) }
+    private func clearHighlight(on node: SCNNode) {
+        if node.name == "pieceHighlight" {
+            node.opacity = 0
+        }
+        for child in node.childNodes { clearHighlight(on: child) }
     }
 
-    private func setEmission(on node: SCNNode, color: UIColor) {
-        if node.name?.hasPrefix("pieceLid:") == true || node.name?.hasPrefix("pieceBody:") == true {
-            node.geometry?.firstMaterial?.emission.contents = color
+    private func setHighlight(on node: SCNNode) {
+        if node.name == "pieceHighlight" {
+            node.opacity = 1
         }
-        for child in node.childNodes { setEmission(on: child, color: color) }
+        for child in node.childNodes { setHighlight(on: child) }
     }
 
     func hitTest(at point: CGPoint, in view: SCNView) -> (slot: Int?, pieceId: Int?) {
@@ -264,10 +307,29 @@ final class PuzzleSceneController: NSObject {
             SCNHitTestOption.searchMode: SCNHitTestSearchMode.all.rawValue,
             SCNHitTestOption.ignoreHiddenNodes: NSNumber(value: false),
         ])
+        if let pieceHit = hits.first(where: {
+            var node: SCNNode? = $0.node
+            while let n = node {
+                if let name = n.name, name.hasPrefix("piece:") {
+                    return true
+                }
+                node = n.parent
+            }
+            return false
+        }) {
+            var node: SCNNode? = pieceHit.node
+            while let n = node {
+                if let name = n.name, name.hasPrefix("piece:") {
+                    let id = Int(String(name.dropFirst("piece:".count)))
+                    return (nil, id)
+                }
+                node = n.parent
+            }
+        }
         if hitTestCols > 0, let boardHit = hits.first(where: {
             var node: SCNNode? = $0.node
             while let n = node {
-                if n.name == "boardTop" { return true }
+                if n.name == "boardTop" || n.name == "revealBoard" { return true }
                 node = n.parent
             }
             return false
@@ -399,10 +461,27 @@ final class PuzzleSceneController: NSObject {
         lid.position = SCNVector3(0, 0, Float(thickness) / 2 + 0.001)
         lid.renderingOrder = 12 + piece.id
 
+        let highlightImage = Self.selectionOutlineImage(piece)
+        let highlightPlane = SCNPlane(width: span, height: span)
+        let highlightMaterial = SCNMaterial()
+        highlightMaterial.diffuse.contents = highlightImage
+        highlightMaterial.transparent.contents = highlightImage
+        highlightMaterial.lightingModel = .constant
+        highlightMaterial.isDoubleSided = false
+        highlightMaterial.blendMode = .add
+        highlightMaterial.writesToDepthBuffer = false
+        highlightPlane.materials = [highlightMaterial]
+        let highlight = SCNNode(geometry: highlightPlane)
+        highlight.name = "pieceHighlight"
+        highlight.position = SCNVector3(0, 0, Float(thickness) / 2 + 0.003)
+        highlight.renderingOrder = 30 + piece.id
+        highlight.opacity = 0
+
         let node = SCNNode()
         node.name = "piece:\(piece.id)"
         node.addChildNode(body)
         node.addChildNode(lid)
+        node.addChildNode(highlight)
 
         let yaw = Float(piece.rotation) * (-Float.pi / 2)
         var m = SCNMatrix4MakeRotation(-Float.pi / 2, 1, 0, 0)
@@ -528,6 +607,37 @@ final class PuzzleSceneController: NSObject {
         }
     }
 
+    private static func selectionOutlineImage(_ piece: PuzzlePieceModel) -> UIImage {
+        let size = piece.image.size
+        let format = UIGraphicsImageRendererFormat()
+        format.opaque = false
+        format.scale = max(2, piece.image.scale)
+        let cell = CGFloat(piece.cellPx)
+        let pad = CGFloat(piece.padPx)
+        let path = JigsawGeometry.piecePath(
+            hw: cell * 0.5,
+            tabs: piece.tabs,
+            knobSamples: 16
+        )
+        return UIGraphicsImageRenderer(size: size, format: format).image { ctx in
+            let g = ctx.cgContext
+            g.clear(CGRect(origin: .zero, size: size))
+            g.saveGState()
+            g.translateBy(x: pad + cell * 0.5, y: pad + cell * 0.5)
+            g.setStrokeColor(UIColor(red: 1, green: 0.71, blue: 0.28, alpha: 1).cgColor)
+            g.setLineWidth(max(2.4, cell * 0.028))
+            g.setLineJoin(.round)
+            g.setShadow(
+                offset: .zero,
+                blur: 3,
+                color: UIColor(red: 1, green: 0.55, blue: 0.08, alpha: 0.8).cgColor
+            )
+            g.addPath(path.cgPath)
+            g.strokePath()
+            g.restoreGState()
+        }
+    }
+
     private func boardKnobSamples(total: Int) -> Int {
         if total > 400 { return 6 }
         if total > 150 { return 10 }
@@ -535,11 +645,24 @@ final class PuzzleSceneController: NSObject {
         return 20
     }
 
+    /// 视图尺寸变化时按新宽高比重新 fit（类似 UIImageView 的 scaleAspectFit）
+    func updateViewport(size: CGSize) {
+        guard size.width > 1, size.height > 1 else { return }
+        let aspect = Float(size.width / size.height)
+        guard abs(aspect - viewAspect) > 0.001 else { return }
+        viewAspect = aspect
+        if cachedCols > 0, cachedRows > 0 {
+            fitCamera(cols: cachedCols, rows: cachedRows)
+        }
+    }
+
     func fitCamera(cols: Int, rows: Int) {
         let w = Float(cols) * cellSize
         let h = Float(rows) * cellSize
         let rim: Float = 0.04
-        fitOrthoScale = max(w + rim, h + rim) * 0.5 * 1.04
+        // orthographicScale 是可见高度的一半；可见宽度 = 2 * scale * aspect
+        let aspect = max(viewAspect, 0.1)
+        fitOrthoScale = max(h + rim, (w + rim) / aspect) * 0.5 * 1.02
         panX = 0
         panZ = 0
         viewZoom = 1
@@ -633,7 +756,6 @@ final class PuzzleSceneController: NSObject {
         let H = cellPx * CGFloat(rows)
         let hw = cellPx / 2
         let fill = UIColor(red: 0x9d / 255, green: 0x93 / 255, blue: 0xb0 / 255, alpha: 0.28)
-        let hintFill = UIColor(red: 1, green: 0.71, blue: 0.28, alpha: 0.92)
         let seam = UIColor(red: 0xb3 / 255, green: 0xaa / 255, blue: 0xc2 / 255, alpha: 1)
         let creamTop = UIColor(red: 0.984, green: 0.973, blue: 0.949, alpha: 1)
         let creamBot = UIColor(red: 0.925, green: 0.898, blue: 0.847, alpha: 1)
@@ -665,11 +787,7 @@ final class PuzzleSceneController: NSObject {
                     let path = JigsawGeometry.piecePath(hw: hw, tabs: piece.tabs, knobSamples: 14)
                     g.saveGState()
                     g.translateBy(x: cx, y: cy)
-                    if piece.correctSlot == hintSlot {
-                        hintFill.setFill()
-                    } else {
-                        fill.setFill()
-                    }
+                    fill.setFill()
                     path.fill()
                     g.restoreGState()
                 }
@@ -682,25 +800,44 @@ final class PuzzleSceneController: NSObject {
                 let inner = JigsawGeometry.piecePath(hw: hw * 0.965, tabs: piece.tabs, knobSamples: 12)
                 g.saveGState()
                 g.translateBy(x: cx, y: cy)
-                if piece.correctSlot == hintSlot {
-                    UIColor(red: 0.85, green: 0.48, blue: 0.08, alpha: 1).setStroke()
-                    path.lineWidth = 2.4
+                let isHint = piece.correctSlot == hintSlot
+                if isHint {
+                    path.lineWidth = 7
                 } else {
                     seam.setStroke()
                     path.lineWidth = 1.6
                 }
                 path.lineJoinStyle = .round
-                g.setShadow(
-                    offset: CGSize(width: 0, height: 1.2),
-                    blur: 1.5,
-                    color: UIColor.black.withAlphaComponent(0.26).cgColor
-                )
-                path.stroke()
+                if isHint {
+                    g.setShadow(
+                        offset: .zero,
+                        blur: 5,
+                        color: UIColor.black.withAlphaComponent(0.7).cgColor
+                    )
+                } else {
+                    g.setShadow(
+                        offset: CGSize(width: 0, height: 1.2),
+                        blur: 1.5,
+                        color: UIColor.black.withAlphaComponent(0.26).cgColor
+                    )
+                }
+                if isHint {
+                    UIColor(red: 0.12, green: 0.03, blue: 0.16, alpha: 1).setStroke()
+                    path.lineWidth = 7
+                    path.stroke()
+                    UIColor(red: 0.98, green: 0.04, blue: 0.42, alpha: 1).setStroke()
+                    path.lineWidth = 4.8
+                    path.stroke()
+                } else {
+                    path.stroke()
+                }
                 g.setShadow(offset: .zero, blur: 0, color: nil)
-                UIColor.white.withAlphaComponent(0.42).setStroke()
-                inner.lineWidth = 1.1
-                inner.lineJoinStyle = .round
-                inner.stroke()
+                if !isHint {
+                    UIColor.white.withAlphaComponent(0.42).setStroke()
+                    inner.lineWidth = 1.1
+                    inner.lineJoinStyle = .round
+                    inner.stroke()
+                }
                 g.restoreGState()
             }
         }

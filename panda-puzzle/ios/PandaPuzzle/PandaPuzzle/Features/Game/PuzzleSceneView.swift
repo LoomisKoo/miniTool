@@ -1,5 +1,17 @@
 import SceneKit
 import SwiftUI
+import os
+
+private let sceneViewPerformanceLog = Logger(subsystem: "PandaPuzzle", category: "performance")
+
+final class LayoutAwareSCNView: SCNView {
+    var onLayout: (@MainActor (CGSize) -> Void)?
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        onLayout?(bounds.size)
+    }
+}
 
 struct PuzzleSceneView: UIViewRepresentable {
     let controller: PuzzleSceneController
@@ -12,7 +24,12 @@ struct PuzzleSceneView: UIViewRepresentable {
     }
 
     func makeUIView(context: Context) -> SCNView {
-        let view = SCNView()
+        let view = LayoutAwareSCNView()
+        let controller = controller
+        view.onLayout = { [weak view] size in
+            controller.updateViewport(size: size)
+            view?.setNeedsDisplay()
+        }
         view.scene = controller.scene
         // 背景是纯色，用不透明图层省掉每帧与下层的 alpha 合成
         view.backgroundColor = UIColor(PandaTheme.canvas)
@@ -31,14 +48,10 @@ struct PuzzleSceneView: UIViewRepresentable {
         let pan = UIPanGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.panned(_:)))
         pan.maximumNumberOfTouches = 1
         let pinch = UIPinchGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.pinched(_:)))
-        let doubleTap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.doubleTapped(_:)))
-        doubleTap.numberOfTapsRequired = 2
-        tap.require(toFail: doubleTap)
 
         view.addGestureRecognizer(tap)
         view.addGestureRecognizer(pan)
         view.addGestureRecognizer(pinch)
-        view.addGestureRecognizer(doubleTap)
 
         context.coordinator.view = view
         context.coordinator.lastGeometry = board.geometrySignature
@@ -52,12 +65,14 @@ struct PuzzleSceneView: UIViewRepresentable {
         let geo = board.geometrySignature
         let sel = board.selectionSignature
         if context.coordinator.lastGeometry != geo {
+            sceneViewPerformanceLog.info("updateUIView geometry changed")
             context.coordinator.lastGeometry = geo
             context.coordinator.lastSelection = sel
             controller.sync(board: board, sourceImage: sourceImage, animatePlace: true)
             return
         }
         if context.coordinator.lastSelection != sel {
+            sceneViewPerformanceLog.info("updateUIView selection changed")
             context.coordinator.lastSelection = sel
             controller.updateHighlights(board: board)
             uiView.setNeedsDisplay()
@@ -93,6 +108,9 @@ struct PuzzleSceneView: UIViewRepresentable {
             guard !isDraggingBoard, let view else { return }
             let p = gr.location(in: view)
             let hit = controller.hitTest(at: p, in: view)
+            sceneViewPerformanceLog.info(
+                "gesture tap hit slot=\(hit.slot ?? -1, privacy: .public) piece=\(hit.pieceId ?? -1, privacy: .public)"
+            )
             if let piece = hit.pieceId {
                 onTap(nil, piece)
             } else if let slot = hit.slot {
