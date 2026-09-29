@@ -1,13 +1,43 @@
 import SceneKit
 import UIKit
 
+/// 手势在主线程写入，渲染线程每帧渲染前读取，避免相机更新和帧不同步
+final class CameraTarget: @unchecked Sendable {
+    private let lock = NSLock()
+    private var position = SIMD3<Float>(0, 20, 0)
+    private var orthoScale: Double = 4
+    private var dirty = false
+
+    func set(position: SIMD3<Float>, orthoScale: Double) {
+        lock.lock()
+        self.position = position
+        self.orthoScale = orthoScale
+        dirty = true
+        lock.unlock()
+    }
+
+    func discard() {
+        lock.lock()
+        dirty = false
+        lock.unlock()
+    }
+
+    func take() -> (position: SIMD3<Float>, orthoScale: Double)? {
+        lock.lock()
+        defer { lock.unlock() }
+        guard dirty else { return nil }
+        dirty = false
+        return (position, orthoScale)
+    }
+}
+
 @MainActor
 final class PuzzleSceneController: NSObject {
     let scene = SCNScene()
     let cameraNode = SCNNode()
+    nonisolated let cameraTarget = CameraTarget()
     private let boardNode = SCNNode()
     private let piecesRoot = SCNNode()
-    private var slotNodes: [Int: SCNNode] = [:]
     private var pieceNodes: [Int: SCNNode] = [:]
     private var topMat: SCNMaterial?
     private var cachedBoardPieces: [PuzzlePieceModel] = []
@@ -234,18 +264,6 @@ final class PuzzleSceneController: NSObject {
             SCNHitTestOption.searchMode: SCNHitTestSearchMode.all.rawValue,
             SCNHitTestOption.ignoreHiddenNodes: NSNumber(value: false),
         ])
-        // 优先取格位：放置失败后可继续点别的空位
-        for hit in hits {
-            var node: SCNNode? = hit.node
-            while let n = node {
-                if let name = n.name, name.hasPrefix("slot:"),
-                   let slot = Int(name.split(separator: ":").last ?? "") {
-                    return (slot, nil)
-                }
-                node = n.parent
-            }
-        }
-        // 大拼图不创建上千个透明热区节点，直接用棋盘坐标计算格位。
         if hitTestCols > 0, let boardHit = hits.first(where: {
             var node: SCNNode? = $0.node
             while let n = node {
@@ -270,7 +288,6 @@ final class PuzzleSceneController: NSObject {
 
     private func rebuildBoard(board: PuzzleBoardState) {
         boardNode.childNodes.forEach { $0.removeFromParentNode() }
-        slotNodes.removeAll()
         topMat = nil
 
         let cols = board.cols
@@ -284,8 +301,6 @@ final class PuzzleSceneController: NSObject {
         let h = Float(rows) * cellSize
         // 底板与拼面齐平，避免拼好后上下露出一圈米色白边
         let rim: Float = 0.02
-        let ox = -w / 2 + cellSize / 2
-        let oz = -h / 2 + cellSize / 2
 
         let base = SCNBox(
             width: CGFloat(w + rim),
@@ -314,6 +329,7 @@ final class PuzzleSceneController: NSObject {
         let topPlane = SCNPlane(width: CGFloat(w), height: CGFloat(h))
         let mat = SCNMaterial()
         mat.diffuse.contents = boardImg
+        mat.diffuse.mipFilter = .linear
         mat.lightingModel = .constant
         mat.isDoubleSided = false
         topPlane.materials = [mat]
@@ -324,31 +340,8 @@ final class PuzzleSceneController: NSObject {
         topNode.renderingOrder = 0
         topNode.name = "boardTop"
         boardNode.addChildNode(topNode)
-
-        // 透明点选热区（不挡分割线）。大拼图改用 boardTop 坐标计算，
-        // 避免为每个格位创建一个额外的 SceneKit 几何体。
-        if board.pieces.count <= 240 {
-        for piece in board.pieces {
-            let plane = SCNPlane(width: CGFloat(cellSize * 0.92), height: CGFloat(cellSize * 0.92))
-            let hitMat = SCNMaterial()
-            hitMat.diffuse.contents = UIColor(white: 1, alpha: 0.001)
-            hitMat.lightingModel = .constant
-            hitMat.writesToDepthBuffer = false
-            hitMat.blendMode = .alpha
-            plane.materials = [hitMat]
-            let node = SCNNode(geometry: plane)
-            node.eulerAngles.x = -Float.pi / 2
-            node.position = SCNVector3(
-                ox + Float(piece.col) * cellSize,
-                0.004,
-                oz + Float(piece.row) * cellSize
-            )
-            node.name = "slot:\(piece.correctSlot)"
-            node.renderingOrder = 5
-            boardNode.addChildNode(node)
-            slotNodes[piece.correctSlot] = node
-        }
-        }
+        // 格位点选统一用 boardTop 坐标计算，不建透明热区节点：
+        // 它们肉眼不可见，但每帧都要逐个排序、绘制、混合，拖动会掉帧。
     }
 
     private func updateSlotHighlights(board: PuzzleBoardState) {
@@ -367,10 +360,6 @@ final class PuzzleSceneController: NSObject {
             }
         )
         topMat.diffuse.contents = img
-
-        for (slot, node) in slotNodes {
-            node.isHidden = board.occupant(of: slot) != nil
-        }
     }
 
     private func makePieceNode(piece: PuzzlePieceModel, hw: CGFloat, cols: Int, rows: Int) -> SCNNode {
@@ -380,6 +369,8 @@ final class PuzzleSceneController: NSObject {
         // 纸板本体：纯色挤出
         let bodyShape = SCNShape(path: bodyPath, extrusionDepth: thickness)
         bodyShape.chamferRadius = min(0.01, thickness * 0.16)
+        // 固定俯视只看得到正面倒角
+        bodyShape.chamferMode = .front
         let core = SCNMaterial()
         core.diffuse.contents = UIColor(red: 0.82, green: 0.76, blue: 0.68, alpha: 1)
         core.lightingModel = .blinn
@@ -395,6 +386,8 @@ final class PuzzleSceneController: NSObject {
         let lidMat = SCNMaterial()
         lidMat.diffuse.contents = lidImg
         lidMat.transparent.contents = lidImg
+        lidMat.diffuse.mipFilter = .linear
+        lidMat.transparent.mipFilter = .linear
         lidMat.lightingModel = .constant
         lidMat.isDoubleSided = false
         lidMat.writesToDepthBuffer = true
@@ -570,15 +563,27 @@ final class PuzzleSceneController: NSObject {
         let worldPerPt = (2 * fitOrthoScale / max(viewZoom, 0.01)) / Float(viewSize.height)
         panX -= Float(screenDelta.x) * worldPerPt
         panZ -= Float(screenDelta.y) * worldPerPt
-        applyCamera()
+        updateCameraFast()
     }
 
     func multiplyZoom(_ factor: Float) {
         viewZoom = min(3.2, max(0.5, viewZoom * factor))
-        applyCamera()
+        updateCameraFast()
+    }
+
+    /// 手势高频调用：只记录目标，由渲染线程在下一帧前应用
+    private func updateCameraFast() {
+        cameraTarget.set(
+            position: SIMD3<Float>(panX, 20, panZ),
+            orthoScale: Double(fitOrthoScale / max(viewZoom, 0.01))
+        )
     }
 
     private func applyCamera() {
+        cameraTarget.discard()
+        SCNTransaction.begin()
+        SCNTransaction.animationDuration = 0
+        SCNTransaction.disableActions = true
         let cam = cameraNode.camera ?? SCNCamera()
         cameraNode.camera = cam
         cam.usesOrthographicProjection = true
@@ -588,6 +593,7 @@ final class PuzzleSceneController: NSObject {
         cameraNode.transform = SCNMatrix4Identity
         cameraNode.position = SCNVector3(panX, 20, panZ)
         cameraNode.eulerAngles = SCNVector3(-Float.pi / 2, 0, 0)
+        SCNTransaction.commit()
     }
 
     private func setupLights() {

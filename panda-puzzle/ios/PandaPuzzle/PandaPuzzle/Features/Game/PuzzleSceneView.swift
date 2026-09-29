@@ -14,13 +14,17 @@ struct PuzzleSceneView: UIViewRepresentable {
     func makeUIView(context: Context) -> SCNView {
         let view = SCNView()
         view.scene = controller.scene
-        view.backgroundColor = .clear
-        view.isOpaque = false
-        view.antialiasingMode = .multisampling4X
+        // 背景是纯色，用不透明图层省掉每帧与下层的 alpha 合成
+        view.backgroundColor = UIColor(PandaTheme.canvas)
+        view.isOpaque = true
+        view.antialiasingMode = .none
+        view.contentScaleFactor = min(2, UIScreen.main.scale)
         // 固定 90° 俯视；平移/缩放用手势，不用系统自由相机
         view.allowsCameraControl = false
         view.pointOfView = controller.cameraNode
+        view.delegate = context.coordinator
         view.rendersContinuously = false
+        view.preferredFramesPerSecond = UIScreen.main.maximumFramesPerSecond
         view.isPlaying = true
 
         let tap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.tapped(_:)))
@@ -56,13 +60,13 @@ struct PuzzleSceneView: UIViewRepresentable {
         if context.coordinator.lastSelection != sel {
             context.coordinator.lastSelection = sel
             controller.updateHighlights(board: board)
-            uiView.isPlaying = true
             uiView.setNeedsDisplay()
         }
     }
 
-    final class Coordinator: NSObject {
+    final class Coordinator: NSObject, SCNSceneRendererDelegate {
         let controller: PuzzleSceneController
+        let cameraTarget: CameraTarget
         var onTap: (_ slot: Int?, _ pieceId: Int?) -> Void
         weak var view: SCNView?
         var lastGeometry: String?
@@ -72,7 +76,17 @@ struct PuzzleSceneView: UIViewRepresentable {
 
         init(controller: PuzzleSceneController, onTap: @escaping (_ slot: Int?, _ pieceId: Int?) -> Void) {
             self.controller = controller
+            self.cameraTarget = controller.cameraTarget
             self.onTap = onTap
+        }
+
+        func renderer(_ renderer: SCNSceneRenderer, updateAtTime time: TimeInterval) {
+            guard let target = cameraTarget.take(), let pov = renderer.pointOfView else { return }
+            SCNTransaction.begin()
+            SCNTransaction.disableActions = true
+            pov.simdPosition = target.position
+            pov.camera?.orthographicScale = target.orthoScale
+            SCNTransaction.commit()
         }
 
         @MainActor @objc func tapped(_ gr: UITapGestureRecognizer) {
@@ -95,19 +109,18 @@ struct PuzzleSceneView: UIViewRepresentable {
             guard let view else { return }
             switch gr.state {
             case .began:
-                isDraggingBoard = false
+                // 系统 pan 已有启动阈值，这里不再叠加，否则起手发黏且会跳一下
+                isDraggingBoard = true
+                view.rendersContinuously = true
+                gr.setTranslation(.zero, in: view)
             case .changed:
                 let t = gr.translation(in: view)
-                if !isDraggingBoard, hypot(t.x, t.y) > 10 {
-                    isDraggingBoard = true
-                }
-                guard isDraggingBoard else { return }
                 controller.panBy(screenDelta: t, viewSize: view.bounds.size)
                 gr.setTranslation(.zero, in: view)
-                view.isPlaying = true
-                view.setNeedsDisplay()
             case .ended, .cancelled, .failed:
                 isDraggingBoard = false
+                view.rendersContinuously = false
+                view.setNeedsDisplay()
             default:
                 break
             }
@@ -118,14 +131,15 @@ struct PuzzleSceneView: UIViewRepresentable {
             switch gr.state {
             case .began:
                 lastPinchScale = gr.scale
+                view.rendersContinuously = true
             case .changed:
                 let factor = Float(gr.scale / max(lastPinchScale, 0.001))
                 lastPinchScale = gr.scale
                 controller.multiplyZoom(factor)
-                view.isPlaying = true
-                view.setNeedsDisplay()
             default:
                 lastPinchScale = 1
+                view.rendersContinuously = false
+                view.setNeedsDisplay()
             }
         }
     }
