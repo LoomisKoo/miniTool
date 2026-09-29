@@ -477,9 +477,7 @@ body.has-dock-picked .to-top { bottom: calc(var(--safe-bottom) + 202px); }
 .input:focus-visible,
 .link-btn:focus-visible,
 .sheet-close:focus-visible,
-.modal-btn:focus-visible,
-.modal-dl:focus-visible,
-.modal-share:focus-visible,
+.modal-act:focus-visible,
 .tab:focus-visible,
 .fav-open:focus-visible,
 .fav-del:focus-visible {
@@ -1523,7 +1521,17 @@ html.sheet-open, body.sheet-open { overflow: hidden; }
 .roast-reviews { display: flex; flex-direction: column; gap: 12px; }
 .roast-review { padding: 12px 14px; border-radius: var(--r-md); background: var(--accent-soft); line-height: 1.7; }
 .roast-review span { margin-right: 8px; color: var(--accent-ink); }
-.roast-reroll { margin-top: 14px; width: 100%; }
+/* 换一批：待在卡片标题那一行右侧，所以是窄胶囊而不是整行按钮 */
+.roast-reroll {
+  flex-shrink: 0; display: inline-flex; align-items: center;
+  padding: 6px 13px; border-radius: var(--r-pill);
+  background: var(--accent-soft); color: var(--accent-ink);
+  border: 1px solid rgba(201, 120, 92, 0.28);
+  font: inherit; font-size: 12.5px; font-weight: 500; letter-spacing: 0.01em;
+  cursor: pointer;
+  transition: transform 0.12s var(--ease), background 0.15s ease;
+}
+.roast-reroll:active { transform: scale(0.95); }
 .roast-punch { margin-top: 14px; padding: 12px 14px; border-left: 3px solid var(--accent); background: var(--accent-soft); line-height: 1.7; }
 .roast-notes { padding-left: 20px; color: var(--muted); line-height: 1.8; }
 .roast-notes li + li { margin-top: 4px; }
@@ -1546,35 +1554,45 @@ html.sheet-open, body.sheet-open { overflow: hidden; }
 /* ── 分享卡片弹层 ─────────────────────── */
 .modal {
   position: fixed; inset: 0; z-index: 80;
-  background: rgba(35, 25, 21, 0.96);
+  /* 背景整体压暗，但中间留一层暖光把卡片托起来，不再是一块死黑 */
+  background:
+    radial-gradient(118% 62% at 50% 10%, rgba(214, 168, 95, .30), rgba(214, 168, 95, 0) 62%),
+    radial-gradient(90% 46% at 50% 96%, rgba(201, 120, 92, .22), rgba(201, 120, 92, 0) 60%),
+    linear-gradient(180deg, rgba(58, 34, 26, .93), rgba(26, 16, 12, .97));
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   display: flex; flex-direction: column;
   animation: modalFade 0.24s ease both;
 }
-.modal-top {
-  display: flex; justify-content: space-between; align-items: center;
-  padding: calc(var(--safe-top) + 10px) 16px 8px;
-}
-.modal-btn { border: none; background: none; color: #fff; font-size: 15px; font-family: inherit; padding: 6px; }
-.modal-body { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 12px 24px 20px; }
+.modal-body { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 16px 24px 12px; }
 .modal-body img {
   width: min(100%, 420px); max-height: 100%; object-fit: contain;
-  border-radius: var(--r-lg); box-shadow: 0 14px 42px rgba(0, 0, 0, .3);
+  border-radius: var(--r-lg);
+  box-shadow: 0 18px 52px rgba(0, 0, 0, .42), 0 0 0 1px rgba(255, 247, 237, .16),
+    0 0 60px rgba(214, 168, 95, .22);
   animation: modalCardIn 0.3s var(--ease) both;
 }
-.modal-foot { display: flex; justify-content: center; gap: 10px; padding: 12px 16px calc(var(--safe-bottom) + 18px); }
-.modal-dl {
-  display: inline-block; color: #fff; background: rgba(255, 255, 255, 0.14);
-  border: 1px solid rgba(255, 255, 255, 0.3); padding: 11px 22px; border-radius: var(--r-pill);
-  font-size: 14px; text-decoration: none; letter-spacing: 0.02em;
-  cursor: pointer;   /* 无 href 的 <a> 不会自带手型光标，这里补一下 */
+.modal-foot { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 10px 20px calc(var(--safe-bottom) + 20px); }
+
+/* 关闭 / 保存 / 发小红书 用同一套按钮：只有主次之分，形状尺寸完全一致 */
+.modal-act {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 108px; padding: 12px 24px;
+  border: 1px solid rgba(255, 247, 237, .30); border-radius: var(--r-pill);
+  background: rgba(255, 247, 237, .12); color: #fff7ed;
+  font: inherit; font-size: 15px; font-weight: 600; letter-spacing: .02em;
+  text-decoration: none; cursor: pointer;
+  transition: transform .16s var(--ease), background .16s ease, box-shadow .16s ease;
 }
-.modal-dl.is-busy { opacity: 0.65; pointer-events: none; }
-.modal-share {
-  margin-left: 8px; color: #fff; background: var(--accent);
-  border: 1px solid rgba(255,255,255,.25); padding: 10px 18px;
-  border-radius: var(--r-pill); font: inherit; cursor: pointer;
+.modal-act:active { transform: scale(.97); }
+.modal-act.is-primary {
+  background: linear-gradient(135deg, #c9785c, #d6a85f);
+  border-color: rgba(255, 247, 237, .5);
+  box-shadow: 0 8px 24px rgba(201, 120, 92, .45);
+  color: #fffdf8;
 }
-.modal-share:disabled { opacity: .65; pointer-events: none; }
+.modal-act.is-primary:disabled,
+.modal-act.is-busy { opacity: .62; pointer-events: none; }
 html.modal-open, body.modal-open { overflow: hidden; }
 /* 退出动画：关闭时先放反向动画，播完再由 JS 加 .hidden 收掉（display:none） */
 .modal-closing { animation: modalFadeOut 0.22s ease both; }

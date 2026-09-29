@@ -2784,7 +2784,7 @@
     var doneUi = function (ok, msg) {
       if (dl) {
         dl.classList.remove('is-busy');
-        dl.textContent = '下载图片';
+        dl.textContent = '保存';
       }
       if (msg) toast(msg);
     };

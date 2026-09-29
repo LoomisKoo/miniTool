@@ -642,9 +642,8 @@
       '  </div>' +
       '</section>' +
       '<section class="card roast-card">' +
-      '  <div class="card-title">名字锐评 <span class="muted">字义、读感和日常场景</span></div>' +
+      '  <div class="card-title">名字锐评 <button type="button" class="roast-reroll" data-roast-scenes>换一批</button></div>' +
       '  <div class="roast-reviews">' + reviews + '</div>' +
-      '  <button type="button" class="ghost-btn roast-reroll" data-roast-scenes>换一批锐评</button>' +
       '</section>' +
       '<p class="roast-disclaimer">名字没有好坏，这只是把字音、字义和生日拼成一个故事。纯属娱乐，不代表性格、命运或科学结论。</p>'
     );
@@ -2946,7 +2945,7 @@
     var doneUi = function (ok, msg) {
       if (dl) {
         dl.classList.remove('is-busy');
-        dl.textContent = '下载图片';
+        dl.textContent = '保存';
       }
       if (msg) toast(msg);
     };

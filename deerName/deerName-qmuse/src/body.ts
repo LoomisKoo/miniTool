@@ -38,11 +38,12 @@ export const BODY_HTML = `<div class="app">
 </div>
 
 <div class="modal hidden" id="modal" role="dialog" aria-modal="true" aria-label="名字卡片预览">
-  <div class="modal-top">
-    <button class="modal-btn" id="modal-close" type="button">关闭</button>
-  </div>
   <div class="modal-body"><img id="modal-img" alt="名字卡片"></div>
-  <div class="modal-foot"><a class="modal-dl" id="modal-dl" href="#" download>下载图片</a></div>
+  <div class="modal-foot">
+    <button class="modal-act" id="modal-close" type="button">关闭</button>
+    <a class="modal-act is-primary" id="modal-dl" href="#" download>保存</a>
+    <button class="modal-act is-primary hidden" id="modal-share" type="button">发小红书</button>
+  </div>
 </div>
 
 <div class="toast" id="toast"></div>`;

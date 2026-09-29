@@ -1650,73 +1650,225 @@
     };
   }
 
-  function wrap(ctx, text, x, y, max, line, color) {
-    ctx.fillStyle = color || '#4c392f';
-    var chars = String(text || '').split('');
-    var row = '';
+  function roundRect(ctx, x, y, w, h, r) {
+    var rad = Math.min(r, w / 2, h / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + rad, y);
+    ctx.arcTo(x + w, y, x + w, y + h, rad);
+    ctx.arcTo(x + w, y + h, x, y + h, rad);
+    ctx.arcTo(x, y + h, x, y, rad);
+    ctx.arcTo(x, y, x + w, y, rad);
+    ctx.closePath();
+  }
+  /* 文字药丸：标题不再是一排死板的字，而是一张贴在正文前面的标签。 */
+  function pill(ctx, text, x, baseline, size, bg, fg) {
+    ctx.font = 'bold ' + size + 'px sans-serif';
+    var padX = Math.round(size * 0.7);
+    var w = ctx.measureText(text).width + padX * 2;
+    var h = size + 16;
+    var top = baseline - size * 0.74 - 8;
+    ctx.fillStyle = bg;
+    roundRect(ctx, x, top, w, h, h / 2); ctx.fill();
+    ctx.fillStyle = fg;
+    ctx.fillText(text, x + padX, baseline);
+    return w;
+  }
+  /* 先分行再绘制，这样调用方可以按行数反推高度，避免文字压到边界。 */
+  function wrapLines(ctx, text, max) {
+    var chars = String(text == null ? '' : text).split('');
+    var lines = [], row = '';
     for (var i = 0; i < chars.length; i++) {
       var next = row + chars[i];
-      if (ctx.measureText(next).width > max && row) {
-        ctx.fillText(row, x, y);
-        y += line;
-        row = chars[i];
-      } else row = next;
+      if (ctx.measureText(next).width > max && row) { lines.push(row); row = chars[i]; }
+      else row = next;
     }
-    if (row) { ctx.fillText(row, x, y); y += line; }
-    return y;
+    if (row) lines.push(row);
+    return lines;
+  }
+  function wrap(ctx, text, x, y, max, line, color) {
+    ctx.fillStyle = color || '#4c392f';
+    var lines = wrapLines(ctx, text, max);
+    lines.forEach(function (ln, i) { ctx.fillText(ln, x, y + i * line); });
+    return y + Math.max(1, lines.length) * line;
   }
 
   NM.renderRoastCard = function (canvas, data) {
-    var W = 900, H = 1200, ctx = canvas.getContext('2d');
+    var W = 900, H = 1200, M = 64, RIGHT = W - M, R = RIGHT - M;
+    var ctx = canvas.getContext('2d');
     canvas.width = W; canvas.height = H;
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+
+    /* 底色 + 斜纹 + 右侧暖光斑：别让整张卡是一块死平的奶油色 */
     ctx.fillStyle = '#fff6e9'; ctx.fillRect(0, 0, W, H);
+    ctx.save();
+    ctx.strokeStyle = 'rgba(201,120,92,.05)'; ctx.lineWidth = 10;
+    for (var s = -H; s < W + H; s += 36) {
+      ctx.beginPath(); ctx.moveTo(s, 0); ctx.lineTo(s + H, H); ctx.stroke();
+    }
+    ctx.restore();
+    var blob = ctx.createRadialGradient(720, 620, 30, 720, 620, 430);
+    blob.addColorStop(0, 'rgba(214,168,95,.18)');
+    blob.addColorStop(1, 'rgba(214,168,95,0)');
+    ctx.fillStyle = blob; ctx.fillRect(0, 340, W, H - 340);
+
     /* 顶部渐变头，与页面里的档案卡保持一致 */
-    var HEAD = 340;
+    var HEAD = 380;
     var grad = ctx.createLinearGradient(0, 0, W, HEAD);
     grad.addColorStop(0, '#8e4e3b'); grad.addColorStop(.52, '#c9785c'); grad.addColorStop(1, '#d6a85f');
     ctx.fillStyle = grad; ctx.fillRect(0, 0, W, HEAD);
     ctx.fillStyle = '#fff7ed'; ctx.font = 'bold 26px sans-serif';
-    ctx.fillText('仙鹿起名 · 前世锐评', 64, 74);
-    ctx.font = 'bold 76px sans-serif'; ctx.fillText(data.full, 64, 178);
-    var score = data.score || { total: 0, items: {} };
-    var keys = Object.keys(score.items);
-    /* 圆形印章 */
-    ctx.beginPath(); ctx.arc(140, 268, 56, 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.lineWidth = 3; ctx.stroke();
-    ctx.fillStyle = '#fff7ed'; ctx.font = 'bold 44px sans-serif'; ctx.textAlign = 'center';
-    ctx.fillText(String(score.total), 140, 272);
-    ctx.font = '16px sans-serif'; ctx.fillText('综合分 / 100', 140, 298);
+    ctx.fillText('仙鹿起名 · 前世锐评', M, 76);
+
+    /* 右上角歪着的印章，整张卡的第一处“不正经” */
+    ctx.save();
+    ctx.translate(788, 96); ctx.rotate(-0.15);
+    ctx.strokeStyle = 'rgba(255,247,237,.7)'; ctx.lineWidth = 3;
+    roundRect(ctx, -54, -54, 108, 108, 18); ctx.stroke();
+    ctx.fillStyle = 'rgba(255,247,237,.94)'; ctx.textAlign = 'center';
+    ctx.font = 'bold 34px sans-serif'; ctx.fillText('锐评', 0, -2);
+    ctx.font = 'bold 18px sans-serif'; ctx.fillText('纯属娱乐', 0, 28);
     ctx.textAlign = 'left';
-    /* 维度进度条 */
+    ctx.restore();
+
+    /* 名字：字数多的时候自动缩小，别顶到印章上 */
+    var nameSize = 76;
+    ctx.font = 'bold ' + nameSize + 'px sans-serif';
+    while (nameSize > 38 && ctx.measureText(data.full).width > R - 150) {
+      nameSize -= 4; ctx.font = 'bold ' + nameSize + 'px sans-serif';
+    }
+    ctx.fillStyle = '#fff7ed'; ctx.fillText(data.full, M, 186);
+
+    /* 打分：印章和进度条放进同一个面板，四周留白，不再贴着渐变边 */
+    var score = data.score || { total: 0, items: {} };
+    var keys = Object.keys(score.items || {});
+    var pX = M, pY = 216, pW = R, pH = 146;
+    ctx.fillStyle = 'rgba(255,255,255,.15)';
+    roundRect(ctx, pX, pY, pW, pH, 22); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,.34)'; ctx.lineWidth = 1;
+    roundRect(ctx, pX, pY, pW, pH, 22); ctx.stroke();
+
+    var cy = pY + pH / 2;
+    ctx.beginPath(); ctx.arc(146, cy, 50, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.lineWidth = 3; ctx.stroke();
+    ctx.textAlign = 'center'; ctx.fillStyle = '#fff7ed';
+    ctx.font = 'bold 42px sans-serif'; ctx.fillText(String(score.total), 146, cy + 6);
+    ctx.font = '15px sans-serif'; ctx.fillText('综合分 / 100', 146, cy + 32);
+    ctx.textAlign = 'left';
+
+    var barX = 410, barW = 336, barH = 8, rowGap = 23;
+    var rowTop = cy - (keys.length - 1) * rowGap / 2;
     keys.forEach(function (key, i) {
-      var y = 232 + i * 26;
+      var ry = rowTop + i * rowGap;
+      var v = Math.max(0, Math.min(100, score.items[key] || 0));
       ctx.fillStyle = 'rgba(255,247,237,.92)'; ctx.font = '16px sans-serif';
-      ctx.fillText(key, 232, y + 6);
-      var bx = 420, bw = 340, bh = 8;
-      ctx.fillStyle = 'rgba(255,255,255,.26)'; ctx.fillRect(bx, y - 4, bw, bh);
-      ctx.fillStyle = '#fff7ed'; ctx.fillRect(bx, y - 4, bw * score.items[key] / 100, bh);
-      ctx.font = '15px sans-serif'; ctx.fillText(String(score.items[key]), bx + bw + 14, y + 6);
+      ctx.fillText(key, 226, ry + 6);
+      ctx.fillStyle = 'rgba(255,255,255,.26)';
+      roundRect(ctx, barX, ry - 4, barW, barH, 4); ctx.fill();
+      ctx.fillStyle = '#fff7ed';
+      roundRect(ctx, barX, ry - 4, Math.max(barH, barW * v / 100), barH, 4); ctx.fill();
+      ctx.font = '15px sans-serif'; ctx.fillText(String(v), barX + barW + 16, ry + 6);
     });
-    /* 前世身份 */
-    var s = data.story;
+
+    var s = data.story || {};
+    var persona = data.persona || null;
+
+    /* 先把每块的“行”算出来，再统一分配剩余空间，
+     * 否则短内容会在中间留一大片空白（之前这里空了 262px）。 */
+    ctx.font = 'bold 40px sans-serif';
+    var titleLines = wrapLines(ctx, s.title, R);
+    ctx.font = '24px sans-serif';
+    var descLines = wrapLines(ctx, data.roleDesc || s.trade, R);
+    var rows = [['事迹', s.event, '#f7ddc8'], ['癖好', s.quirk, '#f9e7bd'], ['结局', s.end, '#f6d4cf']];
+    ctx.font = 'bold 24px sans-serif';
+    var rowLabelW = rows.map(function (r) { return ctx.measureText(r[0]).width + 34; });
+    ctx.font = '24px sans-serif';
+    var rowLines = rows.map(function (r, i) { return wrapLines(ctx, r[1], R - rowLabelW[i] - 14); });
+
+    var HEAD_TOP = HEAD + 44;
+    var FOOT_Y = H - 46;
+    var panelH = 0;
+    var bodyH = 34                                  /* 你的前世身份 */
+      + titleLines.length * 50
+      + (persona ? 34 : 0)
+      + descLines.length * 38
+      + rowLines.reduce(function (a, l) { return a + Math.max(1, l.length) * 38; }, 0);
+    var gaps = 3 + rowLines.length;                 /* 块与块之间的间隙数量 */
+    var reviews = (data.reviews || [data.roast] || []).slice(0, 2).join('　');
+    ctx.font = '24px sans-serif';
+    var rLines = wrapLines(ctx, reviews, R - 36);
+    panelH = 92 + rLines.length * 36;
+    var panelTop = FOOT_Y - 44 - panelH;
+    var free = panelTop - 24 - (HEAD_TOP + bodyH);
+    var gap = Math.max(12, Math.min(40, free / gaps));
+
+    var y = HEAD_TOP;
+
+    /* 你的前世身份 + 年代 chip（chip 靠右） */
     ctx.fillStyle = '#92766a'; ctx.font = 'bold 18px sans-serif';
-    ctx.fillText('你的前世身份', 64, 402);
-    ctx.fillStyle = '#a95b43'; ctx.font = 'bold 26px sans-serif';
-    ctx.fillText(s.dyn, 64, 446);
+    ctx.fillText('你的前世身份', M, y);
+    var eraText = String(s.dyn || '');
+    ctx.font = 'bold 19px sans-serif';
+    var eraW = ctx.measureText(eraText).width + 34, eraH = 34;
+    ctx.fillStyle = 'rgba(201,120,92,.16)';
+    roundRect(ctx, RIGHT - eraW, y - 25, eraW, eraH, eraH / 2); ctx.fill();
+    ctx.fillStyle = '#a95b43'; ctx.textAlign = 'center';
+    ctx.fillText(eraText, RIGHT - eraW / 2, y + 1);
+    ctx.textAlign = 'left';
+
+    /* 身份名 */
+    y += gap + 50;
     ctx.fillStyle = '#4c392f'; ctx.font = 'bold 40px sans-serif';
-    var y = 506;
-    y = wrap(ctx, s.title, 64, y, 770, 50, '#4c392f');
-    ctx.font = '24px sans-serif'; y = wrap(ctx, data.roleDesc || s.trade, 64, y + 6, 770, 38, '#92766a') + 16;
-    [['事迹', s.event], ['癖好', s.quirk], ['结局', s.end]].forEach(function (row) {
-      ctx.font = 'bold 22px sans-serif'; ctx.fillStyle = '#a95b43'; ctx.fillText(row[0], 64, y);
-      ctx.font = '23px sans-serif'; y = wrap(ctx, row[1], 140, y, 690, 36, '#4c392f') + 16;
+    titleLines.forEach(function (ln, i) { ctx.fillText(ln, M, y + i * 50); });
+    y += (titleLines.length - 1) * 50;
+
+    /* 性格取向：一句标签，解释这份档案为什么是这个人 */
+    if (persona) {
+      y += gap + 24;
+      var pw = pill(ctx, '性格取向 · ' + persona.label, M, y, 20, '#f2e2d4', '#8a4a32');
+      ctx.font = '20px sans-serif'; ctx.fillStyle = '#92766a';
+      var tagLines = wrapLines(ctx, persona.tag, R - pw - 16);
+      tagLines.forEach(function (ln, i) { ctx.fillText(ln, i === 0 ? M + pw + 16 : M, y + i * 30); });
+      if (tagLines.length > 1) y += (tagLines.length - 1) * 30;
+    }
+
+    /* 岗位吐槽 */
+    y += gap + 38;
+    ctx.fillStyle = '#6b5344'; ctx.font = '24px sans-serif';
+    descLines.forEach(function (ln, i) { ctx.fillText(ln, M, y + i * 38); });
+    y += (descLines.length - 1) * 38;
+
+    /* 事迹 / 癖好 / 结局：标签做成药丸，和正文同一行 */
+    rows.forEach(function (r, i) {
+      y += gap + 38;
+      var lw = pill(ctx, r[0], M, y, 24, r[2], '#7a3b28');
+      ctx.fillStyle = '#4c392f'; ctx.font = '24px sans-serif';
+      rowLines[i].forEach(function (ln, k) {
+        ctx.fillText(ln, k === 0 ? M + lw + 14 : M, y + k * 38);
+      });
+      y += (Math.max(1, rowLines[i].length) - 1) * 38;
     });
-    /* 名字锐评 */
-    ctx.fillStyle = '#f8ebdd'; ctx.fillRect(48, 900, 804, 210);
-    ctx.font = 'bold 22px sans-serif'; ctx.fillStyle = '#a95b43'; ctx.fillText('名字锐评', 76, 944);
-    wrap(ctx, (data.reviews || [data.roast]).slice(0, 2).join('　'), 76, 986, 740, 34, '#4c392f');
-    ctx.font = '19px sans-serif'; ctx.fillStyle = '#92766a';
-    ctx.fillText('名字没有好坏 · 纯属娱乐', 64, 1155);
+
+    /* 名字锐评：底部对齐，虚线框更像“贴上去的便签” */
+    ctx.fillStyle = '#fffdf7';
+    roundRect(ctx, M - 18, panelTop, R + 36, panelH, 22); ctx.fill();
+    ctx.save();
+    ctx.setLineDash([9, 7]);
+    ctx.strokeStyle = 'rgba(169,91,67,.45)'; ctx.lineWidth = 2;
+    roundRect(ctx, M - 18, panelTop, R + 36, panelH, 22); ctx.stroke();
+    ctx.restore();
+    pill(ctx, '名字锐评', M + 6, panelTop + 40, 21, '#a95b43', '#fff7ed');
+    ctx.fillStyle = '#4c392f'; ctx.font = '24px sans-serif';
+    rLines.forEach(function (ln, i) {
+      ctx.fillText(ln, M + 6, panelTop + 92 + i * 36);
+    });
+
+    /* 页脚 */
+    ctx.font = 'bold 18px sans-serif'; ctx.fillStyle = '#b08b78';
+    ctx.fillText('仙鹿起名', M, FOOT_Y);
+    ctx.textAlign = 'right';
+    ctx.font = '18px sans-serif'; ctx.fillStyle = '#92766a';
+    ctx.fillText('名字没有好坏，这份档案也是', RIGHT, FOOT_Y);
+    ctx.textAlign = 'left';
   };
 
   NM.roast = roast;
