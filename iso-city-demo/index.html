@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>等距夜景小城 · Three.js</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #070b16; }
+  #app { position: fixed; inset: 0; }
+  .hud {
+    position: fixed; left: 16px; bottom: 14px; pointer-events: none;
+    color: #8fa4c8; font: 12px/1.7 system-ui, -apple-system, sans-serif; letter-spacing: .5px;
+  }
+  .title {
+    position: fixed; left: 16px; top: 14px; pointer-events: none;
+    color: #dbe6ff; font: 600 14px/1.5 system-ui, sans-serif; letter-spacing: 1px;
+    text-shadow: 0 0 12px rgba(120,160,255,.5);
+  }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div class="title">PARIS · 20:00</div>
+<div class="hud">WASD 移动 · 撞墙会停下 · 拖拽旋转 · 滚轮缩放 · 被楼挡住时显示轮廓</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.161.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.161.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls }   from 'three/addons/controls/OrbitControls.js';
+import { EffectComposer }  from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass }      from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass }      from 'three/addons/postprocessing/OutputPass.js';
+
+/* ============================== 基础舞台 ============================== */
+const app = document.getElementById('app');
+
+function makeSkyTexture() {
+  const c = document.createElement('canvas');
+  c.width = 4; c.height = 256;
+  const ctx = c.getContext('2d');
+  const g = ctx.createLinearGradient(0, 0, 0, 256);
+  g.addColorStop(0.0, '#1d2547');
+  g.addColorStop(0.55, '#4a4f7e');
+  g.addColorStop(0.85, '#9a7f9c');
+  g.addColorStop(1.0, '#e0a98c');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 4, 256);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+const scene = new THREE.Scene();
+scene.background = makeSkyTexture();
+scene.fog = new THREE.FogExp2(0x5b5f86, 0.0035);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, stencil: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+app.appendChild(renderer.domElement);
+
+/* ============ 环境反射贴图：让玻璃/金属有真实的天空倒影 ============ */
+// 蓝调黄昏的天空渐变当作 IBL：上方冷蓝、地平线暖橙，玻璃会反射出这条暖带
+function makeEnvTexture() {
+  const c = document.createElement('canvas');
+  c.width = 256; c.height = 128;
+  const ctx = c.getContext('2d');
+  const g = ctx.createLinearGradient(0, 0, 0, 128);
+  g.addColorStop(0.0, '#2a3566');
+  g.addColorStop(0.35, '#6b72a8');
+  g.addColorStop(0.49, '#f0b58e');   // 地平线暖带
+  g.addColorStop(0.55, '#7a6a86');
+  g.addColorStop(1.0, '#2c2838');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 256, 128);
+  // 几处城市光污染的光晕
+  for (let i = 0; i < 30; i++) {
+    const x = Math.random() * 256, y = 60 + Math.random() * 18;
+    const r = 4 + Math.random() * 14;
+    const rg = ctx.createRadialGradient(x, y, 0, x, y, r);
+    rg.addColorStop(0, 'rgba(255,190,120,0.20)');
+    rg.addColorStop(1, 'rgba(255,190,120,0)');
+    ctx.fillStyle = rg;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.mapping = THREE.EquirectangularReflectionMapping;
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+pmrem.compileEquirectangularShader();
+scene.environment = pmrem.fromEquirectangular(makeEnvTexture()).texture;
+
+/* ====================== 关键 1：等距正交相机 ====================== */
+// 用正交相机（没有近大远小）+ 位置 (1,1,1) 方向 = 45° 俯视，才有"地图"感
+const VIEW = 20;
+let aspect = innerWidth / innerHeight;
+
+const camera = new THREE.OrthographicCamera(
+  -VIEW * aspect, VIEW * aspect, VIEW, -VIEW, -300, 900
+);
+camera.position.set(60, 60, 60);
+camera.lookAt(0, 0, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 0, 0);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.maxPolarAngle = Math.PI * 0.49;   // 不允许钻到地面以下
+controls.minZoom = 0.6;
+controls.maxZoom = 4;
+
+/* ============================== 灯光 ============================== */
+// Apple Maps 质感的核心：每个朝向的面都有明显不同的色调
+//   天光（半球光）给顶面冷亮色，暖色低角度主光 + 冷色补光让相邻立面一暖一冷
+scene.add(new THREE.HemisphereLight(0xb9c8ff, 0x4b3f55, 1.15));
+
+const sun = new THREE.DirectionalLight(0xffc49a, 2.6);
+sun.position.set(-45, 32, 28);
+sun.castShadow = true;
+sun.shadow.mapSize.set(4096, 4096);
+sun.shadow.bias = -0.0004;
+sun.shadow.normalBias = 0.02;
+Object.assign(sun.shadow.camera, { left: -28, right: 28, top: 28, bottom: -28, near: 1, far: 220 });
+scene.add(sun);
+
+const fill = new THREE.DirectionalLight(0x8aa2ff, 0.6);
+fill.position.set(40, 22, -30);
+scene.add(fill);
+
+/* ============================== 参数 ============================== */
+const BLOCKS = 7;            // 7 x 7 个街区
+const LOT    = 5;            // 街区中心间距
+const EXTENT = BLOCKS * LOT; // 整个世界边长
+const HALF   = EXTENT / 2;
+
+/* ====================== 地面 + 街道（程序化贴图） ====================== */
+function makeMapTexture() {
+  const S = 2048;
+  const c = document.createElement('canvas');
+  c.width = c.height = S;
+  const ctx = c.getContext('2d');
+
+  // 街区底色
+  ctx.fillStyle = '#6a6c80';
+  ctx.fillRect(0, 0, S, S);
+
+  const tile = S / BLOCKS;
+  const road = tile * 0.44;
+
+  // 中央公园草坪
+  const pk = 3 * tile + road / 2, ps = tile - road;
+  ctx.fillStyle = '#4f6a58';
+  ctx.fillRect(pk, pk, ps, ps);
+
+  // 横平竖直的道路
+  ctx.fillStyle = '#3e4155';
+  for (let i = 0; i <= BLOCKS; i++) {
+    const p = i * tile;
+    ctx.fillRect(p - road / 2, 0, road, S);
+    ctx.fillRect(0, p - road / 2, S, road);
+  }
+
+  // 路缘石：道路两侧一道浅色细线，让街区有"抬高"的感觉
+  ctx.fillStyle = 'rgba(255,240,225,0.16)';
+  const curb = Math.max(2, tile * 0.012);
+  for (let i = 0; i <= BLOCKS; i++) {
+    const p = i * tile;
+    ctx.fillRect(p - road / 2 - curb, 0, curb, S);
+    ctx.fillRect(p + road / 2, 0, curb, S);
+    ctx.fillRect(0, p - road / 2 - curb, S, curb);
+    ctx.fillRect(0, p + road / 2, S, curb);
+  }
+
+  // 车道虚线
+  ctx.strokeStyle = 'rgba(255,225,180,0.28)';
+  ctx.lineWidth = Math.max(2, tile * 0.02);
+  ctx.setLineDash([tile * 0.11, tile * 0.11]);
+  for (let i = 0; i <= BLOCKS; i++) {
+    const p = i * tile;
+    ctx.beginPath(); ctx.moveTo(p, 0); ctx.lineTo(p, S); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, p); ctx.lineTo(S, p); ctx.stroke();
+  }
+  ctx.setLineDash([]);
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  return tex;
+}
+
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(EXTENT, EXTENT),
+  new THREE.MeshStandardMaterial({ map: makeMapTexture(), roughness: 0.9 })
+);
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+/* ====================== 关键 2：建筑（纯体块 + 真实窗户几何） ====================== */
+const ROOF_BASE = {
+  color: 0x7a8296, roughness: 0.6, metalness: 0.15, envMapIntensity: 1.0, flatShading: true
+};
+
+// 高度渐变：越靠近地面越暗，贴地再额外压一道 —— Apple Maps 建筑"立在地上"的关键
+function applyHeightAO(mat) {
+  mat.onBeforeCompile = s => {
+    s.vertexShader = s.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying float vWY;')
+      .replace('#include <project_vertex>', '#include <project_vertex>\nvWY = (modelMatrix * vec4(transformed, 1.0)).y;');
+    s.fragmentShader = s.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying float vWY;')
+      .replace('#include <color_fragment>', `#include <color_fragment>
+        diffuseColor.rgb *= mix(0.55, 1.0, smoothstep(0.0, 4.5, vWY)) * mix(0.7, 1.0, smoothstep(0.0, 0.5, vWY));`);
+  };
+  mat.customProgramCacheKey = () => 'heightAO';
+  return mat;
+}
+
+// 地面接触阴影：楼脚下一圈柔和的暗晕
+const CONTACT_INNER = 0.6;   // 贴图中楼体占的比例
+const contactTex = (() => {
+  const S = 128;
+  const c = document.createElement('canvas');
+  c.width = c.height = S;
+  const ctx = c.getContext('2d');
+  const img = ctx.createImageData(S, S);
+  for (let y = 0; y < S; y++) {
+    for (let x = 0; x < S; x++) {
+      const u = Math.abs((x + 0.5) / S * 2 - 1), v = Math.abs((y + 0.5) / S * 2 - 1);
+      const d = Math.hypot(Math.max(u - CONTACT_INNER, 0), Math.max(v - CONTACT_INNER, 0)) / (1 - CONTACT_INNER);
+      const i = (y * S + x) * 4;
+      img.data[i + 3] = Math.pow(1 - Math.min(d, 1), 2.2) * 200;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return new THREE.CanvasTexture(c);
+})();
+const contactMat = new THREE.MeshBasicMaterial({
+  map: contactTex, color: 0x0d0a18, transparent: true, depthWrite: false,
+  polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1
+});
+const contactGeo = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
+// 四棱锥屋顶：先把旋转烘焙进几何体，之后外层 scale 拉伸成长方形（保证棱线对齐）
+const coneGeo = new THREE.ConeGeometry(1 / Math.SQRT2, 1, 4);
+coneGeo.rotateY(Math.PI / 4);
+// 共享的单位立方体：女儿墙 / 屋顶设备 / 基座都用它配合 scale，省内存
+const unitBox = new THREE.BoxGeometry(1, 1, 1);
+
+// 屋顶四周的女儿墙——Apple Maps 体块感的标志（屋顶有"厚度"而不是一张薄片）
+function addParapet(group, cx, cz, w, d, y, mat, pw, ph) {
+  const segs = [
+    [w + pw * 2, pw, 0, -(d / 2 + pw / 2)],
+    [w + pw * 2, pw, 0,  (d / 2 + pw / 2)],
+    [pw, d + pw * 2, -(w / 2 + pw / 2), 0],
+    [pw, d + pw * 2,  (w / 2 + pw / 2), 0]
+  ];
+  for (const [sx, sz, ox, oz] of segs) {
+    const m = new THREE.Mesh(unitBox, mat);
+    m.scale.set(sx, ph, sz);
+    m.position.set(cx + ox, y + ph / 2, cz + oz);
+    m.castShadow = true;
+    group.add(m);
+  }
+}
+
+// XZ 平面的碰撞盒（防止小人穿墙）
+const colliders = [];
+
+// 巴黎奥斯曼风浅色石材
+const WALL_TINTS = ['#cfc6bb', '#c8c2c4', '#d6cdbf', '#bfc0c8', '#cbc3b5', '#c3c6cf'];
+
+/* ---- 窗户：真实几何（略凸出墙面的正方形薄片），全城合并成一个 InstancedMesh ---- */
+const FLOOR_H = 0.62;
+const WIN_PITCH = 0.55;
+const WIN_SIZE = 0.26;           // 正方形窗边长
+const WIN_COLOR = 0xe8b46e;      // 统一暖黄
+const litWins = [];
+const _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3();
+const Y_AXIS = new THREE.Vector3(0, 1, 0);
+
+function addWindows(cx, cz, w, d, h, baseH) {
+  const rows = Math.max(2, Math.floor(h / FLOOR_H));
+  const fh = h / rows;
+  const win = Math.min(WIN_SIZE, fh * 0.6);
+  const shops = Math.random() < 0.5;
+  // [面中心偏移 x, z, 朝向 yaw, 面宽]
+  const faces = [[0, d / 2, 0, w], [0, -d / 2, Math.PI, w], [w / 2, 0, Math.PI / 2, d], [-w / 2, 0, -Math.PI / 2, d]];
+
+  for (const [ox, oz, yaw, len] of faces) {
+    const usable = len - 0.24;
+    const cols = Math.max(1, Math.floor(usable / WIN_PITCH));
+    const pitch = usable / cols;
+    const nx = Math.sin(yaw), nz = Math.cos(yaw);
+    const ax = Math.cos(yaw), az = -Math.sin(yaw);
+    _q.setFromAxisAngle(Y_AXIS, yaw);
+
+    for (let r = 0; r < rows; r++) {
+      const isShop = shops && r === 0;
+      const wh = fh * 0.72;
+      const y = baseH + fh * (isShop ? 0.42 : r + 0.55);
+
+      for (let c = 0; c < cols; c++) {
+        const along = -usable / 2 + pitch * (c + 0.5);
+        _p.set(cx + ox + ax * along + nx * 0.006, y, cz + oz + az * along + nz * 0.006);
+        _s.set(isShop ? pitch * 0.8 : win, isShop ? wh : win, 0.04);
+        litWins.push(new THREE.Matrix4().compose(_p, _q, _s));
+      }
+    }
+  }
+}
+
+function buildWindows() {
+  const lit = new THREE.InstancedMesh(unitBox, new THREE.MeshBasicMaterial({ color: WIN_COLOR }), litWins.length);
+  litWins.forEach((m, i) => lit.setMatrixAt(i, m));
+  scene.add(lit);
+}
+
+function addBuilding(cx, cz, w, d, h, pitched) {
+  const group = new THREE.Group();
+
+  const wallMat = applyHeightAO(new THREE.MeshStandardMaterial({
+    color: WALL_TINTS[(Math.random() * WALL_TINTS.length) | 0],
+    roughness: 0.85,
+    metalness: 0.0
+  }));
+  const roofMat = applyHeightAO(new THREE.MeshStandardMaterial(ROOF_BASE));
+
+  const contact = new THREE.Mesh(contactGeo, contactMat);
+  contact.scale.set(w * 1.05 / CONTACT_INNER, 1, d * 1.05 / CONTACT_INNER);
+  contact.position.set(cx, 0.005, cz);
+  group.add(contact);
+
+  // 基座（裙楼）：底部微微外扩，增加体块层次
+  const baseH = 0.22;
+  const base = new THREE.Mesh(unitBox, roofMat);
+  base.scale.set(w * 1.05, baseH, d * 1.05);
+  base.position.set(cx, baseH / 2, cz);
+  base.castShadow = true;
+  base.receiveShadow = true;
+  group.add(base);
+
+  // 主体。BoxGeometry 材质顺序：+X, -X, +Y, -Y, +Z, -Z
+  const body = new THREE.Mesh(unitBox, [wallMat, wallMat, roofMat, roofMat, wallMat, wallMat]);
+  body.scale.set(w, h, d);
+  body.position.set(cx, baseH + h / 2, cz);
+  body.castShadow = true;
+  body.receiveShadow = true;
+  group.add(body);
+
+  addWindows(cx, cz, w, d, h, baseH);
+
+  let top = baseH + h;
+
+  if (pitched) {
+    // 坡屋顶（巴黎风）
+    const rh = Math.min(w, d) * 0.5 + Math.random() * 0.6;
+    const roof = new THREE.Mesh(coneGeo, roofMat);
+    roof.scale.set(w * 1.03, rh, d * 1.03);
+    roof.position.set(cx, top + rh / 2, cz);
+    roof.castShadow = true;
+    group.add(roof);
+    top += rh;
+
+    if (Math.random() < 0.5) {                   // 烟囱
+      const chH = 0.3 + Math.random() * 0.4;
+      const ch = new THREE.Mesh(unitBox, roofMat);
+      ch.scale.set(0.18, chH, 0.18);
+      ch.position.set(
+        cx + (Math.random() - 0.5) * w * 0.5,
+        top - chH * 0.35,
+        cz + (Math.random() - 0.5) * d * 0.5
+      );
+      ch.castShadow = true;
+      group.add(ch);
+    }
+  } else {
+    // 平屋顶：女儿墙 + 屋顶设备 —— Apple Maps 最有辨识度的部分
+    addParapet(group, cx, cz, w, d, top, roofMat, 0.09, 0.2);
+    top += 0.2;
+
+    const n = 1 + ((Math.random() * 3) | 0);
+    for (let k = 0; k < n; k++) {
+      const bw = 0.22 + Math.random() * 0.3;
+      const bd = 0.2 + Math.random() * 0.26;
+      const bh = 0.13 + Math.random() * 0.28;
+      const box = new THREE.Mesh(unitBox, roofMat);
+      box.scale.set(bw, bh, bd);
+      box.position.set(
+        cx + (Math.random() - 0.5) * Math.max(0, w - bw - 0.4),
+        top + bh / 2,
+        cz + (Math.random() - 0.5) * Math.max(0, d - bd - 0.4)
+      );
+      box.castShadow = true;
+      group.add(box);
+    }
+  }
+
+  scene.add(group);
+
+  // 登记碰撞盒
+  colliders.push({
+    minX: cx - w / 2, maxX: cx + w / 2,
+    minZ: cz - d / 2, maxZ: cz + d / 2
+  });
+
+  return top;
+}
+
+/* ====================== 路灯 / 树 ====================== */
+const lampGlassMat = new THREE.MeshStandardMaterial({
+  color: 0xffd08a, emissive: 0xffbe66, emissiveIntensity: 4.5, roughness: 0.3
+});
+const lampPoleMat = new THREE.MeshStandardMaterial({ color: 0x1b2436, roughness: 0.7, metalness: 0.3 });
+const leafMat = new THREE.MeshStandardMaterial({ color: 0x4f7d55, roughness: 1.0, flatShading: true });
+const trunkMat = new THREE.MeshStandardMaterial({ color: 0x3a2a20, roughness: 1.0 });
+
+const lampGeo = new THREE.SphereGeometry(0.085, 8, 8);
+const poleGeo = new THREE.CylinderGeometry(0.03, 0.04, 0.7, 6);
+const crownGeo = new THREE.IcosahedronGeometry(0.3, 0);
+const trunkGeo = new THREE.CylinderGeometry(0.05, 0.07, 0.42, 6);
+
+// 有限数量的真实点光源：给街道投下真正的暖色光池（太多会拖垮性能）
+const MAX_LAMP_LIGHTS = 16;
+let lampLightCount = 0;
+
+function addLamp(x, z) {
+  const pole = new THREE.Mesh(poleGeo, lampPoleMat);
+  pole.position.set(x, 0.35, z);
+  pole.castShadow = true;
+  scene.add(pole);
+  const head = new THREE.Mesh(lampGeo, lampGlassMat);
+  head.position.set(x, 0.76, z);
+  scene.add(head);
+
+  if (lampLightCount < MAX_LAMP_LIGHTS) {
+    const pl = new THREE.PointLight(0xffb45c, 3, 3, 2);
+    pl.position.set(x, 0.72, z);
+    scene.add(pl);
+    lampLightCount++;
+  }
+}
+
+function addTree(x, z) {
+  const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+  trunk.position.set(x, 0.21, z);
+  trunk.castShadow = true;
+  scene.add(trunk);
+  const crown = new THREE.Mesh(crownGeo, leafMat);
+  crown.position.set(x, 0.62, z);
+  crown.castShadow = true;
+  const s = 0.85 + Math.random() * 0.5;
+  crown.scale.set(s, s * 1.15, s);
+  scene.add(crown);
+}
+
+/* ====================== 生成整座城市 ====================== */
+function lotCenter(i) { return (i + 0.5) * LOT - HALF; }
+
+for (let i = 0; i < BLOCKS; i++) {
+  for (let j = 0; j < BLOCKS; j++) {
+    const cx = lotCenter(i);
+    const cz = lotCenter(j);
+
+    // 留一块当公园
+    const isPark = (i === 3 && j === 3);
+    if (isPark) {
+      for (let k = 0; k < 5; k++) {
+        addTree(
+          cx + (Math.random() - 0.5) * LOT * 0.6,
+          cz + (Math.random() - 0.5) * LOT * 0.6
+        );
+      }
+      continue;
+    }
+
+    // 一块地 1~2 栋楼
+    const count = Math.random() < 0.3 ? 2 : 1;
+    for (let k = 0; k < count; k++) {
+      const maxW = LOT * 0.58;
+      const w = 1.8 + Math.random() * (maxW - 1.8);
+      const d = 1.8 + Math.random() * (maxW - 1.8);
+      const h = 1.6 + Math.random() * 3.6;
+      const ox = count === 2 ? (k === 0 ? -LOT * 0.22 : LOT * 0.22) : 0;
+      const oz = (Math.random() - 0.5) * 0.6;
+      addBuilding(cx + ox, cz + oz, w, d, h, Math.random() < 0.35);   // 多数是平顶（有女儿墙）
+    }
+
+    // 地块四角放路灯
+    const q = LOT * 0.42;
+    if (Math.random() < 0.5) addLamp(cx - q, cz - q);
+    if (Math.random() < 0.5) addLamp(cx + q, cz + q);
+    if (Math.random() < 0.35) addTree(cx + (Math.random() - 0.5) * q, cz + (Math.random() - 0.5) * q);
+  }
+}
+buildWindows();
+
+/* ====================== 小人角色（WASD 控制） ====================== */
+function makeCharacter() {
+  const g = new THREE.Group();
+
+  const coatMat = new THREE.MeshStandardMaterial({ color: 0xd4553c, roughness: 0.75, flatShading: true });
+  const pantsMat = new THREE.MeshStandardMaterial({ color: 0x2b3350, roughness: 0.85, flatShading: true });
+  const skinMat = new THREE.MeshStandardMaterial({ color: 0xe9b78f, roughness: 0.7 });
+  const darkMat = new THREE.MeshStandardMaterial({ color: 0x1c2338, roughness: 0.8, flatShading: true });
+  const scarfMat = new THREE.MeshStandardMaterial({ color: 0xf0c46a, roughness: 0.8, flatShading: true });
+
+  // 躯干
+  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.13, 0.26, 4, 12), coatMat);
+  torso.position.y = 0.46;
+  g.add(torso);
+
+  // 围巾
+  const scarf = new THREE.Mesh(new THREE.TorusGeometry(0.115, 0.035, 6, 14), scarfMat);
+  scarf.rotation.x = Math.PI / 2;
+  scarf.position.y = 0.63;
+  g.add(scarf);
+
+  // 头
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.115, 16, 12), skinMat);
+  head.position.y = 0.75;
+  g.add(head);
+
+  // 帽子
+  const hat = new THREE.Mesh(new THREE.CylinderGeometry(0.125, 0.135, 0.1, 12), darkMat);
+  hat.position.y = 0.845;
+  const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.185, 0.185, 0.022, 16), darkMat);
+  brim.position.y = 0.795;
+  g.add(hat, brim);
+
+  // 手臂
+  const armGeo = new THREE.CapsuleGeometry(0.042, 0.2, 3, 8);
+  const armL = new THREE.Mesh(armGeo, coatMat);
+  armL.position.set(-0.175, 0.47, 0);
+  const armR = new THREE.Mesh(armGeo, coatMat);
+  armR.position.set(0.175, 0.47, 0);
+  g.add(armL, armR);
+
+  // 腿
+  const legGeo = new THREE.CapsuleGeometry(0.052, 0.18, 3, 8);
+  const legL = new THREE.Mesh(legGeo, pantsMat);
+  legL.position.set(-0.07, 0.16, 0);
+  const legR = new THREE.Mesh(legGeo, pantsMat);
+  legR.position.set(0.07, 0.16, 0);
+  g.add(legL, legR);
+
+  // 遮挡透视：正常绘制时在模板缓冲写 1（可见处）；
+  // X 光层只在"深度更远（被挡住）且模板不为 1"的像素绘制 → 只有被挡住的那部分显示半透明轮廓
+  const meshes = [];
+  g.traverse(o => { if (o.isMesh) meshes.push(o); });
+  for (const m of meshes) {
+    m.castShadow = true;
+    m.receiveShadow = true;
+    Object.assign(m.material, {
+      stencilWrite: true,
+      stencilRef: 1,
+      stencilFunc: THREE.AlwaysStencilFunc,
+      stencilZPass: THREE.ReplaceStencilOp
+    });
+    const x = new THREE.Mesh(m.geometry, xrayMat);
+    x.renderOrder = 10;
+    m.add(x);
+  }
+
+  return { group: g, armL, armR, legL, legR };
+}
+
+const xrayMat = new THREE.ShaderMaterial({
+  uniforms: { uColor: { value: new THREE.Color(0xffc777) } },
+  vertexShader: `
+    varying vec3 vN;
+    varying vec3 vV;
+    void main() {
+      vec4 mv = modelViewMatrix * vec4(position, 1.0);
+      vN = normalize(normalMatrix * normal);
+      vV = isOrthographic ? vec3(0.0, 0.0, 1.0) : normalize(-mv.xyz);
+      gl_Position = projectionMatrix * mv;
+    }`,
+  fragmentShader: `
+    uniform vec3 uColor;
+    varying vec3 vN;
+    varying vec3 vV;
+    void main() {
+      float f = pow(1.0 - abs(dot(normalize(vN), vV)), 2.0);
+      gl_FragColor = vec4(uColor * (0.7 + 1.2 * f), 0.35 + 0.5 * f);
+    }`,
+  transparent: true,
+  depthWrite: false,
+  depthFunc: THREE.GreaterDepth,
+  stencilWrite: true,
+  stencilRef: 1,
+  stencilFunc: THREE.NotEqualStencilFunc,
+  stencilFail: THREE.KeepStencilOp,
+  stencilZFail: THREE.KeepStencilOp,
+  stencilZPass: THREE.KeepStencilOp
+});
+
+const player = makeCharacter();
+player.group.position.set(0, 0, 0);   // 出生在中央公园
+scene.add(player.group);
+/* ====================== 键盘输入 ====================== */
+const keys = Object.create(null);
+addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
+    e.preventDefault();
+  }
+});
+addEventListener('keyup', e => { keys[e.code] = false; });
+
+const MOVE_SPEED = 4.2;      // 单位/秒
+const BOUND = HALF - 0.8;    // 活动范围限制在城市内
+const PLAYER_RADIUS = 0.24;  // 小人碰撞半径
+
+/* ---- 碰撞：分轴推进 + 分轴回退，撞墙时沿墙滑动而不是卡死 ---- */
+function resolveCollision(p, axis) {
+  for (let i = 0; i < colliders.length; i++) {
+    const b = colliders[i];
+    const minX = b.minX - PLAYER_RADIUS, maxX = b.maxX + PLAYER_RADIUS;
+    const minZ = b.minZ - PLAYER_RADIUS, maxZ = b.maxZ + PLAYER_RADIUS;
+    if (p.x <= minX || p.x >= maxX || p.z <= minZ || p.z >= maxZ) continue;
+    if (axis === 'x') p.x = (p.x < (minX + maxX) * 0.5) ? minX : maxX;
+    else              p.z = (p.z < (minZ + maxZ) * 0.5) ? minZ : maxZ;
+  }
+}
+
+const camFwd = new THREE.Vector3();
+const camRight = new THREE.Vector3();
+const moveDir = new THREE.Vector3();
+const UP = new THREE.Vector3(0, 1, 0);
+const followDelta = new THREE.Vector3();
+
+let walkPhase = 0;   // 走路摆动相位
+let movingFlag = 0;  // 0~1 平滑过渡
+
+function lerpAngle(a, b, t) {
+  let d = (b - a) % (Math.PI * 2);
+  if (d > Math.PI) d -= Math.PI * 2;
+  if (d < -Math.PI) d += Math.PI * 2;
+  return a + d * t;
+}
+
+/* ====================== 关键 3：Bloom 让灯光发亮 ====================== */
+// 自建渲染目标：带模板缓冲（遮挡透视需要）+ MSAA 抗锯齿
+const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(1, 1, {
+  type: THREE.HalfFloatType, samples: 4, stencilBuffer: true
+}));
+composer.setPixelRatio(Math.min(devicePixelRatio, 2));
+composer.setSize(innerWidth, innerHeight);
+composer.addPass(new RenderPass(scene, camera));
+composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.18, 0.15, 1.5));
+composer.addPass(new OutputPass());   // 色调映射 + sRGB 输出，缺了它画面会发灰发平
+
+/* ============================== 循环 ============================== */
+const clock = new THREE.Clock();
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+
+  /* ---- 1. 按 WASD 计算相对相机的移动方向 ---- */
+  camera.getWorldDirection(camFwd);
+  camFwd.y = 0;
+  camFwd.normalize();
+  camRight.crossVectors(camFwd, UP).normalize();
+
+  moveDir.set(0, 0, 0);
+  if (keys.KeyW || keys.ArrowUp)    moveDir.add(camFwd);
+  if (keys.KeyS || keys.ArrowDown)  moveDir.sub(camFwd);
+  if (keys.KeyD || keys.ArrowRight) moveDir.add(camRight);
+  if (keys.KeyA || keys.ArrowLeft)  moveDir.sub(camRight);
+
+  const moving = moveDir.lengthSq() > 0.0001;
+
+  if (moving) {
+    moveDir.normalize();
+    const p = player.group.position;
+    // 分轴移动：先走 X 再走 Z，撞墙时能自然沿墙滑动
+    p.x += moveDir.x * MOVE_SPEED * dt;
+    resolveCollision(p, 'x');
+    p.z += moveDir.z * MOVE_SPEED * dt;
+    resolveCollision(p, 'z');
+
+    // 限制在城市范围内
+    p.x = Math.max(-BOUND, Math.min(BOUND, p.x));
+    p.z = Math.max(-BOUND, Math.min(BOUND, p.z));
+
+    // 转身朝向移动方向
+    const targetYaw = Math.atan2(moveDir.x, moveDir.z);
+    player.group.rotation.y = lerpAngle(player.group.rotation.y, targetYaw, 1 - Math.pow(0.001, dt));
+  }
+
+  /* ---- 2. 走路摆动 / 呼吸 ---- */
+  movingFlag += ((moving ? 1 : 0) - movingFlag) * Math.min(1, dt * 12);
+  walkPhase += dt * 11 * movingFlag;
+
+  const swing = Math.sin(walkPhase) * 0.65 * movingFlag;
+  player.legL.rotation.x =  swing;
+  player.legR.rotation.x = -swing;
+  player.armL.rotation.x = -swing * 0.8;
+  player.armR.rotation.x =  swing * 0.8;
+  // 上下起伏
+  player.group.position.y = Math.abs(Math.sin(walkPhase)) * 0.045 * movingFlag;
+  // 静止时轻微呼吸
+  player.group.scale.y = 1 + Math.sin(clock.elapsedTime * 2) * 0.012 * (1 - movingFlag);
+
+  /* ---- 3. 相机跟随（把 target 和相机同步平移，保留用户旋转/缩放） ---- */
+  followDelta.set(
+    player.group.position.x - controls.target.x,
+    0,
+    player.group.position.z - controls.target.z
+  );
+  const k = 1 - Math.pow(0.02, dt);
+  controls.target.addScaledVector(followDelta, k);
+  camera.position.addScaledVector(followDelta, k);
+
+  controls.update();
+  composer.render();
+}
+animate();
+
+// 方便在控制台里调参（改灯光、camera、小人位置等）
+window.__demo = { scene, camera, controls, player, renderer, composer, colliders, resolveCollision, sun, fill };
+
+/* ============================== 自适应 ============================== */
+addEventListener('resize', () => {
+  aspect = innerWidth / innerHeight;
+  camera.left = -VIEW * aspect;
+  camera.right = VIEW * aspect;
+  camera.top = VIEW;
+  camera.bottom = -VIEW;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+  composer.setSize(innerWidth, innerHeight);
+});
+</script>
+</body>
+</html>
