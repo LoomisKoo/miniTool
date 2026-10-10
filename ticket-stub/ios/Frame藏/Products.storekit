@@ -1,0 +1,18 @@
+{
+  "configVersion": 1,
+  "products": [
+    {
+      "displayPrice": "18.00",
+      "family": "iap",
+      "internalID": "framezang-pro-lifetime",
+      "locale": "zh_CN",
+      "productID": "com.tincom.framezang.pro.lifetime",
+      "referenceName": "帧藏 Pro 永久版",
+      "type": "NonConsumable"
+    }
+  ],
+  "settings": {
+    "_locale": "zh_CN",
+    "_storefront": "CHN"
+  }
+}

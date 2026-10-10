@@ -5,7 +5,7 @@ import StoreKit
 @Observable
 @MainActor
 final class ProStore {
-    static let productID = "com.loomiskoo.framezang.pro.lifetime"
+    static let productID = "com.tincom.framezang.pro.lifetime"
 
     var isPro = false
     var product: Product?
