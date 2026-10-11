@@ -11,15 +11,15 @@ final class ProStore {
     var product: Product?
     var isPurchasing = false
     var errorMessage: String?
+    var isLoadingProduct = false
+    #if DEBUG
+    var isLocalTestMode = false
+    #endif
 
     private var updatesTask: Task<Void, Never>?
 
     init() {
-        #if DEBUG
-        isPro = true
-        #else
         isPro = UserDefaults.standard.bool(forKey: "framezang.pro.unlocked")
-        #endif
     }
 
     func start() async {
@@ -30,12 +30,41 @@ final class ProStore {
     }
 
     func loadProduct() async {
-        product = try? await Product.products(for: [Self.productID]).first
+        errorMessage = nil
+        isLoadingProduct = true
+        defer { isLoadingProduct = false }
+        do {
+            product = try await Product.products(for: [Self.productID]).first
+            if product == nil {
+                #if DEBUG
+                isLocalTestMode = true
+                #else
+                errorMessage = AppLocalization.text("未找到 Pro 商品，请确认 StoreKit 配置或 App Store Connect 商品 ID。")
+                #endif
+            }
+        } catch {
+            product = nil
+            #if DEBUG
+            isLocalTestMode = true
+            #else
+            errorMessage = AppLocalization.text("无法加载 Pro 商品：") + error.localizedDescription
+            #endif
+        }
     }
 
     func purchase() async {
+        #if DEBUG
+        if product == nil {
+            isPurchasing = true
+            defer { isPurchasing = false }
+            try? await Task.sleep(for: .milliseconds(250))
+            isPro = true
+            UserDefaults.standard.set(true, forKey: "framezang.pro.unlocked")
+            return
+        }
+        #endif
         guard let product else {
-            errorMessage = "商品暂未上架，请稍后再试"
+            errorMessage = AppLocalization.text("商品暂未上架，请稍后再试")
             return
         }
         isPurchasing = true
@@ -63,7 +92,7 @@ final class ProStore {
         do {
             try await AppStore.sync()
             await refreshEntitlement()
-            if !isPro { errorMessage = "没有找到可恢复的购买" }
+            if !isPro { errorMessage = AppLocalization.text("没有找到可恢复的购买") }
         } catch {
             errorMessage = error.localizedDescription
         }

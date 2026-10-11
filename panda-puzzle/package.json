@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "build": "node build.mjs",
-    "build:xhs": "node build.mjs xiaohongshu"
+    "build:xhs": "node build.mjs xiaohongshu",
+    "build:ios": "node build.mjs ios"
   },
   "devDependencies": {
     "esbuild": "^0.25.0"

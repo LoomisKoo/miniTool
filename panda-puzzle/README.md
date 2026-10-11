@@ -20,3 +20,13 @@ python3 -m http.server 8765
 ## 说明
 
 成百上千块时纹理会自动降采样，超过约 300 块改用盒体几何以保流畅；阴影在过高块数时会酌情关闭投射。
+
+## iOS
+
+原生 SwiftUI + SceneKit（非 WebView）。见 [ios/README.md](ios/README.md)，工程：`ios/PandaPuzzle/PandaPuzzle.xcodeproj`。
+
+## 发布状态
+
+| 平台 | 状态 | 版本 | 产物 |
+| --- | --- | --- | --- |
+| 小红书 | ✅ 已上线 | 1.0.0 | `dist/xiaohongshu-panda-puzzle.zip` |

@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "@qmuse/qmuse-cli": "1.0.5"
+  }
+}

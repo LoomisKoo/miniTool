@@ -48,12 +48,102 @@
       <button class="filter-toggle" id="filterBtn" aria-label="筛选" title="筛选">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3Z"/></svg>
       </button>
-      <button class="fav-toggle" id="favFilter" title="只看收藏">♥</button>
+      <button type="button" class="fav-toggle fav-heart" id="favFilter" title="只看收藏" aria-label="只看收藏">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+      </button>
     </div>
     <div class="filter-chips" id="filterActive" hidden></div>
     <div class="list-scroll">
       <div class="sections" id="list"></div>
       <p class="credits">美食文案整理自 <b>china-food-map</b>，地图数据来自 <b>Natural Earth</b>（公有领域）与 <b>阿里云 DataV.GeoAtlas</b>（源：高德开放平台）。本工具为个人非盈利作品，仅供学习交流；相关权利归原作者所有，如涉版权问题请联系删除。</p>
+    </div>
+  </section>
+
+  <!-- 选餐页 -->
+  <section class="screen" id="pickScreen">
+    <div class="pick-scroll">
+      <div class="pick-seg" id="pickModeNav" role="tablist" aria-label="选餐方式">
+        <span class="pick-seg-pill" id="pickSegPill" aria-hidden="true"></span>
+        <button type="button" class="pick-mode on" data-mode="random" role="tab" aria-selected="true">
+          <span class="pick-mode-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="2"/><rect x="13" y="4" width="7" height="7" rx="2"/><rect x="4" y="13" width="7" height="7" rx="2"/><rect x="13" y="13" width="7" height="7" rx="2"/><circle cx="7.5" cy="7.5" r="1"/><circle cx="16.5" cy="16.5" r="1"/></svg>
+          </span>
+          <span class="pick-mode-label">随机</span>
+        </button>
+        <button type="button" class="pick-mode" data-mode="vs" role="tab" aria-selected="false">
+          <span class="pick-mode-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><rect x="4" y="6" width="7" height="12" rx="2.5"/><rect x="13" y="6" width="7" height="12" rx="2.5"/></svg>
+          </span>
+          <span class="pick-mode-label">二选一</span>
+        </button>
+      </div>
+
+      <div class="pick-scope" id="pickScope" role="group" aria-label="美食范围">
+        <button type="button" class="pick-filter-btn" id="pickFilterBtn" aria-label="筛选" title="筛选">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3Z"/></svg>
+          <span>筛选</span>
+        </button>
+        <button type="button" class="pick-chip fav-heart" id="pickFavBtn" data-scope="fav" aria-label="只看收藏">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+          <span>收藏</span>
+        </button>
+        <span class="pick-pool-count" id="pickPoolCount" hidden aria-live="polite"></span>
+      </div>
+
+      <div class="pick-body pick-random" id="pickRandomPanel">
+        <div class="pick-wheel" id="pickWheel">
+          <div class="pick-wheel-panel">
+            <button type="button" class="fav-heart pick-panel-fav" id="pickResultFav" hidden aria-label="收藏">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+            </button>
+            <div class="pick-wheel-body">
+              <div class="pick-idle" id="pickIdle">
+                <span class="pick-idle-icon" aria-hidden="true">🎲</span>
+                <p class="pick-idle-title">帮你选一道</p>
+                <p class="pick-idle-sub" id="pickIdleSub">从全部美食里随机</p>
+              </div>
+              <button type="button" class="pick-result" id="pickStage" hidden aria-live="polite">
+                <span class="pick-name" id="pickName">—</span>
+                <span class="pick-where" id="pickWhere" hidden></span>
+                <div class="meta-row pick-result-meta" id="pickMeta"></div>
+              </button>
+            </div>
+            <button type="button" class="pick-go pick-go-bar" id="pickGo" aria-label="随机抽取">
+              <span class="pick-go-label">随机</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="pick-body" id="pickVsPanel" hidden>
+        <div class="pick-vs-empty" id="pickVsEmpty" hidden>
+          <p class="pick-vs-empty-title" id="pickVsEmptyText">没有符合筛选的美食</p>
+        </div>
+        <div class="pick-vs" id="pickVsArena">
+          <div class="pick-vs-card" id="pickVsLeft">
+            <button type="button" class="fav-heart pick-vs-fav" id="pickVsLeftFav" aria-label="收藏">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+            </button>
+            <button type="button" class="pick-vs-info" id="pickVsLeftInfo" aria-label="查看详情">
+              <span class="pick-vs-name" id="pickVsLeftName">—</span>
+              <span class="pick-vs-where" id="pickVsLeftWhere"></span>
+              <div class="meta-row pick-result-meta" id="pickVsLeftMeta"></div>
+            </button>
+            <button type="button" class="pick-vs-choose" id="pickVsLeftChoose">选它</button>
+          </div>
+          <div class="pick-vs-card" id="pickVsRight">
+            <button type="button" class="fav-heart pick-vs-fav" id="pickVsRightFav" aria-label="收藏">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+            </button>
+            <button type="button" class="pick-vs-info" id="pickVsRightInfo" aria-label="查看详情">
+              <span class="pick-vs-name" id="pickVsRightName">—</span>
+              <span class="pick-vs-where" id="pickVsRightWhere"></span>
+              <div class="meta-row pick-result-meta" id="pickVsRightMeta"></div>
+            </button>
+            <button type="button" class="pick-vs-choose" id="pickVsRightChoose">选它</button>
+          </div>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -69,6 +159,7 @@
       </div>
       <div class="filter-scroll" id="filterBody"></div>
       <div class="filter-foot">
+        <p class="filter-match" id="filterMatchCount" aria-live="polite">—</p>
         <button type="button" class="filter-apply" id="filterApply">查看结果</button>
       </div>
     </div>
@@ -83,6 +174,10 @@
     <button class="tab" data-tab="list">
       <svg viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r=".85" fill="currentColor" stroke="none"/><circle cx="4" cy="12" r=".85" fill="currentColor" stroke="none"/><circle cx="4" cy="18" r=".85" fill="currentColor" stroke="none"/></svg>
       <span>名录</span>
+    </button>
+    <button class="tab" data-tab="pick">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2v8a2.5 2.5 0 0 0 5 0V2"/><path d="M8.5 2v20"/><path d="M17 2v4a3 3 0 0 1 0 6v12"/></svg>
+      <span>选餐</span>
     </button>
   </nav>
 
@@ -109,7 +204,9 @@
         <h2 id="sName"></h2>
         <p id="sSub"></p>
       </div>
-      <button class="heart" id="sHeart" aria-label="收藏">♡</button>
+      <button type="button" class="fav-heart sheet-fav" id="sHeart" aria-label="收藏">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+      </button>
       <button class="sheet-close" id="sheetClose" aria-label="关闭">×</button>
     </div>
     <div class="sheet-scroll">

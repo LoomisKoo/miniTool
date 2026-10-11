@@ -12,16 +12,12 @@ struct TicketCardView: View {
             let scale = min(proxy.size.width / size.width, proxy.size.height / size.height)
             let context = TicketContext(store: store)
 
-            H5TicketView()
-                .overlay {
-                    ZStack {
-                        ForEach(store.effects) { effect in
-                            EffectVisualOverlay(effectID: effect.id, settings: store.settings(for: effect))
-                        }
-                    }
-                    .mask { H5TicketView() }
-                    .environment(\.glitterTilt, CGSize(width: dragOffset.width / 140, height: dragOffset.height / 140))
-                }
+            ZStack {
+                H5TicketView()
+                scopedEffects(.background)
+                    .blendMode(.multiply)
+                scopedEffects(.foreground)
+            }
                 .environment(\.ticket, context)
                 .frame(width: size.width, height: size.height)
                 .scaleEffect(scale)
@@ -37,11 +33,24 @@ struct TicketCardView: View {
                 )
         }
     }
+
+    @ViewBuilder
+    private func scopedEffects(_ scope: EffectScope) -> some View {
+        ZStack {
+            ForEach(store.effects.filter { store.settings(for: $0).resolvedTarget == scope }) { effect in
+                EffectVisualOverlay(effectID: effect.id, settings: store.settings(for: effect))
+            }
+        }
+        .mask { H5TicketView() }
+        .environment(\.ticket, TicketContext(store: store))
+        .environment(\.glitterTilt, CGSize(width: dragOffset.width / 140, height: dragOffset.height / 140))
+    }
 }
 
 struct EffectVisualOverlay: View {
     let effectID: String
     let settings: EffectSettings
+    var isPreview = false
 
     var body: some View {
         GeometryReader { proxy in
@@ -119,15 +128,15 @@ struct EffectVisualOverlay: View {
             case "pat-waves":
                 WavePattern()
             case "stp-postmark":
-                StampMark(text: "POSTED", color: .red, rotation: -18)
+                StampMark(text: "POSTED", color: .red, rotation: -18, isPreview: isPreview)
             case "stp-approved":
-                StampMark(text: "APPROVED", color: .red, rotation: -12)
+                StampMark(text: "APPROVED", color: .red, rotation: -12, isPreview: isPreview)
             case "stp-checked":
-                StampMark(text: "已验票", color: .red, rotation: -8)
+                StampMark(text: AppLocalization.isEnglish ? "CHECKED" : "已验票", color: .red, rotation: -8, isPreview: isPreview)
             case "stp-paid":
-                StampMark(text: "PAID", color: .blue, rotation: 12)
+                StampMark(text: "PAID", color: .blue, rotation: 12, isPreview: isPreview)
             case "stp-custom":
-                StampMark(text: "MEMENTO", color: .brown, rotation: -8)
+                StampMark(text: settings.customText ?? "MEMENTO", color: .white, rotation: -8, isPreview: isPreview)
             case "stp-wax":
                 Circle()
                     .fill(.red.gradient)
@@ -136,23 +145,29 @@ struct EffectVisualOverlay: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
                     .padding(24)
             case "txt-custom":
-                Text("记忆")
-                    .font(.system(size: 24, weight: .bold, design: .serif))
-                    .foregroundStyle(.white.opacity(0.8))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
-                    .padding(20)
+                Text(settings.customText ?? AppLocalization.text("记忆"))
+                    .font(.system(size: isPreview ? 22 : 24, weight: .bold, design: .serif))
+                    .foregroundStyle(.white.opacity(isPreview ? 0.95 : 0.8))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: isPreview ? .center : .bottomLeading)
+                    .padding(isPreview ? 0 : 20)
             case "txt-time":
                 Text(Date.now, style: .date)
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundStyle(.white.opacity(0.8))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                    .padding(18)
+                    .font(.system(size: isPreview ? 22 : 10, design: .monospaced))
+                    .foregroundStyle(.white.opacity(isPreview ? 0.95 : 0.8))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.65)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: isPreview ? .center : .topTrailing)
+                    .padding(isPreview ? 0 : 18)
             case "txt-mark", "txt-diag":
                 Text("ARCHIVE")
-                    .font(.system(size: 18, weight: .black, design: .monospaced))
-                    .tracking(3)
-                    .foregroundStyle(.white.opacity(0.3))
-                    .rotationEffect(.degrees(-24))
+                    .font(.system(size: isPreview ? 22 : 18, weight: .black, design: .monospaced))
+                    .tracking(isPreview ? 1.2 : 3)
+                    .foregroundStyle(.white.opacity(isPreview ? 0.95 : 0.72))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                    .rotationEffect(.degrees(isPreview ? -12 : -24))
             case "lit-glitter", "lit-rose":
                 GlitterField(color: settings.color.background, density: settings.density)
             case "lit-vignette":
@@ -188,16 +203,17 @@ private struct StampMark: View {
     let text: String
     let color: Color
     let rotation: Double
+    var isPreview = false
 
     var body: some View {
         Text(text)
-            .font(.system(size: 11, weight: .black, design: .monospaced))
+            .font(.system(size: isPreview ? 18 : 11, weight: .black, design: .monospaced))
             .foregroundStyle(color.opacity(0.8))
-            .padding(8)
+            .padding(isPreview ? 10 : 8)
             .overlay(Circle().stroke(color.opacity(0.8), lineWidth: 2))
             .rotationEffect(.degrees(rotation))
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-            .padding(22)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: isPreview ? .center : .topTrailing)
+            .padding(isPreview ? 0 : 22)
     }
 }
 

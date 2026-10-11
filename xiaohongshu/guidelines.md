@@ -23,16 +23,21 @@ xiaohongshu/
 
 ### 上架素材与产物
 
+创作服务平台共 **10** 款已发布（镜像截至 2026-09-28；使用人数以平台后台为准），另有 1 款待提交。
+
 | 工具 | 名称 | 简介 | 状态 | 图标 | 小红书 zip |
 | --- | --- | --- | --- | --- | --- |
-| 风铃物语 | 风铃物语 | 治愈系梦幻风铃 | 待提审 | `wind-chime/assets/icon.jpg` | `wind-chime/dist/xiaohongshu-wind-chime.zip` |
-| 兔格拼豆 | 兔格拼豆 | 照片转拼豆色号图纸 | 审核中（1.0.1） | `rabbit-bead/icon.png` | `rabbit-bead/dist/xiaohongshu-rabbit-bead.zip` |
-| 焚香计时 | 焚香计时 | 焚香倒计时，自选时长，看香逐渐燃尽。 | ✅ 已上线 | `incense-timer/icon.png` | `incense-timer/dist/xiaohongshu-incense-timer.zip` |
-| 轻映 | 轻映 | 图片裁切与多宫格分图 | ✅ 已上线 | `crop-grid/icon.png` | `crop-grid/dist/xiaohongshu-qingying.zip` |
-| 星空跳一跳 | 星空跳一跳 | 跳一跳星空改良版 | ✅ 已上线 | `xingkong-jump/assets/icon.jpg` | `xingkong-jump/dist/xiaohongshu-xingkong-jump.zip` |
-| 纸灯夜航 | 纸灯夜航 | 休闲小游戏，杀时间必备 | ✅ 已上线 | `paper-lantern/assets/icon.jpg` | `paper-lantern/dist/xiaohongshu-paper-lantern.zip` |
-| 爆红书 | 爆红书 | 模拟爆红，看笔记从零涨到爆 | 未上架 | `baohongshu/assets/icon.jpg` | `baohongshu/dist/xiaohongshu-baohongshu.zip` |
-| 美食地图 | 美食地图 | 地图上看懂各地饮食 | 未上架 | 待生成 | `food-map/dist/xiaohongshu-meishitujian.zip` |
+| 兔格拼豆 | 兔格拼豆 | 照片转拼豆色号图纸 | ✅ 已发布 1.0.4 | `rabbit-bead/icon.png` | `rabbit-bead/dist/xiaohongshu-rabbit-bead.zip` |
+| 爆红书 | 爆红书 | 模拟爆红，看笔记从零涨到爆 | ✅ 已发布 1.0.0 | `baohongshu/assets/icon.jpg` | `baohongshu/dist/xiaohongshu-baohongshu.zip` |
+| 星空跳一跳 | 星空跳一跳 | 跳一跳星空改良版 | ✅ 已发布 1.0.1 | `xingkong-jump/assets/icon.jpg` | `xingkong-jump/dist/xiaohongshu-xingkong-jump.zip` |
+| 纸灯夜航 | 纸灯夜航 | 休闲小游戏，杀时间必备 | ✅ 已发布 1.0.2 | `paper-lantern/assets/icon.jpg` | `paper-lantern/dist/xiaohongshu-paper-lantern.zip` |
+| 风铃物语 | 风铃物语 | 指尖拨动风铃，叮当作响 | ✅ 已发布 1.0.0 | `wind-chime/assets/icon.jpg` | `wind-chime/dist/xiaohongshu-wind-chime.zip` |
+| 美食地图 | 美食地图 | 地图上看懂各地美食 | ✅ 已发布 1.0.2 | `food-map/` 上架素材 | `food-map/dist/xiaohongshu-meishitujian.zip` |
+| 影厅模拟器 | 影厅模拟器 | 体验不同影厅不同位置的观感 | ✅ 已发布 1.0.2 | `cinema-seat/` 上架素材 | `cinema-seat/dist/xiaohongshu-cinema-seat.zip` |
+| 熊猫拼图 | 熊猫拼图 | 你的照片，变成真 3D 拼图 | ✅ 已发布 1.0.0 | `panda-puzzle/assets/icon.jpg` | `panda-puzzle/dist/xiaohongshu-panda-puzzle.zip` |
+| 焚香计时 | 焚香计时 | 焚香倒计时，自选时长 | ✅ 已发布 1.0.1 | `incense-timer/icon.png` | `incense-timer/dist/xiaohongshu-incense-timer.zip` |
+| 轻映 | 轻映 | 图片裁切与多宫格分图 | ✅ 已发布 1.0.1 | `crop-grid/icon.png` | `crop-grid/dist/xiaohongshu-qingying.zip` |
+| 帧藏 | 帧藏 | 看过的电影走过的路，做成票根 | ⏳ 待提交 1.0.0 | `ticket-stub/assets/icon.jpg` | `ticket-stub/dist/xiaohongshu-ticket-stub.zip` |
 
 跨项目总表见根目录 [README 发布总表](../README.md#发布总表)（小红书 / 快手状态一致）。
 

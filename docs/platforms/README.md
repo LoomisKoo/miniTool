@@ -4,7 +4,7 @@
 
 | 平台 | 目录 | 产品名 | 状态 |
 | --- | --- | --- | --- |
-| 小红书 | [`xiaohongshu/`](../../xiaohongshu/guidelines.md) | 小工具 | 已上线多个工具 |
+| 小红书 | [`xiaohongshu/`](../../xiaohongshu/guidelines.md) | 小工具 | **10** 款已发布（见 guidelines 上架表） |
 | 抖音 | [`douyin/`](../../douyin/guidelines.md) | 互动空间 | 已整理规范摘要 |
 | 快手 | [`kuaishou/`](../../kuaishou/guidelines.md) | 互动内容世界 | 已上线多个工具 |
 | B站 | [`bilibili/`](../../bilibili/guidelines.md) | Toy | 搁置（需内测名额） |

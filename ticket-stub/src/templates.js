@@ -4,11 +4,11 @@
 (function (global) {
   // 按分类的柔焦占位图：中心构图，cover 裁切不易露馅
   const DEFAULT_PHOTOS = {
-    cinema: 'assets/default-cinema.png',
-    travel: 'assets/default-travel.png',
-    concert: 'assets/default-concert.png',
-    city: 'assets/default-city.png',
-    stamp: 'assets/default-stamp.png',
+    cinema: 'assets/default-cinema.jpg',
+    travel: 'assets/default-travel.jpg',
+    concert: 'assets/default-concert.jpg',
+    city: 'assets/default-city.jpg',
+    stamp: 'assets/default-stamp.jpg',
   };
   const DEFAULT_PHOTO = DEFAULT_PHOTOS.cinema;
   // ============================================================
@@ -206,6 +206,61 @@
     gate: 'door-open', vignette: 'camera', ledger: 'book-open',
   };
 
+  /* 复古印刷券：4 种结构 × 配色，[id, 名称, 说明, 结构, 配色, 分类, [图标], 默认值]
+     liner=凹角横版船票 circus=拱顶主券+花边存根 badge=六角徽章 gallery=上下两段画廊券 */
+  const VINTAGE_TICKETS = [
+    ['vt-liner-teal', '远洋船票', '横图 16:9 · 凹角金框 + 撕线存根', 'liner', 'teal', 'travel', ['ship', 'compass'],
+      { title: 'OCEAN LINER', place: 'GRAND VOYAGE', datetime: '2026.06.18', seat: 'NO.0417', mood: '甲板上的风，一直吹到了下一个港口' }],
+    ['vt-liner-wine', '酒红航券', '横图 16:9 · 凹角金框 + 撕线存根', 'liner', 'wine', 'travel', ['train-front', 'map'],
+      { title: 'ORIENT EXPRESS', place: 'NIGHT TRAIN', datetime: '2026.11.02', seat: 'NO.1908', mood: '窗外的灯一盏一盏往后退' }],
+    ['vt-liner-forest', '林绿航券', '横图 16:9 · 凹角金框 + 撕线存根', 'liner', 'forest', 'travel', ['plane', 'globe'],
+      { title: 'SKY CLIPPER', place: 'FIRST FLIGHT', datetime: '2026.03.21', seat: 'NO.0032', mood: '云层下面，是还没去过的地方' }],
+    ['vt-badge-olive', '山野徽章', '方图 1:1 · 六角徽章 + 缝线', 'badge', 'olive', 'travel', ['mountain', 'trees'],
+      { title: 'ADVENTURE PASS', place: 'MOUNTAIN RETREAT', datetime: '2026.08.09', seat: 'NO.0726', mood: 'VALID FOR ONE YEAR' }],
+    ['vt-badge-lake', '湖畔徽章', '方图 1:1 · 六角徽章 + 缝线', 'badge', 'lake', 'travel', ['tent', 'waves'],
+      { title: 'LAKESIDE CAMP', place: 'SUMMER CLUB', datetime: '2026.07.04', seat: 'NO.0311', mood: '篝火熄了，星星还亮着' }],
+    ['vt-badge-plum', '花园徽章', '方图 1:1 · 六角徽章 + 缝线', 'badge', 'plum', 'city', ['flower-2', 'leaf'],
+      { title: 'ROSE GARDEN', place: 'BOTANIC PASS', datetime: '2026.05.12', seat: 'NO.0520', mood: '一整个下午，都是花香' }],
+    ['vt-circus-red', '马戏大棚', '竖图 3:4 · 拱顶主券 + 花边存根', 'circus', 'red', 'concert', ['tent', 'crown'],
+      { title: 'CIRCUS WONDERS', place: 'BIG TOP · A区', datetime: '2026.10.01  19:30', seat: 'NO.12345', mood: '灯一亮，所有人都变回了小孩' }],
+    ['vt-circus-navy', '歌剧拱券', '竖图 3:4 · 拱顶主券 + 花边存根', 'circus', 'navy', 'concert', ['drama', 'music'],
+      { title: 'OPERA NIGHT', place: '大剧院 · 池座', datetime: '2026.12.24  19:00', seat: 'NO.00824', mood: '最后一个高音，全场都屏住了呼吸' }],
+    ['vt-circus-green', '剧场拱券', '竖图 3:4 · 拱顶主券 + 花边存根', 'circus', 'green', 'cinema', ['clapperboard', 'popcorn'],
+      { title: 'MATINEE SHOW', place: '老影院 · 3号厅', datetime: '2026.04.18  14:00', seat: 'NO.00217', mood: '午后的场次，整个厅只有十个人' }],
+    ['vt-gallery-navy', '画廊展券', '横图 16:9 · 两段式 + 侧边缺口', 'gallery', 'navy', 'city', ['landmark', 'palette'],
+      { title: 'Grand Art Exhibition', place: 'GALLERY 4A', datetime: '2026.09.14', seat: 'NO.0916', mood: 'PRIVATE VIEW' }],
+    ['vt-gallery-emerald', '翡翠展券', '横图 16:9 · 两段式 + 侧边缺口', 'gallery', 'emerald', 'city', ['gem', 'sparkles'],
+      { title: 'Jade & Porcelain', place: '东方馆 · 2F', datetime: '2026.06.06', seat: 'NO.0606', mood: '釉色里藏着一整片湖' }],
+    ['vt-gallery-wine', '酒红展券', '横图 16:9 · 两段式 + 侧边缺口', 'gallery', 'wine', 'cinema', ['film', 'star'],
+      { title: 'Silver Screen', place: '经典影展 · 1号厅', datetime: '2026.02.14', seat: 'ROW 5 · 08', mood: '黑白片里的吻，比彩色的更久' }],
+  ];
+
+  /* 胶带相片票：照片 + 圆孔撕线 + 信息栏 + 条码，[id, 名称, 说明, 配色, 照片位置, 标题字体, 胶带, 圆角, 分类, 默认值]
+     胶带：kraft=牛皮纸 grid=格纹 ''=不贴 */
+  const SNAP_TICKETS = [
+    ['sn-sage', '竹影相片票', '横图 4:3 · 左图右文 + 手写标题 + 胶带', 'sage', 'left', 'script', 'kraft', false, 'city',
+      { title: 'Framing The Present Moment', place: 'MONDAY', datetime: 'Jun 29,2026', seat: '9:49 AM', mood: '' }],
+    ['sn-blush', '樱粉相片票', '横图 4:3 · 左文右图 + 圆角', 'blush', 'right', 'serif', '', true, 'city',
+      { title: '「Through The Lens Exhibition」', place: 'FRIDAY', datetime: 'Jul 10,2026', seat: '2:32 PM', mood: '' }],
+    ['sn-moss', '墨绿相片票', '横图 4:3 · 深色信息栏 + 格纹胶带', 'moss', 'left', 'sans', 'grid', false, 'city',
+      { title: '中国湿地博物馆', place: 'SATURDAY', datetime: 'Jul 18,2026', seat: '2:50 PM', mood: '🎫 / 🎟️ · 🦢 / 🦌 ·' }],
+    ['sn-sky', '晴空相片票', '横图 4:3 · 左文右图 + 手写标题 + 胶带', 'sky', 'right', 'script', 'kraft', false, 'travel',
+      { title: 'Somewhere By The Sea', place: 'SUNDAY', datetime: 'Aug 16,2026', seat: '5:20 PM', mood: '' }],
+    ['sn-night', '夜航相片票', '横图 4:3 · 深色圆角 + 左图右文', 'night', 'left', 'sans', '', true, 'travel',
+      { title: '去看一场日落', place: 'WEDNESDAY', datetime: 'Sep 02,2026', seat: '6:48 PM', mood: '🌅 / 🚃 · 🐚 / 🌊 ·' }],
+    ['sn-cream', '奶油相片票', '横图 4:3 · 左文右图 + 格纹胶带', 'cream', 'right', 'serif', 'grid', false, 'cinema',
+      { title: 'Midnight Screening', place: 'THURSDAY', datetime: 'Oct 22,2026', seat: '11:30 PM', mood: '' }],
+  ];
+
+  const SNAP_LABELS = ['标题', '星期 / 副题', '日期', '时间', '贴纸 / 短句（可空）'];
+
+  const VINTAGE_LABELS = {
+    liner: ['目的地 / 大标题', '副题 / 航线', '日期', '票号', '旅行短句'],
+    badge: ['大标题', '副题', '签发日期', '会员号', '底部短句'],
+    circus: ['演出名', '场馆 / 区域', '日期场次', '票号', '一句话'],
+    gallery: ['展名', '展厅', '日期', '票号', '观展短评'],
+  };
+
   function fieldsOf(labels, dv) {
     return FIELD_KEYS.map((k, i) => ({ key: k, label: labels[i], placeholder: dv[k], value: dv[k] }));
   }
@@ -244,6 +299,24 @@
       name,
       desc,
       fields: fieldsOf(STAMP_LABELS, dv),
+    }));
+  }
+
+  function vintageStyleEntries(cat) {
+    return VINTAGE_TICKETS.filter((t) => t[5] === cat).map(([id, name, desc, variant, , , , dv]) => ({
+      id,
+      name,
+      desc,
+      fields: fieldsOf(VINTAGE_LABELS[variant], dv),
+    }));
+  }
+
+  function snapStyleEntries(cat) {
+    return SNAP_TICKETS.filter((t) => t[8] === cat).map(([id, name, desc, , , , , , , dv]) => ({
+      id,
+      name,
+      desc,
+      fields: fieldsOf(SNAP_LABELS, dv),
     }));
   }
 
@@ -446,6 +519,8 @@
             { key: 'mood', label: '一句话短评', placeholder: '旧片重映，像重逢', value: '旧片重映，像重逢' },
           ],
         },
+        ...vintageStyleEntries('cinema'),
+        ...snapStyleEntries('cinema'),
       ],
     },
     {
@@ -753,6 +828,8 @@
             { key: 'mood', label: '旅行短句', placeholder: '水面像一张没写完的信纸', value: '水面像一张没写完的信纸' },
           ],
         },
+        ...vintageStyleEntries('travel'),
+        ...snapStyleEntries('travel'),
       ],
     },
     {
@@ -954,6 +1031,8 @@
             { key: 'mood', label: '应援短句', placeholder: '散场下着小雨，谁都没走快', value: '散场下着小雨，谁都没走快' },
           ],
         },
+        ...vintageStyleEntries('concert'),
+        ...snapStyleEntries('concert'),
       ],
     },
     {
@@ -1153,6 +1232,8 @@
             { key: 'mood', label: '漫游短句', placeholder: '街上全是颜色和鼓声', value: '街上全是颜色和鼓声' },
           ],
         },
+        ...vintageStyleEntries('city'),
+        ...snapStyleEntries('city'),
       ],
     },
     {
@@ -1371,7 +1452,7 @@
   ];
 
   function esc(s) {
-    return String(s ?? '')
+    return String(s == null ? '' : s)
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
@@ -2535,16 +2616,18 @@
     'cinema-twoup'(d, photos) {
       const p0 = photos[0];
       const p1 = photos[1];
-      const pane = (flag, tag, photo) => `<div class="tw-pane${flag}">
+      // 两张票根各带一个照片位，必须显式传 slot：
+      // 都退回默认 0 的话，两张图会被当成同一个槽位（改一张两张都变，第二张也无法调）
+      const pane = (flag, tag, photo, slot) => `<div class="tw-pane${flag}">
         <span class="tw-head">${tag}</span>
-        ${photoBox(photo, 'tw-photo')}
+        ${photoBox(photo, 'tw-photo', slot)}
         <h3 class="tk-title">${esc(d.title)}</h3>
         <p class="tk-place">${esc(d.place)}</p>
         <div class="tw-row"><span>${esc(d.datetime)}</span><span>${esc(d.seat)}</span></div>
       </div>`;
       return `<article class="tk tk-cinema-twoup tk-2div">
-        ${pane('', 'ADMIT ONE', p0)}
-        ${pane(' tw-pane--b', 'ADMIT TWO', p1)}
+        ${pane('', 'ADMIT ONE', p0, 0)}
+        ${pane(' tw-pane--b', 'ADMIT TWO', p1, 1)}
         <span class="fx-layer fx-glitter" aria-hidden="true"></span>
       </article>`;
     },
@@ -2679,8 +2762,9 @@
     'concert-roundtrip'(d, photos) {
       const p0 = photos[0];
       const p1 = photos[1];
-      const half = (tag, seat, photo) => `<div class="rt2-half">
-        ${photoBox(photo)}
+      // 往返两张票各是一个独立照片位：slot 不传会都退回 0，导致两张图联动且第二张无法调
+      const half = (tag, seat, photo, slot) => `<div class="rt2-half">
+        ${photoBox(photo, '', slot)}
         <div>
           <span class="rt2-tag">${tag}</span>
           <h3 class="tk-title">${esc(d.title)}</h3>
@@ -2689,8 +2773,8 @@
         </div>
       </div>`;
       return `<article class="tk tk-concert-roundtrip">
-        ${half('OUTBOUND · 去', esc(d.seat), p0)}
-        ${half('RETURN · 返', esc(d.seat), p1)}
+        ${half('OUTBOUND · 去', esc(d.seat), p0, 0)}
+        ${half('RETURN · 返', esc(d.seat), p1, 1)}
         <span class="fx-layer fx-glitter" aria-hidden="true"></span>
       </article>`;
     },
@@ -2938,6 +3022,124 @@
       </article>`;
     };
   }
+
+  function vintageRenderer(variant, pal, icons) {
+    const ico = (i) => `<i data-lucide="${icons[i]}"></i>`;
+    return (d, photo) => {
+      const title = `<h3 class="tk-title">${esc(d.title)}</h3>`;
+      const place = `<p class="tk-place">${esc(d.place)}</p>`;
+      const mood = `<p class="tk-mood">${esc(d.mood)}</p>`;
+      const line = (k, v) => `<div class="vt-line"><span>${k}</span><b>${esc(v)}</b></div>`;
+      let body = '';
+
+      if (variant === 'liner') {
+        body = `<span class="vt-frame" aria-hidden="true"></span>
+          <div class="vt-main">
+            ${place}${title}
+            <div class="vt-shotrow">
+              <span class="vt-ico">${ico(0)}</span>
+              ${photoBox(photo, 'vt-photo')}
+              <span class="vt-ico">${ico(1)}</span>
+            </div>
+            <div class="vt-lines">${line('DATE:', d.datetime)}${line('NO.', d.seat)}</div>
+            ${mood}
+          </div>
+          <div class="vt-stub"><span class="vt-ico">${ico(0)}</span><b>${esc(d.seat)}</b></div>`;
+      } else if (variant === 'circus') {
+        body = `<div class="vt-arch">
+            ${title}
+            ${photoBox(photo, 'vt-photo')}
+            ${mood}
+          </div>
+          <div class="vt-stub">
+            <span class="vt-ico">${ico(0)}</span>
+            <p class="vt-admit">ADMIT ONE</p>
+            <span class="vt-ico vt-ico--big">${ico(1)}</span>
+            <p class="vt-no">${esc(d.seat)}</p>
+            ${line('DATE:', d.datetime)}
+            ${line('SECTION:', d.place)}
+          </div>`;
+      } else if (variant === 'badge') {
+        body = `<svg class="vt-stitch" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+            <polygon points="31.5,2.6 68.5,2.6 96.6,19.6 96.6,80.4 68.5,97.4 31.5,97.4 3.4,80.4 3.4,19.6" />
+          </svg>
+          <div class="vt-top"><span class="vt-ico">${ico(0)}</span>${place}${title}</div>
+          <div class="vt-mid">
+            <span class="vt-ico">${ico(0)}</span>
+            ${photoBox(photo, 'vt-photo')}
+            <span class="vt-ico">${ico(1)}</span>
+          </div>
+          <div class="vt-foot">${mood}${line('NO.', d.seat)}${line('ISSUED:', d.datetime)}</div>`;
+      } else {
+        const md = String(d.datetime).match(/\d{4}\D(\d{1,2})\D(\d{1,2})/);
+        const big = md ? `${md[1]}.${md[2]}` : String(d.datetime).slice(0, 5);
+        body = `<div class="vt-upper">
+            <span class="vt-frame" aria-hidden="true"></span>
+            ${title}
+            <div class="vt-shotrow">
+              ${photoBox(photo, 'vt-photo')}
+              <p class="vt-big">${esc(big)}</p>
+            </div>
+          </div>
+          <div class="vt-lower">
+            <span class="vt-frame" aria-hidden="true"></span>
+            <span class="vt-ico">${ico(0)}</span>
+            <div class="vt-card">
+              <p class="vt-admit">ADMIT ONE</p>
+              ${mood}${place}
+              ${line('DATE:', d.datetime)}
+            </div>
+            <span class="vt-ico">${ico(1)}</span>
+          </div>`;
+      }
+
+      return `<article class="tk tk-vt tk-vt--${variant} tk-vt--${pal}">
+        ${body}
+        <span class="fx-layer fx-glitter" aria-hidden="true"></span>
+      </article>`;
+    };
+  }
+
+  VINTAGE_TICKETS.forEach(([id, , , variant, pal, , icons]) => {
+    renderers[id] = vintageRenderer(variant, pal, icons);
+  });
+
+  function snapRenderer(pal, side, font, tape, round) {
+    const cls = [
+      'tk tk-snap',
+      `tk-snap--${pal}`,
+      `tk-snap--font-${font}`,
+      side === 'right' ? 'tk-snap--flip' : '',
+      round ? 'tk-snap--round' : '',
+    ].filter(Boolean).join(' ');
+    const tapes = tape
+      ? `<span class="sn-tape sn-tape--${tape} sn-tape--a" aria-hidden="true"></span>
+        <span class="sn-tape sn-tape--${tape} sn-tape--b" aria-hidden="true"></span>`
+      : '';
+    return (d, photo) => {
+      const shot = `<div class="sn-shot">${photoBox(photo, 'sn-photo')}</div>`;
+      const info = `<div class="sn-info">
+          <p class="sn-tag">TICKET<i aria-hidden="true"></i></p>
+          <h3 class="tk-title">${esc(d.title)}</h3>
+          ${d.mood ? `<p class="tk-mood">${esc(d.mood)}</p>` : ''}
+          <div class="sn-when"><b>${esc(d.seat)}</b><span>${esc(d.place)}</span><span>${esc(d.datetime)}</span></div>
+          <div class="sn-bar"><span aria-hidden="true"></span><em>ADMIT ONE</em></div>
+        </div>`;
+      return `<article class="${cls}">
+        <div class="sn-card">
+          ${side === 'right' ? info : shot}
+          <span class="sn-perf" aria-hidden="true"></span>
+          ${side === 'right' ? shot : info}
+          <span class="fx-layer fx-glitter" aria-hidden="true"></span>
+        </div>
+        ${tapes}
+      </article>`;
+    };
+  }
+
+  SNAP_TICKETS.forEach(([id, , , pal, side, font, tape, round]) => {
+    renderers[id] = snapRenderer(pal, side, font, tape, round);
+  });
 
   const TRIP_BAND = { travel: TRIP_LABELS.travel.band, concert: TRIP_LABELS.concert.band };
 

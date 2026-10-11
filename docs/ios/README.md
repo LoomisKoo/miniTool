@@ -38,16 +38,15 @@ H5 小工具和 iOS App 是**同一个产品的两种实现**：
 | `rabbit-bead/` | 兔格拼豆 | `RabbitBead` |
 | `tuqing/` | 图轻 | `Tuqing` |
 | `crop-grid/` | 轻映 | `Qingying` |
-| `live-photo/` | 灵光 | `LivePhoto` |
 | `body-balance/` | 身体小账本 | `BodyBalance` |
 | `colorqr/` | 彩码 | `ColorQR` |
 | `food-map/` | 美食地图 | `Xunwei` |
 | `wind-chime/` | 风铃物语 | `WindChime` |
-| `kongming-deng/` | 祈愿灯 | `KongmingDeng` |
 | `xingkong-jump/` | 星空跳一跳 | `XingkongJump` |
 | `paper-lantern/` | 纸灯夜航 | `PaperLantern` |
 | `incense-timer/` | 焚香计时 | `IncenseTimer` |
 | `cinema-seat/` | 观影座舱 | `CinemaSeat` |
+| `deerName/` | 仙鹿起名 | `DeerNames` |
 | `star-book/` | 星空翻页书 | `StarBook` |
 
 Bundle ID 形式：`com.<team>.<name 小写>`，例如 `com.loomiskoo.rabbitbead`。**同一个 App 的 Bundle ID 一旦上架不可更改**，提交前先定好。
@@ -58,8 +57,7 @@ Bundle ID 形式：`com.<team>.<name 小写>`，例如 `com.loomiskoo.rabbitbead
 | --- | --- | --- |
 | 图片处理 | 图轻、轻映 | SwiftUI + PhotosUI + Core Image / Core Graphics |
 | 图形生成 | 兔格拼豆、彩码 | SwiftUI + Core Graphics（拼豆量化算法可移植自 `rabbit-bead/app.js`） |
-| 动效创作 | 灵光 | SwiftUI + Core Animation / Metal |
-| 3D 氛围 | 风铃物语、祈愿灯 | SceneKit 或 Metal（Web 端为 Three.js，逻辑需重写） |
+| 3D 氛围 | 风铃物语 | SceneKit 或 Metal（Web 端为 Three.js，逻辑需重写） |
 | 小游戏 | 星空跳一跳、纸灯夜航 | SpriteKit |
 | 记录类 | 身体小账本 | SwiftUI + SwiftData / Core Data + HealthKit |
 | 图鉴类 | 美食地图 | SwiftUI + SwiftData |
@@ -85,9 +83,8 @@ Bundle ID 形式：`com.<team>.<name 小写>`，例如 `com.loomiskoo.rabbitbead
 
 | 权限 | 用途 | 涉及工具 |
 | --- | --- | --- |
-| `NSPhotoLibraryAddUsageDescription` | 保存图片 | 图轻、轻映、兔格拼豆、灵光、祈愿灯 |
+| `NSPhotoLibraryAddUsageDescription` | 保存图片 | 图轻、轻映、兔格拼豆 |
 | `NSPhotoLibraryUsageDescription` | 读取相册图片 | 同上 |
-| `NSCameraUsageDescription` | 拍照 | 灵光 |
 | `NSHealthShareUsageDescription` / `NSHealthUpdateUsageDescription` | 体重、运动数据 | 身体小账本 |
 
 原则：能只用「仅添加」就不用「读写」；被拒绝时要给出降级路径（例如导出到文件）。
@@ -97,7 +94,6 @@ Bundle ID 形式：`com.<team>.<name 小写>`，例如 `com.loomiskoo.rabbitbead
 | 模式 | 适用 | 工具 |
 | --- | --- | --- |
 | 买断（非消耗型内购） | 一次性工具，无持续服务成本 | 图轻、轻映、兔格拼豆、彩码、焚香计时 |
-| 免费 + 素材包买断 | 基础可用，高级内容付费 | 灵光（特效包） |
 | 订阅 | 有持续更新或服务成本 | 增强后的身体小账本 |
 
 规则：

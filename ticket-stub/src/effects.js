@@ -14,6 +14,7 @@
     { id: 'stamp', label: '印章' },
     { id: 'text', label: '文字' },
     { id: 'light', label: '光效' },
+    { id: 'material', label: '纸感' },
   ];
 
   const FONTS = [

@@ -630,11 +630,16 @@
         ? '      <p class="roast-persona">性格取向 <b>' + esc(persona.label) + '</b> · ' +
           esc(persona.tag) + ' <i>（' + esc(personaFrom) + '）</i></p>'
         : '') +
-      '      <div class="roast-plate-top">' +
-      '        <h3 class="roast-role">' + esc(s.title) + '</h3>' +
+      '      <div class="roast-plate-main">' +
+      (window.DEER_FIGURE
+        ? '      <div class="roast-figure">' + window.DEER_FIGURE.svg(s.title, s.dyn, r.gender, r.full) + '</div>'
+        : '') +
+      '      <div class="roast-plate-info">' +
       '        <span class="roast-era">' + esc(s.dyn) + '</span>' +
+      '        <h3 class="roast-role">' + esc(s.title) + '</h3>' +
+      '        <p class="roast-desc">' + esc(roleDesc) + '</p>' +
       '      </div>' +
-      '      <p class="roast-desc">' + esc(roleDesc) + '</p>' +
+      '      </div>' +
       '    </div>' +
       '    <p class="roast-line"><b>事迹</b>' + esc(s.event) + '</p>' +
       '    <p class="roast-line"><b>癖好</b>' + esc(s.quirk) + '</p>' +
@@ -1529,7 +1534,7 @@
    * 写在末尾的话，用户得一路滚到底才能看到按钮。 */
   function dockFor(s) {
     if (s === 'roast' && state.roast) {
-      return '<button class="primary-btn" data-roast-share>分享这份前世档案</button>';
+      return '<button class="primary-btn" data-roast-share>分享</button>';
     }
     if (s === 'quiz') {
       /* 性别偏好放固定底栏：每道题都在同一个位置，
@@ -2895,8 +2900,20 @@
 
   function openRoastCard() {
     if (!state.roast || !NM.renderRoastCard) return;
+    var r = state.roast, s = r.story || {};
+    if (!window.DEER_FIGURE) return showRoastCard(null);
+    var img = new Image();
+    var done = false;
+    var finish = function (ok) { if (done) return; done = true; showRoastCard(ok ? img : null); };
+    img.onload = function () { finish(true); };
+    img.onerror = function () { finish(false); };
+    setTimeout(function () { finish(img.complete && img.naturalWidth > 0); }, 1500);
+    img.src = window.DEER_FIGURE.dataUrl(s.title, s.dyn, r.gender, r.full, 420);
+  }
+
+  function showRoastCard(figureImg) {
     var canvas = document.createElement('canvas');
-    NM.renderRoastCard(canvas, state.roast);
+    NM.renderRoastCard(canvas, state.roast, figureImg);
     var url = canvas.toDataURL('image/jpeg', 0.9);
     $('#modal-img').src = url;
     $('#modal').classList.remove('hidden', 'modal-closing');

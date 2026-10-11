@@ -5,14 +5,16 @@ import UIKit
 struct EditorView: View {
     @Environment(TicketStore.self) private var store
     @Environment(WorkLibrary.self) private var library
+    @Environment(ProStore.self) private var pro
     var isDetail = false
     @State private var showNamePrompt = false
     @State private var showSaveOptions = false
     @State private var nameDraft = ""
     @State private var sheet: EditorSheet?
-    @State private var photoItem: PhotosPickerItem?
+    @State private var photoItems: [PhotosPickerItem] = []
     @State private var showPhotoPicker = false
     @State private var showPhotoAdjust = false
+    @State private var showPaywall = false
     @State private var notice = ""
 
     var body: some View {
@@ -71,39 +73,76 @@ struct EditorView: View {
         .confirmationDialog(savedWork?.title ?? "", isPresented: $showSaveOptions, titleVisibility: .visible) {
             Button("保存修改") { saveChanges() }
             Button("另存为新作品") {
-                nameDraft = "\(savedWork?.title ?? store.fields.title) 副本"
+                nameDraft = "\(savedWork?.title ?? store.fields.title)\(AppLocalization.isEnglish ? " Copy" : " 副本")"
                 showNamePrompt = true
             }
             if !isDetail {
-                Button("新建空白票根") { store.startNew() }
+                Button("新建空白票根") {
+                    library.clearDraft()
+                    store.startNew()
+                }
             }
             Button("取消", role: .cancel) {}
         }
-        .photosPicker(isPresented: $showPhotoPicker, selection: $photoItem, matching: .images)
+        .photosPicker(
+            isPresented: $showPhotoPicker,
+            selection: $photoItems,
+            maxSelectionCount: max(1, store.template.photoSlots),
+            matching: .images
+        )
         .sheet(isPresented: $showPhotoAdjust) {
             PhotoAdjustSheet()
         }
-        .onChange(of: photoItem) { _, item in
-            guard let item else { return }
+        .sheet(isPresented: $showPaywall) {
+            PaywallView()
+        }
+        .onChange(of: photoItems) { _, items in
+            guard !items.isEmpty else { return }
             Task {
-                if let data = try? await item.loadTransferable(type: Data.self) {
-                    await MainActor.run {
-                        store.selectedPhotoData = data
-                        photoItem = nil
-                        showPhotoAdjust = true
+                var datas: [Data] = []
+                for item in items.prefix(max(1, store.template.photoSlots)) {
+                    if let data = try? await item.loadTransferable(type: Data.self) {
+                        datas.append(data)
                     }
+                }
+                await MainActor.run {
+                    store.selectedPhotoDatas = datas
+                    store.selectedPhotoData = datas.first
+                    photoItems = []
+                    if datas.count == 1 { showPhotoAdjust = true }
                 }
             }
         }
+        .onChange(of: store.template.id) { _, _ in recordChange() }
+        .onChange(of: store.fields) { _, _ in recordChange() }
+        .onChange(of: store.effects) { _, _ in recordChange() }
+        .onChange(of: store.background) { _, _ in recordChange() }
+        .onChange(of: store.selectedPhotoData) { _, _ in recordChange() }
+        .onChange(of: store.selectedPhotoDatas) { _, _ in recordChange() }
+        .onChange(of: store.photoScale) { _, _ in recordChange() }
+        .onChange(of: store.photoOffset) { _, _ in recordChange() }
+        .onChange(of: store.stageBackgroundData) { _, _ in recordChange() }
+        .onChange(of: store.stageOpacity) { _, _ in recordChange() }
+        .onChange(of: store.effectSettings) { _, _ in recordChange() }
     }
 
     private var savedWork: SavedTicket? {
         library.item(store.editingID)
     }
 
+    private func recordChange() {
+        store.observeChange()
+        library.saveDraft(store.snapshot(id: store.editingID ?? UUID(), name: store.fields.title))
+    }
+
     private func saveAsNew(named name: String) {
+        if !pro.isPro && library.items.count >= 10 {
+            showPaywall = true
+            return
+        }
         let id = UUID()
         library.upsert(store.snapshot(id: id, name: name.isEmpty ? store.fields.title : name))
+        library.clearDraft()
         store.editingID = id
         flash("已保存到我的作品")
     }
@@ -111,11 +150,12 @@ struct EditorView: View {
     private func saveChanges() {
         guard let work = savedWork else { return }
         library.upsert(store.snapshot(id: work.id, name: work.title))
+        library.clearDraft()
         flash("已保存修改")
     }
 
     private func flash(_ text: String) {
-        withAnimation { notice = text }
+        withAnimation { notice = AppLocalization.text(text) }
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
             withAnimation { notice = "" }
         }
@@ -133,10 +173,10 @@ struct EditorView: View {
                         .background(FrameTheme.thumbBackdrop, in: RoundedRectangle(cornerRadius: 8))
                         .allowsHitTesting(false)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(store.category.rawValue)
+                        Text(store.category.displayName)
                             .font(.system(size: 10, weight: .medium))
                             .foregroundStyle(FrameTheme.muted)
-                        Text(store.template.name)
+                        Text(store.template.displayName)
                             .font(.system(size: 14, weight: .semibold))
                     }
                     Image(systemName: "chevron.right")
@@ -151,14 +191,14 @@ struct EditorView: View {
             Button {
                 showPhotoPicker = true
             } label: {
-                Image(systemName: store.selectedPhotoData == nil ? "photo.badge.plus" : "photo")
+                    Image(systemName: store.selectedPhotoDatas.isEmpty ? "photo.badge.plus" : "photo")
                     .font(.system(size: 14, weight: .medium))
                     .frame(width: 34, height: 34)
                     .frameGlass(cornerRadius: 17)
             }
             .accessibilityLabel("选择照片")
 
-            if store.selectedPhotoData != nil {
+            if !store.selectedPhotoDatas.isEmpty {
                 Button {
                     showPhotoAdjust = true
                 } label: {
@@ -171,6 +211,30 @@ struct EditorView: View {
             }
 
             Spacer()
+
+            Button {
+                store.undo()
+            } label: {
+                Image(systemName: "arrow.uturn.backward")
+                    .font(.system(size: 14, weight: .medium))
+                    .frame(width: 34, height: 34)
+            }
+            .frameGlass(cornerRadius: 17)
+            .disabled(!store.canUndo)
+            .opacity(store.canUndo ? 1 : 0.35)
+            .accessibilityLabel("撤销")
+
+            Button {
+                store.redo()
+            } label: {
+                Image(systemName: "arrow.uturn.forward")
+                    .font(.system(size: 14, weight: .medium))
+                    .frame(width: 34, height: 34)
+            }
+            .frameGlass(cornerRadius: 17)
+            .disabled(!store.canRedo)
+            .opacity(store.canRedo ? 1 : 0.35)
+            .accessibilityLabel("重做")
 
             Button {
                 if savedWork == nil {
@@ -252,10 +316,12 @@ struct EditorView: View {
         .padding(.bottom, 8)
     }
 
-    private func dockButton(_ icon: String, _ title: String, _ target: EditorSheet) -> some View {
+    private func dockButton(_ icon: String, _ title: LocalizedStringKey, _ target: EditorSheet) -> some View {
         Button { sheet = target } label: {
             VStack(spacing: 4) {
-                Image(systemName: icon).font(.system(size: 15, weight: .medium))
+                Image(systemName: icon)
+                    .font(.system(size: 16, weight: .medium))
+                    .frame(height: 18)
                 Text(title).font(.system(size: 10, weight: .medium))
             }
             .frame(width: 48, height: 42)

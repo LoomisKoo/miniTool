@@ -1,0 +1,77 @@
+<div id="sky"></div>
+<div id="stage3d" aria-hidden="true"></div>
+<div id="glow" aria-hidden="true"></div>
+<div id="vignette" aria-hidden="true"></div>
+
+<header class="hud hud-top" id="hudTop">
+  <button type="button" class="icon-btn" id="backBtn" aria-label="返回" hidden>
+    <span aria-hidden="true">‹</span>
+  </button>
+  <div class="brand" id="brandBlock">
+    <span class="brand-cn">气息乐园</span>
+    <span class="brand-sub">本机分析音量 · 不上传</span>
+  </div>
+  <button type="button" class="icon-btn" id="muteBtn" aria-label="静音" hidden>
+    <span class="ico-sound" aria-hidden="true">♪</span>
+    <span class="ico-mute" aria-hidden="true">✕</span>
+  </button>
+</header>
+
+<main class="home" id="homeView">
+  <p class="home-lead">对准麦克风用力吹，看它们动起来</p>
+  <div class="scene-grid" id="sceneGrid"></div>
+  <button type="button" class="card card-lung" id="lungCard">
+    <span class="card-ico" aria-hidden="true">◎</span>
+    <span class="card-body">
+      <span class="card-title">肺活量</span>
+      <span class="card-desc">标准一局 · 看气息等级</span>
+    </span>
+    <span class="card-best" id="lungBestHint"></span>
+  </button>
+</main>
+
+<section class="play hidden" id="playView">
+  <div class="goal" id="goalChip" hidden>
+    <div class="goal-head">
+      <span class="goal-label" id="goalLabel">目标</span>
+      <span class="goal-count" id="goalCount"></span>
+    </div>
+    <div class="goal-track"><div class="goal-fill" id="goalFill"></div></div>
+  </div>
+  <div class="bottom">
+    <div class="meter-wrap">
+      <div class="meter-track">
+        <div class="meter-fill" id="meterFill"></div>
+        <div class="meter-peak" id="meterPeak"></div>
+      </div>
+    </div>
+    <p class="play-hint" id="playHint">点击「开始吹气」</p>
+    <div class="play-actions" id="playActions">
+      <button type="button" class="btn btn-main" id="startMicBtn">开始吹气</button>
+    </div>
+    <p class="play-sim" id="simHint" hidden>按住屏幕任意处模拟吹气，松手才停</p>
+  </div>
+</section>
+
+<div class="overlay hidden" id="resultOv">
+  <div class="result-card">
+    <p class="result-tag" id="resultTag">本次</p>
+    <p class="result-grade" id="resultGrade">清风</p>
+    <ul class="result-stats" id="resultStats"></ul>
+    <p class="result-note">趣味参考，非医疗检测</p>
+    <div class="result-btns">
+      <button type="button" class="btn btn-ghost" id="resultHomeBtn">回首页</button>
+      <button type="button" class="btn btn-main" id="resultAgainBtn">再玩一次</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="welcomeOv">
+  <div class="welcome-card">
+    <div class="welcome-orn" aria-hidden="true">✦</div>
+    <h1 class="welcome-title">气息乐园</h1>
+    <p class="welcome-text">吹泡泡、蒲公英、胀气球、转风车，还能测一局趣味肺活量。</p>
+    <p class="welcome-privacy">仅在本机分析麦克风音量，不上传录音。</p>
+    <button type="button" class="btn btn-main" id="welcomeBtn">进入乐园</button>
+  </div>
+</div>

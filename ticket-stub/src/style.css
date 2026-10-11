@@ -1,15 +1,60 @@
+@property --stage-ar {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 0.62;
+}
+
 :root {
-  --bg: #141210;
-  --panel: #1e1b18;
-  --line: rgba(255, 246, 230, 0.1);
-  --text: #f6f1e8;
-  --muted: rgba(246, 241, 232, 0.58);
-  --accent: #e8c27a;
-  --accent-dim: rgba(232, 194, 122, 0.16);
-  --radius: 18px;
-  --paper: #f3eee4;
-  --ink: #1a1612;
-  --shadow: 0 28px 60px rgba(0, 0, 0, 0.45);
+  /* —— 中性暖灰底 + 单一暖橙 accent ——
+     金色只保留在少量强调处，主操作入口的层级只靠图标颜色区分，
+     不画实心墨黑块（会被读成「当前选中的 tab」） */
+  color-scheme: dark;
+  --bg: #0e0e10;
+  --panel: #18181b;
+  --line: rgba(255, 255, 255, 0.07);
+  --line-strong: rgba(255, 255, 255, 0.14);
+  --text: #ededee;
+  --text-invert: #111113;
+  --muted: rgba(237, 237, 238, 0.48);
+  --muted-strong: rgba(237, 237, 238, 0.7);
+  --accent: #d6b47a;
+  --accent-strong: #e6c893;
+  --accent-dim: rgba(214, 180, 122, 0.14);
+  --accent-line: rgba(214, 180, 122, 0.5);
+  /* 票面仍用浅纸深墨；UI 上的实心强调块用 --ui-ink */
+  --paper: #f1efea;
+  --ink: #16140f;
+  --ui-ink: #ededee;
+  --surface: #1f1f23;
+  --surface-muted: rgba(31, 31, 35, 0.86);
+  --surface-inset: rgba(255, 255, 255, 0.06);
+  /* 底部操作区：统一高度 / 圆角 / 间距 */
+  --bar-h: 56px;
+  --bar-r: 16px;
+  --bar-gap: 10px;
+  --bar-edge: 12px;
+  --scrim: rgba(0, 0, 0, 0.55);
+
+  /* 容器顶部两段安全区：
+     --safe-t 手机刘海/状态栏，--nav-h 容器自带顶栏（小红书约 44px，其他平台 0），
+     --xhs-nav 是两段之和。平台差异在 platforms/<平台>/extra.css 里覆盖。 */
+  --safe-t: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
+  --safe-b: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
+  --nav-h: 0px;
+  --xhs-nav: calc(var(--safe-t) + var(--nav-h));
+
+  /* —— 圆角收敛到 3 档 + 胶囊 —— */
+  --radius: 20px;
+  --radius-md: 14px;
+  --radius-sm: 10px;
+  --radius-pill: 999px;
+
+  /* —— 阴影收敛到 3 档，拉开层级但都很轻 —— */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow: 0 18px 44px rgba(0, 0, 0, 0.45);
+  --shadow-sheet: 0 -12px 40px rgba(0, 0, 0, 0.5);
+
   --font: 'DM Sans', system-ui, sans-serif;
   --serif: 'Instrument Serif', Georgia, serif;
   --mono: 'JetBrains Mono', ui-monospace, monospace;
@@ -17,6 +62,8 @@
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
   --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  /* 画板宽高比：由 JS 在「未被 sheet 顶起」时量取并固定 */
+  --stage-ar: 0.62;
 }
 
 *,
@@ -25,13 +72,20 @@
   box-sizing: border-box;
 }
 
+/* `hidden` 属性必须能压住后续的 display 声明：
+   UA 的 [hidden]{display:none} 会被作者样式里的 display:block/grid 盖掉，
+   导致「标了 hidden 的元素其实还在渲染」（.stage-bg-img 这类空 img 会画出一圈 1px 占位边框）。 */
+[hidden] {
+  display: none !important;
+}
+
 html,
 body {
   margin: 0;
   height: 100%;
+  /* 去掉原来的冷蓝 radial：冷暖叠加会出脏色带，只留一层很淡的暖色高光 */
   background:
-    radial-gradient(1200px 600px at 10% -10%, #2a241c 0%, transparent 55%),
-    radial-gradient(900px 500px at 100% 0%, #1c2430 0%, transparent 50%),
+    radial-gradient(1100px 620px at 50% -12%, rgba(214, 180, 122, 0.05) 0%, transparent 60%),
     var(--bg);
   color: var(--text);
   font-family: var(--font);
@@ -46,7 +100,8 @@ input {
 
 /* 移动端：预览占满 + 底部浮层操作栏（不占 flex，避免 sheet 顶起时先放大） */
 :root {
-  --dock-stack: calc(132px + env(safe-area-inset-bottom, 0px));
+  /* 底部固定堆叠高度：dock(≈56) + 间距(8) + 操作条(56) + 上下边距(≈18) */
+  --dock-stack: calc(var(--bar-edge) + var(--bar-h) * 2 + var(--bar-gap) * 2 + var(--safe-b));
   --sheet-push: 0px;
 }
 
@@ -55,10 +110,13 @@ input {
   width: 100%;
   max-width: 460px;
   margin: 0 auto;
+  /* 基线层用 100vh；支持动态视口单位的内核再用 dvh 覆盖 */
+  height: 100vh;
   height: 100dvh;
   display: flex;
   flex-direction: column;
-  padding: 8px 10px 0;
+  /* 顶部让开容器顶栏 + 刘海（普通浏览器里 --nav-h 为 0） */
+  padding: calc(8px + var(--xhs-nav)) 10px 0;
   overflow: hidden;
   box-sizing: border-box;
   /* 只用 padding-bottom 顶起，高度始终 100dvh，避免和底栏收起抢空间 */
@@ -78,11 +136,6 @@ body.is-sheet-push .controls {
 
 body.is-sheet-push .workspace {
   padding-bottom: 0;
-}
-
-body.is-sheet-push .stage {
-  border: 0;
-  border-radius: 12px;
 }
 
 .workspace {
@@ -113,42 +166,42 @@ body.is-sheet-push .stage {
 .btn:active { transform: scale(0.98); }
 
 .btn-export {
-  background: linear-gradient(135deg, #f0d7a0, #d4a85a);
-  color: #2a2114;
+  background: var(--accent);
+  color: var(--text-invert);
   font-weight: 650;
-  box-shadow: 0 10px 28px rgba(212, 168, 90, 0.28);
+  box-shadow: 0 8px 22px rgba(24, 21, 16, 0.2);
   padding: 10px 14px;
   flex-shrink: 0;
 }
 
-.btn-export svg { width: 18px; height: 18px; }
+.btn-export svg { width: 18px; height: 18px; color: var(--accent); }
 
 .btn-fx {
-  background: rgba(255, 246, 230, 0.08);
+  background: var(--surface);
   color: var(--text);
   font-weight: 600;
   border: 1px solid var(--line);
   padding: 10px 12px;
 }
 
-.btn-fx svg { width: 18px; height: 18px; color: var(--accent); }
+.btn-fx svg { width: 18px; height: 18px; color: var(--muted-strong); }
 .btn-fx.is-active {
-  border-color: rgba(232, 194, 122, 0.45);
+  border-color: var(--accent-line);
   background: var(--accent-dim);
 }
 
 .controls {
   position: absolute;
-  left: 10px;
-  right: 10px;
-  bottom: calc(66px + env(safe-area-inset-bottom, 0px));
+  left: var(--bar-edge);
+  right: var(--bar-edge);
+  bottom: calc(var(--bar-edge) + var(--bar-h) + var(--bar-gap) + var(--safe-b));
   z-index: 30;
   background: transparent;
   border: 0;
   padding: 0;
   display: grid;
   grid-template-columns: 1fr auto;
-  gap: 8px;
+  gap: var(--bar-gap);
   align-items: center;
   min-width: 0;
   transition: opacity 0.2s ease;
@@ -165,16 +218,31 @@ body.is-sheet-push .stage {
 
 .dock {
   position: absolute;
-  left: 10px;
-  right: 10px;
-  bottom: 0;
+  left: var(--bar-edge);
+  right: var(--bar-edge);
+  bottom: calc(var(--bar-edge) + var(--safe-b));
   z-index: 40;
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 8px;
-  padding: 8px 0 calc(10px + env(safe-area-inset-bottom, 0px));
-  background: linear-gradient(180deg, transparent, rgba(20, 18, 16, 0.92) 28%, var(--bg));
+  grid-template-columns: repeat(3, 1fr) 2fr;
+  gap: 4px;
+  height: var(--bar-h);
+  padding: 5px;
+  border-radius: var(--bar-r);
+  border: 0;
+  background: var(--surface);
+  box-shadow: 0 0 0 1px var(--line), var(--shadow-sm);
   transition: opacity 0.2s ease;
+}
+
+.dock-actions {
+  display: flex;
+  min-width: 0;
+  border-radius: calc(var(--bar-r) - 5px);
+  background: var(--surface-inset);
+}
+
+.dock-actions .dock-btn {
+  flex: 1 1 0;
 }
 
 .dock-btn {
@@ -183,38 +251,51 @@ body.is-sheet-push .stage {
   align-items: center;
   justify-content: center;
   gap: 3px;
-  min-height: 48px;
-  padding: 6px 8px;
-  border-radius: 12px;
-  border: 1px solid var(--line);
-  background: rgba(30, 27, 24, 0.92);
-  color: var(--text);
+  min-height: 0;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: calc(var(--bar-r) - 5px);
+  background: transparent;
+  color: var(--muted-strong);
   font: inherit;
-  font-size: 0.68rem;
+  font-size: 0.66rem;
   font-weight: 600;
+  letter-spacing: 0.01em;
   cursor: pointer;
+  transition: background 0.18s ease, color 0.18s ease;
 }
 
-.dock-btn svg { width: 18px; height: 18px; color: var(--accent); }
+.dock-btn svg { width: 19px; height: 19px; color: currentColor; }
 
+/* 「导出」和另外三个是同一排的对等入口，只是点开导出面板，
+   所以不能画成实心墨黑块 —— 那会读成「当前选中的 tab」。
+   层级只用图标颜色表达。 */
 .dock-btn--primary {
-  border-color: rgba(232, 194, 122, 0.35);
-  background: linear-gradient(135deg, #f0d7a0, #d4a85a);
-  color: #2a2114;
+  background: transparent;
+  color: var(--text);
 }
 
-.dock-btn--primary svg { color: #2a2114; }
+.dock-btn--primary svg { color: var(--accent); }
 
 .dock-btn.is-active {
-  border-color: rgba(232, 194, 122, 0.5);
-  background: var(--accent-dim);
+  background: var(--surface-inset);
+  color: var(--text);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .dock-btn:hover {
+    background: var(--surface-inset);
+    color: var(--text);
+  }
 }
 
 .cat-tabs {
   display: flex;
-  gap: 8px;
+  align-items: center;
+  gap: 6px;
+  /* 导航条压矮：整体高度只比 tab 本身高一点点 */
+  padding: 6px 12px 5px;
   overflow-x: auto;
-  padding-bottom: 2px;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
 }
@@ -228,29 +309,45 @@ body.is-sheet-push .stage {
   display: flex;
   align-items: center;
   flex: 0 0 auto;
-  gap: 5px;
+  gap: 4px;
   justify-content: center;
-  border: 1px solid var(--line);
-  background: rgba(0, 0, 0, 0.22);
-  border-radius: 9px;
-  padding: 6px 11px;
+  border: 0;
+  background: var(--surface-inset);
+  border-radius: var(--radius-pill);
+  padding: 5px 11px;
   cursor: pointer;
-  font-size: 0.74rem;
+  font-size: 0.7rem;
+  font-weight: 600;
   line-height: 1.2;
+  color: var(--muted-strong);
   white-space: nowrap;
-  transition: border-color 0.18s ease, background 0.18s ease;
+  transition: background 0.18s ease, color 0.18s ease;
 }
 
 .cat-tab svg {
-  width: 13px;
-  height: 13px;
-  opacity: 0.8;
+  width: 12px;
+  height: 12px;
+  opacity: 0.85;
 }
 
 .cat-tab.is-active {
-  border-color: rgba(232, 194, 122, 0.55);
   background: var(--accent-dim);
-  color: #fff4dc;
+  box-shadow: inset 0 0 0 1px var(--accent-line);
+  color: var(--accent);
+}
+
+.cat-tab.is-active svg { opacity: 1; }
+
+/* 当前票根所在的分类（用户可能正在浏览别的分类），用小圆点标出来；
+   它本身就是高亮态时不用再画 */
+.cat-tab.has-current:not(.is-active)::after {
+  content: '';
+  flex: 0 0 auto;
+  width: 5px;
+  height: 5px;
+  margin-left: 1px;
+  border-radius: 50%;
+  background: var(--accent);
 }
 
 /* —— 票根类型：触发按钮（缩略图 + 主副标题） —— */
@@ -258,30 +355,34 @@ body.is-sheet-push .stage {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   width: 100%;
-  padding: 10px 12px;
+  padding: 6px 8px;
   text-align: left;
   cursor: pointer;
   color: var(--text);
   font: inherit;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: rgba(0, 0, 0, 0.24);
-  transition: border-color 0.2s ease, background 0.2s ease, transform 0.14s ease;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow:
+    0 0 0 1px var(--line),
+    var(--shadow-xs);
+  transition: box-shadow 0.2s ease, background 0.2s ease, transform 0.14s ease;
 }
 
 .style-trigger--slim {
-  gap: 8px;
-  padding: 6px 8px;
-  border-radius: 12px;
-  background: rgba(30, 27, 24, 0.92);
+  gap: 10px;
+  height: var(--bar-h);
+  padding: 8px 10px 8px 8px;
+  border-radius: var(--bar-r);
+  background: var(--surface);
 }
 
 .style-trigger--slim .st-thumb {
-  width: 36px;
-  height: 44px;
-  border-radius: 7px;
+  width: calc(var(--bar-h) - 16px);
+  height: calc(var(--bar-h) - 16px);
+  border-radius: calc(var(--bar-r) - 6px);
 }
 
 .style-trigger--slim .st-name {
@@ -289,7 +390,7 @@ body.is-sheet-push .stage {
 }
 
 .style-trigger--slim .st-cat {
-  font-size: 0.6rem;
+  font-size: 0.58rem;
 }
 
 .style-trigger--slim .st-action {
@@ -305,11 +406,13 @@ body.is-sheet-push .stage {
 /* 触发按钮只在真鼠标上做 hover 动效；触屏点按会误触发 hover */
 @media (hover: hover) and (pointer: fine) {
   .style-trigger:hover {
-    border-color: rgba(232, 194, 122, 0.4);
+    box-shadow:
+      0 0 0 1px var(--line-strong),
+      var(--shadow-sm);
   }
 
   .style-item:hover {
-    border-color: rgba(232, 194, 122, 0.32);
+    box-shadow: 0 0 0 1px var(--line-strong);
   }
 }
 
@@ -328,10 +431,10 @@ body.sheet-open .controls {
   place-items: center;
   width: 62px;
   height: 74px;
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   overflow: hidden;
-  background: linear-gradient(160deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.02));
-  box-shadow: inset 0 0 0 1px rgba(255, 246, 230, 0.08);
+  background: var(--surface-inset);
+  box-shadow: inset 0 0 0 1px var(--line);
 }
 
 .st-thumb-host,
@@ -353,10 +456,11 @@ body.sheet-open .controls {
 }
 
 .st-cat {
-  font-size: 0.66rem;
-  letter-spacing: 0.14em;
+  font-size: 0.62rem;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--accent);
+  font-weight: 650;
 }
 
 .st-name,
@@ -382,8 +486,8 @@ body.sheet-open .controls {
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--muted);
+  background: transparent;
+  color: var(--muted-strong);
 }
 
 .st-action svg {
@@ -391,9 +495,9 @@ body.sheet-open .controls {
   height: 16px;
 }
 
-/* —— 全屏类型选择面板 ——
-   注意：这里不要用 backdrop-filter，滚动列表时它会强制每帧重新模糊整屏，
-   是滚动卡顿的主因（面板本来就是不透明铺满的，模糊也看不见） */
+/* —— 票根类型：底部半屏 sheet ——
+   与其他 sheet（信息/画板/特效）保持一致：不铺满全屏、预览被顶到上方、点遮罩关闭。
+   注意：这里不要用 backdrop-filter，滚动列表时它会强制每帧重新模糊整屏，是滚动卡顿的主因 */
 .sheet {
   --sheet-slide: 0.34s;
   position: fixed;
@@ -407,59 +511,85 @@ body.sheet-open .controls {
   pointer-events: none;
 }
 
-.sheet.is-open,
-#styleSheet.is-closing {
+.sheet.is-open {
   visibility: visible;
   pointer-events: auto;
 }
 
-#styleSheet.is-closing {
+.sheet-style {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  align-items: stretch;
+  justify-items: center;
+  background: transparent;
   pointer-events: none;
+  z-index: 100;
+  visibility: hidden;
 }
 
-/* 票根类型：遮罩与面板分层，关闭时只渐隐遮罩、面板仍下滑 */
-#styleSheet::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  background: rgba(8, 7, 6, 0.72);
-  opacity: 0;
-  pointer-events: none;
+.sheet-style.is-open,
+.sheet-style.is-closing {
+  visibility: visible;
 }
 
-#styleSheet.is-open::before {
-  opacity: 1;
+.sheet-style .fx-scrim {
+  grid-row: 1;
+  grid-column: 1;
 }
 
-#styleSheet.is-closing::before {
-  opacity: 0;
-  transition: opacity var(--sheet-slide, 0.34s) var(--ease-out);
+.sheet-style.is-open .fx-scrim {
+  pointer-events: auto;
+  background: transparent;
 }
 
-@media (min-width: 520px) {
-  #styleSheet::before {
-    backdrop-filter: blur(4px);
-  }
+.sheet-style .style-panel {
+  grid-row: 2;
+  grid-column: 1;
+  pointer-events: auto;
+  /* 固定高度：切换分类时面板不会忽高忽低，预览区尺寸稳定；
+     同时留出足够预览空间，换票根时能实时看到效果 */
+  height: min(64vh, 540px);
+  height: min(64dvh, 540px);
+  max-height: min(64vh, 540px);
+  max-height: min(64dvh, 540px);
+  border-radius: var(--radius) var(--radius) 0 0;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  box-shadow: var(--shadow-sheet);
+  transform: translateY(110%);
+  transition: transform var(--sheet-slide, 0.34s) var(--ease-drawer);
+}
+
+.sheet-style.is-open .style-panel,
+.sheet-style.is-closing .style-panel {
+  transition: transform var(--sheet-slide, 0.34s) var(--ease-drawer);
+}
+
+.sheet-style.is-open .style-panel {
+  transform: none;
+}
+
+.sheet-style.is-closing .style-panel {
+  transform: translateY(110%);
 }
 
 .sheet-panel {
   width: 100%;
   max-width: 460px;
   height: 100%;
+  max-height: 100vh;
   max-height: 100dvh;
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr);
-  background: #191613;
-  border-left: 1px solid var(--line);
-  border-right: 1px solid var(--line);
+  background: var(--panel);
+  border-radius: var(--radius) var(--radius) 0 0;
+  overflow: hidden;
+  box-shadow: var(--shadow);
   /* 从下方滑入；用带「拨动感」的抽屉曲线，不用回弹 */
   transform: translateY(110%);
   transition: transform var(--sheet-slide, 0.34s) var(--ease-drawer);
 }
 
-.sheet.is-open .sheet-panel,
-#styleSheet.is-closing .sheet-panel {
+.sheet.is-open .sheet-panel {
   transition: transform var(--sheet-slide, 0.34s) var(--ease-drawer);
 }
 
@@ -467,13 +597,33 @@ body.sheet-open .controls {
   transform: none;
 }
 
-#styleSheet.is-closing .sheet-panel {
-  transform: translateY(110%);
+.sheet-head--compact {
+  padding: 8px 14px 6px;
+  min-height: 0;
 }
 
-.sheet-head--compact {
-  padding: 6px 10px 4px;
-  min-height: 0;
+/* 票根模板面板：标题居中，关闭按钮绝对定位，不参与标题居中 */
+.sheet-style .sheet-head--compact {
+  position: relative;
+  justify-content: center;
+  min-height: 36px;
+  /* 左右留出关闭按钮的宽度，标题永远居中而不是被挤偏 */
+  padding: 6px 48px 5px;
+}
+
+.sheet-style .sheet-head--compact .sheet-title {
+  margin: 0;
+  text-align: center;
+  font-size: 0.86rem;
+}
+
+.sheet-style .sheet-head--compact .sheet-close {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  transform: translateY(-50%);
+  width: 26px;
+  height: 26px;
 }
 
 .sheet-head--compact .sheet-kicker {
@@ -482,18 +632,23 @@ body.sheet-open .controls {
 
 .sheet-head--compact .sheet-title {
   margin: 0;
-  font-size: 0.82rem;
+  font-size: 0.9rem;
   font-weight: 650;
 }
 
 .sheet-head--compact .sheet-close {
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
 }
 
 .sheet-head--compact .sheet-close svg {
   width: 14px;
   height: 14px;
+}
+
+.sheet-style .sheet-head--compact .sheet-close svg {
+  width: 13px;
+  height: 13px;
 }
 
 /* 票面信息半屏 sheet */
@@ -530,13 +685,15 @@ body.sheet-open .controls {
   pointer-events: auto;
   width: 100%;
   height: auto;
+  max-height: min(75vh, 560px);
   max-height: min(75dvh, 560px);
-  border-radius: 16px 16px 0 0;
+  border-radius: var(--radius) var(--radius) 0 0;
+  background: var(--panel);
   display: grid;
   grid-template-rows: auto auto;
   transform: translateY(110%);
   transition: transform var(--sheet-slide, 0.34s) var(--ease-drawer);
-  box-shadow: 0 -16px 40px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--shadow-sheet);
 }
 
 .sheet-fields.is-open .fields-panel,
@@ -555,7 +712,7 @@ body.sheet-open .controls {
 .fields-body {
   min-height: 0;
   overflow: auto;
-  padding: 8px 14px calc(14px + env(safe-area-inset-bottom, 0px));
+  padding: 8px 14px calc(14px + var(--safe-b));
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
 }
@@ -573,6 +730,12 @@ body.fields-open {
 
 html.photo-open,
 body.photo-open {
+  overflow: hidden;
+  touch-action: none;
+}
+
+html.stage-open,
+body.stage-open {
   overflow: hidden;
   touch-action: none;
 }
@@ -611,13 +774,15 @@ body.photo-open {
   pointer-events: auto;
   width: 100%;
   height: auto;
+  max-height: min(82vh, 640px);
   max-height: min(82dvh, 640px);
-  border-radius: 16px 16px 0 0;
+  border-radius: var(--radius) var(--radius) 0 0;
+  background: var(--panel);
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   transform: translateY(110%);
   transition: transform var(--sheet-slide, 0.34s) var(--ease-drawer);
-  box-shadow: 0 -16px 40px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--shadow-sheet);
 }
 
 .sheet-photo.is-open .photo-panel,
@@ -636,7 +801,7 @@ body.photo-open {
 .photo-adjust-body {
   min-height: 0;
   overflow: auto;
-  padding: 8px 14px calc(14px + env(safe-area-inset-bottom, 0px));
+  padding: 8px 14px calc(14px + var(--safe-b));
   display: grid;
   gap: 12px;
   -webkit-overflow-scrolling: touch;
@@ -660,9 +825,8 @@ body.photo-open {
   overflow: clip;
   contain: paint;
   isolation: isolate;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   background: #d8d0c4;
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08), inset 0 8px 18px rgba(0, 0, 0, 0.12);
   touch-action: none;
   cursor: grab;
   z-index: 0;
@@ -699,21 +863,20 @@ body.photo-open {
 }
 
 .photo-adjust-btn {
-  border: 1px solid rgba(232, 194, 122, 0.28);
-  border-radius: 10px;
-  background: rgba(255, 246, 230, 0.07);
-  color: var(--accent);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--surface-inset);
+  color: var(--text);
   font: inherit;
   font-size: 0.84rem;
   font-weight: 650;
   cursor: pointer;
-  padding: 10px 12px;
+  padding: 12px;
 }
 
 .photo-adjust-btn--accent {
-  border: 0;
-  color: #2a2114;
-  background: linear-gradient(135deg, #f0d7a0, #d4a85a);
+  color: var(--text-invert);
+  background: var(--accent);
 }
 
 .photo-adjust-btn:active {
@@ -726,41 +889,50 @@ body.fields-open .dock {
 }
 
 .sheet-head {
-
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: calc(14px + env(safe-area-inset-top, 0px)) 16px 12px;
+  padding: calc(16px + var(--safe-t)) 18px 14px;
   border-bottom: 1px solid var(--line);
+}
+
+/* 底部导出/发布 Sheet 不需要叠加页面顶部安全区，避免标题被推得过低 */
+.sheet-fields .sheet-head--compact {
+  padding: 8px 14px 6px;
 }
 
 .sheet-kicker {
   margin: 0;
-  font-size: 0.66rem;
-  letter-spacing: 0.18em;
+  font-size: 0.62rem;
+  font-weight: 650;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--accent);
 }
 
 .sheet-title {
   margin: 3px 0 0;
-  font-size: 1.06rem;
+  font-size: 1.1rem;
   font-weight: 650;
+  letter-spacing: -0.01em;
 }
 
 .sheet-close {
   display: grid;
   place-items: center;
   flex-shrink: 0;
-  width: 36px;
-  height: 36px;
+  width: 34px;
+  height: 34px;
   cursor: pointer;
   color: var(--text);
-  border: 1px solid var(--line);
+  border: 0;
   border-radius: 50%;
-  background: rgba(0, 0, 0, 0.3);
+  background: var(--surface-inset);
+  transition: background 0.18s ease;
 }
+
+.sheet-close:active { background: var(--line-strong); }
 
 .sheet-close svg {
   width: 18px;
@@ -768,7 +940,7 @@ body.fields-open .dock {
 }
 
 .sheet .cat-tabs {
-  padding: 10px 16px 9px;
+  padding: 6px 12px 5px;
   border-bottom: 1px solid var(--line);
 }
 
@@ -778,26 +950,31 @@ body.fields-open .dock {
   grid-template-columns: 1fr 1fr;
   align-content: start;
   gap: 10px;
-  padding: 14px 16px calc(22px + env(safe-area-inset-bottom, 0px));
+  padding: 12px 14px calc(14px + var(--safe-b));
   overflow-y: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
 }
 
+/* 卡片即缩略图：文案压在图上，省掉卡片下方的文字行。
+   高度显式写在卡片上（而不是只写在 .si-box 上）：
+   只要有一处高度失效，卡片就会被压缩成横条，把缩略图裁成一条缝 */
 .style-item {
   position: relative;
-  display: grid;
-  gap: 8px;
-  padding: 8px;
+  display: block;
+  height: 126px;
+  padding: 0;
   text-align: left;
   cursor: pointer;
   color: var(--text);
   font: inherit;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: rgba(0, 0, 0, 0.24);
-  transition: border-color 0.18s ease, background 0.18s ease, transform 0.14s ease;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: 0 0 0 1px var(--line);
+  overflow: hidden;
+  transition: box-shadow 0.18s ease, transform 0.14s ease;
 }
 
 .style-item:active {
@@ -805,42 +982,87 @@ body.fields-open .dock {
 }
 
 .style-item.is-active {
-  border-color: rgba(232, 194, 122, 0.62);
-  background: var(--accent-dim);
+  box-shadow:
+    0 0 0 1.5px var(--accent),
+    0 8px 22px rgba(0, 0, 0, 0.3);
 }
 
 .si-box {
   position: relative;
   display: grid;
   place-items: center;
-  height: 116px;
-  border-radius: 10px;
+  height: 100%;
+  border-radius: inherit;
   overflow: hidden;
   /* 把每张缩略图的布局/绘制限制在盒子里，避免影响滚动容器的重绘范围 */
   contain: layout paint style;
-  background: linear-gradient(160deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.02));
-  box-shadow: inset 0 0 0 1px rgba(255, 246, 230, 0.06);
+  background: linear-gradient(160deg, #2a2825, #1c1a18);
 }
 
-.si-text {
+/* 缩略图绝对定位居中：不依赖容器的 display（grid/inline 都不会影响它的位置尺寸） */
+.si-host {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+
+/* 票名 + 副标题压在缩略图底部，靠半透明黑色渐变保证文字可读 */
+.si-cap {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
   display: grid;
-  gap: 3px;
-  padding: 0 2px 2px;
-  min-width: 0;
+  gap: 1px;
+  padding: 22px 9px 8px;
+  text-align: left;
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    rgba(10, 9, 7, 0) 0%,
+    rgba(10, 9, 7, 0.34) 46%,
+    rgba(10, 9, 7, 0.74) 100%
+  );
 }
 
-.si-name {
-  font-size: 0.84rem;
+/* 缩略图是按需渲染的：还没轮到的卡片只有浅色底，
+   白字压上去完全看不见，滚动时整片列表像空卡片、根本认不出哪个模板。
+   先按「浅底 + 深字」把名字显示出来，图渲染好后再切回「深底渐变 + 白字」 */
+.style-item:not(.has-thumb) .si-box {
+  background: linear-gradient(160deg, #2a2825, #201e1b);
 }
 
-.si-desc {
+.style-item:not(.has-thumb) .si-cap {
+  background: none;
+  padding-top: 10px;
+}
+
+.style-item:not(.has-thumb) .si-cap .si-name {
+  color: var(--text);
+  text-shadow: none;
+}
+
+.style-item:not(.has-thumb) .si-cap .si-desc {
+  color: var(--muted);
+}
+
+.si-cap .si-name {
+  font-size: 0.78rem;
+  font-weight: 650;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.si-cap .si-desc {
   display: -webkit-box;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 1;
   overflow: hidden;
-  font-size: 0.68rem;
+  font-size: 0.62rem;
   line-height: 1.35;
-  color: var(--muted);
+  color: rgba(255, 255, 255, 0.72);
 }
 
 .si-check {
@@ -852,8 +1074,9 @@ body.fields-open .dock {
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  color: #2a2114;
-  background: linear-gradient(135deg, #f0d7a0, #d4a85a);
+  color: #fff;
+  background: var(--accent);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
 }
 
 .si-check svg {
@@ -875,42 +1098,64 @@ body.sheet-open {
   cursor: pointer;
 }
 
+/* 照片槽：不再自带一层白底盒（那是外面 .photo-slots 的活儿，两层层叠很丑），
+   槽本身就是这一行右侧的一颗 46px 方块，和左侧模板入口同一档高度 */
 .photo-slots {
   display: flex;
-  gap: 8px;
+  gap: var(--bar-gap);
   align-items: center;
   flex: 0 0 auto;
   width: max-content;
-  min-width: 56px;
+  max-width: 100%;
+  min-width: 0;
+  /* overflow-x: auto 会连纵向一起裁切，槽的外圈描边 / 投影画在盒外会被切掉；
+     内侧留 3px 余量，再用负 margin 抵消，位置不变 */
+  padding: 3px;
+  margin: -3px;
+  /* 全局 border-box 下 width: max-content 会把 padding 吃掉，右侧余量就没了 */
+  box-sizing: content-box;
+  background: transparent;
+  overflow-x: auto;
+  scrollbar-width: none;
 }
+
+.photo-slots::-webkit-scrollbar { display: none; }
+
+.photo-slots:empty { display: none; }
 
 .photo-slot {
   position: relative;
-  flex: 0 0 56px;
-  width: 56px;
-  height: 56px;
-  min-width: 56px;
-  min-height: 56px;
+  flex: 0 0 var(--bar-h);
+  width: var(--bar-h);
+  height: var(--bar-h);
+  min-width: var(--bar-h);
+  min-height: var(--bar-h);
   aspect-ratio: 1;
 }
 
 .photo-slot-btn {
   box-sizing: border-box;
-  width: 56px;
-  height: 56px;
-  min-width: 56px;
-  min-height: 56px;
+  width: var(--bar-h);
+  height: var(--bar-h);
+  min-width: var(--bar-h);
+  min-height: var(--bar-h);
   margin: 0;
   padding: 0;
-  border: 1px dashed rgba(232, 194, 122, 0.4);
-  border-radius: 12px;
-  background: rgba(232, 194, 122, 0.06);
-  color: var(--accent);
+  /* 空槽：虚线框，与左侧模板入口同高同圆角；选中态只把边线换成 accent */
+  border: 0;
+  border-radius: var(--bar-r);
+  background: var(--surface);
+  box-shadow: 0 0 0 1px var(--line), var(--shadow-xs);
+  color: var(--muted-strong);
   cursor: pointer;
   font: inherit;
   display: grid;
   place-items: center;
   aspect-ratio: 1;
+  transition:
+    border-color 0.18s ease,
+    background 0.18s ease,
+    color 0.18s ease;
 }
 
 .photo-slot--filled .photo-slot-btn {
@@ -927,10 +1172,11 @@ body.sheet-open {
   height: 20px;
 }
 
+/* 缩略图：实线细边，和空槽同尺寸同圆角，切换时不会有跳变 */
 .photo-slot-btn--thumb {
   overflow: hidden;
-  border-style: solid;
-  border-color: rgba(232, 194, 122, 0.35);
+  border: 0;
+  background: var(--surface);
 }
 
 .photo-slot-btn--thumb img {
@@ -940,41 +1186,56 @@ body.sheet-open {
   object-fit: cover;
 }
 
+/* 移除照片：深色半透明小圆角标，压在任何亮暗照片上都看得清；
+   原来的白色圆片 + 阴影在浅色照片上几乎看不见，还多一层浮肿的白块 */
 .photo-slot-clear {
   position: absolute;
-  top: 3px;
-  right: 3px;
+  /* 贴合缩略图内沿：.photo-slots 为了横向滚动是 overflow 容器，
+     角标挂到 -5px 会被裁掉 */
+  top: 2px;
+  right: 2px;
   z-index: 2;
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   padding: 0;
-  border: 0;
+  border: 1.5px solid var(--surface);
   border-radius: 50%;
   display: grid;
   place-items: center;
-  background: rgba(20, 18, 16, 0.82);
-  color: #f5efe3;
+  background: rgba(22, 20, 16, 0.62);
+  color: #fff;
   cursor: pointer;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
 }
 
 .photo-slot-clear svg {
-  width: 12px;
-  height: 12px;
+  width: 11px;
+  height: 11px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .photo-slot-btn:hover {
+    box-shadow: 0 0 0 1px var(--accent-line), var(--shadow-xs);
+    background: var(--accent-dim);
+    color: var(--accent);
+  }
+
+  .photo-slot-clear:hover {
+    background: rgba(22, 20, 16, 0.85);
+  }
 }
 
 .upload--slim {
   gap: 0;
-  width: 56px;
+  width: 46px;
   flex-shrink: 0;
 }
 
 .upload--slim .upload-btn {
-  width: 56px;
-  height: 56px;
-  min-height: 56px;
+  width: 46px;
+  height: 46px;
+  min-height: 46px;
   padding: 0;
-  border-radius: 12px;
+  border-radius: var(--radius-sm);
   display: grid;
   place-items: center;
 }
@@ -990,10 +1251,10 @@ body.sheet-open {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  border: 1px dashed rgba(232, 194, 122, 0.4);
-  border-radius: 12px;
+  border: 1.5px dashed var(--accent-line);
+  border-radius: var(--radius-sm);
   padding: 12px;
-  background: rgba(232, 194, 122, 0.06);
+  background: var(--accent-dim);
 }
 
 .upload-btn svg {
@@ -1023,15 +1284,17 @@ body.sheet-open {
 
 .field input {
   width: 100%;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: rgba(0, 0, 0, 0.28);
-  padding: 10px 12px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--surface-inset);
+  padding: 11px 12px;
   outline: none;
+  transition: box-shadow 0.18s ease, background 0.18s ease;
 }
 
 .field input:focus {
-  border-color: rgba(232, 194, 122, 0.55);
+  background: var(--surface);
+  box-shadow: 0 0 0 1.5px var(--accent);
 }
 
 .stage {
@@ -1041,35 +1304,535 @@ body.sheet-open {
   min-width: 0;
   min-height: 0;
   height: auto;
-  border-radius: var(--radius);
-  border: 1px solid var(--line);
-  background:
-    radial-gradient(circle at 50% 40%, rgba(255, 255, 255, 0.05), transparent 55%),
-    rgba(20, 18, 16, 0.55);
+  position: relative;
+  background: transparent;
   display: grid;
   place-items: center;
-  padding: 4px;
   overflow: hidden;
+  /* 画板无描边/投影，直接铺满可用区，边界只靠底色与页面底色的差异区分 */
+  padding: 0;
+  /* 画板用容器查询单位跟随可用区实时缩放（sheet 顶起时同步收小） */
+  container-type: size;
+}
+
+/* 固定宽高比画板：只在「未被 sheet 顶起」时量一次 --stage-ar 并固定，
+   之后 sheet 开合只是等比缩小/放大，构图与背景裁切完全一致。
+   导出「预览画面」截取的就是它。 */
+.stage-artboard {
+  position: relative;
+  /* 基线层：JS 按可用区实测写好的 px（容器查询不可用时生效） */
+  width: var(--stage-w, 100%);
+  height: var(--stage-h, 100%);
+  /* 增强层：支持容器查询的内核按可用区实时算，sheet 顶起过程中更跟手 */
+  width: min(100cqw, calc(100cqh * var(--stage-ar, 0.62)));
+  height: min(100cqh, calc(100cqw / var(--stage-ar, 0.62)));
+  border-radius: var(--radius);
+  border: 0;
+  overflow: hidden;
+  background-color: #232327;
+}
+
+.stage-bg {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  overflow: hidden;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.stage-bg-img {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+}
+
+/* 没有背景图时，空的 <img>（无 src）会被浏览器画出一圈 1px 灰色占位边框，
+   位置正好是画板边界、并随圆角被裁切 —— 画板上那圈「边框线」就是它。彻底不渲染。 */
+.stage-bg-img:not([src]) {
+  display: none;
+}
+
+/* 双击缩放画板背景：加过渡而不是瞬移。
+   只在双击时挂上这个类（拖拽/捏合期间不能有过渡，否则跟手会糊） */
+.stage-bg-img.is-bg-fit-anim,
+.stage-media-img.is-bg-fit-anim {
+  will-change: transform;
+  transition:
+    transform 0.34s cubic-bezier(0.25, 0.85, 0.25, 1),
+    object-position 0.34s cubic-bezier(0.25, 0.85, 0.25, 1),
+    transform-origin 0.34s cubic-bezier(0.25, 0.85, 0.25, 1);
 }
 
 .tilt-scene {
+  position: relative;
+  z-index: 1;
   width: 100%;
   height: 100%;
   min-width: 0;
   min-height: 0;
-  perspective: 900px;
   display: grid;
   place-items: center;
   overflow: hidden;
 }
 
+/* 只承担「按 fit 结果定尺寸」的居中容器；预览倾斜已移除，不再需要 3D 上下文 */
 .tilt-card {
   position: relative;
-  transform-style: preserve-3d;
-  transition: transform 0.12s ease-out;
-  will-change: transform;
   max-width: 100%;
   max-height: 100%;
+}
+
+/* —— 纸感 3D 预览层 —— */
+.ticket-host--paper3d {
+  position: relative;
+}
+
+.ticket-host--paper3d .ticket-dom {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.ticket-host--paper3d.is-paper-fallback .ticket-dom {
+  visibility: visible;
+}
+
+.ticket-host--paper3d .paper-gl-wrap {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.ticket-host--paper3d .paper-gl-wrap canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.paper-gl-busy {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  color: var(--muted);
+  background: rgba(31, 31, 35, 0.92);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-sheet);
+  white-space: nowrap;
+  z-index: 3;
+}
+
+.mat-panel {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 12px;
+}
+
+.mat-hint {
+  margin: 0;
+  font-size: 0.72rem;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+/* 素材面板是单列整块，不是缩略图网格。
+   Chrome 61 会整条丢掉 :has() 规则，所以同时用 JS 挂的 .is-mat 兜底（两条规则必须分开写） */
+.fx-catalog.is-mat {
+  display: block;
+}
+
+.fx-catalog:has(.mat-panel) {
+  display: block;
+}
+
+.fx-field--row {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+
+.fx-field--row > label {
+  margin: 0;
+  white-space: nowrap;
+  font-size: 0.78rem;
+  color: var(--text);
+}
+
+.fx-field.is-hidden {
+  display: none;
+}
+
+.sheet-head--stage {
+  flex-direction: row;
+  align-items: center;
+  height: 48px;
+  padding: 0 14px;
+  gap: 10px;
+}
+
+.sheet-stage .fields-panel {
+  height: auto;
+  max-height: min(80vh, 600px);
+  max-height: min(80dvh, 600px);
+}
+
+.sheet-stage .fields-body {
+  display: block;
+  /* 缩略图与空态共用同一高度，sheet 开合高度不变 */
+  --stage-thumb-h: min(38vh, 320px);
+  --stage-thumb-h: min(38dvh, 320px);
+  --stage-media-h: calc(var(--stage-thumb-h) + 48px);
+}
+
+.sheet-head--stage .sheet-head-text {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.sheet-head--stage .sheet-title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 650;
+}
+
+.sheet-sub {
+  margin: 3px 0 0;
+  font-size: 0.7rem;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+.stage-media {
+  min-height: var(--stage-media-h);
+  display: grid;
+  align-content: center;
+  gap: 10px;
+}
+
+/* 未选图：底色模块（直接平铺全部色块）在上，选择图片按钮在下填满剩余空间，
+   整体高度与「已选图」一致，sheet 开合高度不变 */
+.stage-media-empty {
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 12px;
+  min-height: var(--stage-media-h);
+}
+
+.stage-media-empty.is-hidden,
+.stage-media-filled.is-hidden {
+  display: none;
+}
+
+.stage-media-filled {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: var(--stage-media-h);
+}
+
+.stage-media-shot {
+  height: var(--stage-thumb-h);
+  display: grid;
+  place-items: center;
+}
+
+.stage-media-tile {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 116px;
+  margin: 0;
+  padding: 12px;
+  border: 1.5px dashed var(--accent-line);
+  border-radius: var(--radius-md);
+  background: var(--accent-dim);
+  color: var(--accent-strong);
+  font: inherit;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  gap: 10px;
+  transition: transform 0.12s ease, background 0.18s ease;
+}
+
+.stage-media-tile:active {
+  transform: scale(0.97);
+}
+
+/* 底色模块：直接平铺所有色块，不再弹二级菜单 */
+.stage-color-module {
+  box-sizing: border-box;
+  padding: 12px;
+  border-radius: var(--radius-md);
+  border: 0;
+  background: var(--surface);
+  box-shadow: 0 0 0 1px var(--line), var(--shadow-xs);
+}
+
+.stage-color-module-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.stage-color-module-title {
+  font-size: 0.78rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  color: var(--text);
+}
+
+.stage-color-module-value {
+  font-family: var(--mono);
+  font-size: 0.64rem;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.stage-color-grid {
+  display: grid;
+  grid-template-columns: repeat(9, 1fr);
+  gap: 8px;
+}
+
+.stage-media-tile-icon {
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--accent);
+}
+
+.stage-media-tile-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.stage-media-tile-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.stage-media-viewport {
+  position: relative;
+  /* 与画板同宽高比 → 与最终导出的裁切完全一致 */
+  height: var(--stage-thumb-h);
+  aspect-ratio: var(--stage-ar, 0.667);
+  width: auto;
+  max-width: 100%;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  background: #d8d0c4;
+  touch-action: none;
+  cursor: grab;
+}
+
+.stage-media-viewport.is-dragging {
+  cursor: grabbing;
+}
+
+.stage-media-img {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  user-select: none;
+  will-change: transform;
+}
+
+.stage-media-clear {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 2;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--surface);
+  color: #3d3428;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(24, 21, 16, 0.2);
+}
+
+.stage-media-clear svg {
+  width: 13px;
+  height: 13px;
+}
+
+.stage-media-tool {
+  width: 100%;
+  min-height: 40px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--surface-inset);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.stage-media-tool:active {
+  transform: scale(0.97);
+}
+
+.stage-color-chip {
+  aspect-ratio: 1;
+  width: 100%;
+  min-height: 0;
+  padding: 0;
+  border: 1px solid rgba(255, 248, 236, 0.14);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.35);
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.stage-color-chip.is-active {
+  box-shadow:
+    0 0 0 2px var(--surface),
+    0 0 0 3.5px var(--accent);
+}
+
+.stage-color-chip:active {
+  transform: scale(0.92);
+}
+
+.ui-range {
+  position: relative;
+  z-index: 2;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  touch-action: none;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  /* 左右留白：圆点移到两端时不会被裁到，也不贴边 */
+  --ui-range-pad: 10px;
+  --ui-range-p: 0;
+  padding: 0 var(--ui-range-pad);
+}
+
+.ui-range-track {
+  position: relative;
+  width: 100%;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: rgba(255, 248, 236, 0.14);
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.ui-range-fill {
+  height: 100%;
+  width: 0;
+  border-radius: inherit;
+  background: var(--accent);
+}
+
+.ui-range-thumb {
+  position: absolute;
+  top: 50%;
+  /* 与轨道内容区对齐：留白 +（可用宽度 × 比例） */
+  left: calc(
+    var(--ui-range-pad) +
+      (100% - var(--ui-range-pad) * 2) * var(--ui-range-p, 0)
+  );
+  width: 18px;
+  height: 18px;
+  margin-left: -9px;
+  margin-top: -9px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: #f1ede5;
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.45),
+    0 0 0 1px rgba(0, 0, 0, 0.2);
+  cursor: grab;
+  touch-action: none;
+  pointer-events: none;
+}
+
+.ui-range-thumb:active {
+  cursor: grabbing;
+  transform: scale(1.06);
+}
+
+#stageBgControls.is-hidden .ui-range {
+  opacity: 0.38;
+  pointer-events: none;
+  cursor: not-allowed;
+}
+
+.export-options {
+  display: grid;
+  gap: 10px;
+}
+
+.export-option {
+  display: grid;
+  gap: 4px;
+  text-align: left;
+  padding: 16px;
+  border-radius: var(--radius-md);
+  border: 0;
+  background: var(--surface);
+  cursor: pointer;
+  font: inherit;
+  color: var(--text);
+  box-shadow:
+    0 0 0 1px var(--line),
+    var(--shadow-xs);
+}
+
+.export-option--accent {
+  color: var(--text-invert);
+  background: var(--accent);
+  box-shadow: 0 8px 22px rgba(24, 21, 16, 0.2);
+}
+
+.export-option--accent .export-option-desc { color: rgba(251, 250, 247, 0.66); }
+
+.export-option-title {
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.export-option-desc {
+  font-size: 0.72rem;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.export-option:active {
+  transform: scale(0.99);
+}
+
+.sheet-export .export-panel {
+  max-height: min(42vh, 360px);
+  max-height: min(42dvh, 360px);
 }
 
 /* 预览层不再使用矩形高光罩：
@@ -1985,6 +2748,27 @@ body.sheet-open {
   background-size: 8px 8px;
 }
 
+/* —— 挂绳 / 证件类卡片的「长胶囊孔」 ——
+   胶囊形（两端是半圆）用一个 radial-gradient 画不出来，那只会得到椭圆，
+   所以用两层遮罩：不透明底 + 一张白色胶囊 SVG，
+   靠 subtract 把胶囊从底上抠掉 —— 孔是真透明的，直接透出画板背景。
+   --slot-w / --slot-h / --slot-top 必须和对应 .xxx-slot 的盒子一致。 */
+.tk-concert-lanyard,
+.tk-concert-badge,
+.tk-city-gatecard,
+.tk-muscard {
+  -webkit-mask-image: linear-gradient(#000, #000), var(--slot-hole);
+  -webkit-mask-size: 100% 100%, var(--slot-w) var(--slot-h);
+  -webkit-mask-position: 0 0, 50% var(--slot-top);
+  -webkit-mask-repeat: no-repeat, no-repeat;
+  -webkit-mask-composite: source-out;
+  mask-image: linear-gradient(#000, #000), var(--slot-hole);
+  mask-size: 100% 100%, var(--slot-w) var(--slot-h);
+  mask-position: 0 0, 50% var(--slot-top);
+  mask-repeat: no-repeat, no-repeat;
+  mask-composite: subtract;
+}
+
 /* —— concert lanyard：挂绳胸牌 —— */
 .tk-concert-lanyard {
   border-radius: 22px;
@@ -1992,18 +2776,25 @@ body.sheet-open {
   background: linear-gradient(180deg, #181c30, #0b0d19);
   color: #eef0ff;
   box-shadow: var(--shadow), inset 0 0 0 1px rgba(140, 150, 255, 0.2);
+  /* 孔位与 .lanyard-slot 的盒子完全重合（58×9、水平居中、距顶 18px） */
+  --slot-w: 58px;
+  --slot-h: 9px;
+  --slot-top: 18px;
+  --slot-hole: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 58 9'%3E%3Crect width='58' height='9' rx='4.5' fill='%23fff'/%3E%3C/svg%3E");
 }
 
-/* 卡槽：深色底上画出来才看得见（真打孔会透出背景色，几乎隐形） */
+/* 卡槽：只保留孔口的一圈边缘与内侧暗影，本体不填色，
+   孔内是真的空的（盒子尺寸就是上面遮罩的孔位，改尺寸要同步改遮罩） */
 .lanyard-slot {
   width: 58px;
   height: 9px;
   margin: 18px auto 0;
-  border-radius: 999px;
-  background: rgba(0, 0, 0, 0.62);
+  /* 圆角取高度的一半：盒子本身就是胶囊，与遮罩抠出的胶囊孔严丝合缝 */
+  border-radius: 4.5px;
+  background: transparent;
   box-shadow:
-    inset 0 1px 2px rgba(0, 0, 0, 0.9),
-    0 1px 0 rgba(190, 200, 255, 0.16);
+    0 0 0 1px rgba(190, 200, 255, 0.2),
+    0 2px 7px rgba(0, 0, 0, 0.6);
 }
 
 .lanyard-strap {
@@ -8497,15 +9288,24 @@ body.sheet-open {
   color: #231d2e;
   background: linear-gradient(180deg, #fcf9ff, #ebe4f6);
   box-shadow: var(--shadow), inset 0 0 0 1px rgba(110, 90, 150, 0.22);
+  /* 孔位与 .cb-slot 的盒子重合（92×13、水平居中、距顶 12px） */
+  --slot-w: 92px;
+  --slot-h: 13px;
+  --slot-top: 12px;
+  --slot-hole: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 92 13'%3E%3Crect width='92' height='13' rx='6.5' fill='%23fff'/%3E%3C/svg%3E");
 }
 
+/* 挂绳槽：本体不填色（孔内是真的空的），只留孔口边缘与内侧暗影 */
 .cb-slot {
   width: 92px;
   height: 13px;
   margin: 12px auto 0;
-  border-radius: 8px;
-  background: rgba(90, 70, 120, 0.26);
-  box-shadow: inset 0 2px 3px rgba(0, 0, 0, 0.32);
+  /* 圆角取高度的一半：盒子本身就是胶囊，与上面遮罩的孔严丝合缝 */
+  border-radius: 6.5px;
+  background: transparent;
+  box-shadow:
+    0 0 0 1px rgba(110, 90, 150, 0.3),
+    0 2px 6px rgba(60, 40, 100, 0.4);
 }
 
 .tk-concert-badge .cb-photo {
@@ -8831,15 +9631,23 @@ body.sheet-open {
   color: #eaf4ff;
   background: radial-gradient(120% 80% at 50% 0%, #24405f 0%, #0e1c2c 74%);
   box-shadow: var(--shadow), inset 0 0 0 1px rgba(140, 190, 240, 0.26);
+  /* 孔位与 .gc-slot 的盒子重合（76×11，卡片 padding 16px → 孔心 21.5px） */
+  --slot-w: 76px;
+  --slot-h: 11px;
+  --slot-top: 16px;
+  --slot-hole: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 76 11'%3E%3Crect width='76' height='11' rx='5.5' fill='%23fff'/%3E%3C/svg%3E");
 }
 
+/* 证件槽：本体不填色（孔内是真的空的），只留孔口边缘与内侧暗影 */
 .gc-slot {
   width: 76px;
   height: 11px;
   margin: 0 auto;
-  border-radius: 6px;
-  background: rgba(160, 200, 240, 0.2);
-  box-shadow: inset 0 2px 3px rgba(0, 0, 0, 0.4);
+  border-radius: 5.5px;
+  background: transparent;
+  box-shadow:
+    0 0 0 1px rgba(160, 200, 240, 0.34),
+    0 2px 6px rgba(0, 0, 0, 0.5);
 }
 
 .gc-top {
@@ -9747,6 +10555,11 @@ body.sheet-open {
   color: #3f3728;
   background: #f6f1e4;
   box-shadow: var(--shadow);
+  /* 孔位与 .mc-slot 的盒子重合（76×11，.mc-top padding-top 16px → 孔心 21.5px） */
+  --slot-w: 76px;
+  --slot-h: 11px;
+  --slot-top: 16px;
+  --slot-hole: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 76 11'%3E%3Crect width='76' height='11' rx='5.5' fill='%23fff'/%3E%3C/svg%3E");
 }
 
 .mc-top {
@@ -9760,9 +10573,11 @@ body.sheet-open {
 .mc-slot {
   width: 76px;
   height: 11px;
-  border-radius: 7px;
-  background: rgba(255, 255, 255, 0.16);
-  box-shadow: inset 0 2px 3px rgba(0, 0, 0, 0.4);
+  border-radius: 5.5px;
+  background: transparent;
+  box-shadow:
+    0 0 0 1px rgba(180, 200, 240, 0.4),
+    0 2px 6px rgba(0, 0, 0, 0.55);
 }
 
 .tk-muscard .mc-photo {
@@ -10479,19 +11294,20 @@ body.sheet-open {
   pointer-events: auto;
   width: 100%;
   /* 固定高度：偏高一些，减少内部滚动 */
+  height: min(58vh, 520px);
   height: min(58dvh, 520px);
+  max-height: min(58vh, 520px);
   max-height: min(58dvh, 520px);
-  border-radius: 16px 16px 0 0;
-  border-left: 1px solid var(--line);
-  border-right: 1px solid var(--line);
+  border-radius: var(--radius) var(--radius) 0 0;
   display: grid;
   /* 5 行：hint 不占位，中间仅 fx-body 可滚动 */
   grid-template-rows: auto auto auto minmax(0, 1fr) auto;
-  box-shadow: 0 -16px 40px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--shadow-sheet);
   transform: translateY(110%);
   transition: transform var(--sheet-slide, 0.34s) var(--ease-drawer);
   overscroll-behavior: contain;
   overflow: hidden;
+  background: var(--panel);
 }
 
 .sheet-fx .fx-panel > .sheet-head {
@@ -10532,7 +11348,7 @@ body.sheet-open {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 12px 0;
+  padding: 8px 14px 0;
   min-width: 0;
 }
 
@@ -10561,7 +11377,7 @@ body.sheet-open {
 }
 
 .fx-tabs {
-  padding: 6px 12px;
+  padding: 8px 14px;
 }
 
 .fx-layer-bar::-webkit-scrollbar,
@@ -10581,42 +11397,45 @@ body.sheet-open {
 
 .fx-chip {
   flex: 0 0 auto;
-  padding: 5px 9px;
-  border-radius: 8px;
-  border: 1px solid var(--line);
-  background: rgba(0, 0, 0, 0.28);
-  color: var(--muted);
+  padding: 6px 11px;
+  border-radius: var(--radius-pill);
+  border: 0;
+  background: var(--surface-inset);
+  color: var(--muted-strong);
   font: inherit;
+  font-weight: 600;
   font-size: 0.68rem;
   cursor: pointer;
+  transition: background 0.18s ease, color 0.18s ease;
 }
 
 .fx-chip.is-active,
 .fx-chip--layer.is-active {
-  color: var(--text);
-  border-color: rgba(232, 194, 122, 0.45);
+  color: var(--accent);
   background: var(--accent-dim);
+  box-shadow: inset 0 0 0 1px var(--accent-line);
 }
 
 .fx-tab {
   flex: 1 1 0;
   min-width: 0;
-  padding: 6px 4px;
-  border-radius: 8px;
-  border: 1px solid var(--line);
-  background: rgba(0, 0, 0, 0.28);
-  color: var(--muted);
+  padding: 7px 4px;
+  border-radius: var(--radius-pill);
+  border: 0;
+  background: var(--surface-inset);
+  color: var(--muted-strong);
   font: inherit;
   font-size: 0.68rem;
   font-weight: 600;
   cursor: pointer;
   text-align: center;
+  transition: background 0.18s ease, color 0.18s ease;
 }
 
 .fx-tab.is-active {
-  color: var(--text);
-  border-color: rgba(232, 194, 122, 0.45);
+  color: var(--accent);
   background: var(--accent-dim);
+  box-shadow: inset 0 0 0 1px var(--accent-line);
 }
 
 .fx-body {
@@ -10624,7 +11443,7 @@ body.sheet-open {
   flex-direction: column;
   gap: 8px;
   min-height: 0;
-  padding: 8px 12px;
+  padding: 10px 14px;
   overflow: auto;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
@@ -10634,9 +11453,9 @@ body.sheet-open {
 .fx-footer {
   flex-shrink: 0;
   min-height: 52px;
-  padding: 8px 12px calc(10px + env(safe-area-inset-bottom, 0px));
+  padding: 8px 14px calc(12px + var(--safe-b));
   border-top: 1px solid var(--line);
-  background: #191613;
+  background: var(--panel);
   display: flex;
   align-items: center;
 }
@@ -10658,13 +11477,14 @@ body.sheet-open {
   place-items: center;
   padding: 6px 2px;
   text-align: center;
-  border-radius: 8px;
-  border: 1px solid var(--line);
-  background: rgba(0, 0, 0, 0.22);
+  border-radius: var(--radius-sm);
+  border: 0;
+  background: var(--surface-inset);
   color: var(--text);
   font: inherit;
   cursor: pointer;
-  min-height: 32px;
+  min-height: 34px;
+  transition: background 0.18s ease, box-shadow 0.18s ease;
 }
 
 .fx-cat-item:active {
@@ -10672,9 +11492,8 @@ body.sheet-open {
 }
 
 .fx-cat-item.is-preview {
-  border-color: rgba(232, 194, 122, 0.55);
   background: var(--accent-dim);
-  box-shadow: inset 0 0 0 1px rgba(232, 194, 122, 0.2);
+  box-shadow: inset 0 0 0 1.5px var(--accent);
 }
 
 .fx-cat-name {
@@ -10723,20 +11542,22 @@ body.sheet-open {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 3px 4px 3px 8px;
-  border-radius: 8px;
-  border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.04);
+  padding: 4px 4px 4px 10px;
+  border-radius: var(--radius-pill);
+  border: 0;
+  background: var(--surface-inset);
   color: var(--text);
   font: inherit;
   font-size: 0.66rem;
+  font-weight: 600;
   cursor: pointer;
   line-height: 1.2;
+  transition: background 0.18s ease, box-shadow 0.18s ease;
 }
 
 .fx-used-item.is-active {
-  border-color: rgba(232, 194, 122, 0.5);
   background: var(--accent-dim);
+  box-shadow: inset 0 0 0 1.5px var(--accent);
 }
 
 .fx-used-del {
@@ -10747,7 +11568,7 @@ body.sheet-open {
   height: 18px;
   border-radius: 50%;
   border: 0;
-  background: rgba(0, 0, 0, 0.35);
+  background: rgba(255, 248, 236, 0.1);
   color: var(--muted);
   font-size: 12px;
   line-height: 1;
@@ -10771,11 +11592,11 @@ body.sheet-open {
 }
 
 .fx-preview-banner {
-  padding: 8px 10px;
-  border-radius: 10px;
-  background: rgba(232, 194, 122, 0.12);
-  border: 1px dashed rgba(232, 194, 122, 0.4);
-  color: var(--accent);
+  padding: 9px 11px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-dim);
+  border: 1px dashed var(--accent-line);
+  color: var(--accent-strong);
   font-size: 0.78rem;
   font-weight: 600;
 }
@@ -10783,15 +11604,16 @@ body.sheet-open {
 .fx-add-btn {
   width: 100%;
   margin-top: 0;
-  padding: 10px 12px;
+  padding: 12px;
   border: 0;
-  border-radius: 10px;
-  background: linear-gradient(135deg, #f0d7a0, #d4a85a);
-  color: #2a2114;
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: var(--text-invert);
   font: inherit;
   font-size: 0.86rem;
   font-weight: 700;
   cursor: pointer;
+  box-shadow: 0 8px 20px rgba(24, 21, 16, 0.2);
 }
 
 .fx-add-btn:active {
@@ -10826,13 +11648,21 @@ body.sheet-open {
 .fx-field input[type='text'],
 .fx-text-input {
   width: 100%;
-  padding: 10px 12px;
-  border-radius: 10px;
-  border: 1px solid var(--line);
-  background: rgba(0, 0, 0, 0.28);
+  padding: 11px 12px;
+  border-radius: var(--radius-sm);
+  border: 0;
+  background: var(--surface-inset);
   color: var(--text);
   font: inherit;
   font-size: 0.9rem;
+  outline: none;
+  transition: box-shadow 0.18s ease, background 0.18s ease;
+}
+
+.fx-field input[type='text']:focus,
+.fx-text-input:focus {
+  background: var(--surface);
+  box-shadow: 0 0 0 1.5px var(--accent);
 }
 
 .fx-seg {
@@ -10842,20 +11672,22 @@ body.sheet-open {
 }
 
 .fx-seg-btn {
-  padding: 5px 10px;
-  border-radius: 8px;
-  border: 1px solid var(--line);
-  background: rgba(0, 0, 0, 0.22);
-  color: var(--muted);
+  padding: 6px 12px;
+  border-radius: var(--radius-pill);
+  border: 0;
+  background: var(--surface-inset);
+  color: var(--muted-strong);
   font: inherit;
   font-size: 0.68rem;
+  font-weight: 600;
   cursor: pointer;
+  transition: background 0.18s ease, color 0.18s ease;
 }
 
 .fx-seg-btn.is-active {
-  color: var(--text);
-  border-color: rgba(232, 194, 122, 0.45);
+  color: var(--accent);
   background: var(--accent-dim);
+  box-shadow: inset 0 0 0 1px var(--accent-line);
 }
 
 .fx-swatches,
@@ -10880,18 +11712,20 @@ body.sheet-open {
 }
 
 .fx-font-btn {
-  padding: 6px 10px;
-  border-radius: 8px;
-  border: 1px solid var(--line);
-  background: rgba(0, 0, 0, 0.22);
+  padding: 7px 12px;
+  border-radius: var(--radius-pill);
+  border: 0;
+  background: var(--surface-inset);
   color: var(--text);
   font-size: 0.72rem;
+  font-weight: 600;
   cursor: pointer;
 }
 
 .fx-font-btn.is-active {
-  border-color: rgba(232, 194, 122, 0.45);
   background: var(--accent-dim);
+  box-shadow: inset 0 0 0 1px var(--accent-line);
+  color: var(--accent);
 }
 
 .fx-target-row {
@@ -11000,8 +11834,8 @@ body.fx-open .app {
   .sheet-panel,
   .sheet.is-open,
   .sheet.is-open .sheet-panel,
-  #styleSheet.is-closing,
-  #styleSheet.is-closing .sheet-panel {
+  .sheet-style.is-closing,
+  .sheet-style.is-closing .style-panel {
     transition-duration: 0.01ms;
   }
 
@@ -11009,13 +11843,820 @@ body.fx-open .app {
     transform: none;
   }
 
-  .tilt-card {
-    transition: none;
-  }
-
   .style-trigger:active,
   .style-item:active,
   .btn:active {
     transform: none;
   }
+}
+
+/* ============================================================
+   批量版式五：复古印刷券（凹角船票 / 拱顶马戏 / 六角徽章 / 画廊两段）
+   ============================================================ */
+
+.tk-vt {
+  --vt-bg: #1d4a52;
+  --vt-bg2: #153940;
+  --vt-gold: #d9b977;
+  --vt-paper: #efe3c6;
+  /* --vt-paper 与 #b89a6a 按 88:12 混出来的实色，给不支持 color-mix() 的内核兜底 */
+  --vt-paper-2: #e8dabb;
+  --vt-ink-soft: rgba(168, 50, 44, 0.55);
+  --vt-bg-soft: rgba(29, 74, 82, 0.5);
+  --vt-ink: #a8322c;
+  --vt-a: #7b8757;
+  --vt-b: #c9693d;
+  --vt-accent: #c98f2a;
+}
+
+.tk-vt .vt-photo {
+  width: 100%;
+  min-height: 0;
+}
+
+.tk-vt .vt-ico {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.tk-vt .vt-ico svg {
+  width: 20px;
+  height: 20px;
+}
+
+.tk-vt .vt-line {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 0.54rem;
+  letter-spacing: 0.06em;
+}
+
+.tk-vt .vt-line b {
+  flex: 1;
+  min-width: 0;
+  padding-bottom: 1px;
+  border-bottom: 1px solid currentColor;
+  font-size: 0.62rem;
+  font-weight: 500;
+  text-align: left;
+}
+
+.tk-vt .vt-frame {
+  position: absolute;
+  pointer-events: none;
+  border: 4px double var(--vt-gold);
+  opacity: 0.85;
+}
+
+/* —— 凹角船票：四角内凹 + 存根撕线处上下各咬一口 —— */
+.tk-vt--liner {
+  --vt-r: 16px;
+  --vt-cut: 68px;
+  width: 380px;
+  display: grid;
+  grid-template-columns: 1fr var(--vt-cut);
+  color: var(--vt-gold);
+  background: radial-gradient(120% 90% at 45% 40%, var(--vt-bg) 0%, var(--vt-bg2) 100%);
+  -webkit-mask-image: radial-gradient(circle var(--vt-r) at 0 0, transparent var(--vt-r), #000 calc(var(--vt-r) + 0.5px)),
+    radial-gradient(circle var(--vt-r) at 100% 0, transparent var(--vt-r), #000 calc(var(--vt-r) + 0.5px)),
+    radial-gradient(circle var(--vt-r) at 0 100%, transparent var(--vt-r), #000 calc(var(--vt-r) + 0.5px)),
+    radial-gradient(circle var(--vt-r) at 100% 100%, transparent var(--vt-r), #000 calc(var(--vt-r) + 0.5px)),
+    radial-gradient(circle 7px at calc(100% - var(--vt-cut)) 0, transparent 7px, #000 7.5px),
+    radial-gradient(circle 7px at calc(100% - var(--vt-cut)) 100%, transparent 7px, #000 7.5px);
+  -webkit-mask-composite: source-in;
+  mask-image: radial-gradient(circle var(--vt-r) at 0 0, transparent var(--vt-r), #000 calc(var(--vt-r) + 0.5px)),
+    radial-gradient(circle var(--vt-r) at 100% 0, transparent var(--vt-r), #000 calc(var(--vt-r) + 0.5px)),
+    radial-gradient(circle var(--vt-r) at 0 100%, transparent var(--vt-r), #000 calc(var(--vt-r) + 0.5px)),
+    radial-gradient(circle var(--vt-r) at 100% 100%, transparent var(--vt-r), #000 calc(var(--vt-r) + 0.5px)),
+    radial-gradient(circle 7px at calc(100% - var(--vt-cut)) 0, transparent 7px, #000 7.5px),
+    radial-gradient(circle 7px at calc(100% - var(--vt-cut)) 100%, transparent 7px, #000 7.5px);
+  mask-composite: intersect;
+}
+
+.tk-vt--liner .vt-frame {
+  inset: 13px;
+}
+
+.tk-vt--liner .vt-main {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  padding: 26px 10px 24px 26px;
+  text-align: center;
+}
+
+.tk-vt--liner .tk-place {
+  font-family: var(--mono);
+  font-size: 0.56rem;
+  letter-spacing: 0.24em;
+}
+
+.tk-vt--liner .tk-title {
+  font-family: var(--serif);
+  font-size: 1.7rem;
+  line-height: 1;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.tk-vt--liner .vt-shotrow {
+  display: grid;
+  grid-template-columns: 28px 1fr 28px;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin: 2px 0 4px;
+}
+
+.tk-vt--liner .vt-photo {
+  aspect-ratio: 16 / 9;
+  border: 2px solid var(--vt-gold);
+  border-radius: 3px;
+  box-shadow: 0 0 0 3px var(--vt-bg), 0 0 0 4px var(--vt-gold);
+}
+
+.tk-vt--liner .vt-lines {
+  display: flex;
+  gap: 14px;
+  width: 100%;
+}
+
+.tk-vt--liner .vt-line {
+  flex: 1;
+}
+
+.tk-vt--liner .vt-line b,
+.tk-vt--liner .tk-mood {
+  color: var(--vt-paper);
+}
+
+.tk-vt--liner .tk-mood {
+  font-size: 0.62rem;
+  font-style: italic;
+}
+
+.tk-vt--liner .vt-stub {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  padding: 24px 0;
+  border-left: 1.5px dashed var(--vt-gold);
+}
+
+.tk-vt--liner .vt-stub b {
+  writing-mode: vertical-rl;
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  font-weight: 500;
+  letter-spacing: 0.2em;
+  color: var(--vt-paper);
+}
+
+.tk-vt--wine {
+  --vt-bg: #5b1f27;
+  --vt-bg2: #401319;
+  --vt-gold: #e0bf82;
+  --vt-paper: #f3e4c9;
+  --vt-paper-2: #ecdbbe;
+  --vt-bg-soft: rgba(91, 31, 39, 0.5);
+}
+
+.tk-vt--forest {
+  --vt-bg: #25432f;
+  --vt-bg2: #193122;
+  --vt-gold: #d6b56f;
+  --vt-paper: #eee2c3;
+  --vt-paper-2: #e8d9b8;
+  --vt-bg-soft: rgba(37, 67, 47, 0.5);
+}
+
+/* —— 拱顶马戏券：左侧拱形主券 + 右侧花边存根，整体外轮廓不是矩形 —— */
+.tk-vt--circus {
+  --vt-paper: #f3e7d0;
+  --vt-paper-2: #ecdec4;
+  width: 344px;
+  display: grid;
+  grid-template-columns: 1fr 112px;
+  color: var(--vt-ink);
+}
+
+.tk-vt--circus > .fx-glitter {
+  display: none;
+}
+
+.tk-vt--circus .vt-arch {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  gap: 10px;
+  padding: 46px 22px 22px;
+  text-align: center;
+  /* 先给实色（Chrome 61~110 不认 color-mix），支持的再用 color-mix 覆盖 */
+  background: linear-gradient(180deg, var(--vt-paper) 0%, var(--vt-paper-2) 100%);
+  background: linear-gradient(180deg, var(--vt-paper) 0%, color-mix(in srgb, var(--vt-paper) 88%, #b89a6a) 100%);
+  border-radius: 50% 50% 8px 8px / 116px 116px 8px 8px;
+}
+
+.tk-vt--circus .vt-arch::before,
+.tk-vt--circus .vt-arch::after {
+  content: '';
+  position: absolute;
+  pointer-events: none;
+  border: 3px solid var(--vt-ink);
+}
+
+.tk-vt--circus .vt-arch::before {
+  inset: 7px;
+  border-radius: 50% 50% 4px 4px / 109px 109px 4px 4px;
+}
+
+.tk-vt--circus .vt-arch::after {
+  inset: 14px;
+  border-width: 1px;
+  border-radius: 50% 50% 2px 2px / 102px 102px 2px 2px;
+}
+
+.tk-vt--circus .tk-title {
+  max-width: 150px;
+  font-family: var(--serif);
+  font-size: 1.62rem;
+  line-height: 1.02;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.tk-vt--circus .vt-photo {
+  width: 86%;
+  aspect-ratio: 3 / 4;
+  border: 3px solid var(--vt-ink);
+  border-radius: 6px;
+  box-shadow: 0 0 0 4px var(--vt-paper), 0 0 0 5px var(--vt-ink);
+}
+
+.tk-vt--circus .tk-mood {
+  font-size: 0.64rem;
+  font-style: italic;
+}
+
+.tk-vt--circus .vt-stub {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 9px;
+  margin-top: 34px;
+  padding: 18px 16px 18px 12px;
+  text-align: center;
+  background: linear-gradient(180deg, var(--vt-paper) 0%, var(--vt-paper-2) 100%);
+  background: linear-gradient(180deg, var(--vt-paper) 0%, color-mix(in srgb, var(--vt-paper) 88%, #b89a6a) 100%);
+  border-left: 2px dashed var(--vt-ink-soft, rgba(168, 50, 44, 0.55));
+  border-left: 2px dashed color-mix(in srgb, var(--vt-ink) 55%, transparent);
+  -webkit-mask: radial-gradient(circle 5px at 100% 50%, transparent 5px, #000 5.5px) 0 0 / 100% 15px repeat-y;
+  mask: radial-gradient(circle 5px at 100% 50%, transparent 5px, #000 5.5px) 0 0 / 100% 15px repeat-y;
+}
+
+.tk-vt--circus .vt-stub .vt-ico svg {
+  width: 26px;
+  height: 26px;
+}
+
+.tk-vt--circus .vt-stub .vt-ico--big svg {
+  width: 46px;
+  height: 46px;
+  color: var(--vt-accent);
+}
+
+.tk-vt--circus .vt-admit,
+.tk-vt--circus .vt-no {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 1.05rem;
+  line-height: 1.1;
+  letter-spacing: 0.04em;
+}
+
+.tk-vt--circus .vt-no {
+  padding-bottom: 6px;
+  border-bottom: 2px solid var(--vt-ink);
+}
+
+.tk-vt--circus .vt-line {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  font-size: 0.5rem;
+  text-align: left;
+}
+
+.tk-vt--circus .vt-line b {
+  font-size: 0.56rem;
+  overflow-wrap: anywhere;
+}
+
+.tk-vt--navy {
+  --vt-ink: #253f6e;
+  --vt-paper: #efe6d2;
+  --vt-accent: #b8892f;
+}
+
+.tk-vt--green {
+  --vt-ink: #2f5b3c;
+  --vt-paper: #f1e8d2;
+  --vt-accent: #b0772d;
+}
+
+/* —— 六角徽章：上色带 + 中色带 + 米白底，照片压在色带交界 —— */
+.tk-vt--badge {
+  --vt-paper: #efe5cf;
+  --vt-ink: #3a3a2a;
+  position: relative;
+  width: 296px;
+  text-align: center;
+  color: var(--vt-ink);
+  background: var(--vt-paper);
+  clip-path: polygon(30% 0, 70% 0, 100% 18%, 100% 82%, 70% 100%, 30% 100%, 0 82%, 0 18%);
+}
+
+.tk-vt--badge .vt-stitch {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.tk-vt--badge .vt-stitch polygon {
+  fill: none;
+  stroke: var(--vt-b);
+  stroke-width: 1.5;
+  stroke-dasharray: 5 4;
+  vector-effect: non-scaling-stroke;
+}
+
+.tk-vt--badge .vt-top {
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+  padding: 24px 56px 36px;
+  color: var(--vt-paper);
+  background: var(--vt-a);
+}
+
+.tk-vt--badge .vt-top .vt-ico svg {
+  width: 28px;
+  height: 28px;
+}
+
+.tk-vt--badge .tk-place {
+  font-family: var(--mono);
+  font-size: 0.54rem;
+  letter-spacing: 0.2em;
+}
+
+.tk-vt--badge .tk-title {
+  font-family: var(--serif);
+  font-size: 1.4rem;
+  line-height: 1.05;
+  text-transform: uppercase;
+}
+
+.tk-vt--badge .vt-mid {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 50px;
+  padding: 0 24px;
+  color: var(--vt-a);
+  background: var(--vt-b);
+}
+
+.tk-vt--badge .vt-mid .vt-ico svg {
+  width: 26px;
+  height: 26px;
+}
+
+.tk-vt--badge .vt-photo {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 112px;
+  aspect-ratio: 1 / 1;
+  transform: translate(-50%, -50%);
+  border: 5px solid var(--vt-paper);
+  border-radius: 6px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+}
+
+.tk-vt--badge .vt-foot {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  padding: 68px 68px 46px;
+}
+
+.tk-vt--badge .tk-mood {
+  font-family: var(--serif);
+  font-size: 0.98rem;
+  opacity: 0.9;
+}
+
+.tk-vt--badge .vt-line {
+  width: 100%;
+}
+
+.tk-vt--lake {
+  --vt-a: #3f6c8c;
+  --vt-b: #d8a440;
+  --vt-ink: #213646;
+  --vt-paper: #eee6d3;
+}
+
+.tk-vt--plum {
+  --vt-a: #6d3b5b;
+  --vt-b: #d9867a;
+  --vt-ink: #3b2233;
+  --vt-paper: #f3e6dc;
+}
+
+/* —— 画廊两段券：上段照片 + 大号日期，下段米白小卡，分界处两侧咬口 —— */
+.tk-vt--gallery {
+  --vt-bg: #1f3263;
+  --vt-bg2: #152348;
+  --vt-gold: #d9b86e;
+  --vt-paper: #efe3c4;
+  width: 360px;
+  display: grid;
+  color: var(--vt-gold);
+}
+
+.tk-vt--gallery .vt-upper,
+.tk-vt--gallery .vt-lower {
+  position: relative;
+  background: radial-gradient(130% 110% at 50% 30%, var(--vt-bg) 0%, var(--vt-bg2) 100%);
+}
+
+.tk-vt--gallery .vt-upper {
+  display: grid;
+  gap: 12px;
+  padding: 24px 26px 18px;
+  -webkit-mask-image: radial-gradient(circle 11px at 0 100%, transparent 11px, #000 11.5px),
+    radial-gradient(circle 11px at 100% 100%, transparent 11px, #000 11.5px);
+  -webkit-mask-composite: source-in;
+  mask-image: radial-gradient(circle 11px at 0 100%, transparent 11px, #000 11.5px),
+    radial-gradient(circle 11px at 100% 100%, transparent 11px, #000 11.5px);
+  mask-composite: intersect;
+}
+
+.tk-vt--gallery .vt-upper .vt-frame {
+  inset: 9px 9px 0;
+  border-bottom: 0;
+}
+
+.tk-vt--gallery .vt-lower .vt-frame {
+  inset: 0 9px 9px;
+  border-top: 0;
+}
+
+.tk-vt--gallery .tk-title {
+  font-family: var(--serif);
+  font-size: 1.5rem;
+  text-align: center;
+  letter-spacing: 0.02em;
+}
+
+.tk-vt--gallery .vt-shotrow {
+  display: grid;
+  grid-template-columns: 1fr 84px;
+  align-items: center;
+  gap: 12px;
+}
+
+.tk-vt--gallery .vt-photo {
+  aspect-ratio: 16 / 9;
+  border: 3px solid var(--vt-gold);
+  border-radius: 4px;
+}
+
+.tk-vt--gallery .vt-big {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 2.2rem;
+  line-height: 1;
+  text-align: center;
+}
+
+.tk-vt--gallery .vt-lower {
+  display: grid;
+  grid-template-columns: 40px 1fr 40px;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 22px 22px;
+  border-top: 1.5px dashed var(--vt-gold);
+  -webkit-mask-image: radial-gradient(circle 11px at 0 0, transparent 11px, #000 11.5px),
+    radial-gradient(circle 11px at 100% 0, transparent 11px, #000 11.5px);
+  -webkit-mask-composite: source-in;
+  mask-image: radial-gradient(circle 11px at 0 0, transparent 11px, #000 11.5px),
+    radial-gradient(circle 11px at 100% 0, transparent 11px, #000 11.5px);
+  mask-composite: intersect;
+}
+
+.tk-vt--gallery .vt-lower .vt-ico svg {
+  width: 28px;
+  height: 28px;
+}
+
+.tk-vt--gallery .vt-card {
+  display: grid;
+  gap: 3px;
+  padding: 10px 14px;
+  color: var(--vt-bg);
+  background: var(--vt-paper);
+  border-right: 2px dashed var(--vt-bg-soft, rgba(29, 74, 82, 0.5));
+  border-right: 2px dashed color-mix(in srgb, var(--vt-bg) 50%, transparent);
+}
+
+.tk-vt--gallery .vt-admit {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 1.25rem;
+  line-height: 1.05;
+  letter-spacing: 0.04em;
+}
+
+.tk-vt--gallery .vt-card .tk-mood,
+.tk-vt--gallery .vt-card .tk-place {
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 1;
+}
+
+.tk-vt--gallery .vt-card .vt-line {
+  margin-top: 3px;
+}
+
+.tk-vt--emerald {
+  --vt-bg: #1f4d42;
+  --vt-bg2: #153a31;
+  --vt-gold: #d8bd7a;
+}
+
+.tk-vt--gallery.tk-vt--wine {
+  --vt-bg: #50202f;
+  --vt-bg2: #3a1521;
+  --vt-gold: #deb980;
+}
+
+/* ============================================================
+   批量版式六：胶带相片票（照片 + 圆孔撕线 + 信息栏 + 条码）
+   ============================================================ */
+
+.tk-snap {
+  --sn-bg: #d8d3c2;
+  --sn-ink: #2e2e26;
+  --sn-mute: #9b9683;
+  --sn-info: 150px;
+  position: relative;
+  width: 420px;
+  padding: 10px;
+  color: var(--sn-ink);
+}
+
+.tk-snap .sn-card {
+  --sn-hx: calc(100% - var(--sn-info) - 13px);
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 26px var(--sn-info);
+  background: var(--sn-bg);
+  -webkit-mask: radial-gradient(circle 6px at var(--sn-hx) 11px, transparent 6px, #000 6.5px) 0 -11px / 100% 22px repeat-y;
+  mask: radial-gradient(circle 6px at var(--sn-hx) 11px, transparent 6px, #000 6.5px) 0 -11px / 100% 22px repeat-y;
+}
+
+.tk-snap--flip .sn-card {
+  --sn-hx: calc(var(--sn-info) + 13px);
+  grid-template-columns: var(--sn-info) 26px 1fr;
+}
+
+.tk-snap--round .sn-card {
+  border-radius: 16px;
+}
+
+.tk-snap .sn-shot {
+  display: grid;
+  padding: 14px 0 14px 14px;
+}
+
+.tk-snap--flip .sn-shot {
+  padding: 14px 14px 14px 0;
+}
+
+.tk-snap .sn-photo {
+  width: 100%;
+  min-height: 0;
+  aspect-ratio: 4 / 3;
+  border-radius: 2px;
+}
+
+.tk-snap--round .sn-photo {
+  border-radius: 10px;
+}
+
+.tk-snap .sn-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 7px;
+  min-width: 0;
+  padding: 16px 16px 12px 2px;
+  text-align: right;
+}
+
+.tk-snap--flip .sn-info {
+  align-items: flex-start;
+  padding: 16px 2px 12px 18px;
+  text-align: left;
+}
+
+.tk-snap .sn-tag {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 0.5rem;
+  font-weight: 500;
+  letter-spacing: 0.22em;
+  color: var(--sn-mute);
+}
+
+.tk-snap--flip .sn-tag {
+  flex-direction: row-reverse;
+}
+
+.tk-snap .sn-tag i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--sn-mute);
+}
+
+.tk-snap .tk-title {
+  overflow-wrap: anywhere;
+}
+
+.tk-snap--font-script .tk-title {
+  font-family: 'Pinyon Script', var(--serif);
+  font-size: 1.32rem;
+  font-weight: 400;
+  line-height: 1.2;
+}
+
+.tk-snap--font-serif .tk-title {
+  font-family: 'Lora', Georgia, serif;
+  font-size: 1.08rem;
+  font-weight: 700;
+  line-height: 1.32;
+  letter-spacing: 0.03em;
+}
+
+.tk-snap--font-sans .tk-title {
+  font-family: 'DM Sans', 'PingFang SC', sans-serif;
+  font-size: 1.16rem;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: 0.08em;
+}
+
+.tk-snap .tk-mood {
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  opacity: 0.9;
+}
+
+.tk-snap .sn-when {
+  display: grid;
+  gap: 1px;
+  font-family: 'Lora', Georgia, serif;
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  color: var(--sn-mute);
+}
+
+.tk-snap .sn-when b {
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.tk-snap .sn-bar {
+  display: grid;
+  justify-items: center;
+  gap: 1px;
+  margin-top: auto;
+  padding-top: 4px;
+}
+
+.tk-snap .sn-bar span {
+  width: 108px;
+  height: 26px;
+  background:
+    repeating-linear-gradient(90deg, var(--sn-ink) 0 2px, transparent 2px 3px, var(--sn-ink) 3px 4px, transparent 4px 6px,
+      var(--sn-ink) 6px 9px, transparent 9px 10px, var(--sn-ink) 10px 11px, transparent 11px 14px);
+  background-color: #fff;
+  box-shadow: 0 0 0 2px #fff;
+}
+
+.tk-snap .sn-bar em {
+  font-family: var(--mono);
+  font-size: 0.42rem;
+  font-style: normal;
+  letter-spacing: 0.12em;
+}
+
+.tk-snap .sn-tape {
+  position: absolute;
+  z-index: 4;
+  width: 62px;
+  height: 20px;
+  pointer-events: none;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+
+.tk-snap .sn-tape--kraft {
+  background: repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.12) 0 2px, transparent 2px 5px), rgba(224, 202, 150, 0.85);
+}
+
+.tk-snap .sn-tape--grid {
+  background:
+    linear-gradient(rgba(120, 130, 110, 0.45) 1px, transparent 1px) 0 0 / 5px 5px,
+    linear-gradient(90deg, rgba(120, 130, 110, 0.45) 1px, transparent 1px) 0 0 / 5px 5px,
+    rgba(238, 238, 228, 0.9);
+}
+
+.tk-snap .sn-tape--kraft.sn-tape--a {
+  top: 2px;
+  right: -8px;
+  transform: rotate(38deg);
+}
+
+.tk-snap .sn-tape--kraft.sn-tape--b {
+  bottom: 2px;
+  left: -8px;
+  transform: rotate(38deg);
+}
+
+.tk-snap .sn-tape--grid.sn-tape--a {
+  top: 2px;
+  left: -8px;
+  transform: rotate(-38deg);
+}
+
+.tk-snap .sn-tape--grid.sn-tape--b {
+  bottom: 2px;
+  right: -8px;
+  transform: rotate(-38deg);
+}
+
+.tk-snap--blush {
+  --sn-bg: #f2e3d9;
+  --sn-ink: #2a2420;
+  --sn-mute: #b3a69c;
+}
+
+.tk-snap--moss {
+  --sn-bg: #1f271b;
+  --sn-ink: #f3f0e4;
+  --sn-mute: #a9ad98;
+}
+
+.tk-snap--sky {
+  --sn-bg: #dbe5ea;
+  --sn-ink: #22323c;
+  --sn-mute: #8fa0aa;
+}
+
+.tk-snap--night {
+  --sn-bg: #1d2232;
+  --sn-ink: #eef0f6;
+  --sn-mute: #9aa0b5;
+}
+
+.tk-snap--cream {
+  --sn-bg: #f1e9d6;
+  --sn-ink: #3a2e22;
+  --sn-mute: #ab9a82;
+}
+
+/* 深色票面上条码仍是黑条白底 */
+.tk-snap--moss .sn-bar span,
+.tk-snap--night .sn-bar span {
+  --sn-ink: #111;
 }

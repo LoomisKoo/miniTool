@@ -705,8 +705,8 @@ struct TkConcertRoundtrip: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            half("OUTBOUND · 去", slot: 0)
-            half("RETURN · 返", slot: 1)
+            half(AppLocalization.isEnglish ? "OUTBOUND" : "OUTBOUND · 去", slot: 0)
+            half(AppLocalization.isEnglish ? "RETURN" : "RETURN · 返", slot: 1)
                 .background(Color(hex: 0x5A4BA0, alpha: 0.05))
                 .overlay(alignment: .top) { H5Dash(color: Color(hex: 0x6E5FAA, alpha: 0.46), lineWidth: 2, dash: [5, 3]).frame(height: 2) }
         }

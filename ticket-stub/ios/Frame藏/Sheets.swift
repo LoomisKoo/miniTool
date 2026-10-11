@@ -38,7 +38,7 @@ struct TemplateSheet: View {
             VStack(spacing: 0) {
                 Picker("分类", selection: $store.category) {
                     ForEach(TicketCategory.allCases) { category in
-                        Text(category.tab).tag(category)
+                        Text(category.displayTab).tag(category)
                     }
                 }
                 .pickerStyle(.segmented)
@@ -111,7 +111,7 @@ private struct TemplatePreview: View {
                 let size = template.size
                 let scale = min(proxy.size.width / size.width, proxy.size.height / size.height) * 0.86
                 H5TicketView()
-                    .environment(\.ticket, TicketContext(template: template, fields: template.defaults))
+                    .environment(\.ticket, TicketContext(template: template, fields: template.localizedDefaults))
                     .frame(width: size.width, height: size.height)
                     .scaleEffect(scale)
                     .shadow(color: .black.opacity(0.35), radius: 6 / max(scale, 0.01), y: 3 / max(scale, 0.01))
@@ -120,10 +120,10 @@ private struct TemplatePreview: View {
             }
 
             VStack(alignment: .leading, spacing: 1) {
-                Text(template.name)
+                Text(template.displayName)
                     .font(.system(size: 12, weight: .semibold))
                     .lineLimit(1)
-                Text(template.detail)
+                Text(template.displayDetail)
                     .font(.system(size: 8))
                     .foregroundStyle(.white.opacity(0.72))
                     .lineLimit(1)
@@ -194,13 +194,15 @@ struct FieldsSheet: View {
     private func binding(for key: String) -> Binding<String> {
         Binding(
             get: {
+                let raw: String
                 switch key {
-                case "title": store.fields.title
-                case "place": store.fields.place
-                case "date": store.fields.date
-                case "seat": store.fields.seat
-                default: store.fields.mood
+                case "title": raw = store.fields.title
+                case "place": raw = store.fields.place
+                case "date": raw = store.fields.date
+                case "seat": raw = store.fields.seat
+                default: raw = store.fields.mood
                 }
+                return AppLocalization.fieldText(raw)
             },
             set: { value in
                 switch key {
@@ -222,7 +224,7 @@ struct FieldsSheet: View {
                     VStack(alignment: .leading, spacing: 18) {
                         VStack(spacing: 12) {
                             ForEach(store.template.fields, id: \.key) { field in
-                                TicketField(label: field.label, placeholder: field.value, text: binding(for: field.key))
+                                TicketField(label: field.displayLabel, placeholder: AppLocalization.text(field.value), text: binding(for: field.key))
                             }
                         }
                     .padding(.top, 2)
@@ -312,9 +314,11 @@ struct PhotoAdjustSheet: View {
 
 struct EffectsSheet: View {
     @Environment(TicketStore.self) private var store
+    @Environment(ProStore.self) private var pro
     @Environment(\.dismiss) private var dismiss
     @State private var selectedTab = 0
     @State private var selectedEffect: TicketEffect?
+    @State private var showPaywall = false
     private let tabs = ["纹理", "图案", "印章", "文字", "光效", "纸感"]
 
     private func tap(_ effect: TicketEffect) {
@@ -359,20 +363,9 @@ struct EffectsSheet: View {
                     }
                     .background(FrameTheme.surface, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
 
-                    HStack {
-                        Text("作用范围")
-                            .font(.system(size: 12, weight: .semibold))
-                        Spacer()
-                        Text("前景")
-                            .font(.system(size: 12, weight: .semibold))
-                            .padding(.horizontal, 13)
-                            .padding(.vertical, 7)
-                            .background(FrameTheme.surfaceInset, in: Capsule())
-                    }
-
                     Picker("特效分类", selection: $selectedTab) {
                         ForEach(Array(tabs.enumerated()), id: \.offset) { index, tab in
-                            Text(tab).tag(index)
+                            Text(AppLocalization.text(tab)).tag(index)
                         }
                     }
                     .pickerStyle(.segmented)
@@ -386,7 +379,11 @@ struct EffectsSheet: View {
                         ForEach(TicketCatalog.effects.filter { $0.tab == tabs[selectedTab] }) { effect in
                             let isFocused = selectedEffect == effect && store.effects.contains(effect)
                             Button {
-                                tap(effect)
+                                if effect.isPro && !pro.isPro {
+                                    showPaywall = true
+                                } else {
+                                    tap(effect)
+                                }
                             } label: {
                                 VStack(spacing: 9) {
                                     EffectThumb(effect: effect)
@@ -397,7 +394,14 @@ struct EffectsSheet: View {
                                                 .strokeBorder(isFocused ? effectAccent : FrameTheme.line, lineWidth: isFocused ? 2.5 : 1)
                                         }
                                         .overlay(alignment: .topTrailing) {
-                                            if store.effects.contains(effect) {
+                                            if effect.isPro && !pro.isPro {
+                                                Image(systemName: "lock.fill")
+                                                    .font(.system(size: 10, weight: .bold))
+                                                    .foregroundStyle(.white)
+                                                    .frame(width: 20, height: 20)
+                                                    .background(.black.opacity(0.6), in: Circle())
+                                                    .padding(6)
+                                            } else if store.effects.contains(effect) {
                                                 Image(systemName: "checkmark")
                                                     .font(.system(size: 10, weight: .bold))
                                                     .foregroundStyle(.black)
@@ -406,7 +410,7 @@ struct EffectsSheet: View {
                                                     .padding(6)
                                             }
                                         }
-                                    Text(effect.name)
+                                    Text(effect.displayName)
                                         .font(.system(size: 11, weight: isFocused ? .semibold : .medium))
                                         .foregroundStyle(isFocused ? effectAccent : .primary)
                                         .lineLimit(1)
@@ -451,7 +455,7 @@ struct EffectsSheet: View {
                                     Button {
                                         focus(effect, proxy: scrollProxy)
                                     } label: {
-                                        Label(effect.name, systemImage: effect.symbol)
+                                        Label(effect.displayName, systemImage: effect.symbol)
                                             .font(.system(size: 11, weight: isFocused ? .semibold : .medium))
                                             .foregroundStyle(isFocused ? effectAccent : .primary)
                                             .padding(.horizontal, 10)
@@ -483,6 +487,9 @@ struct EffectsSheet: View {
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
         .presentationBackground(FrameTheme.panel)
+        .sheet(isPresented: $showPaywall) {
+            PaywallView()
+        }
     }
 }
 
@@ -495,25 +502,31 @@ private struct EffectThumb: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let scale = max(proxy.size.width / canvas.width, proxy.size.height / canvas.height)
+            // 缩略图必须完整容纳画布；使用 max 会让上下内容溢出并被卡片裁掉
+            let scale = min(proxy.size.width / canvas.width, proxy.size.height / canvas.height) * 0.82
             ZStack {
                 LinearGradient(
                     colors: [effect.tint.background.opacity(0.85), FrameTheme.thumbBackdrop],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )
-                EffectVisualOverlay(
-                    effectID: effect.id,
-                    settings: EffectSettings(opacity: 0.95, positionX: 50, positionY: 50, color: effect.tint)
-                )
-                if effect.tab == "纸感" {
-                    Image(systemName: effect.symbol)
-                        .font(.system(size: 34, weight: .light))
-                        .foregroundStyle(effect.tint.foreground)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                ZStack {
+                    EffectVisualOverlay(
+                        effectID: effect.id,
+                        settings: EffectSettings(opacity: 0.95, positionX: 50, positionY: 50, color: effect.tint),
+                        isPreview: true
+                    )
+                    if effect.tab == "纸感" {
+                        Image(systemName: effect.symbol)
+                            .font(.system(size: 34, weight: .light))
+                            .foregroundStyle(effect.tint.foreground)
+                    }
                 }
+                .frame(width: canvas.width, height: canvas.height)
+                .scaleEffect(scale)
             }
-            .frame(width: canvas.width, height: canvas.height)
-            .scaleEffect(scale)
             .frame(width: proxy.size.width, height: proxy.size.height)
         }
         .allowsHitTesting(false)
@@ -538,9 +551,44 @@ private struct EffectControls: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
-                Text(effect.name).font(.system(size: 14, weight: .semibold))
+                Text(effect.displayName).font(.system(size: 14, weight: .semibold))
                 Spacer()
-                Text(effect.hint).font(.caption).foregroundStyle(.secondary)
+                Text(effect.displayHint).font(.caption).foregroundStyle(.secondary)
+            }
+            VStack(alignment: .leading, spacing: 8) {
+                Text("作用范围")
+                    .font(.system(size: 12, weight: .semibold))
+                HStack(spacing: 7) {
+                    ForEach(EffectScope.allCases) { scope in
+                        Button {
+                            update { $0.target = scope }
+                        } label: {
+                            Text(AppLocalization.text(scope.rawValue))
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(settings.resolvedTarget == scope ? FrameTheme.onAccent : FrameTheme.textSecondary)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 7)
+                                .background(
+                                    settings.resolvedTarget == scope ? FrameTheme.accent : FrameTheme.surfaceInset,
+                                    in: Capsule()
+                                )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                Text(AppLocalization.text(settings.resolvedTarget.hint))
+                    .font(.system(size: 11))
+                    .foregroundStyle(FrameTheme.muted)
+            }
+            if effect.id == "txt-custom" || effect.id == "stp-custom" {
+                TextField(
+                    AppLocalization.text(effect.id == "txt-custom" ? "输入文字" : "输入印章文字"),
+                    text: Binding(
+                        get: { settings.customText ?? (effect.id == "txt-custom" ? "记忆" : "MEMENTO") },
+                        set: { value in update { $0.customText = value } }
+                    )
+                )
+                .textFieldStyle(.roundedBorder)
             }
             HStack {
                 Text("浓淡")
@@ -598,50 +646,134 @@ struct StageSheet: View {
 
     private let colors: [ColorToken] = [.ink, .cream, .ocean, .sunset, .moss, .plum, .amber, .neon]
 
+    private var backgroundImage: UIImage? {
+        guard let data = store.stageBackgroundData else { return nil }
+        return UIImage(data: data)
+    }
+
+    /// 与编辑页画板一致：票根尺寸四周各留 10% 长边的边距。
+    private var boardAspectRatio: CGFloat {
+        let ticket = store.template.size
+        let pad = max(ticket.width, ticket.height) * 0.1
+        return (ticket.width + pad * 2) / (ticket.height + pad * 2)
+    }
+
     var body: some View {
+        @Bindable var store = store
         NavigationStack {
-            List {
-                Section("画板背景") {
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 4), spacing: 14) {
-                        ForEach(colors, id: \.rawValue) { color in
-                            Button {
-                                store.background = color
-                            } label: {
-                                Circle()
-                                    .fill(color.background)
-                                    .frame(height: 48)
-                                    .overlay(Circle().stroke(store.background == color ? FrameTheme.accent : FrameTheme.lineStrong, lineWidth: store.background == color ? 3 : 1))
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                    .padding(.vertical, 8)
-                    PhotosPicker(selection: $backgroundItem, matching: .images) {
-                        Label(store.stageBackgroundData == nil ? "选择背景图" : "更换背景图", systemImage: "photo.badge.plus")
-                    }
-                    if store.stageBackgroundData != nil {
-                        Button("移除背景图", role: .destructive) {
-                            store.stageBackgroundData = nil
-                        }
-                    }
-                    HStack {
-                        Text("背景图透明度")
-                        Slider(value: Binding(
-                            get: { store.stageOpacity },
-                            set: { store.stageOpacity = $0 }
-                        ), in: 0.2...1)
-                    }
-                }
-                .listRowBackground(FrameTheme.surface)
-                Section("纸张呈现") {
-                    Label("票根 3D 悬停预览已启用", systemImage: "rotate.3d")
-                    Text("拖动预览中的票根可查看倾斜效果。导出时会生成平面高清图。")
-                        .font(.caption)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("选择一块适合票根的底色，或使用自己的照片。")
+                        .font(.system(size: 13))
                         .foregroundStyle(FrameTheme.muted)
+
+                    HStack(spacing: 10) {
+                        Text("底色")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(FrameTheme.textSecondary)
+                        Spacer()
+                        Circle()
+                            .fill(store.background.background)
+                            .frame(width: 18, height: 18)
+                            .overlay(Circle().strokeBorder(FrameTheme.lineStrong, lineWidth: 1))
+                        Picker("底色", selection: $store.background) {
+                            ForEach(colors, id: \.rawValue) { color in
+                                Text(color.displayName).tag(color)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .labelsHidden()
+                        .tint(FrameTheme.accent)
+                    }
+                    .padding(16)
+                    .background(FrameTheme.surface, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+
+                    VStack(spacing: 14) {
+                        let hasBackgroundImage = store.stageBackgroundData != nil
+                        let previewImage = backgroundImage
+                        let previewOpacity = store.stageOpacity
+                        let previewRatio = boardAspectRatio
+
+                        HStack {
+                            Label("背景图片", systemImage: "photo.on.rectangle.angled")
+                                .font(.system(size: 13, weight: .semibold))
+                            Spacer()
+                        }
+
+                        PhotosPicker(selection: $backgroundItem, matching: .images) {
+                            Color.clear
+                                .aspectRatio(previewRatio, contentMode: .fit)
+                                .frame(maxWidth: .infinity)
+                                .background(FrameTheme.bg)
+                                .overlay {
+                                    if let image = previewImage {
+                                        Image(uiImage: image)
+                                            .resizable()
+                                            .scaledToFill()
+                                            .opacity(previewOpacity)
+                                    } else {
+                                        VStack(spacing: 8) {
+                                            Image(systemName: "plus")
+                                                .font(.system(size: 26, weight: .medium))
+                                            Text("选择图片")
+                                                .font(.system(size: 12, weight: .medium))
+                                        }
+                                        .foregroundStyle(FrameTheme.accent)
+                                    }
+                                }
+                                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                    .strokeBorder(
+                                        hasBackgroundImage ? FrameTheme.line : FrameTheme.accentLine,
+                                        style: StrokeStyle(
+                                            lineWidth: 1,
+                                            dash: hasBackgroundImage ? [] : [6, 5]
+                                        )
+                                    )
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .overlay(alignment: .topTrailing) {
+                            if hasBackgroundImage {
+                                Button {
+                                    store.stageBackgroundData = nil
+                                    backgroundItem = nil
+                                } label: {
+                                    Image(systemName: "xmark")
+                                        .font(.system(size: 13, weight: .semibold))
+                                        .foregroundStyle(.white)
+                                        .frame(width: 32, height: 32)
+                                        .circleGlass()
+                                }
+                                .buttonStyle(.plain)
+                                .padding(10)
+                                .accessibilityLabel("移除背景图")
+                            }
+                        }
+
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Text("透明度")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundStyle(FrameTheme.textSecondary)
+                                Spacer()
+                                Text("\(Int(previewOpacity * 100))%")
+                                    .font(.system(size: 12, weight: .semibold).monospacedDigit())
+                                    .foregroundStyle(FrameTheme.accent)
+                            }
+                            Slider(value: $store.stageOpacity, in: 0.2...1)
+                                .disabled(!hasBackgroundImage)
+                                .opacity(hasBackgroundImage ? 1 : 0.4)
+                        }
+                    }
+                    .padding(16)
+                    .background(FrameTheme.surface, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
                 }
-                .listRowBackground(FrameTheme.surface)
+                .padding(20)
             }
-            .scrollContentBackground(.hidden)
+            .scrollIndicators(.hidden)
+            .background(FrameTheme.bg)
             .tint(FrameTheme.accent)
             .navigationTitle("画板背景")
             .navigationBarTitleDisplayMode(.inline)
@@ -657,9 +789,20 @@ struct StageSheet: View {
                 }
             }
         }
-        .presentationDetents([.medium, .large])
+        .presentationDetents([.large])
         .presentationDragIndicator(.visible)
         .presentationBackground(FrameTheme.panel)
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func circleGlass() -> some View {
+        if #available(iOS 26.0, *) {
+            self.glassEffect(.regular.interactive(), in: Circle())
+        } else {
+            self.background(.ultraThinMaterial, in: Circle())
+        }
     }
 }
 

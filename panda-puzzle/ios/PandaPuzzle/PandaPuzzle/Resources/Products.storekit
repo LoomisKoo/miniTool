@@ -1,0 +1,34 @@
+{
+  "identifier" : "PandaPuzzleProducts",
+  "nonRenewingSubscriptions" : [],
+  "products" : [
+    {
+      "displayPrice" : "28",
+      "familyShareable" : true,
+      "internalID" : "PANDAPRO001",
+      "localizations" : [
+        {
+          "description" : "More pieces, watermark-free exports, and more in-progress save slots.",
+          "displayName" : "Panda Puzzle Pro",
+          "locale" : "en_US"
+        },
+        {
+          "description" : "更多拼块、无水印导出、更多进行中存档。一次买断，永久使用。",
+          "displayName" : "熊猫拼图 Pro",
+          "locale" : "zh_CN"
+        }
+      ],
+      "productID" : "com.loomiskoo.pandapuzzle.pro.lifetime",
+      "referenceName" : "Panda Puzzle Pro Lifetime",
+      "type" : "NonConsumable"
+    }
+  ],
+  "settings" : {
+    "_failTransactionsEnabled" : false
+  },
+  "subscriptionGroups" : [],
+  "version" : {
+    "major" : 3,
+    "minor" : 0
+  }
+}

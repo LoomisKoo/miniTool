@@ -1,0 +1,52 @@
+[
+  {
+    "page": "地图页 (mapScreen)",
+    "blocks": [
+      "点阵世界地图 canvas#map",
+      "左下角定位标签 #mapLoc",
+      "操作提示 #mapHint",
+      "右上角搜索按钮 #mapSearch",
+      "缩放控件组 #zin/#zout/#zreset/#mapFilter",
+      "顶部导航 .nav(h1#navH1)"
+    ],
+    "states": ["中国视角初始态", "地球仪模式", "平面模式", "拖动/双指缩放/双击放大", "筛选生效后的高亮", "定位权限拒绝的兜底视角"],
+    "interactions": ["拖动平移", "双指缩放", "双击放大", "点击美食点→弹出详情 sheet", "点击附近聚合→clusterDlg", "点击搜索→切名录页并聚焦", "点击筛选→filterDlg"]
+  },
+  {
+    "page": "名录页 (listScreen)",
+    "blocks": [
+      "搜索框 #searchInput",
+      "筛选按钮 #filterBtn",
+      "只看收藏 #favFilter",
+      "已选筛选条 #filterActive",
+      "分组列表 #list（按省展开 .card-wrap/.card）",
+      "数据来源声明 .credits"
+    ],
+    "states": ["默认全量", "搜索命中", "搜索无结果(空态)", "筛选生效", "只看收藏(可能为空)", "分组展开/收起"],
+    "interactions": ["输入搜索", "清除搜索", "切换收藏筛选", "展开/收起省份分组", "点击条目→详情 sheet", "点击筛选项移除"]
+  },
+  {
+    "page": "筛选面板 (filterDlg)",
+    "blocks": ["遮罩 #filterMask", "抓条", "标题/清空/关闭", "可滚动筛选区 #filterBody", "底部『查看结果』#filterApply"],
+    "states": ["关闭", "打开", "已选=空", "已选非空(禁用/可用查看结果)"],
+    "interactions": ["打开/关闭", "勾选/取消筛选", "清空", "查看结果"]
+  },
+  {
+    "page": "附近美食列表 (clusterDlg)",
+    "blocks": ["抓条", "标题 #cTitle/副标题 #cSub/关闭 #clusterClose", "列表 #clusterList", "遮罩 #clusterMask"],
+    "states": ["关闭", "打开"],
+    "interactions": ["点击聚合点打开", "关闭", "点击条目→详情 sheet"]
+  },
+  {
+    "page": "美食详情弹层 (sheet)",
+    "blocks": ["遮罩 #sheetMask", "标题 #sName/副标题 #sSub/收藏 #sHeart/关闭 #sheetClose", "元信息 #sMeta", "特色标签 #sTags", "主要食材 #sIng", "烹饪方式 #sCook", "描述 #placeDesc"],
+    "states": ["关闭", "打开", "已收藏/未收藏", "各详情块有数据/无数据(hidden)"],
+    "interactions": ["打开/关闭", "切换收藏(localStorage)", "点击标签/食材可触发筛选"]
+  },
+  {
+    "page": "全局元素",
+    "blocks": ["底部 Tab .tabbar(data-tab=map/list)", "Toast #toast"],
+    "states": ["地图页选中", "名录页选中", "Toast 显示/隐藏"],
+    "interactions": ["切换 Tab", "Toast 自动消失"]
+  }
+]

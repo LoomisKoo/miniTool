@@ -3,22 +3,26 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-<meta name="theme-color" content="#1a1814" />
+<meta name="theme-color" content="#0e0e10" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
-<title>电子票根生成器</title>
-<link rel="icon" href="assets/icon.svg" />
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="src/style.css?v=20260926z" />
+<title>帧藏</title>
+<link rel="icon" href="assets/icon.jpg" />
+<link rel="apple-touch-icon" href="assets/icon.jpg" />
+<link rel="stylesheet" href="vendor/fonts.css" />
+<link rel="stylesheet" href="src/style.css?v=20261008d4" />
 </head>
 <body>
 <div class="app">
   <div class="workspace">
-    <main class="stage">
-      <div class="tilt-scene" id="tiltScene">
-        <div class="tilt-card" id="tiltCard">
-          <div class="ticket-host" id="ticketHost"></div>
+    <main class="stage" id="stagePanel">
+      <div class="stage-artboard" id="stageArtboard">
+        <div class="stage-bg" id="stageBg" aria-hidden="true">
+          <img class="stage-bg-img" id="stageBgImg" alt="" draggable="false" hidden />
+        </div>
+        <div class="tilt-scene" id="tiltScene">
+          <div class="tilt-card" id="tiltCard">
+            <div class="ticket-host" id="ticketHost"></div>
+          </div>
         </div>
       </div>
     </main>
@@ -35,6 +39,7 @@
 
       <div class="photo-slots" id="photoSlots" aria-label="票面照片"></div>
       <input type="file" id="photoInput" accept="image/*" hidden />
+      <input type="file" id="stageBgInput" accept="image/*" hidden />
     </aside>
   </div>
 
@@ -47,21 +52,29 @@
       <i data-lucide="sparkles"></i>
       <span>特效</span>
     </button>
-    <button type="button" class="dock-btn dock-btn--primary" id="exportBtn">
-      <i data-lucide="download"></i>
-      <span>导出</span>
+    <button type="button" class="dock-btn" id="stageBtn" aria-haspopup="dialog" aria-controls="stageSheet">
+      <i data-lucide="layout"></i>
+      <span>画板</span>
     </button>
+    <div class="dock-actions">
+      <button type="button" class="dock-btn dock-btn--primary" id="exportBtn" aria-haspopup="dialog" aria-controls="exportSheet">
+        <i data-lucide="download"></i>
+        <span>导出</span>
+      </button>
+      <button type="button" class="dock-btn" id="publishBtn" aria-haspopup="dialog" aria-controls="publishSheet">
+        <i data-lucide="send"></i>
+        <span>发布</span>
+      </button>
+    </div>
   </nav>
 </div>
 
 <!-- 票根类型 -->
-<div class="sheet" id="styleSheet" role="dialog" aria-modal="true" aria-label="选择票根类型" aria-hidden="true">
-  <div class="sheet-panel">
-    <header class="sheet-head">
-      <div>
-        <p class="sheet-kicker">票根类型</p>
-        <h2 class="sheet-title" id="sheetTitle">电影票</h2>
-      </div>
+<div class="sheet sheet-style" id="styleSheet" role="dialog" aria-modal="true" aria-label="选择票根类型" aria-hidden="true">
+  <button type="button" class="fx-scrim" id="styleScrim" aria-label="关闭" tabindex="-1"></button>
+  <div class="sheet-panel style-panel">
+    <header class="sheet-head sheet-head--compact">
+      <h2 class="sheet-title" id="sheetTitle">票根模板</h2>
       <button type="button" class="sheet-close" id="sheetClose" aria-label="关闭">
         <i data-lucide="x"></i>
       </button>
@@ -109,8 +122,8 @@
         <img class="photo-img photo-adjust-img" id="photoAdjustImg" alt="" draggable="false" />
       </div>
       <div class="photo-adjust-actions">
-        <button type="button" class="photo-adjust-btn" id="photoResetBtn">重置</button>
-        <button type="button" class="photo-adjust-btn photo-adjust-btn--accent" id="photoReplaceBtn">更换照片</button>
+        <button type="button" class="photo-adjust-btn" id="photoReplaceBtn">更换照片</button>
+        <button type="button" class="photo-adjust-btn photo-adjust-btn--accent" id="photoConfirmBtn">确定</button>
       </div>
     </div>
   </div>
@@ -155,10 +168,124 @@
   </div>
 </div>
 
-<script src="https://unpkg.com/lucide@0.468.0"></script>
-<script src="https://cdn.jsdelivr.net/npm/html-to-image@1.11.11/dist/html-to-image.js"></script>
-<script src="src/templates.js?v=20260926z"></script>
-<script src="src/effects.js?v=20260926z"></script>
-<script src="src/app.js?v=20260926z"></script>
+<!-- 预览画板 -->
+<div class="sheet sheet-fields sheet-stage" id="stageSheet" role="dialog" aria-modal="true" aria-label="预览画板" aria-hidden="true">
+  <button type="button" class="fx-scrim" id="stageScrim" aria-label="关闭" tabindex="-1"></button>
+  <div class="sheet-panel fields-panel">
+    <header class="sheet-head sheet-head--stage">
+      <div class="sheet-head-text">
+        <h2 class="sheet-title">画板背景</h2>
+      </div>
+      <button type="button" class="sheet-close" id="stageClose" aria-label="关闭">
+        <i data-lucide="x"></i>
+      </button>
+    </header>
+    <div class="fields-body">
+      <div class="stage-media" id="stageMedia">
+        <div class="stage-media-empty" id="stageMediaEmpty">
+          <div class="stage-color-module">
+            <div class="stage-color-module-head">
+              <span class="stage-color-module-title">底色</span>
+              <span class="stage-color-module-value" id="stageColorValue" aria-hidden="true"></span>
+            </div>
+            <div class="stage-color-grid" id="stageColorGrid" role="listbox" aria-label="底色预设"></div>
+          </div>
+          <button type="button" class="stage-media-tile stage-media-tile--photo" id="stageMediaPickTile" aria-label="选择背景图">
+            <span class="stage-media-tile-icon" aria-hidden="true"><i data-lucide="image-plus"></i></span>
+            <span class="stage-media-tile-label">选择图片</span>
+          </button>
+        </div>
+        <div class="stage-media-filled is-hidden" id="stageMediaFilled">
+          <div class="stage-media-shot">
+            <div class="stage-media-viewport" id="stageMediaViewport">
+              <img class="stage-media-img" id="stageMediaImg" alt="" draggable="false" />
+              <button type="button" class="stage-media-clear" id="stageBgClearBtn" aria-label="移除图片">
+                <i data-lucide="x"></i>
+              </button>
+            </div>
+          </div>
+          <button type="button" class="stage-media-tool" id="stageBgPickBtn">更换图片</button>
+        </div>
+      </div>
+      <div class="fx-field fx-field--row is-hidden" id="stageBgControls">
+        <label id="stageOpacityLabel">背景透明度</label>
+        <div class="ui-range" id="stageOpacityUi">
+          <div class="ui-range-track" aria-hidden="true"><div class="ui-range-fill"></div></div>
+          <button type="button" class="ui-range-thumb" aria-label="背景透明度"></button>
+        </div>
+      </div>
+      <div class="fx-field fx-field--row is-hidden" id="stageStyleField">
+        <label>风格化</label>
+        <div class="fx-seg fx-seg--wrap" id="stageStyleSeg">
+          <button type="button" class="fx-seg-btn is-active" data-stage-style="none">原图</button>
+          <button type="button" class="fx-seg-btn" data-stage-style="mono">黑白</button>
+          <button type="button" class="fx-seg-btn" data-stage-style="vintage">复古</button>
+          <button type="button" class="fx-seg-btn" data-stage-style="soft">柔焦</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 导出 -->
+<div class="sheet sheet-fields sheet-export" id="exportSheet" role="dialog" aria-modal="true" aria-label="导出" aria-hidden="true">
+  <button type="button" class="fx-scrim" id="exportScrim" aria-label="关闭" tabindex="-1"></button>
+  <div class="sheet-panel fields-panel export-panel">
+    <header class="sheet-head sheet-head--compact">
+      <div>
+        <p class="sheet-kicker">导出 PNG</p>
+        <h2 class="sheet-title">选择范围</h2>
+      </div>
+      <button type="button" class="sheet-close" id="exportClose" aria-label="关闭">
+        <i data-lucide="x"></i>
+      </button>
+    </header>
+    <div class="fields-body export-options">
+      <button type="button" class="export-option" id="exportTicketBtn">
+        <span class="export-option-title">仅票根</span>
+        <span class="export-option-desc">透明底，只要票根本体，适合叠加到别的图</span>
+      </button>
+      <button type="button" class="export-option" id="exportSceneBtn">
+        <span class="export-option-title">预览画面</span>
+        <span class="export-option-desc">包含画板底色、背景图与当前票根位置</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- 发布 -->
+<div class="sheet sheet-fields sheet-export" id="publishSheet" role="dialog" aria-modal="true" aria-label="发布到小红书" aria-hidden="true">
+  <button type="button" class="fx-scrim" id="publishScrim" aria-label="关闭" tabindex="-1"></button>
+  <div class="sheet-panel fields-panel export-panel">
+    <header class="sheet-head sheet-head--compact">
+      <div>
+        <p class="sheet-kicker">发布到小红书</p>
+        <h2 class="sheet-title">选择内容</h2>
+      </div>
+      <button type="button" class="sheet-close" id="publishClose" aria-label="关闭">
+        <i data-lucide="x"></i>
+      </button>
+    </header>
+    <div class="fields-body export-options">
+      <button type="button" class="export-option" id="publishTicketBtn">
+        <span class="export-option-title">仅票根</span>
+        <span class="export-option-desc">透明底，只发布票根本体</span>
+      </button>
+      <button type="button" class="export-option" id="publishNoteBtn">
+        <span class="export-option-title">预览画面</span>
+        <span class="export-option-desc">生成图片笔记并打开小红书发布页</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<script src="vendor/lucide.min.js"></script>
+<script src="vendor/html-to-image.js"></script>
+<script src="vendor/fonts-embed.js"></script>
+<script src="vendor/three.min.js"></script>
+<script src="src/templates.js?v=20260928d3"></script>
+<script src="src/effects.js?v=20260928d3"></script>
+<script src="src/paper-renderer.js?v=20260928d3"></script>
+<script src="src/app.js?v=20260928d3"></script>
 </body>
 </html>

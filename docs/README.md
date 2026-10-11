@@ -8,6 +8,7 @@
 | [ios/](ios/README.md) | iOS 原生 App 总规范（技术选型、命名、目录、权限、付费） |
 | [ios/development.md](ios/development.md) | iOS 开发约定（新建工程、代码组织、资源、联调） |
 | [ios/release.md](ios/release.md) | iOS 发布流程（签名、TestFlight、App Store、买断与订阅） |
+| [qmuse.md](qmuse.md) | **QMuse（妙思）上传规范**：账号门禁、React 适配、审计、导入与重传 |
 
 ## 三种「平台」的区别（容易混淆，先看这里）
 

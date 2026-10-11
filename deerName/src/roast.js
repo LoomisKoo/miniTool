@@ -1692,8 +1692,10 @@
     return y + Math.max(1, lines.length) * line;
   }
 
-  NM.renderRoastCard = function (canvas, data) {
+  NM.renderRoastCard = function (canvas, data, figureImg) {
     var W = 900, H = 1200, M = 64, RIGHT = W - M, R = RIGHT - M;
+    var FIG_W = figureImg ? 210 : 0, FIG_H = figureImg ? 245 : 0;
+    var TW = figureImg ? R - FIG_W - 16 : R;
     var ctx = canvas.getContext('2d');
     canvas.width = W; canvas.height = H;
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
@@ -1775,9 +1777,9 @@
     /* 先把每块的“行”算出来，再统一分配剩余空间，
      * 否则短内容会在中间留一大片空白（之前这里空了 262px）。 */
     ctx.font = 'bold 40px sans-serif';
-    var titleLines = wrapLines(ctx, s.title, R);
+    var titleLines = wrapLines(ctx, s.title, TW);
     ctx.font = '24px sans-serif';
-    var descLines = wrapLines(ctx, data.roleDesc || s.trade, R);
+    var descLines = wrapLines(ctx, data.roleDesc || s.trade, TW);
     var rows = [['事迹', s.event, '#f7ddc8'], ['癖好', s.quirk, '#f9e7bd'], ['结局', s.end, '#f6d4cf']];
     ctx.font = 'bold 24px sans-serif';
     var rowLabelW = rows.map(function (r) { return ctx.measureText(r[0]).width + 34; });
@@ -1787,10 +1789,10 @@
     var HEAD_TOP = HEAD + 44;
     var FOOT_Y = H - 46;
     var panelH = 0;
+    var topH = titleLines.length * 50 + (persona ? 34 : 0) + descLines.length * 38;
+    if (figureImg) topH = Math.max(topH, FIG_H - 30);
     var bodyH = 34                                  /* 你的前世身份 */
-      + titleLines.length * 50
-      + (persona ? 34 : 0)
-      + descLines.length * 38
+      + topH
       + rowLines.reduce(function (a, l) { return a + Math.max(1, l.length) * 38; }, 0);
     var gaps = 3 + rowLines.length;                 /* 块与块之间的间隙数量 */
     var reviews = (data.reviews || [data.roast] || []).slice(0, 2).join('　');
@@ -1815,6 +1817,9 @@
     ctx.fillText(eraText, RIGHT - eraW / 2, y + 1);
     ctx.textAlign = 'left';
 
+    var figTop = y + 22;
+    if (figureImg) ctx.drawImage(figureImg, RIGHT - FIG_W + 12, figTop, FIG_W, FIG_H);
+
     /* 身份名 */
     y += gap + 50;
     ctx.fillStyle = '#4c392f'; ctx.font = 'bold 40px sans-serif';
@@ -1826,7 +1831,7 @@
       y += gap + 24;
       var pw = pill(ctx, '性格取向 · ' + persona.label, M, y, 20, '#f2e2d4', '#8a4a32');
       ctx.font = '20px sans-serif'; ctx.fillStyle = '#92766a';
-      var tagLines = wrapLines(ctx, persona.tag, R - pw - 16);
+      var tagLines = wrapLines(ctx, persona.tag, TW - pw - 16);
       tagLines.forEach(function (ln, i) { ctx.fillText(ln, i === 0 ? M + pw + 16 : M, y + i * 30); });
       if (tagLines.length > 1) y += (tagLines.length - 1) * 30;
     }
@@ -1836,6 +1841,8 @@
     ctx.fillStyle = '#6b5344'; ctx.font = '24px sans-serif';
     descLines.forEach(function (ln, i) { ctx.fillText(ln, M, y + i * 38); });
     y += (descLines.length - 1) * 38;
+
+    if (figureImg) y = Math.max(y, figTop + FIG_H + 20 - gap - 38);
 
     /* 事迹 / 癖好 / 结局：标签做成药丸，和正文同一行 */
     rows.forEach(function (r, i) {

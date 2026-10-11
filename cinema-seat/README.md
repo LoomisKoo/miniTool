@@ -22,3 +22,9 @@ node build.mjs xiaohongshu
 ```
 
 产物位于 `dist/xiaohongshu-cinema-seat.zip`。
+
+### 发布状态
+
+| 平台 | 状态 | 版本 | 产物 |
+| --- | --- | --- | --- |
+| 小红书 | ✅ 已上线 | 1.0.2 | `dist/xiaohongshu-cinema-seat.zip` |

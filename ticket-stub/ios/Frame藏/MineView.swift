@@ -13,7 +13,7 @@ private let gold = FrameTheme.accent
 
 /// 纯内容网页：只展示 HTML，不带浏览器工具栏
 private struct WebPageView: View {
-    let title: String
+    let title: LocalizedStringKey
     let url: URL
     @State private var isLoading = true
 
@@ -25,7 +25,6 @@ private struct WebPageView: View {
             .overlay { if isLoading { ProgressView() } }
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar(.hidden, for: .tabBar)
             .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
     }
@@ -94,31 +93,97 @@ struct MineView: View {
     @State private var showPaywall = false
     @State private var renaming: SavedTicket?
     @State private var nameDraft = ""
+    @State private var query = ""
+    @State private var showReview = false
+    @State private var editingMetadata: SavedTicket?
+    @State private var presetToOpen: SavedPreset?
+    @State private var presetNameDraft = ""
+    @State private var presetSource: SavedTicket?
+    @State private var pendingDelete: SavedTicket?
+
+    private var visibleItems: [SavedTicket] {
+        let text = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !text.isEmpty else { return library.items }
+        return library.items.filter {
+            $0.title.lowercased().contains(text) ||
+            ($0.note ?? "").lowercased().contains(text) ||
+            ($0.tags ?? []).contains { $0.lowercased().contains(text) } ||
+            ($0.template?.category.rawValue.lowercased().contains(text) ?? false)
+        }
+    }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                Button { showPaywall = true } label: { proCard }
-                    .buttonStyle(.plain)
+                if !pro.isPro {
+                    Button { showPaywall = true } label: { proCard }
+                        .buttonStyle(.plain)
+                }
 
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Text("我的作品")
                         .font(.system(size: 17, weight: .bold))
-                    Text("\(library.items.count)")
+                    Text("\(visibleItems.count)")
                         .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(FrameTheme.muted)
+                    Spacer()
+                    Button("年度合集") { showReview = true }
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(FrameTheme.accent)
                 }
 
-                if library.items.isEmpty {
+                if visibleItems.isEmpty {
                     ContentUnavailableView("还没有作品", systemImage: "bookmark", description: Text("在首页编辑完成后，点击右上角书签保存。"))
                         .padding(.top, 30)
                 } else {
-                    WorkGrid(items: library.items, onRename: { work in
+                    WorkGrid(items: visibleItems, onRename: { work in
                         nameDraft = work.title
                         renaming = work
                     }, onDelete: { work in
-                        withAnimation(.spring(duration: 0.4, bounce: 0.12)) { library.delete(work.id) }
+                        pendingDelete = work
+                    }, onMetadata: { editingMetadata = $0 }, onPreset: {
+                        if pro.isPro {
+                            presetSource = $0
+                            presetNameDraft = $0.title
+                        } else {
+                            showPaywall = true
+                        }
                     })
+                }
+
+                if !library.presets.isEmpty {
+                    Text("我的模板")
+                        .font(.system(size: 17, weight: .bold))
+                        .padding(.top, 6)
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 10) {
+                            ForEach(library.presets) { preset in
+                                Button {
+                                    presetToOpen = preset
+                                } label: {
+                                    VStack(alignment: .leading, spacing: 6) {
+                                        Image(systemName: "rectangle.3.group")
+                                            .font(.system(size: 22))
+                                            .foregroundStyle(FrameTheme.accent)
+                                        Text(preset.name)
+                                            .font(.system(size: 12, weight: .semibold))
+                                            .lineLimit(1)
+                                    }
+                                    .frame(width: 112, height: 72, alignment: .leading)
+                                    .padding(12)
+                                    .background(FrameTheme.surface, in: RoundedRectangle(cornerRadius: 14))
+                                }
+                                .buttonStyle(.plain)
+                                .contextMenu {
+                                    Button(role: .destructive) {
+                                        library.deletePreset(preset.id)
+                                    } label: {
+                                        Label("删除模板", systemImage: "trash")
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
             .padding(.horizontal, 14)
@@ -127,6 +192,7 @@ struct MineView: View {
         }
         .background(FrameTheme.bg)
         .foregroundStyle(FrameTheme.text)
+        .searchable(text: $query, prompt: "搜索作品、标签或地点")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 NavigationLink(value: RootRoute.settings) {
@@ -136,6 +202,44 @@ struct MineView: View {
             }
         }
         .sheet(isPresented: $showPaywall) { PaywallView() }
+        .sheet(isPresented: $showReview) { AnnualReviewView() }
+        .sheet(item: $editingMetadata) { work in
+            WorkMetadataSheet(work: work)
+        }
+        .sheet(item: $presetToOpen) { preset in
+            PresetEditorView(preset: preset)
+        }
+        .alert("保存为我的模板", isPresented: Binding(
+            get: { presetSource != nil },
+            set: { if !$0 { presetSource = nil } }
+        )) {
+            TextField("模板名称", text: $presetNameDraft)
+            Button("取消", role: .cancel) {}
+            Button("保存") {
+                if let source = presetSource {
+                    library.savePreset(from: source, name: presetNameDraft.trimmingCharacters(in: .whitespaces))
+                }
+                presetSource = nil
+            }
+        } message: {
+            Text("模板会保留当前版式、照片、特效和配色")
+        }
+        .alert("删除作品？", isPresented: Binding(
+            get: { pendingDelete != nil },
+            set: { if !$0 { pendingDelete = nil } }
+        )) {
+            Button("取消", role: .cancel) {}
+            Button("删除", role: .destructive) {
+                if let work = pendingDelete {
+                    withAnimation(.spring(duration: 0.4, bounce: 0.12)) {
+                        library.delete(work.id)
+                    }
+                }
+                pendingDelete = nil
+            }
+        } message: {
+            Text(pendingDelete?.title ?? AppLocalization.text("这个作品"))
+        }
         .alert("重命名", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
             TextField("作品名称", text: $nameDraft)
             Button("取消", role: .cancel) {}
@@ -154,10 +258,10 @@ struct MineView: View {
                 .frame(width: 48, height: 48)
                 .background(FrameTheme.accentGradient, in: Circle())
             VStack(alignment: .leading, spacing: 4) {
-                Text(pro.isPro ? "帧藏 Pro 已解锁" : "升级帧藏 Pro")
+                Text(AppLocalization.text(pro.isPro ? "帧藏 Pro 已解锁" : "升级帧藏 Pro"))
                     .font(.system(size: 17, weight: .bold, design: .serif))
                     .foregroundStyle(FrameTheme.accentStrong)
-                Text(pro.isPro ? "全部模板与特效均可使用" : "解锁全部高级模板、特效与高清导出")
+                Text(AppLocalization.text(pro.isPro ? "全部模板与特效均可使用" : "解锁全部高级模板、特效与高清导出"))
                     .font(.system(size: 13))
                     .foregroundStyle(FrameTheme.textSecondary)
             }
@@ -182,6 +286,8 @@ private struct WorkGrid: View {
     let items: [SavedTicket]
     let onRename: (SavedTicket) -> Void
     let onDelete: (SavedTicket) -> Void
+    let onMetadata: (SavedTicket) -> Void
+    let onPreset: (SavedTicket) -> Void
 
     private let spacing: CGFloat = 10
 
@@ -194,6 +300,8 @@ private struct WorkGrid: View {
                 .buttonStyle(.plain)
                 .contextMenu {
                     Button { onRename(work) } label: { Label("重命名", systemImage: "pencil") }
+                    Button { onMetadata(work) } label: { Label("编辑档案", systemImage: "tag") }
+                    Button { onPreset(work) } label: { Label("保存为我的模板", systemImage: "square.and.arrow.down") }
                     Button(role: .destructive) { onDelete(work) } label: { Label("删除", systemImage: "trash") }
                 }
                 // 移除必须立即脱离视图树，长按菜单预览才会原地消失而不是飞回原位
@@ -254,23 +362,38 @@ struct WorkCard: View {
             FrameTheme.thumbBackdrop
                 .aspectRatio(1 / Self.coverRatio(for: work), contentMode: .fit)
                 .overlay { cover.padding(12) }
-                .clipped()
-            VStack(alignment: .leading, spacing: 5) {
-                Text(work.title.isEmpty ? "未命名票根" : work.title)
-                    .font(.system(size: 14, weight: .semibold))
-                    .lineLimit(2)
-                HStack(spacing: 4) {
-                    Text(work.template?.name ?? "模板")
-                        .lineLimit(1)
-                    Spacer(minLength: 4)
-                    Text(work.savedAt.formatted(.dateTime.month().day()))
+                .overlay(alignment: .bottom) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        LinearGradient(
+                            colors: [.clear, .black.opacity(0.78)],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                        .frame(height: 68)
+                        .overlay(alignment: .bottomLeading) {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(work.title.isEmpty ? AppLocalization.text("未命名票根") : AppLocalization.text(work.title))
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .lineLimit(1)
+                                HStack(spacing: 4) {
+                                    Text(work.template?.displayName ?? AppLocalization.text("模板"))
+                                        .lineLimit(1)
+                                    Spacer(minLength: 2)
+                                    if work.isFavorite == true {
+                                        Image(systemName: "heart.fill")
+                                            .foregroundStyle(FrameTheme.accent)
+                                    }
+                                    Text(work.savedAt.formatted(.dateTime.month().day()))
+                                }
+                                .font(.system(size: 9, weight: .medium))
+                                .foregroundStyle(.white.opacity(0.72))
+                            }
+                            .padding(.horizontal, 10)
+                            .padding(.bottom, 9)
+                        }
+                    }
                 }
-                .font(.system(size: 11))
-                .foregroundStyle(FrameTheme.muted)
-            }
-            .padding(.horizontal, 10)
-            .padding(.top, 8)
-            .padding(.bottom, 10)
+                .clipped()
         }
         .foregroundStyle(FrameTheme.text)
         .background(FrameTheme.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -359,8 +482,19 @@ enum WorkThumbnails {
 
 struct SettingsView: View {
     @Environment(ProStore.self) private var pro
+    @AppStorage("appLanguage") private var appLanguage = "system"
+
     var body: some View {
         List {
+            Section("语言") {
+                Picker("界面语言", selection: $appLanguage) {
+                    Text("跟随系统").tag("system")
+                    Text("中文").tag("zh-Hans")
+                    Text("English").tag("en")
+                }
+                .pickerStyle(.menu)
+            }
+            .listRowBackground(FrameTheme.surface)
             Section("购买") {
                 Button {
                     Task { await pro.restore() }
@@ -398,7 +532,7 @@ struct SettingsView: View {
         }
     }
 
-    private func row(_ title: String, systemImage: String) -> some View {
+    private func row(_ title: LocalizedStringKey, systemImage: String) -> some View {
         Label {
             Text(title).foregroundStyle(FrameTheme.text)
         } icon: {
@@ -411,5 +545,225 @@ struct SettingsView: View {
         let short = info?["CFBundleShortVersionString"] as? String ?? "1.0"
         let build = info?["CFBundleVersion"] as? String ?? "1"
         return "\(short) (\(build))"
+    }
+}
+
+private struct WorkMetadataSheet: View {
+    @Environment(WorkLibrary.self) private var library
+    @Environment(\.dismiss) private var dismiss
+    let work: SavedTicket
+    @State private var tags = ""
+    @State private var note = ""
+    @State private var isFavorite = false
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("收藏") {
+                    Toggle("加入收藏", isOn: $isFavorite)
+                }
+                Section("标签") {
+                    TextField("电影、旅行、纪念日（用逗号分隔）", text: $tags)
+                }
+                Section("备注") {
+                    TextEditor(text: $note)
+                        .frame(minHeight: 120)
+                }
+            }
+            .scrollContentBackground(.hidden)
+            .background(FrameTheme.bg)
+            .foregroundStyle(FrameTheme.text)
+            .navigationTitle("作品档案")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("取消") { dismiss() }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("保存") {
+                        let values = tags.split(separator: ",").map {
+                            $0.trimmingCharacters(in: .whitespacesAndNewlines)
+                        }.filter { !$0.isEmpty }
+                        library.updateMetadata(work.id, tags: values, note: note, isFavorite: isFavorite)
+                        dismiss()
+                    }
+                    .fontWeight(.semibold)
+                }
+            }
+        }
+        .tint(FrameTheme.accent)
+        .presentationDetents([.medium, .large])
+        .onAppear {
+            tags = (work.tags ?? []).joined(separator: ", ")
+            note = work.note ?? ""
+            isFavorite = work.isFavorite ?? false
+        }
+    }
+}
+
+private struct AnnualReviewView: View {
+    @Environment(WorkLibrary.self) private var library
+    @Environment(ProStore.self) private var pro
+    @Environment(\.dismiss) private var dismiss
+    @State private var year = Calendar.current.component(.year, from: .now)
+    @State private var showPaywall = false
+    @State private var notice = ""
+
+    private var years: [Int] {
+        Array(Set(library.items.map {
+            Calendar.current.component(.year, from: $0.savedAt)
+        }).union([year])).sorted(by: >)
+    }
+
+    private var works: [SavedTicket] {
+        library.items.filter {
+            Calendar.current.component(.year, from: $0.savedAt) == year
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    Picker("年份", selection: $year) {
+                        ForEach(years, id: \.self) { Text(AppLocalization.year($0)).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(AppLocalization.memoriesTitle(year))
+                            .font(.system(size: 28, weight: .bold, design: .serif))
+                        Text(AppLocalization.ticketsThisYear(works.count))
+                            .foregroundStyle(FrameTheme.textSecondary)
+                    }
+
+                    Button {
+                        if pro.isPro {
+                            exportPoster()
+                        } else {
+                            showPaywall = true
+                        }
+                    } label: {
+                        Label("导出年度合集海报 · Pro", systemImage: "square.and.arrow.up")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(FrameTheme.accent)
+
+                    if !notice.isEmpty {
+                        Text(notice)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(FrameTheme.accent)
+                    }
+
+                    if works.isEmpty {
+                        ContentUnavailableView("这一年还没有作品", systemImage: "calendar")
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, 40)
+                    } else {
+                        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                            ForEach(works) { work in
+                                WorkCard(work: work)
+                            }
+                        }
+                    }
+                }
+                .padding(20)
+            }
+            .background(FrameTheme.bg)
+            .foregroundStyle(FrameTheme.text)
+            .navigationTitle("年度合集")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("完成") { dismiss() }
+                }
+            }
+        }
+        .tint(FrameTheme.accent)
+        .presentationBackground(FrameTheme.panel)
+        .sheet(isPresented: $showPaywall) {
+            PaywallView()
+        }
+    }
+
+    private func exportPoster() {
+        guard !works.isEmpty else {
+            notice = AppLocalization.text("这一年还没有可导出的作品")
+            return
+        }
+        let renderer = ImageRenderer(content:
+            ReviewPoster(year: year, works: Array(works.prefix(12)))
+                .frame(width: 1200)
+                .padding(56)
+                .background(FrameTheme.bg)
+        )
+        renderer.scale = 2
+        if let image = renderer.uiImage {
+            UIImageWriteToSavedPhotosAlbum(image, nil, nil, nil)
+            notice = AppLocalization.text("年度合集已保存到相册")
+        } else {
+            notice = AppLocalization.text("导出失败，请重试")
+        }
+    }
+}
+
+private struct ReviewPoster: View {
+    let year: Int
+    let works: [SavedTicket]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 30) {
+            Text("\(year)")
+                .font(.system(size: 96, weight: .bold, design: .serif))
+                .foregroundStyle(FrameTheme.accentStrong)
+            Text("MY MEMORY TICKETS")
+                .font(.system(size: 20, weight: .bold, design: .monospaced))
+                .tracking(3)
+                .foregroundStyle(FrameTheme.textSecondary)
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 24) {
+                ForEach(works) { work in
+                    VStack(alignment: .leading, spacing: 10) {
+                        H5TicketView()
+                            .environment(\.ticket, TicketContext(
+                                template: work.template ?? TicketCatalog.templates[0],
+                                fields: work.fields,
+                                photos: [work.photoData.flatMap(UIImage.init(data:))],
+                                photoScale: work.photoScale ?? 1,
+                                photoOffset: work.photoOffset ?? .zero
+                            ))
+                            .frame(height: 250)
+                            .clipped()
+                        Text(work.title)
+                            .font(.system(size: 18, weight: .semibold))
+                            .lineLimit(1)
+                    }
+                }
+            }
+        }
+        .foregroundStyle(FrameTheme.text)
+    }
+}
+
+private struct PresetEditorView: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var store: TicketStore
+    let preset: SavedPreset
+
+    init(preset: SavedPreset) {
+        self.preset = preset
+        _store = State(initialValue: TicketStore(preset: preset))
+    }
+
+    var body: some View {
+        NavigationStack {
+            EditorView()
+                .environment(store)
+                .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button("关闭") { dismiss() }
+                    }
+                }
+        }
     }
 }

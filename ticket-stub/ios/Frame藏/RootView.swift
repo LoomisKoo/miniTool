@@ -28,11 +28,9 @@ struct RootView: View {
                         switch route {
                         case .settings:
                             SettingsView()
-                                .toolbar(.hidden, for: .tabBar)
                         case .work(let id):
                             if let work = library.item(id) {
                                 WorkDetailView(work: work)
-                                    .toolbar(.hidden, for: .tabBar)
                             }
                         }
                     }

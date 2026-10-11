@@ -3,14 +3,18 @@ import PhotosUI
 import SwiftUI
 import UIKit
 import CryptoKit
+import os
+
+private let puzzlePerformanceLog = Logger(subsystem: "PandaPuzzle", category: "performance")
 
 @Observable
 @MainActor
 final class PuzzleGameViewModel {
     var board = PuzzleBoardState(cols: 4, rows: 6, pieces: [], selectedId: nil, hintSlot: nil, crop: CropView())
-    var hint = "点选拼块，再点棋盘格位归位"
+    var hint = "点选拼块，再点棋盘格位归位；点已拼好的拼块可收回"
     var hintOn = false
     var showRestartConfirm = false
+    var showSolveConfirm = false
     var showCropSheet = false
     var cropDraftImage: UIImage?
     var cropApplyTitle = "开始拼图"
@@ -23,6 +27,8 @@ final class PuzzleGameViewModel {
     var saveName = ""
     var isPreparingPuzzle = false
     var celebrationToken = 0
+    private var didLoadInitialState = false
+    private var isRevealed = false
 
     private var pro: ProStore?
     private(set) var sourceImage: UIImage = PuzzleCutEngine.demoImage()
@@ -54,6 +60,59 @@ final class PuzzleGameViewModel {
         startNew(image: PuzzleCutEngine.demoImage(), cols: nil, rows: nil, crop: CropView())
     }
 
+    func loadSaved(id: String, saves: PuzzleSaveStore) {
+        guard !didLoadInitialState else { return }
+        didLoadInitialState = true
+        guard let saved = saves.load(id: id) else {
+            hint = "无法读取这个存档"
+            bootIfNeeded()
+            return
+        }
+
+        sourceImage = saved.sourceImage
+        preparationToken += 1
+        let token = preparationToken
+        isPreparingPuzzle = true
+        hint = "正在读取存档…"
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            let pieces = PuzzleCutEngine.cut(
+                image: saved.sourceImage,
+                cols: saved.cols,
+                rows: saved.rows,
+                cropView: saved.crop
+            )
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.preparationToken == token else { return }
+                self.finishPreparing(
+                    image: saved.sourceImage,
+                    cols: saved.cols,
+                    rows: saved.rows,
+                    crop: saved.crop,
+                    pieces: pieces,
+                    key: Self.puzzleKey(
+                        image: saved.sourceImage,
+                        cols: saved.cols,
+                        rows: saved.rows,
+                        crop: saved.crop
+                    ),
+                    trayMode: self.board.trayMode
+                )
+                for state in saved.pieces {
+                    guard let idx = self.board.pieces.firstIndex(where: { $0.id == state.id }) else {
+                        continue
+                    }
+                    self.board.pieces[idx].placedSlot = state.placedSlot
+                    self.board.pieces[idx].rotationSteps = state.rotationSteps
+                    self.board.pieces[idx].trayOrder = state.trayOrder
+                }
+                self.activeSaveID = saved.id
+                self.activeSaveTitle = saved.title
+                self.hint = "已打开「\(saved.title)」"
+            }
+        }
+    }
+
     /// 点「选图」：打开当前图的切分设置（可在 sheet 里换图）
     func openCropEditor(applyTitle: String = "按此切分") {
         cropDraftImage = sourceImage
@@ -66,6 +125,7 @@ final class PuzzleGameViewModel {
 
     func startNew(image: UIImage, cols: Int?, rows: Int?, crop: CropView) {
         sourceImage = image
+        isRevealed = false
         preparationToken += 1
         let token = preparationToken
         let limit = maxPieces
@@ -142,7 +202,7 @@ final class PuzzleGameViewModel {
     }
 
     func requestSave(saves: PuzzleSaveStore) {
-        guard !board.pieces.isEmpty else {
+        guard board.placedCount > 0 else {
             hint = "拼盘为空，无法保存"
             return
         }
@@ -224,7 +284,42 @@ final class PuzzleGameViewModel {
         }
     }
 
+    func liftPlacedPiece(_ id: Int) {
+        guard let idx = board.pieces.firstIndex(where: { $0.id == id }),
+              board.pieces[idx].isPlaced,
+              !isRevealed else { return }
+        let started = CFAbsoluteTimeGetCurrent()
+        puzzlePerformanceLog.info("lift tap id=\(id, privacy: .public)")
+        let nextTrayOrder = (board.pieces.map(\.trayOrder).max() ?? -1) + 1
+        withAnimation(.spring(response: 0.18, dampingFraction: 0.86)) {
+            board.pieces[idx].placedSlot = nil
+            board.pieces[idx].trayOrder = nextTrayOrder
+            board.selectedId = id
+            refreshHintHighlight()
+        }
+        puzzlePerformanceLog.info(
+            "lift state updated id=\(id, privacy: .public) elapsed=\((CFAbsoluteTimeGetCurrent() - started) * 1000, privacy: .public)ms"
+        )
+    }
+
+    func requestLiftPlacedPiece(_ id: Int) -> Bool {
+        guard board.pieces.contains(where: { $0.id == id && $0.isPlaced }),
+              !isRevealed else { return false }
+        guard board.selectedId == nil else {
+            shakeBoard()
+            return false
+        }
+        return true
+    }
+
     func tapSlot(_ slot: Int) {
+        let started = CFAbsoluteTimeGetCurrent()
+        puzzlePerformanceLog.info("slot tap slot=\(slot, privacy: .public) selected=\(self.board.selectedId ?? -1, privacy: .public)")
+        guard !isRevealed else { return }
+        if board.selectedId == nil, let placed = board.occupant(of: slot) {
+            liftPlacedPiece(placed.id)
+            return
+        }
         guard let sid = board.selectedId,
               let idx = board.pieces.firstIndex(where: { $0.id == sid }) else { return }
         if board.occupant(of: slot) != nil {
@@ -240,11 +335,14 @@ final class PuzzleGameViewModel {
         }
         let cur = piece.rotation
         let delta = (rot - cur + 4) % 4
-        withAnimation(.spring(response: 0.32, dampingFraction: 0.78)) {
+        withAnimation(.spring(response: 0.18, dampingFraction: 0.86)) {
             board.pieces[idx].rotationSteps += delta
             board.pieces[idx].placedSlot = slot
             board.selectedId = nil
         }
+        puzzlePerformanceLog.info(
+            "place state updated slot=\(slot, privacy: .public) piece=\(sid, privacy: .public) elapsed=\((CFAbsoluteTimeGetCurrent() - started) * 1000, privacy: .public)ms"
+        )
         refreshHintHighlight()
         let n = board.placedCount
         if n == board.total {
@@ -274,7 +372,6 @@ final class PuzzleGameViewModel {
         withAnimation(.easeInOut(duration: 0.16)) {
             board.pieces[idx].rotationSteps += 1
         }
-        refreshHintHighlight()
     }
 
     func toggleHint() {
@@ -333,6 +430,7 @@ final class PuzzleGameViewModel {
     }
 
     func solveAll() {
+        isRevealed = true
         var transaction = Transaction()
         transaction.disablesAnimations = true
         withTransaction(transaction) {
@@ -349,10 +447,19 @@ final class PuzzleGameViewModel {
         hint = "已揭晓完整画面"
     }
 
+    func requestSolve() {
+        if board.placedCount > 0 {
+            showSolveConfirm = true
+        } else {
+            solveAll()
+        }
+    }
+
     private func shakeBoard() {
         board.shakeTick += 1
-        let gen = UINotificationFeedbackGenerator()
-        gen.notificationOccurred(.error)
+        let generator = UIImpactFeedbackGenerator(style: .rigid)
+        generator.prepare()
+        generator.impactOccurred(intensity: 0.9)
     }
 
     private func refreshHintHighlight() {

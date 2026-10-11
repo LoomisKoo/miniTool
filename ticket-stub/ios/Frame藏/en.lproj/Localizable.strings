@@ -1,0 +1,179 @@
+/* Frame藏 — English */
+
+/* 通用 */
+"首页" = "Home";
+"我的" = "Mine";
+"设置" = "Settings";
+"完成" = "Done";
+"取消" = "Cancel";
+"保存" = "Save";
+"删除" = "Delete";
+"重命名" = "Rename";
+"关闭" = "Close";
+"提示" = "Notice";
+"好" = "OK";
+"版本" = "Version";
+"未命名票根" = "Untitled Ticket";
+"模板" = "Template";
+"已添加" = "Added";
+"Pro" = "Pro";
+
+/* 我的 */
+"我的作品" = "My Works";
+"我的模板" = "My Templates";
+"年度合集" = "Annual Review";
+"还没有作品" = "No works yet";
+"在首页编辑完成后，点击右上角书签保存。" = "Finish editing on Home, then tap the bookmark in the top-right corner to save.";
+"搜索作品、标签或地点" = "Search works, tags, or places";
+"帧藏 Pro 已解锁" = "FrameZang Pro Unlocked";
+"全部模板与特效均可使用" = "All templates and effects are available";
+"升级帧藏 Pro" = "Upgrade to FrameZang Pro";
+"解锁全部高级模板、特效与高清导出" = "Unlock premium templates, effects, and HD export";
+"删除作品？" = "Delete Work?";
+"编辑档案" = "Edit Details";
+"保存为我的模板" = "Save as My Template";
+"删除模板" = "Delete Template";
+"作品档案" = "Work Details";
+"收藏" = "Favorite";
+"加入收藏" = "Add to Favorites";
+"标签" = "Tags";
+"备注" = "Note";
+"电影、旅行、纪念日（用逗号分隔）" = "Film, travel, anniversary (comma separated)";
+"模板名称" = "Template Name";
+"模板会保留当前版式、照片、特效和配色" = "The template keeps the current layout, photos, effects, and colors.";
+"作品名称" = "Work Name";
+"年份" = "Year";
+"这一年还没有作品" = "No works this year";
+"导出年度合集海报 · Pro" = "Export Annual Review Poster · Pro";
+
+/* 设置 */
+"语言" = "Language";
+"界面语言" = "Interface Language";
+"跟随系统" = "Follow System";
+"中文" = "中文";
+"英文" = "English";
+"购买" = "Purchase";
+"恢复购买" = "Restore Purchases";
+"支持" = "Support";
+"隐私政策" = "Privacy Policy";
+"支持与反馈" = "Support & Feedback";
+"所有作品仅保存在本机，不会上传到任何服务器。" = "All works are stored on this device and are never uploaded to any server.";
+
+/* 编辑页 */
+"选择照片" = "Choose Photos";
+"调整照片构图" = "Adjust Composition";
+"保存作品" = "Save Work";
+"撤销" = "Undo";
+"重做" = "Redo";
+"导出" = "Export";
+"信息" = "Info";
+"特效" = "Effects";
+"画板" = "Canvas";
+"保存为新作品" = "Save as New Work";
+"新建空白票根" = "New Blank Ticket";
+"保存修改" = "Save Changes";
+"另存为新作品" = "Save as New Work";
+"作品仅保存在本机，可在「我的」中查看" = "Works are stored on this device and can be found in Mine.";
+"已保存到我的作品" = "Saved to My Works";
+"已保存修改" = "Changes Saved";
+"调整构图" = "Adjust Composition";
+"缩放" = "Zoom";
+"拖动平移，双指捏合缩放" = "Drag to move; pinch to zoom";
+
+/* 模板 / 信息 / 特效 Sheet */
+"票根模板" = "Ticket Templates";
+"关闭模板" = "Close templates";
+"票面信息" = "Ticket Details";
+"票根特效" = "Ticket Effects";
+"特殊分类" = "Category";
+"特效分类" = "Effect Category";
+"已用" = "Used";
+"清空" = "Clear";
+"颜色" = "Color";
+"浓淡" = "Opacity";
+"位置" = "Position";
+"密度" = "Density";
+"作用范围" = "Effect Scope";
+"背景" = "Background";
+"照片" = "Photo";
+"前景" = "Foreground";
+"点素材添加并调节；再点一次选中的素材移除；点「已用」标签可切回调整" = "Tap an effect to add and adjust it; tap a selected effect again to remove it; tap the Used tags to jump back and edit.";
+"纸感会改变票根的材质呈现：平面、哑光、亮面或 3D 纸张。" = "Paper style changes how the ticket surface reads: flat, matte, glossy, or 3D paper.";
+"点素材预览，或点已用项调整" = "Tap an effect to preview, or tap a used one to adjust.";
+
+/* 画板背景 */
+"画板背景" = "Canvas Background";
+"纯色" = "Solid Colors";
+"背景图片" = "Background Image";
+"选择背景图" = "Choose Background Image";
+"更换背景图" = "Replace Background Image";
+"移除背景图" = "Remove Background Image";
+"背景图透明度" = "Image Opacity";
+"纸张呈现" = "Paper Presentation";
+"票根 3D 悬停预览已启用。拖动预览中的票根可查看倾斜效果，导出时会生成平面高清图。" = "3D ticket preview is enabled. Drag the preview to view the tilt effect; exports are rendered as flat HD images.";
+"选择一块适合票根的底色，或使用自己的照片。" = "Pick a base color that suits your ticket, or use your own photo.";
+"底色" = "Base Color";
+"透明度" = "Opacity";
+"选择图片" = "Choose Image";
+"移除" = "Remove";
+
+/* 导出 */
+"导出设置" = "Export Settings";
+"将当前票根保存为高清 PNG，可以存入相册或本地文件。" = "Save the current ticket as a high-resolution PNG to Photos or Files.";
+"保存到相册" = "Save to Photos";
+"保存到本地文件" = "Save to Files";
+
+/* 购买 */
+"帧藏 Pro" = "FrameZang Pro";
+"解锁完整的票根素材库，把每一段记忆做成更像收藏品的票根。" = "Unlock the full ticket library and turn every memory into a collectible ticket.";
+"已解锁全部 Pro 功能" = "All Pro features unlocked";
+"当前为 Debug 本地测试模式，不会产生真实扣款。" = "Debug local test mode; no real charges will occur.";
+"重新加载商品" = "Reload Products";
+"升级" = "Upgrade";
+
+/* 分类 */
+"电影票" = "Cinema";
+"旅行通票" = "Travel";
+"演唱会票" = "Concert";
+"漫游" = "Wander";
+"邮票" = "Stamps";
+"电影" = "Cinema";
+"旅行" = "Travel";
+"演唱会" = "Concerts";
+
+/* 票面样例内容 */
+"午夜巴黎" = "Midnight in Paris";
+"和平影都 · 3号厅" = "Peace Cinema · Hall 3";
+"7排12座  NO.A204" = "Row 7 Seat 12  NO.A204";
+"雨夜落幕，仍想回那座城" = "When the rainy night ends, I still want to return to that city";
+"光影留声" = "Echoes of Light";
+"上海影城 · SHO" = "Shanghai Cinema · SHO";
+"5排 08座" = "Row 5 Seat 08";
+"黑白的画面，反而更吵" = "Black-and-white images can be louder";
+"海边的曼彻斯特" = "Manchester by the Sea";
+"2016 · 剧情" = "2016 · Drama";
+"有些冷，一直没化开" = "It was cold, and it never thawed";
+"这一年还没有可导出的作品" = "No works to export this year";
+"年度合集已保存到相册" = "Annual review saved to Photos";
+"导出失败，请重试" = "Export failed. Please try again.";
+"保存失败，请重试" = "Save failed. Please try again.";
+"已保存到本地文件" = "Saved to Files";
+"文件保存失败，请重试" = "File save failed. Please try again.";
+"没有相册写入权限，请在系统设置中允许访问" = "No photo library access. Please allow it in Settings.";
+"已保存到相册" = "Saved to Photos";
+"正在生成高清票根…" = "Rendering HD ticket…";
+"未找到 Pro 商品，请确认 StoreKit 配置或 App Store Connect 商品 ID。" = "Pro product not found. Check the StoreKit configuration or the App Store Connect product ID.";
+"无法加载 Pro 商品：" = "Could not load Pro product: ";
+"商品暂未上架，请稍后再试" = "The product isn't available yet. Please try again later.";
+"没有找到可恢复的购买" = "No purchases to restore.";
+"这个作品" = "this work";
+"超高清导出" = "Ultra HD Export";
+"Pro · 2× 分辨率，适合打印与大图发布" = "Pro · 2× resolution, great for print and large posts";
+"透明背景" = "Transparent Background";
+"Pro · 导出时移除画板底色" = "Pro · removes the canvas color on export";
+"全部高级模板与 Pro 特效" = "All premium templates and Pro effects";
+"2× 超高清与透明背景导出" = "2× Ultra HD and transparent background export";
+"无限作品与年度合集海报" = "Unlimited works and annual review posters";
+"保存自己的票根模板" = "Save your own ticket templates";
+"本地测试解锁" = "Unlock in local test mode";
+"购买 Pro" = "Buy Pro";

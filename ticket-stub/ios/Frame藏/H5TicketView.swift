@@ -172,12 +172,17 @@ struct TkPending: View {
 extension TicketContext {
     @MainActor
     init(store: TicketStore) {
+        let photoDatas = store.selectedPhotoDatas.isEmpty
+            ? (store.selectedPhotoData.map { [$0] } ?? [])
+            : store.selectedPhotoDatas
         self.init(
             template: store.template,
             fields: store.fields,
-            photos: [store.selectedPhotoData.flatMap(UIImage.init(data:))],
+            photos: photoDatas.map { UIImage(data: $0) },
             photoScale: store.photoScale,
-            photoOffset: store.photoOffset
+            photoOffset: store.photoOffset,
+            photoEffects: store.effects.filter { store.settings(for: $0).resolvedTarget == .photo },
+            photoEffectSettings: store.effectSettings
         )
     }
 }

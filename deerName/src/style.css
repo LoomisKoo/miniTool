@@ -1555,6 +1555,15 @@ html.sheet-open, body.sheet-open { overflow: hidden; }
 .roast-persona { margin: 0 0 9px; color: var(--ink-2); font-size: 12px; line-height: 1.6; }
 .roast-persona b { color: var(--accent-ink); font-weight: 600; }
 .roast-persona i { font-style: normal; color: var(--ink-3, #9aa0a6); }
+.roast-plate-main { display: flex; align-items: center; gap: 12px; }
+.roast-figure { flex: 0 0 104px; margin: -4px 0 -6px -6px; }
+.roast-figure .deer-fig { display: block; width: 100%; height: auto; }
+.roast-plate-info { flex: 1; min-width: 0; }
+.roast-plate-info .roast-era { display: inline-block; margin-bottom: 6px; }
+.roast-plate-info .roast-desc { margin-top: 6px; }
+.deer-fig path, .deer-fig circle, .deer-fig rect, .deer-fig ellipse {
+  stroke: #6b4a3e; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.deer-fig .ns { stroke: none; }
 .roast-plate-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .roast-role { margin: 0; font-size: 22px; line-height: 1.3; }
 .roast-era { flex: 0 0 auto; padding: 3px 10px; border-radius: var(--r-pill); background: var(--surface); color: var(--accent-ink); font-size: 12px; font-weight: 500; letter-spacing: .04em; white-space: nowrap; }

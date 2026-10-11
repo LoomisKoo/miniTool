@@ -189,7 +189,7 @@ MIT 的关键条款是：
 
 | 平台 | 状态 | 版本 | 产物 |
 | --- | --- | --- | --- |
-| 小红书 | 审核中 | 1.0.4 | `dist/xiaohongshu-rabbit-bead.zip` |
+| 小红书 | ✅ 已上线 | 1.0.4 | `dist/xiaohongshu-rabbit-bead.zip` |
 | 抖音 | 未上架 | — | `dist/douyin-rabbit-bead.zip` |
 | 快手 | 审核中 | 1.0.4 | `dist/kuaishou-rabbit-bead.zip` |
 | iOS | 开发中 | 1.0.0 | `ios/RabbitBead/` |

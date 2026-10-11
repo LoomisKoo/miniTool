@@ -11,6 +11,12 @@ struct PuzzleGameView: View {
     @State private var toastVisible = false
     @State private var trayWidth: CGFloat = 320
     @State private var boardShakeX: CGFloat = 0
+    @State private var suppressInitialToast = false
+    private let initialSaveID: String?
+
+    init(savedID: String? = nil) {
+        initialSaveID = savedID
+    }
 
     var body: some View {
         ZStack {
@@ -42,18 +48,35 @@ struct PuzzleGameView: View {
         }
         .task {
             model.bind(pro: pro)
-            model.bootIfNeeded()
-            flashToast()
+            if let initialSaveID {
+                suppressInitialToast = true
+                model.loadSaved(id: initialSaveID, saves: saves)
+            } else {
+                model.bootIfNeeded()
+                flashToast()
+            }
         }
         .onChange(of: pro.isPro) { _, _ in model.bind(pro: pro) }
         .onChange(of: model.pickerItem) { _, _ in Task { await model.loadPickedPhoto() } }
-        .onChange(of: model.hint) { _, _ in flashToast() }
+        .onChange(of: model.hint) { _, _ in
+            if suppressInitialToast {
+                suppressInitialToast = false
+            } else {
+                flashToast()
+            }
+        }
         .onChange(of: model.board.shakeTick) { _, _ in playBoardShake() }
         .alert("确定要重来吗？", isPresented: $model.showRestartConfirm) {
             Button("再想想", role: .cancel) {}
             Button("重来", role: .destructive) { model.restartConfirmed() }
         } message: {
             Text("已拼好的拼块会全部收回。")
+        }
+        .alert("确定要揭晓吗？", isPresented: $model.showSolveConfirm) {
+            Button("取消", role: .cancel) {}
+            Button("揭晓", role: .destructive) { model.solveAll() }
+        } message: {
+            Text("当前已有 \(model.board.placedCount) 块拼好，揭晓会覆盖当前进度。")
         }
         .alert("保存拼图", isPresented: $model.showSaveName) {
             TextField("请输入拼图名称", text: $model.saveName)
@@ -93,12 +116,24 @@ struct PuzzleGameView: View {
     }
 
     private var stage: some View {
-        PuzzleSceneView(controller: scene, board: model.board, sourceImage: model.sourceImage) { slot, _ in
-            if let slot { model.tapSlot(slot) }
+        GeometryReader { _ in
+            PuzzleSceneView(controller: scene, board: model.board, sourceImage: model.sourceImage) { slot, pieceId in
+                if let slot {
+                    model.tapSlot(slot)
+                } else if let pieceId {
+                    if model.requestLiftPlacedPiece(pieceId) {
+                        scene.animateLift(pieceId: pieceId) {
+                            model.liftPlacedPiece(pieceId)
+                        }
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .offset(x: boardShakeX)
         .frame(minHeight: 220)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .layoutPriority(1)
     }
 
     private var trayBar: some View {
@@ -124,7 +159,12 @@ struct PuzzleGameView: View {
                     action: model.toggleHint,
                     on: model.hintOn
                 )
-                toolButton(title: "揭晓", systemImage: "wand.and.stars", action: model.solveAll)
+                toolButton(
+                    title: "揭晓",
+                    systemImage: "wand.and.stars",
+                    action: model.requestSolve,
+                    on: model.board.total > 0 && model.board.placedCount == model.board.total
+                )
                     .disabled(model.board.pieces.isEmpty || model.isPreparingPuzzle)
                 toolButton(title: "复位", systemImage: "viewfinder") {
                     scene.resetCamera()
@@ -163,7 +203,7 @@ struct PuzzleGameView: View {
                 .animation(nil, value: model.board.trayMode)
 
                 dockBar
-                    .padding(.trailing, 4)
+                    .padding(.trailing, 10)
                     .zIndex(10)
             }
         }
@@ -174,7 +214,10 @@ struct PuzzleGameView: View {
 
     private func listTray(_ unplaced: [PuzzlePieceModel]) -> some View {
         let cols = max(1, Int(ceil(Double(unplaced.count) / Double(PandaTheme.trayRows))))
-        return ScrollView(.horizontal, showsIndicators: false) {
+        if unplaced.isEmpty {
+            return AnyView(emptyTrayPlaceholder)
+        }
+        return AnyView(ScrollView(.horizontal, showsIndicators: false) {
             LazyHGrid(
                 rows: Array(repeating: GridItem(.fixed(PandaTheme.thumbSize), spacing: 4), count: PandaTheme.trayRows),
                 spacing: 4
@@ -194,10 +237,13 @@ struct PuzzleGameView: View {
             .padding(.vertical, 6)
             .padding(.trailing, 58)
             .frame(width: CGFloat(cols) * (PandaTheme.thumbSize + 4) + 58)
-        }
+        })
     }
 
     private func stackTray(_ unplaced: [PuzzlePieceModel]) -> some View {
+        if unplaced.isEmpty {
+            return AnyView(emptyTrayPlaceholder)
+        }
         let W = trayWidth
         let H = PandaTheme.thumbSize * CGFloat(PandaTheme.trayRows) + 18
         let pad: CGFloat = 12
@@ -209,7 +255,7 @@ struct PuzzleGameView: View {
         // 避免大量 ZStack 子视图同时参与布局、阴影和点击命中。
         let visible = Array(unplaced.prefix(Self.stackVisibleLimit))
 
-        return ZStack(alignment: .topLeading) {
+        return AnyView(ZStack(alignment: .topLeading) {
             ForEach(Array(visible.enumerated()), id: \.element.id) { _, piece in
                 let slot = piece.trayOrder
                 let left = pad + hash01(slot, 1, seed) * spanX
@@ -237,7 +283,31 @@ struct PuzzleGameView: View {
                 .zIndex(Double(z))
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading))
+    }
+
+    private var emptyTrayPlaceholder: some View {
+        HStack(spacing: 7) {
+            Image(systemName: "checkmark.circle")
+                .font(.system(size: 16, weight: .semibold))
+            Text("全部拼好了")
+                .font(.system(size: 13, weight: .heavy))
+        }
+        .foregroundStyle(PandaTheme.muted)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(PandaTheme.surface2.opacity(0.55))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(
+                            PandaTheme.line,
+                            style: StrokeStyle(lineWidth: 1, dash: [5, 5])
+                        )
+                }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
     }
 
     private var dockBar: some View {
@@ -252,7 +322,9 @@ struct PuzzleGameView: View {
             toolButton(title: "打乱", systemImage: "shuffle", action: model.scatter)
             toolButton(title: "重来", systemImage: "arrow.counterclockwise", action: model.requestRestart)
         }
-        .padding(4)
+        // 与顶部工具按钮共用同一个右边界；只保留上下留白，
+        // 避免额外的 trailing padding 让整列向左错开。
+        .padding(.vertical, 4)
     }
 
     private var glassCard: some View {

@@ -25,6 +25,29 @@
   let favSet = new Set(JSON.parse(localStorage.getItem(FAV_KEY) || '[]'));
   const saveFavs = () => localStorage.setItem(FAV_KEY, JSON.stringify([...favSet]));
   const isFav = i => favSet.has(i);
+  function syncFavHeart(btn, idx) {
+    if (!btn) return;
+    btn.classList.toggle('on', idx >= 0 && isFav(idx));
+  }
+  function syncPickFavHearts() {
+    syncFavHeart($('#pickResultFav'), pickShownIdx);
+    syncFavHeart($('#pickVsLeftFav'), vsLeft);
+    syncFavHeart($('#pickVsRightFav'), vsRight);
+  }
+  function toggleFavAt(i) {
+    if (i < 0) return;
+    if (isFav(i)) { favSet.delete(i); toast('已移除收藏'); }
+    else { favSet.add(i); toast('已收藏'); }
+    saveFavs();
+    syncFavHeart(sHeart, openIdx);
+    syncPickFavHearts();
+    document.querySelectorAll('.row-fav').forEach((btn) => {
+      const ri = Number(btn.dataset.idx);
+      if (ri === i) syncFavHeart(btn, ri);
+    });
+    if (state.tab === 'list') renderList();
+    if (state.tab === 'pick') refreshPickTab();
+  }
 
   /* ================= 筛选（分类 / 口味 / 食材 / 做法） ================= */
   const filters = { cats: new Set(), tastes: new Set(), ings: new Set(), cooks: new Set() };
@@ -1601,8 +1624,9 @@
       el.appendChild(span);
     });
   }
-  function fillMeta(f) {
-    sMeta.innerHTML = '';
+  function fillMetaEl(el, f) {
+    if (!el) return;
+    el.innerHTML = '';
     const items = [];
     if (f.cat) items.push(['cat', f.cat]);
     if (f.taste) items.push(['taste', f.taste]);
@@ -1611,8 +1635,11 @@
       const span = document.createElement('span');
       span.className = 'meta-pill ' + cls;
       span.textContent = text;
-      sMeta.appendChild(span);
+      el.appendChild(span);
     });
+  }
+  function fillMeta(f) {
+    fillMetaEl(sMeta, f);
   }
   function specialtyTags(f) {
     const skip = new Set([f.cat, f.taste, f.cui].filter(Boolean));
@@ -1636,7 +1663,7 @@
     sIngBlock.hidden = !(f.ing && f.ing.length);
     fillChips(sCook, f.cook);
     sCookBlock.hidden = !(f.cook && f.cook.length);
-    sHeart.classList.toggle('on', isFav(i));
+    syncFavHeart(sHeart, i);
     if (opts.fly) {
       switchTab('map', { keepPlace: true });
       openSheet();
@@ -1735,14 +1762,9 @@
   }
   $('#clusterClose').addEventListener('click', hideCluster);
   clusterMask.addEventListener('click', hideCluster);
-  sHeart.addEventListener('click', () => {
-    const i = openIdx;
-    if (i < 0) return;
-    if (isFav(i)) { favSet.delete(i); toast('已移除收藏'); }
-    else { favSet.add(i); toast('已收藏 ♥'); }
-    saveFavs();
-    sHeart.classList.toggle('on', isFav(i));
-    if (state.tab === 'list') renderList();
+  sHeart.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleFavAt(openIdx);
   });
   let toastTimer;
   function toast(m) {
@@ -1758,6 +1780,9 @@
   let q = '', onlyFav = false;
   const expandedProv = new Set(); // 展开的省
 
+  const navH1 = $('#navH1');
+  const NAV_TITLES = { map: '美食地图', pick: '随机选餐', list: '美食名录' };
+
   function switchTab(t, opts = {}) {
     state.tab = t;
     hideFilter(); // 切页时关闭筛选面板，避免从名录「在地图查看」后面板仍悬在地图后
@@ -1767,9 +1792,12 @@
       setSel(-1);
     }
     $('#mapScreen').classList.toggle('active', t === 'map');
+    $('#pickScreen').classList.toggle('active', t === 'pick');
     $('#listScreen').classList.toggle('active', t === 'list');
     document.querySelectorAll('.tab').forEach(b => b.classList.toggle('active', b.dataset.tab === t));
+    if (navH1) navH1.textContent = NAV_TITLES[t] || NAV_TITLES.map;
     if (t === 'list') renderList();
+    else if (t === 'pick') refreshPickTab();
     else {
       // 切回地图页时，屏幕刚从 display:none 变为 flex，需要等布局稳定后再取尺寸重绘
       requestAnimationFrame(() => {
@@ -1795,6 +1823,7 @@
     if (state.tab === 'map') {
       scheduleDraw();
     }
+    if (state.tab === 'pick') refreshPickTab();
   }
   
   searchInput.addEventListener('input', e => { 
@@ -1889,19 +1918,26 @@
           toggleSet(sec.set, val);
           btn.classList.toggle('on', sec.set.has(val));
           syncFilterChrome();
+          updateFilterSheetCount();
         });
         row.appendChild(btn);
       });
       wrap.appendChild(row);
       filterBody.appendChild(wrap);
     });
+    updateFilterSheetCount();
   }
+  const pickFilterBtn = $('#pickFilterBtn');
+  const pickPoolCount = $('#pickPoolCount');
+  const filterApplyBtn = $('#filterApply');
+  const filterMatchCount = $('#filterMatchCount');
   function syncFilterChrome() {
-    const on = hasAttrFilter();
-    filterBtn.classList.toggle('on', on);
-    mapFilterBtn.classList.toggle('on', on);
+    const attrOn = hasAttrFilter();
+    filterBtn.classList.toggle('on', attrOn);
+    mapFilterBtn.classList.toggle('on', attrOn);
+    if (pickFilterBtn) pickFilterBtn.classList.toggle('on', attrOn || !!q);
     filterActive.innerHTML = '';
-    if (!on) {
+    if (!attrOn) {
       filterActive.hidden = true;
       return;
     }
@@ -1924,6 +1960,10 @@
     syncFilterChrome();
     if (state.tab === 'list') {
       renderList();
+    } else if (state.tab === 'pick') {
+      const n = pickPool().length;
+      if ((hasAttrFilter() || q) && n === 0) toast('没有符合筛选的美食');
+      refreshPickTab();
     } else {
       // 地图页筛选：给出生效反馈（名录页切回时会重新渲染）
       const n = PLACES.filter((p, i) => passFilter(p, i)).length;
@@ -1935,8 +1975,10 @@
   }
   function openFilter() {
     renderFilterBody();
+    if (filterApplyBtn) filterApplyBtn.textContent = state.tab === 'pick' ? '确定' : '查看结果';
     filterDlg.classList.add('open');
     filterDlg.setAttribute('aria-hidden', 'false');
+    updateFilterSheetCount();
   }
   function hideFilter() {
     filterDlg.classList.remove('open');
@@ -1944,6 +1986,7 @@
   }
   filterBtn.addEventListener('click', openFilter);
   mapFilterBtn.addEventListener('click', openFilter);
+  if (pickFilterBtn) pickFilterBtn.addEventListener('click', openFilter);
   
   // 地图搜索按钮：切换到名录页并聚焦搜索框
   $('#mapSearch').addEventListener('click', () => {
@@ -1974,6 +2017,399 @@
     return true;
   }
 
+  /* ================= 选餐 · 随机 / 二选一 ================= */
+  const PICK_HIST_KEY = 'meishitujian-pick-hist';
+  const PICK_HIST_MAX = 12;
+  let pickScope = 'normal';
+  let pickMode = 'random';
+  let pickLastIdx = -1;
+  let pickShownIdx = -1;
+  let pickRolling = false;
+  let vsLeft = -1;
+  let vsRight = -1;
+  let vsChampion = -1;
+  let vsAnimating = false;
+
+  function placeWhereLine(p) {
+    return [p.prov, p.city].filter(Boolean).filter((v, idx, a) => a.indexOf(v) === idx).join(' · ') || p.sec || '';
+  }
+  function fillPickPlace(idx, nameEl, whereEl) {
+    if (!nameEl || idx < 0) return;
+    const p = PLACES[idx];
+    const f = foodOfPlace(p);
+    nameEl.textContent = f.n || p.n;
+    if (whereEl) {
+      const sub = placeWhereLine(p);
+      whereEl.textContent = sub;
+      whereEl.hidden = !sub;
+    }
+  }
+  function pickPreviewEls(side) {
+    if (side === 'random') {
+      return {
+        name: $('#pickName'),
+        where: $('#pickWhere'),
+        meta: $('#pickMeta'),
+      };
+    }
+    const pre = side === 'left' ? 'pickVsLeft' : 'pickVsRight';
+    return {
+      name: $(`#${pre}Name`),
+      where: $(`#${pre}Where`),
+      meta: $(`#${pre}Meta`),
+    };
+  }
+  function fillPickPreview(idx, els) {
+    if (idx < 0 || !els) return;
+    fillPickPlace(idx, els.name, els.where);
+    fillMetaEl(els.meta, foodOf(PLACES[idx]));
+  }
+  function fillPickRandomResult(idx) {
+    pickShownIdx = idx;
+    fillPickPreview(idx, pickPreviewEls('random'));
+    syncFavHeart($('#pickResultFav'), idx);
+  }
+  function pickRandomExcluding(pool, exclude) {
+    const ex = new Set(exclude);
+    const cand = pool.filter((i) => !ex.has(i));
+    if (!cand.length) return -1;
+    return cand[Math.floor(Math.random() * cand.length)];
+  }
+  function syncPickSegPill() {
+    const nav = $('#pickModeNav');
+    const pill = $('#pickSegPill');
+    if (!nav || !pill) return;
+    const on = nav.querySelector('.pick-mode.on');
+    if (!on) return;
+    const navRect = nav.getBoundingClientRect();
+    const onRect = on.getBoundingClientRect();
+    pill.style.width = `${onRect.width}px`;
+    pill.style.height = `${onRect.height}px`;
+    pill.style.transform = `translate3d(${onRect.left - navRect.left}px, ${onRect.top - navRect.top}px, 0)`;
+  }
+  function setPickMode(mode) {
+    pickMode = mode;
+    document.querySelectorAll('#pickModeNav .pick-mode').forEach((btn) => {
+      const on = btn.dataset.mode === mode;
+      btn.classList.toggle('on', on);
+      btn.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    const randomPanel = $('#pickRandomPanel');
+    const vsPanel = $('#pickVsPanel');
+    if (randomPanel) randomPanel.hidden = mode !== 'random';
+    if (vsPanel) vsPanel.hidden = mode !== 'vs';
+    if (mode === 'vs') startVsPair();
+    if (mode === 'random') syncPickRandomView();
+    syncPickScopeBar();
+    requestAnimationFrame(() => syncPickSegPill());
+  }
+  function syncPickScopeBar() {
+    syncPickPoolCount();
+  }
+  function syncPickPoolCount() {
+    if (!pickPoolCount) return;
+    const n = pickPool().length;
+    pickPoolCount.hidden = false;
+    pickPoolCount.textContent = `${n} 道美食`;
+  }
+  function refreshPickTab() {
+    syncFilterChrome();
+    syncPickScopeBar();
+    if (pickMode === 'random') syncPickRandomView();
+    if (pickMode === 'vs') refreshVsTab();
+    requestAnimationFrame(() => syncPickSegPill());
+  }
+
+  function loadPickHist() {
+    try { return JSON.parse(localStorage.getItem(PICK_HIST_KEY) || '[]'); }
+    catch { return []; }
+  }
+  function pushPickHist(i) {
+    let h = loadPickHist().filter((x) => x !== i);
+    h.unshift(i);
+    if (h.length > PICK_HIST_MAX) h = h.slice(0, PICK_HIST_MAX);
+    localStorage.setItem(PICK_HIST_KEY, JSON.stringify(h));
+  }
+  function syncPickRandomView() {
+    const idle = $('#pickIdle');
+    const stage = $('#pickStage');
+    const idleSub = $('#pickIdleSub');
+    const go = $('#pickGo');
+    const showResult = pickRolling || pickLastIdx >= 0;
+    if (idle) idle.hidden = showResult;
+    if (stage) stage.hidden = !showResult;
+    const pickResultFav = $('#pickResultFav');
+    if (pickResultFav) pickResultFav.hidden = !showResult;
+    if (showResult) syncFavHeart(pickResultFav, pickShownIdx);
+    const pool = pickPool();
+    if (idleSub) {
+      if (pickScope === 'fav') {
+        idleSub.textContent = pool.length ? `从 ${pool.length} 道收藏里随机` : '还没有收藏';
+      } else if (hasAttrFilter() || q) {
+        idleSub.textContent = pool.length
+          ? `从 ${pool.length} 道筛选结果里随机`
+          : '暂无符合条件的美食';
+      } else {
+        idleSub.textContent = pool.length ? `从 ${pool.length} 道菜里随机` : '暂无美食';
+      }
+    }
+    const label = go && go.querySelector('.pick-go-label');
+    if (label) label.textContent = (pickLastIdx >= 0 && !pickRolling) ? '再随一次' : '随机';
+  }
+  function countForFilterSheet() {
+    let n = 0;
+    PLACES.forEach((p, i) => {
+      if (state.tab === 'pick') {
+        if (pickScope === 'fav' && !isFav(i)) return;
+      } else if (onlyFav && !isFav(i)) return;
+      if (!passAttrFilter(p)) return;
+      if (!passSearchFilter(p)) return;
+      n += 1;
+    });
+    return n;
+  }
+  function updateFilterSheetCount() {
+    if (!filterMatchCount || !filterDlg.classList.contains('open')) return;
+    const n = countForFilterSheet();
+    filterMatchCount.textContent = n ? `${n} 道美食` : '没有符合筛选的美食';
+    filterMatchCount.classList.toggle('is-empty', n === 0);
+  }
+  function pickPool() {
+    const pool = [];
+    PLACES.forEach((p, i) => {
+      if (pickScope === 'fav' && !isFav(i)) return;
+      if (!passAttrFilter(p)) return;
+      if (!passSearchFilter(p)) return;
+      pool.push(i);
+    });
+    return pool;
+  }
+  function pickDisplayName(i) {
+    const p = PLACES[i];
+    const f = foodOfPlace(p);
+    return f.n || p.n;
+  }
+  function setPickRolling(on) {
+    const stage = $('#pickStage');
+    if (stage) stage.classList.toggle('rolling', on);
+  }
+  function showPickResult(i) {
+    fillPickRandomResult(i);
+    syncPickRandomView();
+  }
+  function runPick() {
+    if (pickRolling) return;
+    let pool = pickPool();
+    if (!pool.length) {
+      toast(pickScope === 'fav' ? '还没有收藏'
+        : (hasAttrFilter() || q) ? '没有符合筛选的美食' : '没有符合条件的美食');
+      return;
+    }
+    const hist = new Set(loadPickHist());
+    if (pickLastIdx >= 0 && pool.length > 1) pool = pool.filter((i) => i !== pickLastIdx);
+    let candidates = pool.filter((i) => !hist.has(i));
+    if (!candidates.length) candidates = pool;
+
+    pickRolling = true;
+    setPickRolling(true);
+    syncPickRandomView();
+    const go = $('#pickGo');
+    if (go) go.disabled = true;
+
+    const ticks = 12 + Math.floor(Math.random() * 10);
+    let step = 0;
+    const tick = () => {
+      const ri = candidates[Math.floor(Math.random() * candidates.length)];
+      fillPickRandomResult(ri);
+      step += 1;
+      if (step < ticks) {
+        setTimeout(tick, 48 + step * 5);
+      } else {
+        const finalIdx = candidates[Math.floor(Math.random() * candidates.length)];
+        pickLastIdx = finalIdx;
+        pushPickHist(finalIdx);
+        pickRolling = false;
+        setPickRolling(false);
+        if (go) go.disabled = false;
+        showPickResult(finalIdx);
+      }
+    };
+    tick();
+  }
+
+  function renderVsCards() {
+    fillPickPreview(vsLeft, pickPreviewEls('left'));
+    fillPickPreview(vsRight, pickPreviewEls('right'));
+    syncPickFavHearts();
+    const leftBtn = $('#pickVsLeft');
+    const rightBtn = $('#pickVsRight');
+    if (leftBtn) leftBtn.classList.remove('keep', 'shatter', 'enter');
+    if (rightBtn) rightBtn.classList.remove('keep', 'shatter', 'enter');
+  }
+  function nextVsChallenger(pool, winnerIdx, eliminatedIdx) {
+    let idx = pickRandomExcluding(pool, [eliminatedIdx, winnerIdx]);
+    if (idx < 0) idx = pickRandomExcluding(pool, [winnerIdx]);
+    return idx;
+  }
+  function fillVsSide(side, idx) {
+    fillPickPreview(idx, pickPreviewEls(side));
+    syncFavHeart(side === 'left' ? $('#pickVsLeftFav') : $('#pickVsRightFav'), idx);
+  }
+  function pickVsEmptyMessage(pool) {
+    if (pickScope === 'fav') {
+      if (!pool.length) return '还没有收藏';
+      return '收藏至少两道才能二选一';
+    }
+    if (hasAttrFilter() || q) {
+      if (!pool.length) return '没有符合筛选的美食';
+      return '筛选结果至少两道才能二选一';
+    }
+    if (!pool.length) return '暂无美食';
+    return '至少需要两道美食才能二选一';
+  }
+  function syncVsAvailability(pool) {
+    const ok = pool.length >= 2;
+    const empty = $('#pickVsEmpty');
+    const emptyText = $('#pickVsEmptyText');
+    const arena = $('#pickVsArena');
+    if (!ok) {
+      vsLeft = vsRight = vsChampion = -1;
+      if (emptyText) emptyText.textContent = pickVsEmptyMessage(pool);
+      if (empty) empty.hidden = false;
+      if (arena) arena.hidden = true;
+      return false;
+    }
+    if (empty) empty.hidden = true;
+    return true;
+  }
+  function showVsArena() {
+    const arena = $('#pickVsArena');
+    if (arena) arena.hidden = false;
+  }
+  function refreshVsTab() {
+    const pool = pickPool();
+    if (!syncVsAvailability(pool)) return;
+    showVsArena();
+    const valid = vsLeft >= 0 && vsRight >= 0
+      && pool.includes(vsLeft) && pool.includes(vsRight);
+    if (!valid) startVsPair();
+    else renderVsCards();
+  }
+  function startVsPair() {
+    vsAnimating = false;
+    const pool = pickPool();
+    if (!syncVsAvailability(pool)) return;
+    showVsArena();
+    vsChampion = -1;
+    vsLeft = pickRandomExcluding(pool, []);
+    vsRight = pickRandomExcluding(pool, [vsLeft]);
+    if (vsRight < 0) vsRight = vsLeft;
+    renderVsCards();
+  }
+  function chooseVs(side) {
+    if (vsAnimating) return;
+    const pool = pickPool();
+    if (pool.length < 2 || vsLeft < 0 || vsRight < 0) return;
+    const leftBtn = $('#pickVsLeft');
+    const rightBtn = $('#pickVsRight');
+    const winnerIdx = side === 'left' ? vsLeft : vsRight;
+    const loserSide = side === 'left' ? 'right' : 'left';
+    const winnerBtn = side === 'left' ? leftBtn : rightBtn;
+    const loserBtn = loserSide === 'left' ? leftBtn : rightBtn;
+
+    vsChampion = winnerIdx;
+    vsAnimating = true;
+    if (winnerBtn) {
+      winnerBtn.classList.remove('shatter', 'enter');
+      winnerBtn.classList.add('keep');
+    }
+    if (loserBtn) {
+      loserBtn.classList.remove('keep', 'enter');
+      loserBtn.classList.add('shatter');
+    }
+
+    window.setTimeout(() => {
+      if (winnerBtn) winnerBtn.classList.remove('keep');
+      if (loserBtn) loserBtn.classList.remove('shatter');
+      vsAnimating = false;
+      vsChampion = winnerIdx;
+      const eliminated = loserSide === 'left' ? vsLeft : vsRight;
+      const next = nextVsChallenger(pool, winnerIdx, eliminated);
+      if (next < 0) {
+        toast('没有更多可比较的菜');
+        if (side === 'left') vsLeft = winnerIdx;
+        else vsRight = winnerIdx;
+        renderVsCards();
+        return;
+      }
+      if (side === 'left') {
+        vsLeft = winnerIdx;
+        vsRight = next;
+      } else {
+        vsRight = winnerIdx;
+        vsLeft = next;
+      }
+      fillVsSide(loserSide, next);
+      if (loserBtn) {
+        loserBtn.classList.add('enter');
+        window.setTimeout(() => loserBtn.classList.remove('enter'), 300);
+      }
+    }, 420);
+  }
+
+  const pickFavBtn = $('#pickFavBtn');
+  if (pickFavBtn) {
+    pickFavBtn.addEventListener('click', () => {
+      pickScope = pickScope === 'fav' ? 'normal' : 'fav';
+      pickFavBtn.classList.toggle('on', pickScope === 'fav');
+      refreshPickTab();
+    });
+  }
+  document.querySelectorAll('#pickModeNav .pick-mode').forEach((btn) => {
+    btn.addEventListener('click', () => setPickMode(btn.dataset.mode || 'random'));
+  });
+  const pickGo = $('#pickGo');
+  if (pickGo) pickGo.addEventListener('click', (e) => {
+    e.stopPropagation();
+    runPick();
+  });
+  const pickStage = $('#pickStage');
+  if (pickStage) pickStage.addEventListener('click', () => {
+    if (pickRolling || pickLastIdx < 0) return;
+    openPlace(pickLastIdx);
+  });
+  const pickResultFav = $('#pickResultFav');
+  if (pickResultFav) pickResultFav.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleFavAt(pickShownIdx);
+  });
+  const pickVsLeftFav = $('#pickVsLeftFav');
+  const pickVsRightFav = $('#pickVsRightFav');
+  if (pickVsLeftFav) pickVsLeftFav.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleFavAt(vsLeft);
+  });
+  if (pickVsRightFav) pickVsRightFav.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleFavAt(vsRight);
+  });
+  const pickVsLeftInfo = $('#pickVsLeftInfo');
+  const pickVsRightInfo = $('#pickVsRightInfo');
+  const pickVsLeftChoose = $('#pickVsLeftChoose');
+  const pickVsRightChoose = $('#pickVsRightChoose');
+  if (pickVsLeftInfo) pickVsLeftInfo.addEventListener('click', () => {
+    if (vsLeft >= 0) openPlace(vsLeft);
+  });
+  if (pickVsRightInfo) pickVsRightInfo.addEventListener('click', () => {
+    if (vsRight >= 0) openPlace(vsRight);
+  });
+  if (pickVsLeftChoose) pickVsLeftChoose.addEventListener('click', () => chooseVs('left'));
+  if (pickVsRightChoose) pickVsRightChoose.addEventListener('click', () => chooseVs('right'));
+  requestAnimationFrame(() => syncPickSegPill());
+  window.addEventListener('resize', () => {
+    if (state.tab === 'pick') syncPickSegPill();
+  });
+
   function appendPlaceRow(card, idx) {
     const p = PLACES[idx];
     const row = document.createElement('div');
@@ -1988,13 +2424,20 @@
     row.innerHTML =
       `<span class="pin">${p.n.charAt(0)}</span>` +
       `<button type="button" class="chead">` +
-        `<span class="cname">${p.n}${isFav(idx) ? ' ♥' : ''}</span>` +
+        `<span class="cname">${p.n}</span>` +
         `<div class="csub">${sub2}</div>` +
+      `</button>` +
+      `<button type="button" class="fav-heart row-fav${isFav(idx) ? ' on' : ''}" data-idx="${idx}" aria-label="收藏">` +
+        `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>` +
       `</button>` +
       `<button type="button" class="locate" aria-label="在地图查看" title="定位">` +
         `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2c-3.6 0-6.5 2.8-6.5 6.3 0 4.7 6.5 13.2 6.5 13.2S18.5 13 18.5 8.3C18.5 4.8 15.6 2 12 2zm0 8.6a2.3 2.3 0 1 1 0-4.6 2.3 2.3 0 0 1 0 4.6z"/></svg>` +
       `</button>`;
     row.querySelector('.chead').addEventListener('click', () => openPlace(idx));
+    row.querySelector('.row-fav').addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleFavAt(idx);
+    });
     row.querySelector('.locate').addEventListener('click', e => {
       e.stopPropagation();
       openPlace(idx, { fly: true });
@@ -2010,7 +2453,7 @@
     if (!matched.length) {
       const tip = document.createElement('div');
       tip.className = 'sheet-emptytip';
-      tip.textContent = onlyFav ? '还没有收藏，点卡片 ♡ 收藏' : (hasAttrFilter() ? '没有符合筛选的结果' : '没有匹配的结果');
+      tip.textContent = onlyFav ? '还没有收藏，点心形收藏' : (hasAttrFilter() ? '没有符合筛选的结果' : '没有匹配的结果');
       listEl.appendChild(tip);
       return;
     }

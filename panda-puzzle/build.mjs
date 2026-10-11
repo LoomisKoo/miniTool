@@ -14,7 +14,7 @@ import { fileURLToPath } from 'url';
 import * as esbuild from 'esbuild';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const ALL = ['xiaohongshu'];
+const ALL = ['xiaohongshu', 'ios'];
 const MAX_ZIP = 10 * 1024 * 1024;
 const TARGET = ['es2017', 'chrome61'];
 const VIEWPORT =
@@ -59,8 +59,11 @@ async function bundleJs() {
   return out.outputFiles[0].text;
 }
 
-async function buildCss() {
-  const out = await esbuild.transform(read('src/style.css'), {
+async function buildCss(platformId) {
+  let css = read('src/style.css');
+  const extra = path.join(__dirname, 'platforms', platformId, 'extra.css');
+  if (fs.existsSync(extra)) css += `\n${fs.readFileSync(extra, 'utf8')}`;
+  const out = await esbuild.transform(css, {
     loader: 'css',
     target: ['chrome61'],
     minify: true,
@@ -91,11 +94,14 @@ async function buildOne(platformId) {
     return;
   }
   const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
-  const outDir = path.join(__dirname, 'dist', platformId);
+  const outDir =
+    platformId === 'ios'
+      ? path.join(__dirname, 'ios/PandaPuzzle/PandaPuzzle/Resources/www')
+      : path.join(__dirname, 'dist', platformId);
   fs.rmSync(outDir, { recursive: true, force: true });
   fs.mkdirSync(path.join(outDir, 'assets'), { recursive: true });
 
-  const [js, css] = await Promise.all([bundleJs(), buildCss()]);
+  const [js, css] = await Promise.all([bundleJs(), buildCss(platformId)]);
   const html = `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -121,20 +127,30 @@ ${extractBody()}
   fs.copyFileSync(path.join(__dirname, 'vendor/three.min.js'), path.join(outDir, 'three.min.js'));
   fs.copyFileSync(path.join(__dirname, 'assets/icon.jpg'), path.join(outDir, 'assets/icon.jpg'));
 
-  if (fs.existsSync(AUDIT)) execSync(`node "${AUDIT}" "${outDir}"`, { stdio: 'inherit' });
+  if (platformId !== 'ios') {
+    if (fs.existsSync(AUDIT)) execSync(`node "${AUDIT}" "${outDir}"`, { stdio: 'inherit' });
 
-  const zipPath = path.join(__dirname, 'dist', `${platformId}-panda-puzzle.zip`);
-  fs.rmSync(zipPath, { force: true });
-  execSync(`zip -q -r "${zipPath}" . -x '*.DS_Store'`, { cwd: outDir, stdio: 'pipe' });
-  const zipBytes = fs.statSync(zipPath).size;
-  if (zipBytes > MAX_ZIP) throw new Error('zip 超过 10MB 上限');
+    const zipPath = path.join(__dirname, 'dist', `${platformId}-panda-puzzle.zip`);
+    fs.rmSync(zipPath, { force: true });
+    execSync(`zip -q -r "${zipPath}" . -x '*.DS_Store'`, { cwd: outDir, stdio: 'pipe' });
+    const zipBytes = fs.statSync(zipPath).size;
+    if (zipBytes > MAX_ZIP) throw new Error('zip 超过 10MB 上限');
+
+    const fmt = (n) => `${(n / 1024).toFixed(1)} KB`;
+    const detail = ['index.html', 'style.css', 'app.js', 'three.min.js', 'assets/icon.jpg']
+      .map((f) => `${f} ${fmt(fs.statSync(path.join(outDir, f)).size)}`)
+      .join(', ');
+    console.log(`✓ ${cfg.title} (${platformId}): ${detail}`);
+    console.log(`  zip ${fmt(zipBytes)} → ${path.relative(__dirname, zipPath)}`);
+    return;
+  }
 
   const fmt = (n) => `${(n / 1024).toFixed(1)} KB`;
   const detail = ['index.html', 'style.css', 'app.js', 'three.min.js', 'assets/icon.jpg']
     .map((f) => `${f} ${fmt(fs.statSync(path.join(outDir, f)).size)}`)
     .join(', ');
   console.log(`✓ ${cfg.title} (${platformId}): ${detail}`);
-  console.log(`  zip ${fmt(zipBytes)} → ${path.relative(__dirname, zipPath)}`);
+  console.log(`  → ${path.relative(__dirname, outDir)}`);
 }
 
 for (const t of targets) await buildOne(t);

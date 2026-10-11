@@ -1,0 +1,7 @@
+:root {
+  --safe-t: 0px;
+  --nav-h: 0px;
+}
+.hud-title .brand-sub {
+  display: none;
+}

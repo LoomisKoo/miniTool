@@ -22,10 +22,13 @@ struct TicketPNGDocument: FileDocument {
 
 struct ExportSheet: View {
     @Environment(TicketStore.self) private var store
+    @Environment(ProStore.self) private var pro
     @Environment(\.dismiss) private var dismiss
     @Binding var notice: String
     @State private var isRendering = false
     @State private var showFileExporter = false
+    @State private var showPaywall = false
+    @State private var transparentBackground = false
     @State private var fileDocument = TicketPNGDocument()
 
     var body: some View {
@@ -33,6 +36,35 @@ struct ExportSheet: View {
             VStack(alignment: .leading, spacing: 20) {
                 Text("将当前票根保存为高清 PNG，可以存入相册或本地文件。")
                     .foregroundStyle(FrameTheme.textSecondary)
+
+                VStack(alignment: .leading, spacing: 12) {
+                    exportOption(
+                        title: "超高清导出",
+                        detail: "Pro · 2× 分辨率，适合打印与大图发布",
+                        isOn: pro.isPro,
+                        action: {
+                            guard pro.isPro else {
+                                showPaywall = true
+                                return
+                            }
+                        }
+                    )
+                    exportOption(
+                        title: "透明背景",
+                        detail: "Pro · 导出时移除画板底色",
+                        isOn: transparentBackground,
+                        action: {
+                            guard pro.isPro else {
+                                showPaywall = true
+                                return
+                            }
+                            transparentBackground.toggle()
+                        }
+                    )
+                }
+                .padding(16)
+                .background(FrameTheme.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(FrameTheme.line, lineWidth: 1))
 
                 Button {
                     exportToPhotos()
@@ -46,7 +78,7 @@ struct ExportSheet: View {
 
                 Button {
                     guard let image = renderImage(), let data = image.pngData() else {
-                        notice = "保存失败，请重试"
+                        notice = AppLocalization.text("保存失败，请重试")
                         return
                     }
                     fileDocument = TicketPNGDocument(data: data)
@@ -75,15 +107,21 @@ struct ExportSheet: View {
         .presentationDetents([.medium])
         .presentationBackground(FrameTheme.panel)
         .tint(FrameTheme.accent)
+        .sheet(isPresented: $showPaywall) {
+            PaywallView()
+        }
         .fileExporter(
             isPresented: $showFileExporter,
             document: fileDocument,
             contentType: .png,
             defaultFilename: "帧藏-\(store.fields.title)"
         ) { result in
-            if case .success = result {
-                notice = "已保存到本地文件"
+            switch result {
+            case .success:
+                notice = AppLocalization.text("已保存到本地文件")
                 dismiss()
+            case .failure:
+                notice = AppLocalization.text("文件保存失败，请重试")
             }
         }
     }
@@ -92,24 +130,95 @@ struct ExportSheet: View {
         isRendering = true
         guard let image = renderImage() else {
             isRendering = false
-            notice = "导出失败，请重试"
+            notice = AppLocalization.text("导出失败，请重试")
             return
         }
-        UIImageWriteToSavedPhotosAlbum(image, nil, nil, nil)
-        isRendering = false
-        notice = "已保存到相册"
-        dismiss()
+        Task {
+            let status = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
+            await MainActor.run {
+                guard status == .authorized || status == .limited else {
+                    isRendering = false
+                    notice = AppLocalization.text("没有相册写入权限，请在系统设置中允许访问")
+                    return
+                }
+                UIImageWriteToSavedPhotosAlbum(image, nil, nil, nil)
+                isRendering = false
+                notice = AppLocalization.text("已保存到相册")
+                dismiss()
+            }
+        }
     }
 
+    /// 与编辑页画板同构：票根四周各留长边 10%，再按目标像素放大。
     private func renderImage() -> UIImage? {
+        let ticket = store.template.size
+        let pad = max(ticket.width, ticket.height) * 0.1
+        let board = CGSize(width: ticket.width + pad * 2, height: ticket.height + pad * 2)
+        let longSide: CGFloat = pro.isPro ? 3000 : 1500
+
         let renderer = ImageRenderer(content:
-            TicketCardView()
-                .environment(store)
-                .frame(width: 1200, height: 1500)
-                .padding(40)
-                .background(store.background.background)
+            ZStack {
+                exportBackground
+                    .frame(width: board.width, height: board.height)
+                TicketCardView()
+                    .environment(store)
+                    .frame(width: ticket.width, height: ticket.height)
+            }
+            .frame(width: board.width, height: board.height)
         )
-        renderer.scale = 2
+        renderer.scale = longSide / max(board.width, board.height)
         return renderer.uiImage
-}
+    }
+
+    @ViewBuilder
+    private var exportBackground: some View {
+        if transparentBackground {
+            Color.clear
+        } else {
+            store.background.background
+                .overlay {
+                    if let data = store.stageBackgroundData, let image = UIImage(data: data) {
+                        Image(uiImage: image)
+                            .resizable()
+                            .scaledToFill()
+                            .opacity(store.stageOpacity)
+                    }
+                }
+                .clipped()
+        }
+    }
+
+    private func exportOption(
+        title: String,
+        detail: String,
+        isOn: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                Image(systemName: isOn ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(isOn ? FrameTheme.accent : FrameTheme.muted)
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 6) {
+                        Text(LocalizedStringKey(title))
+                            .font(.system(size: 15, weight: .semibold))
+                        Text("PRO")
+                            .font(.system(size: 9, weight: .bold, design: .rounded))
+                            .foregroundStyle(FrameTheme.onAccent)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 3)
+                            .background(FrameTheme.accent, in: Capsule())
+                    }
+                    Text(LocalizedStringKey(detail))
+                        .font(.system(size: 12))
+                        .foregroundStyle(FrameTheme.textSecondary)
+                }
+                Spacer()
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(FrameTheme.text)
+    }
 }

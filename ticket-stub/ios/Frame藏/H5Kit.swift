@@ -60,16 +60,18 @@ struct TicketContext {
     var photos: [UIImage?] = []
     var photoScale: CGFloat = 1
     var photoOffset: CGSize = .zero
+    var photoEffects: [TicketEffect] = []
+    var photoEffectSettings: [String: EffectSettings] = [:]
 
-    var title: String { fields.title }
-    var place: String { fields.place }
-    var date: String { fields.date }
-    var seat: String { fields.seat }
-    var mood: String { fields.mood }
+    var title: String { AppLocalization.text(fields.title) }
+    var place: String { AppLocalization.text(fields.place) }
+    var date: String { AppLocalization.text(fields.date) }
+    var seat: String { AppLocalization.text(fields.seat) }
+    var mood: String { AppLocalization.text(fields.mood) }
 }
 
 private struct TicketContextKey: EnvironmentKey {
-    static let defaultValue = TicketContext(template: TicketCatalog.templates[0], fields: TicketCatalog.templates[0].defaults)
+    static let defaultValue = TicketContext(template: TicketCatalog.templates[0], fields: TicketCatalog.templates[0].localizedDefaults)
 }
 
 extension EnvironmentValues {
@@ -97,6 +99,14 @@ struct H5Photo: View {
                     Image(t.template.category.artworkName)
                         .resizable()
                         .scaledToFill()
+                }
+            }
+            .overlay {
+                ForEach(t.photoEffects) { effect in
+                    EffectVisualOverlay(
+                        effectID: effect.id,
+                        settings: t.photoEffectSettings[effect.id] ?? EffectSettings(color: effect.tint)
+                    )
                 }
             }
             .clipped()

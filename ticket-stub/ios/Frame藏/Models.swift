@@ -19,6 +19,9 @@ enum TicketCategory: String, CaseIterable, Identifiable, Codable {
         case .stamp: "邮票"
         }
     }
+
+    var displayName: String { AppLocalization.text(rawValue) }
+    var displayTab: String { AppLocalization.text(tab) }
     var icon: String {
         switch self {
         case .cinema: "film"
@@ -49,6 +52,8 @@ struct TemplateField: Codable, Hashable {
         self.label = label
         self.value = value
     }
+
+    var displayLabel: String { AppLocalization.text(label) }
 }
 
 struct TicketTemplate: Identifiable, Codable {
@@ -60,6 +65,19 @@ struct TicketTemplate: Identifiable, Codable {
     let fields: [TemplateField]
     let photoSlots: Int
     let isPro: Bool
+
+    var displayName: String { AppLocalization.text(name) }
+    var displayDetail: String { AppLocalization.text(detail) }
+
+    var localizedDefaults: TicketFields {
+        var result = defaults
+        result.title = AppLocalization.text(result.title)
+        result.place = AppLocalization.text(result.place)
+        result.date = AppLocalization.text(result.date)
+        result.seat = AppLocalization.text(result.seat)
+        result.mood = AppLocalization.text(result.mood)
+        return result
+    }
 
     var defaults: TicketFields {
         var result = TicketFields(title: "", place: "", date: "", seat: "", mood: "")
@@ -87,6 +105,21 @@ struct TicketFields: Equatable, Codable {
 
 enum ColorToken: String, Codable {
     case ink, cream, ocean, sunset, moss, plum, amber, neon
+
+    var displayName: String {
+        let name: String
+        switch self {
+        case .ink: name = "墨黑"
+        case .cream: name = "奶油"
+        case .ocean: name = "深海"
+        case .sunset: name = "落日"
+        case .moss: name = "苔绿"
+        case .plum: name = "梅紫"
+        case .amber: name = "琥珀"
+        case .neon: name = "霓虹"
+        }
+        return AppLocalization.text(name)
+    }
 
     var background: Color {
         switch self {
@@ -116,6 +149,17 @@ struct TicketEffect: Identifiable, Hashable, Codable {
     let tint: ColorToken
     let tab: String
     let hint: String
+
+    var displayName: String { AppLocalization.text(name) }
+    var displayHint: String { AppLocalization.text(hint) }
+
+    var isPro: Bool {
+        id.hasPrefix("lit-") ||
+        id.hasPrefix("mat-") && id != "mat-flat" ||
+        id == "stp-custom" ||
+        id == "txt-custom" ||
+        id == "txt-diag"
+    }
 }
 
 struct SavedTicket: Identifiable, Codable {
@@ -124,6 +168,7 @@ struct SavedTicket: Identifiable, Codable {
     var templateID: String
     var fields: TicketFields
     var photoData: Data?
+    var photoDatas: [Data]?
     var savedAt: Date
     var photoScale: CGFloat?
     var photoOffset: CGSize?
@@ -132,10 +177,30 @@ struct SavedTicket: Identifiable, Codable {
     var background: ColorToken?
     var stageBackgroundData: Data?
     var stageOpacity: Double?
+    var tags: [String]?
+    var note: String?
+    var isFavorite: Bool?
 
     var template: TicketTemplate? {
         TicketCatalog.templates.first { $0.id == templateID }
     }
+}
+
+struct SavedPreset: Identifiable, Codable {
+    let id: UUID
+    var name: String
+    var templateID: String
+    var fields: TicketFields
+    var photoData: Data?
+    var photoDatas: [Data]?
+    var photoScale: CGFloat?
+    var photoOffset: CGSize?
+    var effectIDs: [String]?
+    var effectSettings: [String: EffectSettings]?
+    var background: ColorToken?
+    var stageBackgroundData: Data?
+    var stageOpacity: Double?
+    var createdAt: Date
 }
 
 /// 本地作品库：仅存本机 Application Support，不走 iCloud
@@ -143,12 +208,26 @@ struct SavedTicket: Identifiable, Codable {
 @MainActor
 final class WorkLibrary {
     private(set) var items: [SavedTicket] = []
+    private(set) var presets: [SavedPreset] = []
+    private(set) var draft: SavedTicket?
 
     private static let legacyKey = "framezang.savedTickets"
     private static var fileURL: URL {
         let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir.appendingPathComponent("works.json")
+    }
+
+    private static var presetsURL: URL {
+        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir.appendingPathComponent("presets.json")
+    }
+
+    private static var draftURL: URL {
+        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir.appendingPathComponent("draft.json")
     }
 
     init() {
@@ -160,6 +239,13 @@ final class WorkLibrary {
             items = saved
             persist()
             UserDefaults.standard.removeObject(forKey: Self.legacyKey)
+        }
+        if let data = try? Data(contentsOf: Self.presetsURL),
+           let saved = try? JSONDecoder().decode([SavedPreset].self, from: data) {
+            presets = saved
+        }
+        if let data = try? Data(contentsOf: Self.draftURL) {
+            draft = try? JSONDecoder().decode(SavedTicket.self, from: data)
         }
     }
 
@@ -174,6 +260,18 @@ final class WorkLibrary {
         persist()
     }
 
+    func saveDraft(_ item: SavedTicket) {
+        draft = item
+        if let data = try? JSONEncoder().encode(item) {
+            try? data.write(to: Self.draftURL, options: .atomic)
+        }
+    }
+
+    func clearDraft() {
+        draft = nil
+        try? FileManager.default.removeItem(at: Self.draftURL)
+    }
+
     func rename(_ id: UUID, to name: String) {
         guard let index = items.firstIndex(where: { $0.id == id }) else { return }
         items[index].title = name
@@ -185,9 +283,50 @@ final class WorkLibrary {
         persist()
     }
 
+    func updateMetadata(_ id: UUID, tags: [String], note: String, isFavorite: Bool) {
+        guard let index = items.firstIndex(where: { $0.id == id }) else { return }
+        items[index].tags = tags
+        items[index].note = note
+        items[index].isFavorite = isFavorite
+        persist()
+    }
+
+    func savePreset(from work: SavedTicket, name: String) {
+        let preset = SavedPreset(
+            id: UUID(),
+            name: name.isEmpty ? work.title : name,
+            templateID: work.templateID,
+            fields: work.fields,
+            photoData: work.photoData,
+            photoDatas: work.photoDatas,
+            photoScale: work.photoScale,
+            photoOffset: work.photoOffset,
+            effectIDs: work.effectIDs,
+            effectSettings: work.effectSettings,
+            background: work.background,
+            stageBackgroundData: work.stageBackgroundData,
+            stageOpacity: work.stageOpacity,
+            createdAt: .now
+        )
+        presets.removeAll { $0.name == preset.name }
+        presets.insert(preset, at: 0)
+        persistPresets()
+    }
+
+    func deletePreset(_ id: UUID) {
+        presets.removeAll { $0.id == id }
+        persistPresets()
+    }
+
     private func persist() {
         if let data = try? JSONEncoder().encode(items) {
             try? data.write(to: Self.fileURL, options: .atomic)
+        }
+    }
+
+    private func persistPresets() {
+        if let data = try? JSONEncoder().encode(presets) {
+            try? data.write(to: Self.presetsURL, options: .atomic)
         }
     }
 }
@@ -198,6 +337,39 @@ struct EffectSettings: Codable, Hashable {
     var positionX: Double = 70
     var positionY: Double = 22
     var color: ColorToken = .amber
+    var target: EffectScope?
+    var customText: String?
+
+    var resolvedTarget: EffectScope { target ?? .foreground }
+}
+
+enum EffectScope: String, CaseIterable, Codable, Hashable, Identifiable {
+    case background = "背景"
+    case photo = "照片"
+    case foreground = "前景"
+
+    var id: String { rawValue }
+    var hint: String {
+        switch self {
+        case .background: "铺在文字和照片下方"
+        case .photo: "只作用于照片区域"
+        case .foreground: "盖在全部内容之上"
+        }
+    }
+}
+
+private struct DraftState: Equatable {
+    var templateID: String
+    var fields: TicketFields
+    var effects: [TicketEffect]
+    var background: ColorToken
+    var selectedPhotoData: Data?
+    var selectedPhotoDatas: [Data]
+    var photoScale: CGFloat
+    var photoOffset: CGSize
+    var stageBackgroundData: Data?
+    var stageOpacity: Double
+    var effectSettings: [String: EffectSettings]
 }
 
 enum TicketCatalog {
@@ -241,15 +413,32 @@ enum TicketCatalog {
 final class TicketStore {
     var category: TicketCategory = .cinema
     var template = TicketCatalog.templates[0]
-    var fields = TicketCatalog.templates[0].defaults
+    var fields = TicketCatalog.templates[0].localizedDefaults
     var effects: [TicketEffect] = []
     var background: ColorToken = .ink
     var selectedPhotoData: Data?
+    var selectedPhotoDatas: [Data] = []
     var photoScale: CGFloat = 1
     var photoOffset: CGSize = .zero
     var stageBackgroundData: Data?
     var stageOpacity: Double = 1
     var effectSettings: [String: EffectSettings] = [:]
+    private var undoStack: [DraftState] = []
+    private var redoStack: [DraftState] = []
+    private var isApplyingHistory = false
+    private var lastObservedState = DraftState(
+        templateID: TicketCatalog.templates[0].id,
+        fields: TicketCatalog.templates[0].localizedDefaults,
+        effects: [],
+        background: .ink,
+        selectedPhotoData: nil,
+        selectedPhotoDatas: [],
+        photoScale: 1,
+        photoOffset: .zero,
+        stageBackgroundData: nil,
+        stageOpacity: 1,
+        effectSettings: [:]
+    )
     /// 正在编辑的本地作品；nil 表示尚未保存过的新票根
     var editingID: UUID?
 
@@ -259,14 +448,42 @@ final class TicketStore {
         load(work)
     }
 
+    init(preset: SavedPreset) {
+        let work = SavedTicket(
+            id: UUID(),
+            title: preset.name,
+            templateID: preset.templateID,
+            fields: preset.fields,
+            photoData: preset.photoData,
+            photoDatas: preset.photoDatas,
+            savedAt: .now,
+            photoScale: preset.photoScale,
+            photoOffset: preset.photoOffset,
+            effectIDs: preset.effectIDs,
+            effectSettings: preset.effectSettings,
+            background: preset.background,
+            stageBackgroundData: preset.stageBackgroundData,
+            stageOpacity: preset.stageOpacity,
+            tags: nil,
+            note: nil,
+            isFavorite: false
+        )
+        load(work)
+        editingID = nil
+    }
+
     var categoryTemplates: [TicketTemplate] {
         TicketCatalog.templates.filter { $0.category == category }
     }
 
     func select(_ template: TicketTemplate) {
         self.template = template
-        fields = template.defaults
+        fields = template.localizedDefaults
         category = template.category
+        if selectedPhotoDatas.count > template.photoSlots {
+            selectedPhotoDatas = Array(selectedPhotoDatas.prefix(template.photoSlots))
+            selectedPhotoData = selectedPhotoDatas.first
+        }
     }
 
     func toggle(_ effect: TicketEffect) {
@@ -274,7 +491,14 @@ final class TicketStore {
             effects.remove(at: index)
         } else {
             effects.append(effect)
-            effectSettings[effect.id] = EffectSettings(color: effect.tint)
+            let defaultScope: EffectScope = {
+                switch effect.tab {
+                case "纹理", "图案": return .background
+                case "印章", "文字": return .foreground
+                default: return .foreground
+                }
+            }()
+            effectSettings[effect.id] = EffectSettings(color: effect.tint, target: defaultScope)
         }
     }
 
@@ -282,9 +506,41 @@ final class TicketStore {
         effectSettings[effect.id] ?? EffectSettings(color: effect.tint)
     }
 
+    var canUndo: Bool { !undoStack.isEmpty }
+    var canRedo: Bool { !redoStack.isEmpty }
+
+    func observeChange() {
+        guard !isApplyingHistory else { return }
+        let next = draftState
+        guard next != lastObservedState else { return }
+        undoStack.append(lastObservedState)
+        if undoStack.count > 50 { undoStack.removeFirst() }
+        redoStack.removeAll()
+        lastObservedState = next
+    }
+
+    func undo() {
+        guard let previous = undoStack.popLast() else { return }
+        redoStack.append(draftState)
+        isApplyingHistory = true
+        applyDraftState(previous)
+        isApplyingHistory = false
+        lastObservedState = previous
+    }
+
+    func redo() {
+        guard let next = redoStack.popLast() else { return }
+        undoStack.append(draftState)
+        isApplyingHistory = true
+        applyDraftState(next)
+        isApplyingHistory = false
+        lastObservedState = next
+    }
+
     func startNew() {
         select(template)
         selectedPhotoData = nil
+        selectedPhotoDatas = []
         photoScale = 1
         photoOffset = .zero
         effects = []
@@ -294,9 +550,13 @@ final class TicketStore {
 
     func snapshot(id: UUID, name: String) -> SavedTicket {
         SavedTicket(
-            id: id, title: name, templateID: template.id, fields: fields, photoData: selectedPhotoData, savedAt: .now,
+            id: id, title: name, templateID: template.id, fields: fields,
+            photoData: selectedPhotoDatas.first ?? selectedPhotoData,
+            photoDatas: selectedPhotoDatas.isEmpty ? nil : selectedPhotoDatas,
+            savedAt: .now,
             photoScale: photoScale, photoOffset: photoOffset, effectIDs: effects.map(\.id), effectSettings: effectSettings,
-            background: background, stageBackgroundData: stageBackgroundData, stageOpacity: stageOpacity
+            background: background, stageBackgroundData: stageBackgroundData, stageOpacity: stageOpacity,
+            tags: nil, note: nil, isFavorite: false
         )
     }
 
@@ -306,6 +566,7 @@ final class TicketStore {
         category = saved.category
         fields = item.fields
         selectedPhotoData = item.photoData
+        selectedPhotoDatas = item.photoDatas ?? item.photoData.map { [$0] } ?? []
         photoScale = item.photoScale ?? 1
         photoOffset = item.photoOffset ?? .zero
         let ids = item.effectIDs ?? []
@@ -315,5 +576,41 @@ final class TicketStore {
         stageBackgroundData = item.stageBackgroundData
         stageOpacity = item.stageOpacity ?? 1
         editingID = item.id
+        lastObservedState = draftState
+        undoStack.removeAll()
+        redoStack.removeAll()
+    }
+
+    private var draftState: DraftState {
+        DraftState(
+            templateID: template.id,
+            fields: fields,
+            effects: effects,
+            background: background,
+            selectedPhotoData: selectedPhotoData,
+            selectedPhotoDatas: selectedPhotoDatas,
+            photoScale: photoScale,
+            photoOffset: photoOffset,
+            stageBackgroundData: stageBackgroundData,
+            stageOpacity: stageOpacity,
+            effectSettings: effectSettings
+        )
+    }
+
+    private func applyDraftState(_ state: DraftState) {
+        if let savedTemplate = TicketCatalog.templates.first(where: { $0.id == state.templateID }) {
+            template = savedTemplate
+            category = savedTemplate.category
+        }
+        fields = state.fields
+        effects = state.effects
+        background = state.background
+        selectedPhotoData = state.selectedPhotoData
+        selectedPhotoDatas = state.selectedPhotoDatas
+        photoScale = state.photoScale
+        photoOffset = state.photoOffset
+        stageBackgroundData = state.stageBackgroundData
+        stageOpacity = state.stageOpacity
+        effectSettings = state.effectSettings
     }
 }

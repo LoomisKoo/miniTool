@@ -7,8 +7,10 @@
 	objects = {
 
 /* Begin PBXFileReference section */
+		5056FADA307A402F007E2F1E /* Frame藏.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = "Frame藏.xcodeproj"; sourceTree = "<group>"; };
 		505B75BE30778A8B0091A845 /* Frame藏.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = "Frame藏.xcodeproj"; sourceTree = "<group>"; };
 		505B75DA307795410091A845 /* Frame藏.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = "Frame藏.xcodeproj"; sourceTree = "<group>"; };
+		505B762A3078DC770091A845 /* Frame藏.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = "Frame藏.xcodeproj"; sourceTree = "<group>"; };
 		FRM00000000000000000003 /* Frame藏.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Frame藏.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -27,12 +29,22 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		5056FAF3307A402F007E2F1E /* Products */ = {
+			isa = PBXGroup;
+			name = Products;
+			sourceTree = "<group>";
+		};
 		505B75C530778A8B0091A845 /* Products */ = {
 			isa = PBXGroup;
 			name = Products;
 			sourceTree = "<group>";
 		};
 		505B75E1307795410091A845 /* Products */ = {
+			isa = PBXGroup;
+			name = Products;
+			sourceTree = "<group>";
+		};
+		505B763F3078DC770091A845 /* Products */ = {
 			isa = PBXGroup;
 			name = Products;
 			sourceTree = "<group>";
@@ -105,8 +117,16 @@
 			projectDirPath = "";
 			projectReferences = (
 				{
+					ProductGroup = 505B763F3078DC770091A845 /* Products */;
+					ProjectRef = 505B762A3078DC770091A845 /* Frame藏.xcodeproj */;
+				},
+				{
 					ProductGroup = 505B75E1307795410091A845 /* Products */;
 					ProjectRef = 505B75DA307795410091A845 /* Frame藏.xcodeproj */;
+				},
+				{
+					ProductGroup = 5056FAF3307A402F007E2F1E /* Products */;
+					ProjectRef = 5056FADA307A402F007E2F1E /* Frame藏.xcodeproj */;
 				},
 				{
 					ProductGroup = 505B75C530778A8B0091A845 /* Products */;
@@ -176,7 +196,7 @@
 				INFOPLIST_KEY_CADisableMinimumFrameDurationOnPhone = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "帧藏";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.photo-video";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.photography";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "将制作好的票根保存到相册。";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "选择照片制作纪念票根。";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -189,6 +209,7 @@
 				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.tincom.framezang;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
@@ -208,7 +229,7 @@
 				INFOPLIST_KEY_CADisableMinimumFrameDurationOnPhone = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "帧藏";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.photo-video";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.photography";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "将制作好的票根保存到相册。";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "选择照片制作纪念票根。";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;

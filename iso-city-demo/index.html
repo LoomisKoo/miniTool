@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>等距夜景小城 · Three.js</title>
 <style>
-  html, body { margin: 0; height: 100%; overflow: hidden; background: #070b16; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #050817; }
+  #app canvas { image-rendering: pixelated; }
   #app { position: fixed; inset: 0; }
   .hud {
     position: fixed; left: 16px; bottom: 14px; pointer-events: none;
@@ -16,12 +17,23 @@
     color: #dbe6ff; font: 600 14px/1.5 system-ui, sans-serif; letter-spacing: 1px;
     text-shadow: 0 0 12px rgba(120,160,255,.5);
   }
+  #themeBtn {
+    position: fixed; left: 16px; top: 46px; z-index: 10;
+    padding: 7px 14px; border-radius: 999px; cursor: pointer;
+    border: 1px solid rgba(140,180,255,.35);
+    background: rgba(20,28,52,.55); backdrop-filter: blur(8px);
+    color: #dbe6ff; font: 600 12px/1 system-ui, sans-serif; letter-spacing: .5px;
+    transition: background .2s, border-color .2s, transform .1s;
+  }
+  #themeBtn:hover { background: rgba(40,58,104,.7); border-color: rgba(160,200,255,.6); }
+  #themeBtn:active { transform: scale(.96); }
 </style>
 </head>
 <body>
 <div id="app"></div>
-<div class="title">PARIS · 20:00</div>
-<div class="hud">WASD 移动 · 撞墙会停下 · 拖拽旋转 · 滚轮缩放 · 被楼挡住时显示轮廓</div>
+<div class="title">NEON BAY · <span id="clock">20:00</span></div>
+<div class="hud">WASD 移动 · 拖拽旋转 · 滚轮缩放 · N 切换昼夜</div>
+<button id="themeBtn">🌙 夜晚</button>
 
 <script type="importmap">
 {
@@ -43,29 +55,78 @@ import { OutputPass }      from 'three/addons/postprocessing/OutputPass.js';
 /* ============================== 基础舞台 ============================== */
 const app = document.getElementById('app');
 
-function makeSkyTexture() {
-  const c = document.createElement('canvas');
-  c.width = 4; c.height = 256;
-  const ctx = c.getContext('2d');
-  const g = ctx.createLinearGradient(0, 0, 0, 256);
-  g.addColorStop(0.0, '#1d2547');
-  g.addColorStop(0.55, '#4a4f7e');
-  g.addColorStop(0.85, '#9a7f9c');
-  g.addColorStop(1.0, '#e0a98c');
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, 4, 256);
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  return t;
+/* ====================== 主题系统：白天 / 黑夜 ====================== */
+// 所有随模式变化的值集中在此，切换时统一做平滑过渡（后面天气系统会乘叠在这之上）
+const THEMES = {
+  day: {
+    fog: 0x91acd8, fogDensity: 0.0018,
+    hemiSky: 0xc6d8ff, hemiGround: 0x62718f, hemiIntensity: 1.05,
+    sun: 0xffe4c7, sunIntensity: 2.0,
+    fill: 0x7e9fe8, fillIntensity: 0.42,
+    lampEmissive: 0x000000, lampLight: 0,
+    bloom: 0.0, exposure: 1.0, label: '白天', clock: '12:00'
+  },
+  night: {
+    fog: 0x3e4e92, fogDensity: 0.0022,
+    hemiSky: 0x8da6ed, hemiGround: 0x3b4070, hemiIntensity: 1.42,
+    sun: 0xc4b1f4, sunIntensity: 2.2,
+    fill: 0x7899f0, fillIntensity: 1.22,
+    lampEmissive: 0xffae73, lampLight: 4.8,
+    bloom: 0.24, exposure: 1.38, label: '夜晚', clock: '20:00'
+  }
+};
+
+// 天空渐变：每条色标给出 白天/黑夜 两个颜色
+const SKY_STOPS = [
+  { p: 0.00, day: '#244f9e', night: '#1d2b67' },
+  { p: 0.55, day: '#6d8ed5', night: '#3e519d' },
+  { p: 0.85, day: '#b0b8e0', night: '#7168a9' },
+  { p: 1.00, day: '#e5d3cf', night: '#a45770' }
+];
+
+const _tmpA = new THREE.Color(), _tmpB = new THREE.Color();
+function mixC(target, dayHex, nightHex, t) {
+  _tmpA.set(dayHex); _tmpB.set(nightHex);
+  target.copy(_tmpA).lerp(_tmpB, t);
+}
+
+const skyCanvas = document.createElement('canvas');
+skyCanvas.width = 4; skyCanvas.height = 256;
+const skyCtx = skyCanvas.getContext('2d');
+const skyTex = new THREE.CanvasTexture(skyCanvas);
+skyTex.colorSpace = THREE.SRGBColorSpace;
+
+function drawSky(t) {   // t: 0 = 白天, 1 = 黑夜
+  const g = skyCtx.createLinearGradient(0, 0, 0, 256);
+  for (const s of SKY_STOPS) {
+    mixC(_tmpA, s.day, s.night, t);
+    g.addColorStop(s.p, '#' + _tmpA.getHexString());
+  }
+  skyCtx.fillStyle = g;
+  skyCtx.fillRect(0, 0, 4, 256);
+  skyTex.needsUpdate = true;
+}
+
+// 需要跟随主题过渡的材质（自动收集，避免逐个手改）
+const themeMats = [];
+function themedMat(mat, dayHex, nightHex) {
+  mat.userData.themeDay = new THREE.Color(dayHex);
+  mat.userData.themeNight = new THREE.Color(nightHex);
+  themeMats.push(mat);
+  return mat;
 }
 
 const scene = new THREE.Scene();
-scene.background = makeSkyTexture();
-scene.fog = new THREE.FogExp2(0x5b5f86, 0.0035);
+drawSky(1);
+scene.background = skyTex;
+scene.fog = new THREE.FogExp2(THEMES.night.fog, THEMES.night.fogDensity);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, stencil: true });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-renderer.setSize(innerWidth, innerHeight);
+const PIXEL_SCALE = 0.72;
+renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+renderer.setSize(innerWidth * PIXEL_SCALE, innerHeight * PIXEL_SCALE, false);
+renderer.domElement.style.width = '100%';
+renderer.domElement.style.height = '100%';
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
 renderer.shadowMap.enabled = true;
@@ -114,7 +175,7 @@ let aspect = innerWidth / innerHeight;
 const camera = new THREE.OrthographicCamera(
   -VIEW * aspect, VIEW * aspect, VIEW, -VIEW, -300, 900
 );
-camera.position.set(60, 60, 60);
+camera.position.set(80, 80, 80);
 camera.lookAt(0, 0, 0);
 
 const controls = new OrbitControls(camera, renderer.domElement);
@@ -122,21 +183,22 @@ controls.target.set(0, 0, 0);
 controls.enableDamping = true;
 controls.dampingFactor = 0.08;
 controls.maxPolarAngle = Math.PI * 0.49;   // 不允许钻到地面以下
-controls.minZoom = 0.6;
+controls.minZoom = 0.22;                   // 允许拉远看全城
 controls.maxZoom = 4;
 
 /* ============================== 灯光 ============================== */
 // Apple Maps 质感的核心：每个朝向的面都有明显不同的色调
 //   天光（半球光）给顶面冷亮色，暖色低角度主光 + 冷色补光让相邻立面一暖一冷
-scene.add(new THREE.HemisphereLight(0xb9c8ff, 0x4b3f55, 1.15));
+const hemi = new THREE.HemisphereLight(0xb9c8ff, 0x4b3f55, 1.15);
+scene.add(hemi);
 
 const sun = new THREE.DirectionalLight(0xffc49a, 2.6);
 sun.position.set(-45, 32, 28);
 sun.castShadow = true;
-sun.shadow.mapSize.set(4096, 4096);
+sun.shadow.mapSize.set(2048, 2048);
 sun.shadow.bias = -0.0004;
 sun.shadow.normalBias = 0.02;
-Object.assign(sun.shadow.camera, { left: -28, right: 28, top: 28, bottom: -28, near: 1, far: 220 });
+Object.assign(sun.shadow.camera, { left: -42, right: 42, top: 42, bottom: -42, near: 1, far: 260 });
 scene.add(sun);
 
 const fill = new THREE.DirectionalLight(0x8aa2ff, 0.6);
@@ -144,10 +206,102 @@ fill.position.set(40, 22, -30);
 scene.add(fill);
 
 /* ============================== 参数 ============================== */
-const BLOCKS = 7;            // 7 x 7 个街区
-const LOT    = 5;            // 街区中心间距
-const EXTENT = BLOCKS * LOT; // 整个世界边长
+const BLOCKS = 12;                   // 更密的都市街区
+const LOT    = 5.6;                  // 缩小街区，增加建筑数量
+const EXTENT = BLOCKS * LOT;         // 路网边长
 const HALF   = EXTENT / 2;
+const BORDER = LOT;                  // 外圈绿地：避免道路贴到地图边缘
+const PLANE  = EXTENT + BORDER * 2;  // 地面实际尺寸
+const ROAD_W = LOT * 0.34;           // 车行道宽
+const CURB_W = LOT * 0.09;           // 人行道 / 路缘宽
+const INSET  = ROAD_W / 2 + CURB_W;  // 地块相对道路的内缩
+const RING_R = ROAD_W * 1.2;         // 环岛中心线半径
+
+/* ============ 地块类型：建筑 / 公园 / 停车场 / 广场 / 绿地 ============ */
+const cellType = [];
+for (let i = 0; i < BLOCKS; i++) {
+  cellType[i] = [];
+  for (let j = 0; j < BLOCKS; j++) {
+    const r = Math.random();
+    cellType[i][j] = r < 0.56 ? 'bldg'
+                   : r < 0.66 ? 'park'
+                   : r < 0.78 ? 'lot'
+                   : r < 0.90 ? 'plaza'
+                   : 'empty';
+  }
+}
+// 地标：中央大公园 + 两处广场
+const LANDMARKS = { '5,5': 'park', '5,4': 'park', '4,5': 'park', '6,5': 'park',
+                    '2,8': 'plaza', '8,2': 'plaza', '8,8': 'park' };
+for (const k in LANDMARKS) { const [i, j] = k.split(',').map(Number); cellType[i][j] = LANDMARKS[k]; }
+const SKYLINE_TOWERS = new Set(['1,2', '2,9', '8,3', '10,9']);
+for (const k of SKYLINE_TOWERS) {
+  const [i, j] = k.split(',').map(Number);
+  if (!LANDMARKS[k]) cellType[i][j] = 'bldg';
+}
+
+const parks = [];   // 公园中心，供动物活动
+
+/* ============ 道路网：随机去掉部分路段 → T 字路口 / 断头路 ============ */
+const NODES = BLOCKS + 1;
+const nodeX = i => i * LOT - HALF;
+const nodeZ = j => j * LOT - HALF;
+const nid  = (i, j) => j * NODES + i;
+const nidI = id => id % NODES;
+const nidJ = id => (id / NODES) | 0;
+const adj  = Array.from({ length: NODES * NODES }, () => []);
+
+(function buildRoadNetwork() {
+  const keepProb = 0.83;
+  const edges = [];
+  for (let i = 0; i < NODES; i++) {
+    for (let j = 0; j < NODES; j++) {
+      if (i < BLOCKS && Math.random() < keepProb) edges.push([nid(i, j), nid(i + 1, j)]);
+      if (j < BLOCKS && Math.random() < keepProb) edges.push([nid(i, j), nid(i, j + 1)]);
+    }
+  }
+  // 只保留最大连通分量，丢弃零碎孤岛路段
+  const parent = new Int32Array(NODES * NODES);
+  for (let k = 0; k < parent.length; k++) parent[k] = k;
+  const find = a => { while (parent[a] !== a) a = parent[a] = parent[parent[a]]; return a; };
+  for (const [a, b] of edges) parent[find(a)] = find(b);
+  const size = new Map();
+  for (const [a] of edges) { const r = find(a); size.set(r, (size.get(r) || 0) + 1); }
+  let root = -1, best = -1;
+  for (const [r, s] of size) if (s > best) { best = s; root = r; }
+  for (const [a, b] of edges) if (find(a) === root) { adj[a].push(b); adj[b].push(a); }
+})();
+
+const isLinked = (i, j, di, dj) => adj[nid(i, j)].includes(nid(i + di, j + dj));
+
+/* ============ 环岛：在若干多岔路口设环岛 ============ */
+const isRoundabout = new Set();
+(function pickRoundabouts() {
+  const cand = [];
+  for (let i = 1; i < BLOCKS; i++)
+    for (let j = 1; j < BLOCKS; j++)
+      if (adj[nid(i, j)].length >= 3) cand.push(nid(i, j));
+  cand.sort(() => Math.random() - 0.5);           // 打乱后依次挑选
+  for (const id of cand) {
+    if (isRoundabout.size >= 6) break;
+    const i = nidI(id), j = nidJ(id);
+    let ok = true;
+    for (const r of isRoundabout) {
+      if (Math.abs(nidI(r) - i) < 3 && Math.abs(nidJ(r) - j) < 3) { ok = false; break; }
+    }
+    if (ok) isRoundabout.add(id);                 // 互相至少隔 3 个街区，避免扎堆
+  }
+})();
+
+// 遍历所有存在的路段（每条只一次）
+function forEachEdge(cb) {
+  for (let i = 0; i < NODES; i++) {
+    for (let j = 0; j < NODES; j++) {
+      if (i < BLOCKS && isLinked(i, j, 1, 0)) cb(i, j, 1, 0);
+      if (j < BLOCKS && isLinked(i, j, 0, 1)) cb(i, j, 0, 1);
+    }
+  }
+}
 
 /* ====================== 地面 + 街道（程序化贴图） ====================== */
 function makeMapTexture() {
@@ -155,48 +309,94 @@ function makeMapTexture() {
   const c = document.createElement('canvas');
   c.width = c.height = S;
   const ctx = c.getContext('2d');
+  const toU  = v => ((v + PLANE / 2) / PLANE) * S;   // 世界 → 画布
+  const uLen = v => (v / PLANE) * S;
 
-  // 街区底色
-  ctx.fillStyle = '#6a6c80';
+  // 底色：地块地面
+  ctx.fillStyle = '#cfd8e6';
   ctx.fillRect(0, 0, S, S);
 
-  const tile = S / BLOCKS;
-  const road = tile * 0.44;
+  // 城市漂浮在深蓝色水面上，保留一圈暗色岸线
+  const g0 = toU(-HALF - BORDER * 0.2), g1 = toU(HALF + BORDER * 0.2);
+  ctx.fillStyle = '#101c4d';
+  ctx.fillRect(0, 0, S, g0);
+  ctx.fillRect(0, g1, S, S - g1);
+  ctx.fillRect(0, g0, g0, g1 - g0);
+  ctx.fillRect(g1, g0, S - g1, g1 - g0);
 
-  // 中央公园草坪
-  const pk = 3 * tile + road / 2, ps = tile - road;
-  ctx.fillStyle = '#4f6a58';
-  ctx.fillRect(pk, pk, ps, ps);
-
-  // 横平竖直的道路
-  ctx.fillStyle = '#3e4155';
-  for (let i = 0; i <= BLOCKS; i++) {
-    const p = i * tile;
-    ctx.fillRect(p - road / 2, 0, road, S);
-    ctx.fillRect(0, p - road / 2, S, road);
+  // 地块主题色
+  const cellRect = (i, j, color) => {
+    ctx.fillStyle = color;
+    const x0 = nodeX(i) + INSET, z0 = nodeZ(j) + INSET, len = LOT - INSET * 2;
+    ctx.fillRect(toU(x0), toU(z0), uLen(len), uLen(len));
+  };
+  for (let i = 0; i < BLOCKS; i++) {
+    for (let j = 0; j < BLOCKS; j++) {
+      const t = cellType[i][j];
+      if (t === 'park')       cellRect(i, j, '#93b98a');
+      else if (t === 'plaza') cellRect(i, j, '#d8d3c6');
+      else if (t === 'lot')   cellRect(i, j, '#98a0b0');
+    }
   }
 
-  // 路缘石：道路两侧一道浅色细线，让街区有"抬高"的感觉
-  ctx.fillStyle = 'rgba(255,240,225,0.16)';
-  const curb = Math.max(2, tile * 0.012);
-  for (let i = 0; i <= BLOCKS; i++) {
-    const p = i * tile;
-    ctx.fillRect(p - road / 2 - curb, 0, curb, S);
-    ctx.fillRect(p + road / 2, 0, curb, S);
-    ctx.fillRect(0, p - road / 2 - curb, S, curb);
-    ctx.fillRect(0, p + road / 2, S, curb);
-  }
+  // 人行道（先铺，宽于车道）
+  const segRect = (x0, z0, x1, z1, w) => {
+    const ux0 = toU(Math.min(x0, x1)), uz0 = toU(Math.min(z0, z1));
+    const wU = uLen(Math.abs(x1 - x0)), hV = uLen(Math.abs(z1 - z0));
+    ctx.fillRect(ux0 - w / 2, uz0 - w / 2, wU + w, hV + w);
+  };
+  ctx.fillStyle = '#c3ccda';
+  forEachEdge((i, j, di, dj) => segRect(nodeX(i), nodeZ(j), nodeX(i + di), nodeZ(j + dj), uLen(ROAD_W + CURB_W * 2)));
+
+  // 车行道
+  ctx.fillStyle = '#7c89a3';
+  forEachEdge((i, j, di, dj) => segRect(nodeX(i), nodeZ(j), nodeX(i + di), nodeZ(j + dj), uLen(ROAD_W)));
+
+  // 斑马线：每条路段的两个路口端各画一组
+  const crosswalk = (x, z, di, dj) => {
+    const bandDepth = ROAD_W * 0.42, half = ROAD_W * 0.6, n = 5;
+    ctx.fillStyle = 'rgba(255,255,255,0.78)';
+    const cx = x + di * (ROAD_W * 0.5 + bandDepth * 0.5 + 0.06);
+    const cz = z + dj * (ROAD_W * 0.5 + bandDepth * 0.5 + 0.06);
+    const stripe = (half * 2) / (n * 2);
+    for (let k = 0; k < n; k++) {
+      const o = (k / (n - 1) - 0.5) * 2 * half;
+      if (di) {
+        const w = uLen(bandDepth), h = uLen(stripe);
+        ctx.fillRect(toU(cx) - w / 2, toU(cz + o) - h / 2, w, h);
+      } else {
+        const w = uLen(stripe), h = uLen(bandDepth);
+        ctx.fillRect(toU(cx + o) - w / 2, toU(cz) - h / 2, w, h);
+      }
+    }
+  };
+  forEachEdge((i, j, di, dj) => {
+    crosswalk(nodeX(i), nodeZ(j), di, dj);
+    crosswalk(nodeX(i + di), nodeZ(j + dj), -di, -dj);
+  });
 
   // 车道虚线
-  ctx.strokeStyle = 'rgba(255,225,180,0.28)';
-  ctx.lineWidth = Math.max(2, tile * 0.02);
-  ctx.setLineDash([tile * 0.11, tile * 0.11]);
-  for (let i = 0; i <= BLOCKS; i++) {
-    const p = i * tile;
-    ctx.beginPath(); ctx.moveTo(p, 0); ctx.lineTo(p, S); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(0, p); ctx.lineTo(S, p); ctx.stroke();
-  }
+  ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+  ctx.lineWidth = Math.max(2, uLen(LOT * 0.016));
+  ctx.setLineDash([uLen(0.9), uLen(0.9)]);
+  ctx.beginPath();
+  forEachEdge((i, j, di, dj) => {
+    ctx.moveTo(toU(nodeX(i)), toU(nodeZ(j)));
+    ctx.lineTo(toU(nodeX(i + di)), toU(nodeZ(j + dj)));
+  });
+  ctx.stroke();
   ctx.setLineDash([]);
+
+  // 环岛：外圈人行道 + 环道 + 中心岛（覆盖在普通路面上）
+  for (const id of isRoundabout) {
+    const cx = toU(nodeX(nidI(id))), cz = toU(nodeZ(nidJ(id)));
+    ctx.fillStyle = '#c3ccda';
+    ctx.beginPath(); ctx.arc(cx, cz, uLen(RING_R + ROAD_W / 2 + CURB_W), 0, 7); ctx.fill();
+    ctx.fillStyle = '#7c89a3';
+    ctx.beginPath(); ctx.arc(cx, cz, uLen(RING_R + ROAD_W / 2), 0, 7); ctx.fill();
+    ctx.fillStyle = '#93b98a';
+    ctx.beginPath(); ctx.arc(cx, cz, uLen(RING_R - ROAD_W / 2), 0, 7); ctx.fill();
+  }
 
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
@@ -204,17 +404,50 @@ function makeMapTexture() {
   return tex;
 }
 
-const ground = new THREE.Mesh(
-  new THREE.PlaneGeometry(EXTENT, EXTENT),
-  new THREE.MeshStandardMaterial({ map: makeMapTexture(), roughness: 0.9 })
+const groundMat = themedMat(
+  new THREE.MeshStandardMaterial({
+    map: makeMapTexture(), roughness: 0.92,
+    emissive: 0x16275d, emissiveIntensity: 0.34
+  }),
+  0xffffff, 0xc0c9f0
 );
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(PLANE, PLANE), groundMat);
 ground.rotation.x = -Math.PI / 2;
 ground.receiveShadow = true;
 scene.add(ground);
 
+// 地块下方的实体海面：让城市边缘不再像一张平面贴图，而是漂在深蓝水面上
+const oceanMat = new THREE.MeshStandardMaterial({
+  color: 0x0b1743, roughness: 0.28, metalness: 0.22,
+  emissive: 0x071332, emissiveIntensity: 0.55
+});
+const ocean = new THREE.Mesh(new THREE.PlaneGeometry(PLANE * 3.5, PLANE * 3.5), oceanMat);
+ocean.rotation.x = -Math.PI / 2;
+ocean.position.y = -0.16;
+ocean.receiveShadow = true;
+scene.add(ocean);
+
+// 四条暗色岸线，强化目标图中“建筑岛 / 水岸商业区”的轮廓
+const shoreMat = new THREE.MeshStandardMaterial({
+  color: 0x171d43, roughness: 0.82, metalness: 0.12
+});
+const shoreH = 0.12;
+for (const [sx, sy, sz, px, pz] of [
+  [PLANE, shoreH, 0.18, 0, -PLANE / 2],
+  [PLANE, shoreH, 0.18, 0, PLANE / 2],
+  [0.18, shoreH, PLANE, -PLANE / 2, 0],
+  [0.18, shoreH, PLANE, PLANE / 2, 0]
+]) {
+  const shore = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), shoreMat);
+  shore.scale.set(sx, sy, sz);
+  shore.position.set(px, -0.02, pz);
+  shore.receiveShadow = true;
+  scene.add(shore);
+}
+
 /* ====================== 关键 2：建筑（纯体块 + 真实窗户几何） ====================== */
 const ROOF_BASE = {
-  color: 0x7a8296, roughness: 0.6, metalness: 0.15, envMapIntensity: 1.0, flatShading: true
+  color: 0x596494, roughness: 0.6, metalness: 0.15, envMapIntensity: 1.0, flatShading: true
 };
 
 // 高度渐变：越靠近地面越暗，贴地再额外压一道 —— Apple Maps 建筑"立在地上"的关键
@@ -279,18 +512,101 @@ function addParapet(group, cx, cz, w, d, y, mat, pw, ph) {
   }
 }
 
+// 商业楼外立面的发光广告牌：用几何色块模拟目标图中的霓虹招牌，
+// 避免引入图片资源，后续也可以替换成真实品牌贴图。
+const signColors = [0xff416d, 0x4ed7ff, 0x6c7dff, 0xffb83d, 0x65e88a, 0xf26dff];
+function addNeonSign(group, cx, cz, w, d, h, top) {
+  if (Math.random() > 0.34 || Math.min(w, d) < 1.1) return;
+  const side = (Math.random() * 4) | 0;
+  const vertical = Math.random() < 0.38;
+  const sw = vertical ? 0.16 : Math.min(w, d) * (0.48 + Math.random() * 0.22);
+  const sh = vertical ? Math.min(h * 0.48, 1.5) : 0.34 + Math.random() * 0.2;
+  const signMat = new THREE.MeshStandardMaterial({
+    color: signColors[(Math.random() * signColors.length) | 0],
+    emissive: signColors[(Math.random() * signColors.length) | 0],
+    emissiveIntensity: 2.8,
+    roughness: 0.28,
+    metalness: 0.1
+  });
+  const sign = new THREE.Mesh(new THREE.BoxGeometry(sw, sh, 0.035), signMat);
+  const y = 0.5 + Math.min(h * 0.62, top - 0.55);
+  if (side === 0) {
+    sign.position.set(cx, y, cz + d / 2 + 0.025);
+  } else if (side === 1) {
+    sign.position.set(cx, y, cz - d / 2 - 0.025);
+    sign.rotation.y = Math.PI;
+  } else if (side === 2) {
+    sign.position.set(cx + w / 2 + 0.025, y, cz);
+    sign.rotation.y = Math.PI / 2;
+  } else {
+    sign.position.set(cx - w / 2 - 0.025, y, cz);
+    sign.rotation.y = -Math.PI / 2;
+  }
+  sign.scale.x = vertical ? 1 : 1.25;
+  sign.castShadow = true;
+  group.add(sign);
+}
+
+function addFacadeLights(group, cx, cz, w, d, h) {
+  if (h < 3.4 || Math.random() > 0.72) return;
+  const color = signColors[(Math.random() * signColors.length) | 0];
+  const mat = new THREE.MeshStandardMaterial({
+    color, emissive: color, emissiveIntensity: 2.2,
+    roughness: 0.35, metalness: 0.15
+  });
+  const stripH = Math.min(h * 0.72, 5.2);
+  const strip = new THREE.Mesh(new THREE.BoxGeometry(0.055, stripH, 0.045), mat);
+  const side = (Math.random() * 4) | 0;
+  const y = 0.42 + stripH / 2;
+  if (side === 0) strip.position.set(cx + (Math.random() - 0.5) * w * 0.55, y, cz + d / 2 + 0.03);
+  if (side === 1) { strip.position.set(cx + (Math.random() - 0.5) * w * 0.55, y, cz - d / 2 - 0.03); strip.rotation.y = Math.PI; }
+  if (side === 2) { strip.position.set(cx + w / 2 + 0.03, y, cz + (Math.random() - 0.5) * d * 0.55); strip.rotation.y = Math.PI / 2; }
+  if (side === 3) { strip.position.set(cx - w / 2 - 0.03, y, cz + (Math.random() - 0.5) * d * 0.55); strip.rotation.y = -Math.PI / 2; }
+  strip.castShadow = true;
+  group.add(strip);
+}
+
+function addRooftopAntenna(group, cx, cz, w, d, h, top) {
+  if (h < 5.4 || Math.random() > 0.48) return;
+  const antennaMat = new THREE.MeshStandardMaterial({
+    color: 0x7884aa, roughness: 0.5, metalness: 0.65
+  });
+  const mastH = 0.65 + Math.random() * 0.75;
+  const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.04, mastH, 6), antennaMat);
+  mast.position.set(
+    cx + (Math.random() - 0.5) * w * 0.45,
+    top + mastH / 2,
+    cz + (Math.random() - 0.5) * d * 0.45
+  );
+  group.add(mast);
+  const beacon = new THREE.Mesh(
+    new THREE.SphereGeometry(0.055, 7, 5),
+    new THREE.MeshBasicMaterial({ color: 0xff526c })
+  );
+  beacon.position.set(mast.position.x, top + mastH + 0.04, mast.position.z);
+  group.add(beacon);
+}
+
 // XZ 平面的碰撞盒（防止小人穿墙）
 const colliders = [];
+const buildingRecords = [];
 
-// 巴黎奥斯曼风浅色石材
-const WALL_TINTS = ['#cfc6bb', '#c8c2c4', '#d6cdbf', '#bfc0c8', '#cbc3b5', '#c3c6cf'];
+// 墙面调色板：白天蓝白灰 pastel，夜晚巴黎奥斯曼风浅色石材
+const WALL_TINTS = {
+  day:   ['#9eb2d4', '#798ebc', '#bdc8e2', '#6578a9', '#aab4d1', '#8798c2'],
+  night: ['#5669a8', '#625fa0', '#5b6eb8', '#765e9d', '#4d68a9', '#6878b7']
+};
 
 /* ---- 窗户：真实几何（略凸出墙面的正方形薄片），全城合并成一个 InstancedMesh ---- */
 const FLOOR_H = 0.62;
 const WIN_PITCH = 0.55;
 const WIN_SIZE = 0.26;           // 正方形窗边长
-const WIN_COLOR = 0xe8b46e;      // 统一暖黄
+const WIN_COLOR = 0xe8b46e;      // 夜晚统一暖黄
+// 窗户材质：白天是冷灰蓝玻璃、夜晚暖黄发光
+const windowMat = themedMat(new THREE.MeshBasicMaterial({ color: WIN_COLOR }), 0x8fb0d4, WIN_COLOR);
+const windowDarkMat = themedMat(new THREE.MeshBasicMaterial({ color: 0x17203e }), 0x6f86b8, 0x17203e);
 const litWins = [];
+const darkWins = [];
 const _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3();
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
 
@@ -319,27 +635,31 @@ function addWindows(cx, cz, w, d, h, baseH) {
         const along = -usable / 2 + pitch * (c + 0.5);
         _p.set(cx + ox + ax * along + nx * 0.006, y, cz + oz + az * along + nz * 0.006);
         _s.set(isShop ? pitch * 0.8 : win, isShop ? wh : win, 0.04);
-        litWins.push(new THREE.Matrix4().compose(_p, _q, _s));
+        const target = Math.random() < (isShop ? 0.82 : 0.58) ? litWins : darkWins;
+        target.push(new THREE.Matrix4().compose(_p, _q, _s));
       }
     }
   }
 }
 
 function buildWindows() {
-  const lit = new THREE.InstancedMesh(unitBox, new THREE.MeshBasicMaterial({ color: WIN_COLOR }), litWins.length);
+  const lit = new THREE.InstancedMesh(unitBox, windowMat, litWins.length);
   litWins.forEach((m, i) => lit.setMatrixAt(i, m));
-  scene.add(lit);
+  const dark = new THREE.InstancedMesh(unitBox, windowDarkMat, darkWins.length);
+  darkWins.forEach((m, i) => dark.setMatrixAt(i, m));
+  scene.add(lit, dark);
 }
 
 function addBuilding(cx, cz, w, d, h, pitched) {
   const group = new THREE.Group();
 
-  const wallMat = applyHeightAO(new THREE.MeshStandardMaterial({
-    color: WALL_TINTS[(Math.random() * WALL_TINTS.length) | 0],
+  const ti = (Math.random() * WALL_TINTS.night.length) | 0;
+  const wallMat = themedMat(applyHeightAO(new THREE.MeshStandardMaterial({
+    color: WALL_TINTS.night[ti],
     roughness: 0.85,
     metalness: 0.0
-  }));
-  const roofMat = applyHeightAO(new THREE.MeshStandardMaterial(ROOF_BASE));
+  })), WALL_TINTS.day[ti], WALL_TINTS.night[ti]);
+  const roofMat = themedMat(applyHeightAO(new THREE.MeshStandardMaterial(ROOF_BASE)), 0x9fb0c4, ROOF_BASE.color);
 
   const contact = new THREE.Mesh(contactGeo, contactMat);
   contact.scale.set(w * 1.05 / CONTACT_INNER, 1, d * 1.05 / CONTACT_INNER);
@@ -363,6 +683,8 @@ function addBuilding(cx, cz, w, d, h, pitched) {
   body.receiveShadow = true;
   group.add(body);
 
+  const litStart = litWins.length;
+  const darkStart = darkWins.length;
   addWindows(cx, cz, w, d, h, baseH);
 
   let top = baseH + h;
@@ -411,23 +733,37 @@ function addBuilding(cx, cz, w, d, h, pitched) {
     }
   }
 
+  addNeonSign(group, cx, cz, w, d, h, top);
+  addFacadeLights(group, cx, cz, w, d, h);
+  addRooftopAntenna(group, cx, cz, w, d, h, top);
+
   scene.add(group);
 
   // 登记碰撞盒
-  colliders.push({
+  const collider = {
     minX: cx - w / 2, maxX: cx + w / 2,
-    minZ: cz - d / 2, maxZ: cz + d / 2
+    minZ: cz - d / 2, maxZ: cz + d / 2,
+    disabled: false
+  };
+  colliders.push(collider);
+  buildingRecords.push({
+    group, collider,
+    minX: collider.minX, maxX: collider.maxX,
+    minZ: collider.minZ, maxZ: collider.maxZ,
+    litStart, litCount: litWins.length - litStart,
+    darkStart, darkCount: darkWins.length - darkStart
   });
 
   return top;
 }
 
 /* ====================== 路灯 / 树 ====================== */
-const lampGlassMat = new THREE.MeshStandardMaterial({
+const lampGlassMat = themedMat(new THREE.MeshStandardMaterial({
   color: 0xffd08a, emissive: 0xffbe66, emissiveIntensity: 4.5, roughness: 0.3
-});
+}), 0xfff0d0, 0xffd08a);
+const lampLights = [];   // 收集所有路灯点光源，供主题统一调亮度
 const lampPoleMat = new THREE.MeshStandardMaterial({ color: 0x1b2436, roughness: 0.7, metalness: 0.3 });
-const leafMat = new THREE.MeshStandardMaterial({ color: 0x4f7d55, roughness: 1.0, flatShading: true });
+const leafMat = themedMat(new THREE.MeshStandardMaterial({ color: 0x4f7d55, roughness: 1.0, flatShading: true }), 0x73b469, 0x4f7d55);
 const trunkMat = new THREE.MeshStandardMaterial({ color: 0x3a2a20, roughness: 1.0 });
 
 const lampGeo = new THREE.SphereGeometry(0.085, 8, 8);
@@ -452,63 +788,1215 @@ function addLamp(x, z) {
     const pl = new THREE.PointLight(0xffb45c, 3, 3, 2);
     pl.position.set(x, 0.72, z);
     scene.add(pl);
+    lampLights.push(pl);
     lampLightCount++;
   }
 }
 
-function addTree(x, z) {
-  const trunk = new THREE.Mesh(trunkGeo, trunkMat);
-  trunk.position.set(x, 0.21, z);
-  trunk.castShadow = true;
-  scene.add(trunk);
-  const crown = new THREE.Mesh(crownGeo, leafMat);
-  crown.position.set(x, 0.62, z);
-  crown.castShadow = true;
-  const s = 0.85 + Math.random() * 0.5;
-  crown.scale.set(s, s * 1.15, s);
-  scene.add(crown);
+// 植被：先收集再统一实例化（树干 / 树冠 / 灌木 / 花丛），避免上千个 Mesh
+const treeQueue = [], bushQueue = [], flowerQueue = [];
+const bushGeo = new THREE.IcosahedronGeometry(0.22, 0);
+const flowerGeo = new THREE.SphereGeometry(0.05, 6, 5);
+const flowerMat = themedMat(new THREE.MeshStandardMaterial({ color: 0xe8748c, roughness: 0.9, flatShading: true }), 0xf08ea4, 0xe8748c);
+
+function addTree(x, z, s) { treeQueue.push({ x, z, s: s || (0.8 + Math.random() * 0.6) }); }
+function addBush(x, z) { bushQueue.push({ x, z, s: 0.7 + Math.random() * 0.7 }); }
+function addFlower(x, z) { flowerQueue.push({ x, z }); }
+
+function buildVegetation() {
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), sv = new THREE.Vector3();
+  const trunkIM = new THREE.InstancedMesh(trunkGeo, trunkMat, treeQueue.length);
+  const crownIM = new THREE.InstancedMesh(crownGeo, leafMat, treeQueue.length);
+  treeQueue.forEach((t, k) => {
+    p.set(t.x, 0.21, t.z); sv.set(1, 1, 1); q.identity();
+    m.compose(p, q, sv); trunkIM.setMatrixAt(k, m);
+    p.set(t.x, 0.6, t.z); sv.set(t.s, t.s * 1.2, t.s);
+    q.setFromAxisAngle(Y_AXIS, Math.random() * Math.PI);
+    m.compose(p, q, sv); crownIM.setMatrixAt(k, m);
+  });
+  trunkIM.castShadow = crownIM.castShadow = true;
+  scene.add(trunkIM, crownIM);
+
+  const bushIM = new THREE.InstancedMesh(bushGeo, leafMat, bushQueue.length);
+  bushQueue.forEach((b, k) => {
+    p.set(b.x, 0.16 * b.s, b.z); sv.set(b.s, b.s * 0.8, b.s); q.identity();
+    m.compose(p, q, sv); bushIM.setMatrixAt(k, m);
+  });
+  bushIM.castShadow = true;
+  scene.add(bushIM);
+
+  const flowerIM = new THREE.InstancedMesh(flowerGeo, flowerMat, flowerQueue.length);
+  flowerQueue.forEach((f, k) => {
+    p.set(f.x, 0.08, f.z); sv.set(1, 1, 1); q.identity();
+    m.compose(p, q, sv); flowerIM.setMatrixAt(k, m);
+  });
+  scene.add(flowerIM);
 }
 
 /* ====================== 生成整座城市 ====================== */
-function lotCenter(i) { return (i + 0.5) * LOT - HALF; }
+const cellHalf = LOT / 2 - INSET;   // 地块可用半宽
 
 for (let i = 0; i < BLOCKS; i++) {
   for (let j = 0; j < BLOCKS; j++) {
-    const cx = lotCenter(i);
-    const cz = lotCenter(j);
+    const cx = nodeX(i) + LOT / 2, cz = nodeZ(j) + LOT / 2;
+    const t = cellType[i][j];
 
-    // 留一块当公园
-    const isPark = (i === 3 && j === 3);
-    if (isPark) {
+    if (t === 'bldg') {
+      const w = 1.45 + Math.random() * 1.15;
+      const d = 1.45 + Math.random() * 1.15;
+      const isTower = SKYLINE_TOWERS.has(`${i},${j}`);
+      const low = !isTower && Math.random() < 0.42;
+      // 拉高天际线，形成目标图中的“低层商业 + 少量摩天楼”层次
+      const h = isTower ? 6.8 + Math.random() * 2.6
+                        : low ? 1.0 + Math.random() * 1.35 : 3.0 + Math.random() * 5.2;
+      // 建筑向地块中心收拢，给地面道路和上跨桥面留出明确的安全间距
+      const ox = (Math.random() - 0.5) * Math.max(cellHalf * 2 - w - 0.8, 0) * 0.62;
+      const oz = (Math.random() - 0.5) * Math.max(cellHalf * 2 - d - 0.8, 0) * 0.62;
+      addBuilding(cx + ox, cz + oz, w, d, h, low && Math.random() < 0.7);
+      if (Math.random() < 0.24) {   // 偶尔来栋副楼
+        const w2 = 0.9 + Math.random() * 0.5, d2 = 0.9 + Math.random() * 0.5;
+        addBuilding(cx + ox + (w + w2) * 0.7, cz + oz, w2, d2, 0.9 + Math.random() * 0.9, false);
+      }
+    } else if (t === 'park') {
+      parks.push({ x: cx, z: cz, h: Math.max(cellHalf - 0.3, 0.8) });
+      const n = 8 + ((Math.random() * 7) | 0);
+      for (let k = 0; k < n; k++) {
+        const a = Math.random() * Math.PI * 2, r = Math.random() * cellHalf * 0.9;
+        addTree(cx + Math.cos(a) * r, cz + Math.sin(a) * r);
+      }
+      for (let k = 0; k < 6; k++) {
+        const a = Math.random() * Math.PI * 2, r = Math.random() * cellHalf * 0.9;
+        addBush(cx + Math.cos(a) * r, cz + Math.sin(a) * r);
+      }
       for (let k = 0; k < 5; k++) {
-        addTree(
-          cx + (Math.random() - 0.5) * LOT * 0.6,
-          cz + (Math.random() - 0.5) * LOT * 0.6
-        );
+        const a = Math.random() * Math.PI * 2, r = Math.random() * cellHalf * 0.85;
+        addFlower(cx + Math.cos(a) * r, cz + Math.sin(a) * r);
+      }
+    } else if (t === 'plaza') {
+      for (let k = 0; k < 4; k++) {
+        addTree(cx + (Math.random() - 0.5) * cellHalf * 1.7,
+                cz + (Math.random() - 0.5) * cellHalf * 1.7, 0.7 + Math.random() * 0.3);
+      }
+      for (let k = 0; k < 2; k++) {
+        addBush(cx + (Math.random() - 0.5) * cellHalf * 1.6,
+                cz + (Math.random() - 0.5) * cellHalf * 1.6);
+      }
+    } else if (t === 'empty') {
+      const n = 4 + ((Math.random() * 5) | 0);
+      for (let k = 0; k < n; k++) {
+        addTree(cx + (Math.random() - 0.5) * cellHalf * 1.8,
+                cz + (Math.random() - 0.5) * cellHalf * 1.8);
+      }
+      addBush(cx + (Math.random() - 0.5) * cellHalf, cz + (Math.random() - 0.5) * cellHalf);
+    }
+
+    if (Math.random() < 0.2 && adj[nid(i, j)].length) addLamp(nodeX(i) + 0.6, nodeZ(j) + 0.6);
+  }
+}
+
+// 行道树：沿每条路段两侧间隔种树
+forEachEdge((i, j, di, dj) => {
+  const x0 = nodeX(i), z0 = nodeZ(j);
+  const px = -dj, pz = di;                       // 垂直于道路
+  const off = ROAD_W / 2 + CURB_W * 0.55;
+  const steps = 3;
+  for (let k = 1; k <= steps; k++) {
+    if (Math.random() < 0.42) {
+      const f = k / (steps + 1);
+      const side = Math.random() < 0.5 ? 1 : -1;
+      addTree(x0 + di * LOT * f + px * off * side,
+              z0 + dj * LOT * f + pz * off * side, 0.65 + Math.random() * 0.4);
+    }
+  }
+});
+
+// 水岸边只保留少量树，避免城市变成森林
+for (let k = 0; k < 24; k++) {
+  const a = Math.random() * Math.PI * 2;
+  const r = HALF + BORDER * (0.3 + Math.random() * 0.7);
+  addTree(Math.cos(a) * r, Math.sin(a) * r, 0.8 + Math.random() * 0.9);
+}
+
+/* ====================== 城市设施：喷泉 / 长椅 / 环岛中心岛 ====================== */
+const stoneMat = themedMat(new THREE.MeshStandardMaterial({ color: 0xcfd3d8, roughness: 0.85 }), 0xdfe6ef, 0xb9bfc9);
+const waterMat = new THREE.MeshStandardMaterial({
+  color: 0x6fb6e8, roughness: 0.15, metalness: 0.1, transparent: true, opacity: 0.85,
+  emissive: 0x123a55, emissiveIntensity: 0.35
+});
+const benchMat = themedMat(new THREE.MeshStandardMaterial({ color: 0x8a6a4a, roughness: 0.85 }), 0x9a7a58, 0x7a5c40);
+const islandMat = themedMat(new THREE.MeshStandardMaterial({ color: 0x93b98a, roughness: 1 }), 0x8fc47f, 0x6f9b63);
+const jetGeo = new THREE.CylinderGeometry(0.025, 0.13, 1, 8, 1, true);
+
+const fountains = [];
+function addFountain(x, z, r) {
+  r = r || 1.05;
+  const g = new THREE.Group();
+  const rim = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 1.05, 0.22, 22), stoneMat);
+  rim.position.y = 0.11; g.add(rim);
+  const water = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.88, r * 0.88, 0.16, 22), waterMat);
+  water.position.y = 0.15; g.add(water);
+  const jet = new THREE.Mesh(jetGeo, waterMat);  jet.position.y = 0.5; g.add(jet);
+  const jet2 = new THREE.Mesh(jetGeo, waterMat); jet2.position.y = 0.25; jet2.scale.set(0.7, 0.55, 0.7); g.add(jet2);
+  g.position.set(x, 0, z);
+  g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  scene.add(g);
+  fountains.push({ jet, jet2, water, phase: Math.random() * 6.28 });
+}
+
+function addBench(x, z, yaw) {
+  const g = new THREE.Group();
+  const seat = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.06, 0.18), benchMat); seat.position.y = 0.16; g.add(seat);
+  const back = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.18, 0.05), benchMat); back.position.set(0, 0.27, -0.08); g.add(back);
+  for (const lx of [-0.2, 0.2]) {
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.16, 0.16), benchMat);
+    leg.position.set(lx, 0.08, 0); g.add(leg);
+  }
+  g.position.set(x, 0, z); g.rotation.y = yaw;
+  g.traverse(o => { if (o.isMesh) o.castShadow = true; });
+  scene.add(g);
+}
+
+// 广场：中心喷泉 + 四边长椅
+for (let i = 0; i < BLOCKS; i++) {
+  for (let j = 0; j < BLOCKS; j++) {
+    if (cellType[i][j] !== 'plaza') continue;
+    const cx = nodeX(i) + LOT / 2, cz = nodeZ(j) + LOT / 2;
+    addFountain(cx, cz, 0.95);
+    const b = cellHalf * 0.85;
+    addBench(cx - b, cz, Math.PI / 2); addBench(cx + b, cz, -Math.PI / 2);
+    addBench(cx, cz - b, 0);           addBench(cx, cz + b, Math.PI);
+  }
+}
+
+// 环岛中心岛：绿岛 + 喷泉 / 树丛
+for (const id of isRoundabout) {
+  const nx = nodeX(nidI(id)), nz = nodeZ(nidJ(id));
+  const rr = RING_R - ROAD_W / 2;
+  const disk = new THREE.Mesh(new THREE.CylinderGeometry(rr, rr, 0.14, 26), islandMat);
+  disk.position.set(nx, 0.07, nz); disk.receiveShadow = true;
+  scene.add(disk);
+  if (Math.random() < 0.5) {
+    addFountain(nx, nz, Math.min(0.62, rr * 0.6));
+  } else {
+    addTree(nx, nz, 1.0);
+    for (let k = 0; k < 3; k++) {
+      const a = Math.random() * 6.28, r = Math.random() * rr * 0.6;
+      addBush(nx + Math.cos(a) * r, nz + Math.sin(a) * r);
+    }
+  }
+}
+
+/* ====================== 立交：圆角高架环路（沿曲线生成桥面） ====================== */
+const RING_I0 = 3, RING_I1 = BLOCKS - 3, RING_J0 = 3, RING_J1 = BLOCKS - 3;
+const RING_Y = 1.35;
+const RX0 = nodeX(RING_I0), RX1 = nodeX(RING_I1);
+const RZ0 = nodeZ(RING_J0), RZ1 = nodeZ(RING_J1);
+const CR  = LOT;                     // 转角半径（圆角）
+const HW  = ROAD_W / 2;              // 桥面半宽
+
+const deckMat   = themedMat(new THREE.MeshStandardMaterial({ color: 0xb9c1cf, roughness: 0.9 }), 0xe2e8f2, 0x6b7390);
+const railMat   = themedMat(new THREE.MeshStandardMaterial({ color: 0xdfe4ec, roughness: 0.7 }), 0xf2f5fa, 0x8a92a8);
+const pillarMat = themedMat(new THREE.MeshStandardMaterial({ color: 0xa8b0bf, roughness: 0.9 }), 0xd4dae4, 0x646c82);
+// 匝道桥面：与主桥同高度的重叠区用 polygonOffset 提前渲染，避免深度冲突闪出接缝
+const rampDeckMat = themedMat(new THREE.MeshStandardMaterial({
+  color: 0xb9c1cf, roughness: 0.9,
+  polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2
+}), 0xe2e8f2, 0x6b7390);
+
+// ---- 生成圆角矩形中心线（直线段 + 四分之一圆弧）----
+const ringPts = [];
+(function buildRingPath() {
+  const line = (x0, z0, x1, z1, n, first) => {
+    for (let k = first ? 0 : 1; k <= n; k++) {
+      const t = k / n;
+      ringPts.push({ x: x0 + (x1 - x0) * t, z: z0 + (z1 - z0) * t, y: RING_Y });
+    }
+  };
+  const arc = (cx, cz, a0, a1, n, first) => {
+    for (let k = first ? 0 : 1; k <= n; k++) {
+      const a = a0 + (a1 - a0) * k / n;
+      ringPts.push({ x: cx + Math.cos(a) * CR, z: cz + Math.sin(a) * CR, y: RING_Y });
+    }
+  };
+  const segments = Math.max(6, Math.round(LOT / 0.5));
+  line(RX0 + CR, RZ0, RX1 - CR, RZ0, segments, true);                  // 下边 → +x
+  arc (RX1 - CR, RZ0 + CR, -Math.PI / 2, 0, 8, false);                 // 右下角
+  line(RX1, RZ0 + CR, RX1, RZ1 - CR, segments, false);                 // 右边 → +z
+  arc (RX1 - CR, RZ1 - CR, 0, Math.PI / 2, 8, false);                  // 右上角
+  line(RX1 - CR, RZ1, RX0 + CR, RZ1, segments, false);                 // 上边 → -x
+  arc (RX0 + CR, RZ1 - CR, Math.PI / 2, Math.PI, 8, false);            // 左上角
+  line(RX0, RZ1 - CR, RX0, RZ0 + CR, segments, false);                 // 左边 → -z
+  arc (RX0 + CR, RZ0 + CR, Math.PI, Math.PI * 1.5, 8, false);          // 左下角
+  // 闭合环去掉与首点重合的末点，避免零长度段
+  const f = ringPts[0], l = ringPts[ringPts.length - 1];
+  if (Math.hypot(l.x - f.x, l.z - f.z) < 1e-6) ringPts.pop();
+})();
+
+// 每个点处的切向 + 法向（闭合环，用相邻点平均）
+const ringTan = [], ringNor = [];
+for (let i = 0; i < ringPts.length; i++) {
+  const a = ringPts[(i - 1 + ringPts.length) % ringPts.length];
+  const b = ringPts[(i + 1) % ringPts.length];
+  const tx = b.x - a.x, tz = b.z - a.z;
+  const L = Math.hypot(tx, tz) || 1;
+  ringTan.push({ x: tx / L, z: tz / L });
+  ringNor.push({ x: -tz / L, z: tx / L });
+}
+
+// 环路弧长参数化（匝道并线、护栏开缺口、桥上车辆都依赖它）
+const RING_CUM = [0];
+for (let i = 1; i <= ringPts.length; i++) {
+  const a = ringPts[i - 1], b = ringPts[i % ringPts.length];
+  RING_CUM.push(RING_CUM[i - 1] + Math.hypot(b.x - a.x, b.z - a.z));
+}
+const RPERIM = RING_CUM[ringPts.length];
+
+// 沿折线拉出一条带状实体（桥面 / 护栏 / 匝道通用）
+// norms: 与 points 等长的单位法向数组（XZ 平面）
+// 顶面 / 底面 / 两侧各自使用独立顶点与法向 → 顶面平整、棱线清晰，
+// 不会再出现“顶点法向被侧壁拉斜”导致的暗边（并线处看起来会像硬接缝）
+function extrudeRibbon(points, norms, halfWidth, thickness, yOf, closed = true) {
+  const getY = yOf || (p => p.y || 0);
+  const n = points.length, hw = halfWidth, th = thickness / 2;
+  const segs = closed ? n : n - 1;
+  const P = [], Wd = [], Nd = [];
+  for (let i = 0; i < n; i++) {
+    const a = points[closed ? (i - 1 + n) % n : Math.max(0, i - 1)];
+    const b = points[closed ? (i + 1) % n : Math.min(n - 1, i + 1)];
+    let tx = b.x - a.x, ty = getY(b) - getY(a), tz = b.z - a.z;
+    const tl = Math.hypot(tx, ty, tz) || 1; tx /= tl; ty /= tl; tz /= tl;
+    const nx = norms[i].x, nz = norms[i].z;
+    let Nx = -nz * ty, Ny = nz * tx - nx * tz, Nz = nx * ty;   // cross((nx,0,nz), t)
+    const nl = Math.hypot(Nx, Ny, Nz) || 1;
+    P.push({ x: points[i].x, y: getY(points[i]), z: points[i].z });
+    Wd.push({ x: nx, y: 0, z: nz });
+    Nd.push({ x: Nx / nl, y: Ny / nl, z: Nz / nl });
+  }
+
+  const pos = [], nrm = [], idx = [];
+  const corner = (i, sW, sN) => ({
+    x: P[i].x + Wd[i].x * hw * sW + Nd[i].x * th * sN,
+    y: P[i].y + Nd[i].y * th * sN,
+    z: P[i].z + Wd[i].z * hw * sW + Nd[i].z * th * sN
+  });
+  const strip = (cA, cB, nA, nB) => {
+    const base = pos.length / 3;
+    for (let i = 0; i < n; i++) {
+      const A = cA(i), B = cB(i), NA = nA(i), NB = nB(i);
+      pos.push(A.x, A.y, A.z); nrm.push(NA.x, NA.y, NA.z);
+      pos.push(B.x, B.y, B.z); nrm.push(NB.x, NB.y, NB.z);
+    }
+    for (let i = 0; i < segs; i++) {
+      const a = base + i * 2, b = base + ((i + 1) % n) * 2;
+      idx.push(a, a + 1, b + 1, a, b + 1, b);
+    }
+  };
+  strip(i => corner(i, 1, 1), i => corner(i, -1, 1), i => Nd[i], i => Nd[i]);                                   // 顶面
+  strip(i => corner(i, -1, -1), i => corner(i, 1, -1), i => ({ x: -Nd[i].x, y: -Nd[i].y, z: -Nd[i].z }), i => ({ x: -Nd[i].x, y: -Nd[i].y, z: -Nd[i].z })); // 底面
+  strip(i => corner(i, 1, -1), i => corner(i, 1, 1), i => Wd[i], i => Wd[i]);                                    // +W 侧
+  strip(i => corner(i, -1, 1), i => corner(i, -1, -1), i => ({ x: -Wd[i].x, y: 0, z: -Wd[i].z }), i => ({ x: -Wd[i].x, y: 0, z: -Wd[i].z })); // -W 侧
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
+  geo.setIndex(idx);
+  return geo;
+}
+
+function addRibbon(points, norms, halfWidth, thickness, mat, yOf, closed = true) {
+  const mesh = new THREE.Mesh(extrudeRibbon(points, norms, halfWidth, thickness, yOf, closed), mat);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  scene.add(mesh);
+  return mesh;
+}
+
+// 桥面
+addRibbon(ringPts, ringNor, HW, 0.14, deckMat);
+// 两侧护栏在“匝道并线口”留缺口，放到匝道生成之后再拉（见下方 addRingRails）
+// 桥墩：沿曲线每隔约半格落一对（落在人行道外沿）
+(function addRingPillars() {
+  let acc = 0, prev = ringPts[0];
+  for (let i = 0; i < ringPts.length; i++) {
+    const p = ringPts[i];
+    acc += Math.hypot(p.x - prev.x, p.z - prev.z); prev = p;
+    if (acc < LOT * 0.5) continue;
+    acc = 0;
+    for (const s of [1, -1]) {
+      const px = p.x + ringNor[i].x * s * (HW + CURB_W * 0.5);
+      const pz = p.z + ringNor[i].z * s * (HW + CURB_W * 0.5);
+      const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.11, RING_Y, 8), pillarMat);
+      pillar.position.set(px, RING_Y / 2, pz);
+      pillar.castShadow = true;
+      scene.add(pillar);
+    }
+  }
+})();
+
+// 环路弧长 → 世界坐标 + 朝向，车沿曲线平滑转弯
+function ringPos(s) {
+  s = ((s % RPERIM) + RPERIM) % RPERIM;
+  let lo = 0, hi = ringPts.length;
+  while (lo + 1 < hi) {
+    const mid = (lo + hi) >> 1;
+    if (RING_CUM[mid] <= s) lo = mid; else hi = mid;
+  }
+  const a = ringPts[lo], b = ringPts[(lo + 1) % ringPts.length];
+  const seg = RING_CUM[lo + 1] - RING_CUM[lo] || 1;
+  const t = (s - RING_CUM[lo]) / seg;
+  return { x: a.x + (b.x - a.x) * t, z: a.z + (b.z - a.z) * t, yaw: Math.atan2(b.x - a.x, b.z - a.z) };
+}
+
+/* ====================== 弧形引桥：贝塞尔曲线，缓缓盘升并切向并入环路 ====================== */
+// 匝道与高架主桥使用同一桥面宽度和标高，接缝处不会出现台阶或窄口
+const RAMP_W = ROAD_W;
+const RAMP_TOP = RING_Y;
+
+function nearestRingS(px, pz) {                    // 最近的环路弧长
+  let best = 0, bd = Infinity;
+  for (let i = 0; i < ringPts.length; i++) {
+    const p = ringPts[i], dd = (p.x - px) ** 2 + (p.z - pz) ** 2;
+    if (dd < bd) { bd = dd; best = i; }
+  }
+  return RING_CUM[best];
+}
+
+const RAMPS = [];
+(function buildRamps() {
+  const bez = (p0, p1, p2, p3, t) => {
+    const u = 1 - t, a = u * u * u, b = 3 * u * u * t, c = 3 * u * t * t, d = t * t * t;
+    return { x: a * p0.x + b * p1.x + c * p2.x + d * p3.x, z: a * p0.z + b * p1.z + c * p2.z + d * p3.z };
+  };
+  const smooth = t => t * t * (3 - 2 * t);         // 缓入缓出 → 坡度平缓
+
+  // 每条引桥：从城市外缘的地面路口长距离缓缓盘升，末端沿环路切向并入
+  // 每边两条、汇入点均匀分布在四边中点附近，避免两条匝道并到同一个环角
+  const defs = [
+    { k: 3,          j: 0,          mx: nodeX(5), mz: RZ0 },
+    { k: 6,          j: 0,          mx: nodeX(7), mz: RZ0 },
+    { k: 6,          j: BLOCKS,     mx: nodeX(5), mz: RZ1 },
+    { k: 9,          j: BLOCKS,     mx: nodeX(7), mz: RZ1 },
+    { k: BLOCKS,     j: 3,          mx: RX1,     mz: nodeZ(5) },
+    { k: BLOCKS,     j: 4,          mx: RX1,     mz: nodeZ(7) },
+    { k: 0,          j: 8,          mx: RX0,     mz: nodeZ(5) },
+    { k: 0,          j: 9,          mx: RX0,     mz: nodeZ(7) }
+  ];
+
+  for (const d of defs) {
+    const foot = { x: nodeX(d.k), z: nodeZ(d.j) };
+    // 精确落在主桥边缘，避免两个同高度桥面互相覆盖产生折叠和闪边
+    const approachS = nearestRingS(d.mx, d.mz);
+    const mergeS = approachS + 0.28;
+    const mA = ringPos(mergeS), mB = ringPos(mergeS + 0.6);
+    const merge = { x: mA.x, z: mA.z };
+    const t3 = Math.atan2(mB.x - mA.x, mB.z - mA.z);          // 环路在该点的切向（逆时针）
+    const T3 = { x: Math.sin(t3), z: Math.cos(t3) };
+
+    // 起点切向：把"直指汇入点"的方向朝主桥切向预旋六成。
+    // 于是整条匝道从起点就开始缓缓转弯，弯度分摊到全程，而不是堆到末端急拐。
+    const chx = merge.x - foot.x, chz = merge.z - foot.z;
+    const chL = Math.hypot(chx, chz) || 1;
+    const cdir = { x: chx / chL, z: chz / chL };
+    let dTurn = Math.atan2(T3.x, T3.z) - Math.atan2(cdir.x, cdir.z);
+    while (dTurn > Math.PI) dTurn -= Math.PI * 2;
+    while (dTurn < -Math.PI) dTurn += Math.PI * 2;
+    const rotA = dTurn * 0.6, cR = Math.cos(rotA), sR = Math.sin(rotA);
+    const T0 = { x: cdir.x * cR - cdir.z * sR, z: cdir.x * sR + cdir.z * cR };
+
+    // 控制柄取弦长 0.6：配合预旋让曲线成为一段平顺的大半径弧，不再过冲成 S 形
+    const k = chL * 0.6;
+    const P0 = foot;
+    const P1 = { x: P0.x + T0.x * k, z: P0.z + T0.z * k };
+    const P2 = { x: merge.x - T3.x * k, z: merge.z - T3.z * k };
+    const P3 = merge;
+
+    const N = 48, pts = [], nor = [];
+    for (let i = 0; i <= N; i++) {
+      const t = i / N, p = bez(P0, P1, P2, P3, t);
+      pts.push({ x: p.x, z: p.z, y: 0.06 });
+    }
+    for (let i = 0; i <= N; i++) {                 // 由切向得到横向法向
+      const a = pts[Math.max(0, i - 1)], b = pts[Math.min(N, i + 1)];
+      const tx = b.x - a.x, tz = b.z - a.z, L = Math.hypot(tx, tz) || 1;
+      nor.push({ x: -tz / L, z: tx / L });
+    }
+
+    // 高度按平面弧长分配：最后 PLATEAU 段与主桥等高。
+    // 并线重叠区的两块桥面因此完全共面，既不露台阶也不出暗色接缝。
+    const cum2d = [0];
+    for (let i = 1; i <= N; i++) cum2d.push(cum2d[i - 1] + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].z - pts[i - 1].z));
+    const rLen2 = cum2d[N] || 1;
+    const PLATEAU = 8;
+    for (let i = 0; i <= N; i++) {
+      const u = Math.min(1, cum2d[i] / Math.max(1, rLen2 - PLATEAU));
+      pts[i].y = 0.06 + (RAMP_TOP - 0.06) * smooth(u);
+    }
+
+    const cum = [0];
+    for (let i = 1; i <= N; i++) {
+      const a = pts[i - 1], b = pts[i];
+      cum.push(cum[i - 1] + Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z));
+    }
+    const rLen = cum[N] || 1;
+
+    // 匝道内缘在主桥局部坐标系里的横向偏移：用来决定护栏的收尾位置和让位区间
+    const sIn = (nor[N].x * -merge.x + nor[N].z * -merge.z) > 0 ? 1 : -1;   // +nor 指向城市中心
+    const vOut = { x: -nor[N].x * sIn, z: -nor[N].z * sIn };                // 指向桥外
+    const latc = [], alongc = [];
+    let thx = pts[N].x - pts[N - 2].x, thz = pts[N].z - pts[N - 2].z;
+    const thl = Math.hypot(thx, thz) || 1; thx /= thl; thz /= thl;
+    for (let i = 0; i <= N; i++) {
+      latc.push((pts[i].x - merge.x) * vOut.x + (pts[i].z - merge.z) * vOut.z);
+      alongc.push(-((pts[i].x - merge.x) * thx + (pts[i].z - merge.z) * thz));   // 沿环路方向离汇入点的距离
+    }
+    const statS = thr => { for (let i = N - 1; i >= 0; i--) if (latc[i] > thr) return cum2d[i]; return 0; };
+    const statA = thr => { for (let i = N - 1; i >= 0; i--) if (latc[i] > thr) return alongc[i]; return 0; };
+    const cutOuter = Math.max(2.5, statA(HW + RAMP_W * 0.5 - 0.06));   // 主桥外护栏要让开的弧长
+    const cutInner = Math.max(1.5, statA(HW - RAMP_W * 0.5 + 0.06));   // 主桥内护栏要让开的弧长
+    const innerS   = Math.max(1.0, statS(HW - RAMP_W * 0.5 + 0.06));   // 匝道内护栏的收尾位置
+
+    addRibbon(pts, nor, RAMP_W * 0.5, 0.14, rampDeckMat, undefined, false);  // 与主桥同厚 → 顶面齐平，交接处无缝
+    // 外侧护栏一直做到并线点，与主桥外护栏自然接续；
+    // 内侧护栏在主桥内护栏处收尾，不会横在主桥车道上
+    const innerEnd = (() => { let i = N; while (i > 0 && cum2d[i] > rLen2 - innerS) i--; return i; })();
+    for (const s of [1, -1]) {
+      const last = (s === -sIn) ? N : innerEnd;
+      const rp = [];
+      for (let i = 0; i <= last; i++) {
+        rp.push({
+          x: pts[i].x + nor[i].x * s * (RAMP_W * 0.5 - 0.05),
+          z: pts[i].z + nor[i].z * s * (RAMP_W * 0.5 - 0.05), y: pts[i].y + 0.09
+        });
+      }
+      addRibbon(rp, nor.slice(0, last + 1), 0.045, 0.14, railMat, undefined, false);
+    }
+    for (let i = 12; i <= N; i += 6) {             // 弧形支撑墩
+      const p = pts[i];
+      if (p.y < 0.35) continue;
+      const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, p.y, 8), pillarMat);
+      pillar.position.set(p.x, p.y / 2, p.z);
+      pillar.castShadow = true;
+      scene.add(pillar);
+    }
+    RAMPS.push({ foot, merge, mergeS, pts, nor, cum, len3: rLen, footNode: nid(d.k, d.j), yawUp: Math.atan2(T0.x, T0.z), cutOuter, cutInner });
+  }
+})();
+
+// 主桥护栏：只在匝道桥面真正压到护栏线的位置开口（外/内侧分别计算），
+// 开口由匝道自己的护栏接着，人不会再从并线口走出去
+(function addRingRails() {
+  const SIGN = 0.05;                             // 并线点往后多留的一点余量
+  const cut = (i, sgn) => {
+    const px = ringPts[i].x, pz = ringPts[i].z;
+    const sgnOuter = Math.sign(ringNor[i].x * px + ringNor[i].z * pz) || 1;
+    for (const r of RAMPS) {
+      let d = RING_CUM[i] - r.mergeS;
+      d = ((d % RPERIM) + RPERIM * 1.5) % RPERIM - RPERIM * 0.5;   // 归一到 (-P/2, P/2]
+      const len = (sgn === sgnOuter ? r.cutOuter : r.cutInner) + SIGN;
+      if (d <= 0 ? -d <= len : d <= SIGN) return true;
+    }
+    return false;
+  };
+  for (const sgn of [1, -1]) {
+    let pts = [], nrm = [];
+    const flush = () => {
+      if (pts.length >= 2) addRibbon(pts, nrm, 0.05, 0.16, railMat, undefined, false);
+      pts = []; nrm = [];
+    };
+    for (let i = 0; i < ringPts.length; i++) {
+      if (cut(i, sgn)) { flush(); continue; }
+      const p = ringPts[i], nm = ringNor[i];
+      pts.push({ x: p.x + nm.x * sgn * (HW - 0.06), z: p.z + nm.z * sgn * (HW - 0.06), y: RING_Y + 0.1 });
+      nrm.push(nm);
+    }
+    flush();
+  }
+})();
+
+// —— 并线收口：匝道内缘与主桥外缘之间会夹出一条细长缝隙（gore），
+//    用一块渐变的桥面把它补齐。补面内边界的两端分别与主桥外缘、匝道内缘相切，
+//    所以整条桥面轮廓线没有折点；再往外仍留作正常空隙 ——
+(function addJunctionGores() {
+  const TOP = RING_Y + 0.07, TH = 0.14, HWr = RAMP_W * 0.5, HWh = ROAD_W * 0.5, GAPMAX = 2.4;
+  const mat = new THREE.MeshStandardMaterial({
+    color: 0xb9c1cf, roughness: 0.9, side: THREE.DoubleSide,
+    polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3
+  });
+  themedMat(mat, 0xe2e8f2, 0x6b7390);
+  const smooth = t => t * t * (3 - 2 * t);
+
+  for (const r of RAMPS) {
+    const N = r.pts.length - 1, M = r.merge;
+    let ux = r.pts[N].x - r.pts[N - 2].x, uz = r.pts[N].z - r.pts[N - 2].z;
+    const ul = Math.hypot(ux, uz) || 1; ux /= ul; uz /= ul;
+    let vx = -uz, vz = ux;                                   // 垂直于末端切向
+    if (vx * M.x + vz * M.z < 0) { vx = -vx; vz = -vz; }     // 取背离城市中心（桥外）的一侧
+    const toC = { x: -M.x, z: -M.z };
+    const sIn = (r.nor[N].x * toC.x + r.nor[N].z * toC.z) > 0 ? 1 : -1;   // 匝道内缘
+
+    const eIn = [];
+    for (let i = 0; i <= N; i++) {
+      const x = r.pts[i].x + r.nor[i].x * sIn * HWr;
+      const z = r.pts[i].z + r.nor[i].z * sIn * HWr;
+      eIn.push({ x, z, lat: (x - M.x) * vx + (z - M.z) * vz });
+    }
+    let hit = -1;                                            // 内缘穿回主桥外缘线以内的位置
+    for (let i = N - 1; i >= 0; i--) if (eIn[i].lat > HWh && eIn[i + 1].lat <= HWh) { hit = i; break; }
+    if (hit < 0) continue;
+    const fc = (eIn[hit].lat - HWh) / ((eIn[hit].lat - eIn[hit + 1].lat) || 1);
+    const C = { x: eIn[hit].x + (eIn[hit + 1].x - eIn[hit].x) * fc, z: eIn[hit].z + (eIn[hit + 1].z - eIn[hit].z) * fc };
+
+    let nose = hit;                                          // 缝隙超过 GAPMAX 后就让它自然敞开
+    while (nose > 0 && (eIn[nose - 1].lat - HWh) <= GAPMAX) nose--;
+    if (nose >= hit) continue;
+
+    const pts = [];
+    for (let i = nose; i <= hit; i++) pts.push({ x: eIn[i].x, z: eIn[i].z, lat: eIn[i].lat });
+    pts.push({ x: C.x, z: C.z, lat: HWh });
+
+    const outer = [], inner = [];
+    for (let k = 0; k < pts.length; k++) {
+      const tp = smooth(k / (pts.length - 1));
+      const rx = pts[k].x - vx * (pts[k].lat - HWh), rz = pts[k].z - vz * (pts[k].lat - HWh);
+      outer.push({ x: pts[k].x, z: pts[k].z });
+      inner.push({ x: rx + (pts[k].x - rx) * (1 - tp), z: rz + (pts[k].z - rz) * (1 - tp) });
+    }
+
+    const pos = [], idx = [], botY = TOP - TH;
+    const put = (p, y) => { pos.push(p.x, y, p.z); return pos.length / 3 - 1; };
+    const oT = outer.map(p => put(p, TOP)), iT = inner.map(p => put(p, TOP));
+    const oB = outer.map(p => put(p, botY)), iB = inner.map(p => put(p, botY));
+    for (let k = 0; k < pts.length - 1; k++) {
+      idx.push(oT[k], iT[k], iT[k + 1], oT[k], iT[k + 1], oT[k + 1]);
+      idx.push(oB[k], iB[k + 1], iB[k], oB[k], oB[k + 1], iB[k + 1]);
+      idx.push(oT[k], oB[k], oB[k + 1], oT[k], oB[k + 1], oT[k + 1]);
+      idx.push(iT[k], iB[k + 1], iB[k], iT[k], iT[k + 1], iB[k + 1]);
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setIndex(idx);
+    geo.computeVertexNormals();
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.castShadow = true; mesh.receiveShadow = true;
+    scene.add(mesh);
+  }
+})();
+
+// 匝道上按归一化弧长取点（含高度与朝向）
+function rampAt(r, t) {
+  t = Math.max(0, Math.min(1, t));
+  const s = t * r.len3;
+  let lo = 0, hi = r.cum.length - 1;
+  while (lo + 1 < hi) { const mid = (lo + hi) >> 1; if (r.cum[mid] <= s) lo = mid; else hi = mid; }
+  const a = r.pts[lo], b = r.pts[lo + 1] || r.pts[lo];
+  const seg = (r.cum[lo + 1] - r.cum[lo]) || 1;
+  const f = (s - r.cum[lo]) / seg;
+  return {
+    x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f, z: a.z + (b.z - a.z) * f,
+    yaw: Math.atan2(b.x - a.x, b.z - a.z)
+  };
+}
+
+// 玩家上桥/下桥的状态机（定义见文件下方的“高架行走”一节）
+// 路网最短路（BFS）：匝道车靠它从任意路口开到匝道口
+function findPath(from, to) {
+  if (from === to) return [from];
+  const prev = new Int32Array(adj.length).fill(-1);
+  const seen = new Uint8Array(adj.length);
+  const q = [from]; seen[from] = 1;
+  for (let h = 0; h < q.length; h++) {
+    const n = q[h];
+    if (n === to) break;
+    for (const m of adj[n]) if (!seen[m]) { seen[m] = 1; prev[m] = n; q.push(m); }
+  }
+  if (!seen[to]) return [from];
+  const path = []; let c = to;
+  while (c !== -1) { path.push(c); c = prev[c]; }
+  return path.reverse();
+}
+
+// 清理高架占用区：桥面和匝道不能穿过建筑体块
+function pruneRampOverlaps() {
+  const blocked = [];
+  const testPath = (points, width, closed) => {
+    const count = closed ? points.length : points.length - 1;
+    for (let i = 0; i < count; i++) {
+      const a = points[i], b = points[(i + 1) % points.length];
+      for (const rec of buildingRecords) {
+        if (blocked.includes(rec)) continue;
+        const minX = rec.minX - width * 0.58, maxX = rec.maxX + width * 0.58;
+        const minZ = rec.minZ - width * 0.58, maxZ = rec.maxZ + width * 0.58;
+        const dx = b.x - a.x, dz = b.z - a.z;
+        const len2 = dx * dx + dz * dz || 1;
+        const f = Math.max(0, Math.min(1, (
+          ((minX + maxX) * 0.5 - a.x) * dx +
+          ((minZ + maxZ) * 0.5 - a.z) * dz
+        ) / len2));
+        const px = a.x + dx * f, pz = a.z + dz * f;
+        const nearX = px >= minX && px <= maxX;
+        const nearZ = pz >= minZ && pz <= maxZ;
+        if (nearX && nearZ) blocked.push(rec);
+      }
+    }
+  };
+  for (const r of RAMPS) testPath(r.pts, RAMP_W, false);
+  testPath(ringPts, ROAD_W, true);
+
+  // 先从场景和碰撞系统移除，再按区间倒序移除窗户实例
+  for (const rec of blocked) {
+    rec.group.visible = false;
+    rec.collider.disabled = true;
+  }
+  const litRanges = blocked.filter(r => r.litCount).sort((a, b) => b.litStart - a.litStart);
+  const darkRanges = blocked.filter(r => r.darkCount).sort((a, b) => b.darkStart - a.darkStart);
+  for (const rec of litRanges) litWins.splice(rec.litStart, rec.litCount);
+  for (const rec of darkRanges) darkWins.splice(rec.darkStart, rec.darkCount);
+
+  // 清掉落在匝道 / 桥面范围内的植被（树长在桥面上是不对的）
+  const nearPath = (points, width, closed, x, z) => {
+    const count = closed ? points.length : points.length - 1;
+    const lim = (width * 0.5 + 0.35) ** 2;
+    for (let i = 0; i < count; i++) {
+      const a = points[i], b = points[(i + 1) % points.length];
+      const dx = b.x - a.x, dz = b.z - a.z, len2 = dx * dx + dz * dz || 1;
+      let f = ((x - a.x) * dx + (z - a.z) * dz) / len2;
+      f = f < 0 ? 0 : (f > 1 ? 1 : f);
+      if ((x - (a.x + dx * f)) ** 2 + (z - (a.z + dz * f)) ** 2 < lim) return true;
+    }
+    return false;
+  };
+  const onDeck = (x, z) =>
+    RAMPS.some(r => nearPath(r.pts, RAMP_W, false, x, z)) ||
+    nearPath(ringPts, ROAD_W, true, x, z);
+  for (let i = treeQueue.length - 1; i >= 0; i--) if (onDeck(treeQueue[i].x, treeQueue[i].z)) treeQueue.splice(i, 1);
+  for (let i = bushQueue.length - 1; i >= 0; i--) if (onDeck(bushQueue[i].x, bushQueue[i].z)) bushQueue.splice(i, 1);
+  for (let i = flowerQueue.length - 1; i >= 0; i--) if (onDeck(flowerQueue[i].x, flowerQueue[i].z)) flowerQueue.splice(i, 1);
+}
+
+pruneRampOverlaps();
+buildWindows();
+buildVegetation();
+
+/* ============ 通用行走器：沿路网前进，路口按权重选择方向，环岛绕行 ============ */
+const WALK_LANE_CAR = ROAD_W * 0.24;              // 车贴右车道偏移
+const WALK_LANE_PED = ROAD_W / 2 + CURB_W * 0.5;  // 行人走人行道
+const clamp = (v, a, b) => v < a ? a : (v > b ? b : v);
+
+const actors = [];                                // 参与刚体互斥的所有对象（含玩家）
+
+function randomRoadStart() {
+  let a;
+  do { a = (Math.random() * adj.length) | 0; } while (!adj[a].length);
+  const b = adj[a][(Math.random() * adj[a].length) | 0];
+  return { a, b };
+}
+
+function chooseNeighbor(a, cameFrom, w) {
+  const i = nidI(a), j = nidJ(a), pi = nidI(cameFrom), pj = nidJ(cameFrom);
+  const inX = Math.sign(i - pi), inZ = Math.sign(j - pj);
+  const opts = []; let total = 0;
+  for (const nb of adj[a]) {
+    if (nb === cameFrom) continue;                 // 不原路返回
+    const di = nidI(nb) - i, dj = nidJ(nb) - j;
+    const straight = di === inX && dj === inZ;
+    const cross = inX * dj - inZ * di;             // > 0 = 右转
+    const wt = straight ? w.straight : (cross > 0 ? w.right : w.left);
+    opts.push({ nb, wt }); total += wt;
+  }
+  if (!opts.length) return cameFrom;               // 断头路 → 掉头
+  let r = Math.random() * total;
+  for (const o of opts) { r -= o.wt; if (r <= 0) return o.nb; }
+  return opts[opts.length - 1].nb;
+}
+
+// 位置 + 朝向：线形阶段贴一侧行驶；环岛阶段沿圆环行驶
+function placeWalker(wk) {
+  const lane = wk.lane + (wk.side || 0);
+  if (wk.mode === 'ring') {
+    const nx = nodeX(nidI(wk.node)), nz = nodeZ(nidJ(wk.node));
+    const r = RING_R + lane;
+    const a = wk.ringAng;
+    wk.group.position.set(nx + Math.cos(a) * r, 0, nz + Math.sin(a) * r);
+    wk.group.rotation.y = Math.atan2(-Math.sin(a), Math.cos(a));   // 切线方向（逆时针）
+    return;
+  }
+  const ax = nodeX(nidI(wk.a)), az = nodeZ(nidJ(wk.a));
+  const bx = nodeX(nidI(wk.b)), bz = nodeZ(nidJ(wk.b));
+  const odx = bx - ax, odz = bz - az;
+  const rInX = -wk.inDj, rInZ = wk.inDi;           // 来向的右向量
+  const rOutX = -Math.sign(odz), rOutZ = Math.sign(odx);
+  const k = Math.min(1, wk.t / 0.18);
+  const ox = (rInX + (rOutX - rInX) * k) * lane;
+  const oz = (rInZ + (rOutZ - rInZ) * k) * lane;
+  wk.group.position.set(ax + odx * wk.t + ox, 0, az + odz * wk.t + oz);
+  wk.group.rotation.y = Math.atan2(odx, odz);
+}
+
+// 进入环岛：在环上从"来向"逆时针转到所选出口
+function enterRoundabout(wk, node, cameFrom, weights) {
+  const nb = chooseNeighbor(node, cameFrom, weights);
+  if (nb === cameFrom) {                           // 环形路口却是死胡同：原路返回
+    wk.a = node; wk.b = nb; wk.t = 0;
+    wk.inDi = nidI(nb) - nidI(node); wk.inDj = nidJ(nb) - nidJ(node);
+    wk.mode = 'line';
+    return;
+  }
+  const nx = nodeX(nidI(node)), nz = nodeZ(nidJ(node));
+  const inAng  = Math.atan2(nodeZ(nidJ(cameFrom)) - nz, nodeX(nidI(cameFrom)) - nx);
+  const outAng = Math.atan2(nodeZ(nidJ(nb))       - nz, nodeX(nidI(nb))       - nx);
+  let d = outAng - inAng;
+  while (d <= 0) d += Math.PI * 2;                 // 逆时针绕行
+  wk.mode = 'ring';
+  wk.node = node; wk.next = nb;
+  wk.ringAng = inAng; wk.ringEnd = inAng + d;
+}
+
+function stepWalker(wk, dt, weights) {
+  const v = (wk.curSpeed != null ? wk.curSpeed : wk.speed) * (1 - (wk.brake || 0) * 0.9);
+  const arc = v * dt;
+
+  if (wk.mode === 'ring') {
+    wk.ringAng += arc / Math.max(RING_R + wk.lane, 0.2);
+    if (wk.ringAng >= wk.ringEnd) {                // 驶出环岛
+      const node = wk.node, nb = wk.next;
+      wk.mode = 'line';
+      wk.a = node; wk.b = nb; wk.t = (RING_R + wk.lane) / LOT;
+      wk.inDi = nidI(nb) - nidI(node); wk.inDj = nidJ(nb) - nidJ(node);
+    }
+  } else {
+    const toRound = isRoundabout.has(wk.b);
+    const tEnter = toRound ? Math.max(0.05, 1 - (RING_R + wk.lane) / LOT) : 1;
+    wk.t += arc / LOT;
+    if (toRound && wk.t >= tEnter) {
+      enterRoundabout(wk, wk.b, wk.a, weights);
+    } else {
+      while (wk.t >= 1) {
+        wk.t -= 1;
+        const odx = nidI(wk.b) - nidI(wk.a), odz = nidJ(wk.b) - nidJ(wk.a);
+        const cameFrom = wk.a;
+        wk.a = wk.b; wk.inDi = odx; wk.inDj = odz;
+        if (isRoundabout.has(wk.a)) { enterRoundabout(wk, wk.a, cameFrom, weights); break; }
+        wk.b = chooseNeighbor(wk.a, cameFrom, weights);
+      }
+    }
+  }
+  placeWalker(wk);
+}
+
+/* ====================== 车辆：多车型 + 随机变速 ====================== */
+const wheelGeo = new THREE.CylinderGeometry(1, 1, 1, 10);
+wheelGeo.rotateZ(Math.PI / 2);                     // 轮轴沿 x
+const wheelMat = new THREE.MeshStandardMaterial({ color: 0x1a1d28, roughness: 0.9 });
+const headMat  = new THREE.MeshBasicMaterial({ color: 0xfff0c0 });
+const tailMat  = new THREE.MeshBasicMaterial({ color: 0xff5a4a });
+const carGlassMat = new THREE.MeshStandardMaterial({ color: 0x1c2434, roughness: 0.2, metalness: 0.4 });
+
+// 车型：尺寸、配色、速度区间都不同
+const CAR_TYPES = [
+  { id: 'sedan', L: 0.86, W: 0.42, wheel: 0.075, v: [3.0, 4.8],
+    colors: [0x4f8fe0, 0xe8624a, 0xeceff5, 0x8a6ad4, 0x63c58a, 0x3a4a6b, 0xd9dee6] },
+  { id: 'taxi',  L: 0.92, W: 0.44, wheel: 0.075, v: [3.2, 5.0], sign: true,
+    colors: [0xf3c33d] },
+  { id: 'van',   L: 1.05, W: 0.46, wheel: 0.08,  v: [2.4, 3.6],
+    colors: [0xeceff5, 0xd9dee6, 0x4f8fe0, 0xe8b46e] },
+  { id: 'bus',   L: 1.7,  W: 0.5,  wheel: 0.09,  v: [1.8, 2.8], roofH: 0.44, sign: false,
+    colors: [0x4a90d9, 0xd9584a, 0xe8b46e, 0x63c58a] },
+  { id: 'truck', L: 1.55, W: 0.48, wheel: 0.09,  v: [2.0, 3.2], cargo: true,
+    colors: [0x8a8f98, 0x5a6472, 0xc06a4a] }
+];
+
+function makeCar(type) {
+  const g = new THREE.Group();
+  const bodyMat = new THREE.MeshStandardMaterial({
+    color: type.colors[(Math.random() * type.colors.length) | 0], roughness: 0.5, metalness: 0.1
+  });
+  const baseY = 0.16, bh = 0.2;
+
+  const body = new THREE.Mesh(new THREE.BoxGeometry(type.W, bh, type.L), bodyMat);
+  body.position.y = baseY + bh / 2; g.add(body);
+
+  if (type.cargo) {                                 // 卡车：车头 + 货箱
+    const cab = new THREE.Mesh(new THREE.BoxGeometry(type.W, 0.2, 0.4), bodyMat);
+    cab.position.set(0, baseY + 0.1, type.L / 2 - 0.22); g.add(cab);
+    const box = new THREE.Mesh(new THREE.BoxGeometry(type.W * 0.98, 0.42, type.L * 0.6),
+      new THREE.MeshStandardMaterial({ color: 0xdfe3e8, roughness: 0.7 }));
+    box.position.set(0, baseY + 0.21, -type.L * 0.16); g.add(box);
+  } else if (type.roofH) {                          // 巴士：高车厢 + 窗带
+    const cabin = new THREE.Mesh(new THREE.BoxGeometry(type.W, type.roofH, type.L * 0.9), bodyMat);
+    cabin.position.set(0, baseY + bh + type.roofH / 2, 0); g.add(cabin);
+    const strip = new THREE.Mesh(new THREE.BoxGeometry(type.W + 0.012, type.roofH * 0.5, type.L * 0.8), carGlassMat);
+    strip.position.set(0, baseY + bh + type.roofH * 0.62, 0); g.add(strip);
+  } else {                                          // 轿车 / 出租 / 面包车
+    const cab = new THREE.Mesh(new THREE.BoxGeometry(type.W * 0.86, 0.15, type.L * 0.46), carGlassMat);
+    cab.position.set(0, baseY + bh + 0.075, -type.L * 0.05); g.add(cab);
+    if (type.sign) {
+      const sign = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.07, 0.08),
+        new THREE.MeshStandardMaterial({ color: 0xf3c33d, emissive: 0x332200 }));
+      sign.position.set(0, baseY + bh + 0.19, 0); g.add(sign);
+    }
+  }
+
+  const wz = type.L / 2 - 0.2;
+  for (const [wx, zz] of [[-type.W / 2, wz], [type.W / 2, wz], [-type.W / 2, -wz], [type.W / 2, -wz]]) {
+    const wh = new THREE.Mesh(wheelGeo, wheelMat);
+    wh.scale.set(type.wheel, 0.055, type.wheel);
+    wh.position.set(wx, type.wheel, zz); g.add(wh);
+  }
+  const head = new THREE.Mesh(new THREE.BoxGeometry(type.W * 0.72, 0.06, 0.03), headMat);
+  head.position.set(0, baseY + 0.05, type.L / 2 + 0.012); g.add(head);
+  const tail = new THREE.Mesh(new THREE.BoxGeometry(type.W * 0.72, 0.06, 0.03), tailMat);
+  tail.position.set(0, baseY + 0.05, -type.L / 2 - 0.012); g.add(tail);
+
+  g.traverse(o => { if (o.isMesh) o.castShadow = true; });
+  return { group: g, radius: type.L * 0.5 + 0.06 };
+}
+
+const cars = [];
+
+const CAR_WEIGHTS = { straight: 6, right: 1.5, left: 2.5 };   // 直行多、左转最多
+
+function spawnCar() {
+  const type = CAR_TYPES[(Math.random() * CAR_TYPES.length) | 0];
+  const { group, radius } = makeCar(type);
+  const s = randomRoadStart();
+  const base = type.v[0] + Math.random() * (type.v[1] - type.v[0]);
+  const car = {
+    kind: 'car', group, a: s.a, b: s.b, t: Math.random(), mode: 'line',
+    inDi: nidI(s.b) - nidI(s.a), inDj: nidJ(s.b) - nidJ(s.a),
+    lane: WALK_LANE_CAR, side: 0, brake: 0, radius, mass: 3,
+    prio: 1, mob: 1,
+    speed: base, target: base, curSpeed: base,            // 变速
+    accel: 1.0 + Math.random() * 1.2, reTimer: Math.random() * 3
+  };
+  scene.add(group);
+  cars.push(car);
+  actors.push(car);
+}
+for (let k = 0; k < 14; k++) spawnCar();
+
+function updateCars(dt) {
+  for (const c of cars) {
+    c.reTimer -= dt;
+    if (c.reTimer <= 0) {                          // 每隔几秒换一个目标速度（非匀速）
+      c.reTimer = 2 + Math.random() * 4;
+      c.target = c.speed * (0.55 + Math.random() * 0.8);
+    }
+    const dv = c.target - c.curSpeed;
+    const step = c.accel * dt;
+    c.curSpeed += Math.sign(dv) * Math.min(Math.abs(dv), step);
+    stepWalker(c, dt, CAR_WEIGHTS);
+  }
+}
+
+/* 高架环路车流（不参与地面碰撞，因为在高处） */
+const ringCars = [];
+function spawnRingCar() {
+  const type = CAR_TYPES[(Math.random() * CAR_TYPES.length) | 0];
+  const { group, radius } = makeCar(type);
+  const base = type.v[0] + Math.random() * (type.v[1] - type.v[0]);
+  group.position.y = RING_Y;
+  scene.add(group);
+  const car = {
+    kind: 'car', group, radius, mass: 3, prio: 1, mob: 1,
+    brake: 0, side: 0,
+    s: Math.random() * RPERIM, v: base, target: base, reTimer: Math.random() * 3
+  };
+  ringCars.push(car);
+  actors.push(car);
+}
+for (let k = 0; k < 7; k++) spawnRingCar();
+
+function updateRingCars(dt) {
+  for (const c of ringCars) {
+    c.reTimer -= dt;
+    if (c.reTimer <= 0) { c.reTimer = 2 + Math.random() * 4; c.target = c.v * (0.6 + Math.random() * 0.8); }
+    const dv = c.target - c.v;
+    c.v += Math.sign(dv) * Math.min(Math.abs(dv), 1.4 * dt);
+    c.s += c.v * (1 - (c.brake || 0) * 0.9) * dt;
+    const p = ringPos(c.s);
+    c.group.position.set(p.x, RING_Y, p.z);
+    c.group.rotation.y = p.yaw;
+  }
+}
+
+/* ====================== 匝道通勤车：地面 → 上匝道 → 环路 → 下匝道 → 地面 ====================== */
+const rampCars = [];
+
+function startGroundLeg(c, toNode) {
+  const path = findPath(c.a, toNode);
+  if (path.length < 2) {                            // 已经在匝道口：直接上桥
+    c.state = 'up'; c.tt = 0; c.airborne = false; return;
+  }
+  c.state = 'ground';                               // 明确回到地面行驶
+  c.path = path; c.pathIdx = 1;
+  c.a = path[0]; c.b = path[1]; c.t = 0; c.mode = 'line';
+  c.inDi = nidI(path[1]) - nidI(path[0]); c.inDj = nidJ(path[1]) - nidJ(path[0]);
+}
+
+function spawnRampCar() {
+  const type = CAR_TYPES[(Math.random() * CAR_TYPES.length) | 0];
+  const { group, radius } = makeCar(type);
+  const entryIdx = (Math.random() * RAMPS.length) | 0;
+  const base = type.v[0] + Math.random() * (type.v[1] - type.v[0]);
+
+  let a = RAMPS[entryIdx].footNode;
+  const c = {
+    kind: 'car', group, a, b: a, t: 0, mode: 'line', state: 'ground', path: [], pathIdx: 1,
+    inDi: 0, inDj: 0, lane: WALK_LANE_CAR, side: 0, brake: 0, radius, mass: 3, prio: 1, mob: 1,
+    speed: base, target: base, curSpeed: base, accel: 1.0 + Math.random() * 1.2,
+    reTimer: Math.random() * 3, entryIdx, exitIdx: entryIdx, tt: 0, s: 0, airborne: false,
+    ramp: RAMPS[entryIdx]
+  };
+  scene.add(group);
+  startGroundLeg(c, RAMPS[entryIdx].footNode);
+  rampCars.push(c);
+  actors.push(c);
+}
+for (let k = 0; k < 8; k++) spawnRampCar();
+
+function arcAhead(fromS, toS) { return ((toS - fromS) % RPERIM + RPERIM) % RPERIM || RPERIM; }
+
+function updateRampCars(dt) {
+  for (const c of rampCars) {
+    c.reTimer -= dt;
+    if (c.reTimer <= 0) { c.reTimer = 2 + Math.random() * 4; c.target = c.speed * (0.6 + Math.random() * 0.7); }
+    const dv = c.target - c.curSpeed;
+    c.curSpeed += Math.sign(dv) * Math.min(Math.abs(dv), c.accel * dt);
+    const v = c.curSpeed * (1 - (c.brake || 0) * 0.9);
+
+    if (c.state === 'ground') {
+      c.airborne = false;
+      c.t += v * dt / LOT;
+      while (c.t >= 1) {
+        c.t -= 1;
+        c.inDi = nidI(c.b) - nidI(c.a); c.inDj = nidJ(c.b) - nidJ(c.a);
+        c.a = c.b; c.pathIdx++;
+        if (c.pathIdx >= c.path.length) { c.state = 'up'; c.tt = 0; c.ramp = RAMPS[c.entryIdx]; break; }
+        c.b = c.path[c.pathIdx];
+      }
+      if (c.state === 'ground') placeWalker(c);
+    } else if (c.state === 'up') {
+      c.airborne = true;
+      const r = c.ramp;
+      c.tt += v * dt / r.len3;
+      if (c.tt >= 1) {
+        c.state = 'ring'; c.s = r.mergeS;
+        // 出口：优先选"前方最近"的匝道（顺行下桥），偶尔跳过一个
+        const ahead = RAMPS.map((rr, i) => ({ i, a: i === c.entryIdx ? Infinity : arcAhead(r.mergeS, rr.mergeS) }))
+                           .sort((p, q) => p.a - q.a);
+        const pick = (Math.random() < 0.7 || ahead.length < 2) ? ahead[0] : ahead[1];
+        c.exitIdx = pick.i;
+        c.remain = pick.a;
+      }
+      const p = rampAt(r, Math.min(c.tt, 1));
+      c.group.position.set(p.x, p.y, p.z);
+      c.group.rotation.y = p.yaw;
+    } else if (c.state === 'ring') {
+      c.airborne = true;
+      c.s += v * dt; c.remain -= v * dt;
+      if (c.remain <= 0) { c.state = 'down'; c.tt = 0; c.ramp = RAMPS[c.exitIdx]; }
+      const p = ringPos(c.s);
+      c.group.position.set(p.x, RING_Y, p.z);
+      c.group.rotation.y = p.yaw;
+    } else if (c.state === 'down') {
+      c.airborne = true;
+      const r = c.ramp;
+      c.tt += v * dt / r.len3;
+      if (c.tt >= 1) {                                 // 回到地面，准备下一趟
+        c.a = r.footNode;
+        const ahead = RAMPS.map((rr, i) => ({ i, a: i === c.exitIdx ? Infinity : arcAhead(r.mergeS, rr.mergeS) }))
+                           .sort((p, q) => p.a - q.a);
+        c.entryIdx = (Math.random() < 0.75 ? ahead[0] : (ahead[1] || ahead[0])).i;
+        startGroundLeg(c, RAMPS[c.entryIdx].footNode);
+        if (c.state !== 'up') c.airborne = false;
+      }
+      const p = rampAt(r, 1 - Math.min(c.tt, 1));
+      c.group.position.set(p.x, p.y, p.z);
+      c.group.rotation.y = p.yaw + Math.PI;
+    }
+  }
+}
+
+/* ====================== 行人（走人行道，纯算法） ====================== */
+const pedBodyGeo = new THREE.CapsuleGeometry(0.105, 0.24, 4, 10);
+const pedHeadGeo = new THREE.SphereGeometry(0.095, 12, 10);
+const pedLegGeo  = new THREE.CapsuleGeometry(0.042, 0.16, 3, 8);
+const pedPantMat = new THREE.MeshStandardMaterial({ color: 0x2b3350, roughness: 0.9, flatShading: true });
+const pedSkinMat = new THREE.MeshStandardMaterial({ color: 0xe9b78f, roughness: 0.75 });
+const PED_COLORS = [0xd4553c, 0x4f8fe0, 0x63c58a, 0xe8b46e, 0x8a6ad4, 0xe8624a, 0xeceff5, 0x3a4a6b];
+const PED_WEIGHTS = { straight: 3, right: 2, left: 2 };
+
+const pedestrians = [];
+
+function spawnPedestrian() {
+  const g = new THREE.Group();
+  const coatMat = new THREE.MeshStandardMaterial({
+    color: PED_COLORS[(Math.random() * PED_COLORS.length) | 0], roughness: 0.8, flatShading: true
+  });
+  const body = new THREE.Mesh(pedBodyGeo, coatMat); body.position.y = 0.42; g.add(body);
+  const head = new THREE.Mesh(pedHeadGeo, pedSkinMat); head.position.y = 0.68; g.add(head);
+  const legL = new THREE.Mesh(pedLegGeo, pedPantMat); legL.position.set(-0.055, 0.14, 0); g.add(legL);
+  const legR = new THREE.Mesh(pedLegGeo, pedPantMat); legR.position.set(0.055, 0.14, 0); g.add(legR);
+  g.traverse(o => { if (o.isMesh) o.castShadow = true; });
+
+  const s = randomRoadStart();
+  const spd = 0.8 + Math.random() * 0.6;
+  const ped = { kind: 'ped', group: g, legL, legR, a: s.a, b: s.b, t: Math.random(), mode: 'line',
+                inDi: nidI(s.b) - nidI(s.a), inDj: nidJ(s.b) - nidJ(s.a),
+                lane: WALK_LANE_PED, side: 0, brake: 0, radius: 0.17, mass: 1, prio: 0, mob: 1,
+                speed: spd, curSpeed: spd, phase: Math.random() * 6.28 };
+  scene.add(g);
+  pedestrians.push(ped);
+  actors.push(ped);
+  return ped;
+}
+for (let k = 0; k < 30; k++) spawnPedestrian();
+
+// 匝道上的行人：与车辆共用同一组上下桥曲线，确保桥不是“只能看不能走”
+const rampPeds = [];
+for (let k = 0; k < RAMPS.length * 2; k++) {
+  const p = spawnPedestrian();
+  pedestrians.pop();
+  const ramp = RAMPS[k % RAMPS.length];
+  p.ramp = ramp;
+  p.rampT = k % 2 ? 1 : 0;
+  p.rampDir = k % 2 ? -1 : 1;
+  p.rampSpeed = 0.55 + Math.random() * 0.2;
+  p.airborne = true;
+  rampPeds.push(p);
+}
+
+function updateRampPeds(dt) {
+  for (const p of rampPeds) {
+    p.rampT += p.rampDir * p.rampSpeed * dt / p.ramp.len3;
+    if (p.rampT >= 1) {
+      p.rampT = 1;
+      p.rampDir = -1;
+    } else if (p.rampT <= 0) {
+      p.rampT = 0;
+      p.rampDir = 1;
+    }
+    const pos = rampAt(p.ramp, p.rampT);
+    // 匝道点是桥面中心高度，行人脚底要抬到桥面上方，避免与桥面深度闪烁
+    p.group.position.set(pos.x, pos.y + 0.05, pos.z);
+    p.group.rotation.y = pos.yaw + (p.rampDir < 0 ? Math.PI : 0);
+    p.phase += dt * 8;
+    const swing = Math.sin(p.phase) * 0.6;
+    p.legL.rotation.x = swing;
+    p.legR.rotation.x = -swing;
+  }
+}
+
+function updatePedestrians(dt) {
+  for (const p of pedestrians) {
+    stepWalker(p, dt, PED_WEIGHTS);
+    p.phase += dt * 8 * (0.4 + (p.curSpeed || p.speed));
+    const swing = Math.sin(p.phase) * 0.6;
+    p.legL.rotation.x = swing;
+    p.legR.rotation.x = -swing;
+    p.group.position.y = Math.abs(Math.sin(p.phase)) * 0.02;
+  }
+}
+
+/* ====================== 动物：公园里游荡的猫狗 ====================== */
+const animals = [];
+
+function makeAnimal(kind) {
+  const g = new THREE.Group();
+  const dog = kind === 'dog';
+  const col = dog ? [0xb98a5a, 0x6d5741, 0xd9c3a5][(Math.random() * 3) | 0]
+                  : [0x9aa0a8, 0xd08a4a, 0x3c3c44][(Math.random() * 3) | 0];
+  const fur = new THREE.MeshStandardMaterial({ color: col, roughness: 0.9, flatShading: true });
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.14, 0.34), fur); body.position.y = 0.17; g.add(body);
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.12, 0.13), fur); head.position.set(0, 0.24, 0.21); g.add(head);
+  const legGeo = new THREE.CylinderGeometry(0.022, 0.022, 0.14, 6);
+  const legs = [];
+  for (const [lx, lz] of [[-0.06, 0.12], [0.06, 0.12], [-0.06, -0.12], [0.06, -0.12]]) {
+    const l = new THREE.Mesh(legGeo, fur); l.position.set(lx, 0.07, lz); g.add(l); legs.push(l);
+  }
+  g.scale.setScalar(dog ? 1 : 0.72);
+  g.traverse(o => { if (o.isMesh) o.castShadow = true; });
+  return { group: g, legs };
+}
+
+function spawnAnimal() {
+  if (!parks.length) return;
+  const park = parks[(Math.random() * parks.length) | 0];
+  const a = makeAnimal(Math.random() < 0.6 ? 'dog' : 'cat');
+  const an = { ...a, kind: 'animal', park, tx: park.x, tz: park.z, speed: 0.5 + Math.random() * 0.6,
+               phase: Math.random() * 6.28, pause: 0, radius: 0.22, mass: 1, prio: 0, mob: 1, side: null, brake: null, freeMover: true, vx: 0, vz: 0 };
+  an.group.position.set(park.x, 0, park.z);
+  scene.add(an.group);
+  animals.push(an);
+  actors.push(an);
+}
+for (let k = 0; k < 9; k++) spawnAnimal();
+
+function updateAnimals(dt) {
+  for (const an of animals) {
+    const p = an.group.position;
+    const dx = an.tx - p.x, dz = an.tz - p.z;
+    const dist = Math.hypot(dx, dz);
+    if (dist < 0.25 || an.pause > 0) {
+      an.pause -= dt;
+      if (dist < 0.25) {
+        const a = Math.random() * Math.PI * 2, r = Math.random() * an.park.h * 0.85;
+        an.tx = an.park.x + Math.cos(a) * r;
+        an.tz = an.park.z + Math.sin(a) * r;
+        an.pause = Math.random() < 0.3 ? 0.8 + Math.random() * 2 : 0;
       }
       continue;
     }
-
-    // 一块地 1~2 栋楼
-    const count = Math.random() < 0.3 ? 2 : 1;
-    for (let k = 0; k < count; k++) {
-      const maxW = LOT * 0.58;
-      const w = 1.8 + Math.random() * (maxW - 1.8);
-      const d = 1.8 + Math.random() * (maxW - 1.8);
-      const h = 1.6 + Math.random() * 3.6;
-      const ox = count === 2 ? (k === 0 ? -LOT * 0.22 : LOT * 0.22) : 0;
-      const oz = (Math.random() - 0.5) * 0.6;
-      addBuilding(cx + ox, cz + oz, w, d, h, Math.random() < 0.35);   // 多数是平顶（有女儿墙）
-    }
-
-    // 地块四角放路灯
-    const q = LOT * 0.42;
-    if (Math.random() < 0.5) addLamp(cx - q, cz - q);
-    if (Math.random() < 0.5) addLamp(cx + q, cz + q);
-    if (Math.random() < 0.35) addTree(cx + (Math.random() - 0.5) * q, cz + (Math.random() - 0.5) * q);
+    const step = an.speed * dt;
+    p.x += (dx / dist) * step;
+    p.z += (dz / dist) * step;
+    an.group.rotation.y = Math.atan2(dx, dz);
+    an.phase += dt * 9;
+    const sw = Math.sin(an.phase) * 0.5;
+    an.legs[0].rotation.x = sw;  an.legs[1].rotation.x = -sw;
+    an.legs[2].rotation.x = -sw; an.legs[3].rotation.x = sw;
   }
 }
-buildWindows();
+
+/* ====================== 飞鸟 ====================== */
+const birds = [];
+(function spawnBirds() {
+  const bodyGeo = new THREE.ConeGeometry(0.06, 0.26, 5);
+  bodyGeo.rotateX(Math.PI / 2);
+  const wingGeo = new THREE.PlaneGeometry(0.26, 0.09);
+  const birdMat = new THREE.MeshStandardMaterial({ color: 0x3a4356, roughness: 0.8, flatShading: true, side: THREE.DoubleSide });
+  for (let k = 0; k < 10; k++) {
+    const g = new THREE.Group();
+    g.add(new THREE.Mesh(bodyGeo, birdMat));
+    const wl = new THREE.Mesh(wingGeo, birdMat); wl.position.x = -0.15; g.add(wl);
+    const wr = new THREE.Mesh(wingGeo, birdMat); wr.position.x = 0.15; g.add(wr);
+    scene.add(g);
+    birds.push({
+      group: g, wl, wr,
+      cx: (Math.random() - 0.5) * EXTENT * 0.5,
+      cz: (Math.random() - 0.5) * EXTENT * 0.5,
+      r: 3 + Math.random() * 6, y: 6 + Math.random() * 5,
+      a: Math.random() * Math.PI * 2, speed: 0.25 + Math.random() * 0.35,
+      flap: Math.random() * 6.28
+    });
+  }
+})();
+
+function updateBirds(dt, t) {
+  for (const b of birds) {
+    b.a += b.speed * dt;
+    b.cx += Math.cos(t * 0.05 + b.r) * dt * 0.4;
+    b.cz += Math.sin(t * 0.05 + b.r) * dt * 0.4;
+    b.group.position.set(
+      b.cx + Math.cos(b.a) * b.r,
+      b.y + Math.sin(t * 1.5 + b.flap) * 0.4,
+      b.cz + Math.sin(b.a) * b.r
+    );
+    b.group.rotation.y = -b.a;
+    const f = Math.sin(t * 9 + b.flap) * 0.7;
+    b.wl.rotation.z = f; b.wr.rotation.z = -f;
+  }
+}
 
 /* ====================== 小人角色（WASD 控制） ====================== */
 function makeCharacter() {
@@ -602,6 +2090,9 @@ const xrayMat = new THREE.ShaderMaterial({
   transparent: true,
   depthWrite: false,
   depthFunc: THREE.GreaterDepth,
+  polygonOffset: true,
+  polygonOffsetFactor: 1,
+  polygonOffsetUnits: 1,
   stencilWrite: true,
   stencilRef: 1,
   stencilFunc: THREE.NotEqualStencilFunc,
@@ -613,6 +2104,78 @@ const xrayMat = new THREE.ShaderMaterial({
 const player = makeCharacter();
 player.group.position.set(0, 0, 0);   // 出生在中央公园
 scene.add(player.group);
+
+/* ====================== 刚体互斥：车 / 人 / 动物 / 玩家不能相互穿过 ====================== */
+// 玩家作为不可推动的刚体登记进来；车见到玩家会刹车避让。
+actors.push({ kind: 'player', group: player.group, radius: 0.36, mass: 6, prio: 2, mob: 0, side: null, brake: null });
+
+function resolveCollisions() {
+  for (const a of actors) if (a.brake != null) a.brake = 0;
+  const n = actors.length;
+  for (let i = 0; i < n; i++) {
+    const A = actors[i], ap = A.group.position;
+    for (let j = i + 1; j < n; j++) {
+      const B = actors[j], bp = B.group.position;
+      // 只隔离不同高度层；同一层的地面对象、高架车辆和匝道行人都要碰撞
+      const ay = A.group.position.y || 0;
+      const by = B.group.position.y || 0;
+      if (Math.abs(ay - by) > 0.45) continue;
+      const dx = bp.x - ap.x, dz = bp.z - ap.z;
+      const d2 = dx * dx + dz * dz;
+      const rsum = A.radius + B.radius;
+
+      // 车辆带前瞻（对行人/动物留更长安全距离），其余只看贴身范围
+      const carInvolved = A.kind === 'car' || B.kind === 'car';
+      const bothCar = A.kind === 'car' && B.kind === 'car';
+      const lim = rsum + (bothCar ? 0.8 : carInvolved ? 1.4 : 0.3);
+      if (d2 > lim * lim || d2 < 1e-6) continue;
+
+      const d = Math.sqrt(d2), nx = dx / d, nz = dz / d;
+      const f = 1 - d / lim;
+
+      // 真正重叠时：自由移动体直接位移，沿路径行走的用侧向偏移分离
+      if (d < rsum) {
+        const push = (d - rsum) * 0.5 * -1;         // 重叠量的一半
+        if (A.freeMover) { A.group.position.x += nx * push; A.group.position.z += nz * push; }
+        if (B.freeMover) { B.group.position.x -= nx * push; B.group.position.z -= nz * push; }
+        const fr = 1 - d / rsum;
+        const arx = -Math.cos(A.group.rotation.y), arz = Math.sin(A.group.rotation.y);
+        const brx = -Math.cos(B.group.rotation.y), brz = Math.sin(B.group.rotation.y);
+        if (A.side != null) A.side = clamp(A.side - (nx * arx + nz * arz) * fr * 0.6, -0.6, 0.6);
+        if (B.side != null) B.side = clamp(B.side + (nx * brx + nz * brz) * fr * 0.6, -0.6, 0.6);
+      }
+
+      // 让行：只对"前方同伴车"和"前方行人/动物"刹车，避免被对向/路边对象误刹
+      const afx = Math.sin(A.group.rotation.y), afz = Math.cos(A.group.rotation.y);
+      const bfx = Math.sin(B.group.rotation.y), bfz = Math.cos(B.group.rotation.y);
+      const aSees = afx * nx + afz * nz;            // B 在 A 正前方程度
+      const bSees = -(bfx * nx + bfz * nz);         // A 在 B 正前方程度
+      const sameDir = afx * bfx + afz * bfz > 0.6;
+      const aCar = A.kind === 'car', bCar = B.kind === 'car';
+
+      if (A.brake != null && aSees > 0.25 && (!bCar || sameDir)) A.brake = Math.max(A.brake, f * aSees);
+      if (B.brake != null && bSees > 0.25 && (!aCar || sameDir)) B.brake = Math.max(B.brake, f * bSees);
+      // 车辆礼让正前方的人 / 动物 / 玩家
+      if (aCar && !bCar && A.brake != null && aSees > 0.5 && d < rsum + 0.9) A.brake = Math.max(A.brake, f);
+      if (bCar && !aCar && B.brake != null && bSees > 0.5 && d < rsum + 0.9) B.brake = Math.max(B.brake, f);
+      // 垂直交叉（含对向）：低优先者让行
+      if (Math.abs(aSees) <= 0.25 && Math.abs(bSees) <= 0.25) {
+        if (A.prio <= B.prio) { if (A.brake != null) A.brake = Math.max(A.brake, f * 0.9); }
+        else                  { if (B.brake != null) B.brake = Math.max(B.brake, f * 0.9); }
+      }
+    }
+  }
+}
+
+function updateFountains(t) {
+  for (const f of fountains) {
+    const s = 0.9 + Math.sin(t * 3 + f.phase) * 0.2;
+    f.jet.scale.y = s;
+    f.jet2.scale.y = 1.1 - (s - 0.9);
+    f.jet.rotation.y += 0.02;
+    f.water.position.y = 0.15 + Math.sin(t * 2 + f.phase) * 0.008;
+  }
+}
 /* ====================== 键盘输入 ====================== */
 const keys = Object.create(null);
 addEventListener('keydown', e => {
@@ -624,13 +2187,104 @@ addEventListener('keydown', e => {
 addEventListener('keyup', e => { keys[e.code] = false; });
 
 const MOVE_SPEED = 4.2;      // 单位/秒
-const BOUND = HALF - 0.8;    // 活动范围限制在城市内
+// 匝道入口位于最外侧道路节点，边界必须留到入口外侧，不能提前截断玩家
+const BOUND = HALF + 0.65;   // 仍在水岸地块内，但可以走到所有匝道入口
 const PLAYER_RADIUS = 0.24;  // 小人碰撞半径
+
+/* ---- 高架行走：只能从匝道口上桥，桥上会贴边但不会掉下去 ---- */
+// 玩家当前踩在哪个面上：ground（地面）/ ramp（匝道）/ ring（立交主桥）
+const playerRide = { kind: 'ground' };
+const RAMP_EDGE = RAMP_W * 0.5 - PLAYER_RADIUS;   // 匝道内可站立的横向半宽
+const RING_EDGE = ROAD_W * 0.5 - PLAYER_RADIUS;   // 主桥内可站立的横向半宽
+const MERGE_ZONE = 1.4;                            // 匝道口前后多长弧距内允许下桥
+
+// 把 XZ 点投影到折线上，返回最近点 / 归一化弧长参数 / 横向距离 / 切向
+function projectPolyline(points, cum, total, x, z, closed) {
+  let bi = 0, bf = 0, bd2 = Infinity, px = 0, pz = 0, tx = 1, tz = 0;
+  const n = closed ? points.length : points.length - 1;
+  for (let i = 0; i < n; i++) {
+    const a = points[i], b = points[(i + 1) % points.length];
+    const dx = b.x - a.x, dz = b.z - a.z;
+    const len2 = dx * dx + dz * dz || 1;
+    let f = ((x - a.x) * dx + (z - a.z) * dz) / len2;
+    f = f < 0 ? 0 : (f > 1 ? 1 : f);
+    const qx = a.x + dx * f, qz = a.z + dz * f;
+    const d2 = (x - qx) ** 2 + (z - qz) ** 2;
+    if (d2 < bd2) { bd2 = d2; bi = i; bf = f; px = qx; pz = qz; tx = dx; tz = dz; }
+  }
+  const s = cum[bi] + (cum[bi + 1] - cum[bi]) * bf;
+  const tl = Math.hypot(tx, tz) || 1;
+  return { s, t: total ? s / total : 0, d: Math.sqrt(bd2), px, pz, tx: tx / tl, tz: tz / tl };
+}
+
+// 匝道某处"上桥"的前进方向
+function rampForward(r, t) {
+  const a = rampAt(r, Math.max(0, Math.min(1, t - 0.05)));
+  const b = rampAt(r, Math.min(1, t + 0.02));
+  const dx = b.x - a.x, dz = b.z - a.z, L = Math.hypot(dx, dz) || 1;
+  return { x: dx / L, z: dz / L };
+}
+
+function updatePlayerElevation(moving, moveDir, dt) {
+  const p = player.group.position;
+  let y = 0;
+  const maxPull = MOVE_SPEED * dt * 1.6;           // 每帧横向修正上限，避免瞬移吸附
+
+  if (playerRide.kind === 'ramp') {
+    const r = playerRide.ramp;
+    const q = projectPolyline(r.pts, r.cum, r.len3, p.x, p.z, false);
+    if (q.d > RAMP_EDGE) {                         // 贴回桥面：平滑滑入，不瞬移
+      const nx = p.x - q.px, nz = p.z - q.pz, nl = Math.hypot(nx, nz) || 1;
+      const tx = q.px + nx / nl * RAMP_EDGE, tz = q.pz + nz / nl * RAMP_EDGE;
+      const dx = tx - p.x, dz = tz - p.z, dl = Math.hypot(dx, dz);
+      if (dl > 1e-6) { const st = Math.min(dl, maxPull); p.x += dx / dl * st; p.z += dz / dl * st; }
+    }
+    if (q.t >= 0.995) {                            // 并上主桥
+      playerRide.kind = 'ring'; y = RING_Y;
+    } else if (q.t <= 0.004) {                     // 走回匝道口，落到地面
+      playerRide.kind = 'ground'; y = 0;
+    } else {
+      y = rampAt(r, q.t).y;
+    }
+  } else if (playerRide.kind === 'ring') {
+    const q = projectPolyline(ringPts, RING_CUM, RPERIM, p.x, p.z, true);
+    if (q.d > RING_EDGE) {
+      const nx = p.x - q.px, nz = p.z - q.pz, nl = Math.hypot(nx, nz) || 1;
+      p.x = q.px + nx / nl * RING_EDGE;
+      p.z = q.pz + nz / nl * RING_EDGE;
+    }
+    playerRide.s = q.s; y = RING_Y;
+    if (moving) {                                  // 仅在匝道口、且顺着匝道方向时才下桥
+      for (const r of RAMPS) {
+        let ds = Math.abs(q.s - r.mergeS); ds = Math.min(ds, RPERIM - ds);
+        if (ds > MERGE_ZONE) continue;
+        const f = rampForward(r, 1);
+        if (moveDir.x * f.x + moveDir.z * f.z < -0.1) {
+          playerRide.kind = 'ramp'; playerRide.ramp = r;
+          y = rampAt(r, 1).y;                      // 不瞬移，位置保持不变，平滑接上
+          break;
+        }
+      }
+    }
+  } else if (moving) {                             // 地面：站在匝道口并朝坡上前进才会上桥
+    for (const r of RAMPS) {
+      const q = projectPolyline(r.pts, r.cum, r.len3, p.x, p.z, false);
+      if (q.d > RAMP_EDGE + 0.4 || q.t > 0.06) continue;
+      const f = rampForward(r, q.t);
+      if (moveDir.x * f.x + moveDir.z * f.z > 0.2) {
+        playerRide.kind = 'ramp'; playerRide.ramp = r; y = rampAt(r, q.t).y;  // 不瞬移
+        break;
+      }
+    }
+  }
+  return y;
+}
 
 /* ---- 碰撞：分轴推进 + 分轴回退，撞墙时沿墙滑动而不是卡死 ---- */
 function resolveCollision(p, axis) {
   for (let i = 0; i < colliders.length; i++) {
     const b = colliders[i];
+    if (b.disabled) continue;
     const minX = b.minX - PLAYER_RADIUS, maxX = b.maxX + PLAYER_RADIUS;
     const minZ = b.minZ - PLAYER_RADIUS, maxZ = b.maxZ + PLAYER_RADIUS;
     if (p.x <= minX || p.x >= maxX || p.z <= minZ || p.z >= maxZ) continue;
@@ -647,6 +2301,7 @@ const followDelta = new THREE.Vector3();
 
 let walkPhase = 0;   // 走路摆动相位
 let movingFlag = 0;  // 0~1 平滑过渡
+let playerSurfaceY = 0;
 
 function lerpAngle(a, b, t) {
   let d = (b - a) % (Math.PI * 2);
@@ -661,10 +2316,59 @@ const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(1, 1, 
   type: THREE.HalfFloatType, samples: 4, stencilBuffer: true
 }));
 composer.setPixelRatio(Math.min(devicePixelRatio, 2));
-composer.setSize(innerWidth, innerHeight);
+composer.setSize(innerWidth * PIXEL_SCALE, innerHeight * PIXEL_SCALE);
 composer.addPass(new RenderPass(scene, camera));
-composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.18, 0.15, 1.5));
+const bloomPass = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.18, 0.15, 1.5);
+composer.addPass(bloomPass);
 composer.addPass(new OutputPass());   // 色调映射 + sRGB 输出，缺了它画面会发灰发平
+
+/* ====================== 主题应用：白天 ⇄ 黑夜 ====================== */
+let themeMix = 1;      // 0 = 白天, 1 = 黑夜（当前插值值）
+let themeTarget = 1;   // 目标值
+
+function applyTheme(t) {
+  drawSky(t);
+
+  // 雾
+  mixC(scene.fog.color, THEMES.day.fog, THEMES.night.fog, t);
+  scene.fog.density = THREE.MathUtils.lerp(THEMES.day.fogDensity, THEMES.night.fogDensity, t);
+
+  // 光照
+  mixC(hemi.color, THEMES.day.hemiSky, THEMES.night.hemiSky, t);
+  mixC(hemi.groundColor, THEMES.day.hemiGround, THEMES.night.hemiGround, t);
+  hemi.intensity = THREE.MathUtils.lerp(THEMES.day.hemiIntensity, THEMES.night.hemiIntensity, t);
+  mixC(sun.color, THEMES.day.sun, THEMES.night.sun, t);
+  sun.intensity = THREE.MathUtils.lerp(THEMES.day.sunIntensity, THEMES.night.sunIntensity, t);
+  mixC(fill.color, THEMES.day.fill, THEMES.night.fill, t);
+  fill.intensity = THREE.MathUtils.lerp(THEMES.day.fillIntensity, THEMES.night.fillIntensity, t);
+
+  // 所有登记的材质颜色（墙 / 屋顶 / 窗户 / 地面 / 灯罩）
+  for (const m of themeMats) m.color.copy(m.userData.themeDay).lerp(m.userData.themeNight, t);
+
+  // 路灯自发光 + 点光源亮度
+  mixC(lampGlassMat.emissive, THEMES.day.lampEmissive, THEMES.night.lampEmissive, t);
+  lampGlassMat.emissiveIntensity = THREE.MathUtils.lerp(0.15, 4.5, t);
+  const li = THREE.MathUtils.lerp(THEMES.day.lampLight, THEMES.night.lampLight, t);
+  for (const l of lampLights) l.intensity = li;
+
+  // 后处理 + 曝光
+  bloomPass.strength = THREE.MathUtils.lerp(THEMES.day.bloom, THEMES.night.bloom, t);
+  renderer.toneMappingExposure = THREE.MathUtils.lerp(THEMES.day.exposure, THEMES.night.exposure, t);
+}
+
+const themeBtn = document.getElementById('themeBtn');
+const clockEl = document.getElementById('clock');
+function setTheme(target) {
+  themeTarget = target;
+  const night = target > 0.5;
+  themeBtn.textContent = night ? '🌙 夜晚' : '☀️ 白天';
+  clockEl.textContent = night ? THEMES.night.clock : THEMES.day.clock;
+}
+themeBtn.addEventListener('click', () => setTheme(themeTarget > 0.5 ? 0 : 1));
+addEventListener('keydown', e => { if (e.code === 'KeyN') setTheme(themeTarget > 0.5 ? 0 : 1); });
+
+applyTheme(1);
+setTheme(1);
 
 /* ============================== 循环 ============================== */
 const clock = new THREE.Clock();
@@ -672,6 +2376,13 @@ const clock = new THREE.Clock();
 function animate() {
   requestAnimationFrame(animate);
   const dt = Math.min(clock.getDelta(), 0.05);
+
+  /* ---- 0. 主题过渡（约 1.2s 平滑过渡） ---- */
+  if (Math.abs(themeMix - themeTarget) > 0.001) {
+    themeMix += (themeTarget - themeMix) * Math.min(1, dt * 2.5);
+    if (Math.abs(themeMix - themeTarget) <= 0.001) themeMix = themeTarget;
+    applyTheme(themeMix);
+  }
 
   /* ---- 1. 按 WASD 计算相对相机的移动方向 ---- */
   camera.getWorldDirection(camFwd);
@@ -705,6 +2416,9 @@ function animate() {
     player.group.rotation.y = lerpAngle(player.group.rotation.y, targetYaw, 1 - Math.pow(0.001, dt));
   }
 
+  const elevatedY = updatePlayerElevation(moving, moveDir, dt);
+  playerSurfaceY += (elevatedY + (elevatedY > 0 ? 0.05 : 0) - playerSurfaceY) * Math.min(1, dt * 10);
+
   /* ---- 2. 走路摆动 / 呼吸 ---- */
   movingFlag += ((moving ? 1 : 0) - movingFlag) * Math.min(1, dt * 12);
   walkPhase += dt * 11 * movingFlag;
@@ -715,9 +2429,22 @@ function animate() {
   player.armL.rotation.x = -swing * 0.8;
   player.armR.rotation.x =  swing * 0.8;
   // 上下起伏
-  player.group.position.y = Math.abs(Math.sin(walkPhase)) * 0.045 * movingFlag;
+  player.group.position.y = playerSurfaceY + Math.abs(Math.sin(walkPhase)) * 0.045 * movingFlag;
   // 静止时轻微呼吸
   player.group.scale.y = 1 + Math.sin(clock.elapsedTime * 2) * 0.012 * (1 - movingFlag);
+
+  /* ---- 车流 / 行人 / 动物 / 飞鸟 / 高架 / 喷泉（全部纯算法） ---- */
+  updateCars(dt);
+  updateRingCars(dt);
+  updateRampCars(dt);
+  updateRampPeds(dt);
+  updatePedestrians(dt);
+  updateAnimals(dt);
+  updateBirds(dt, clock.elapsedTime);
+  updateFountains(clock.elapsedTime);
+
+  /* ---- 刚体互斥：所有地面对象两两分离并让行 ---- */
+  resolveCollisions();
 
   /* ---- 3. 相机跟随（把 target 和相机同步平移，保留用户旋转/缩放） ---- */
   followDelta.set(
@@ -735,7 +2462,7 @@ function animate() {
 animate();
 
 // 方便在控制台里调参（改灯光、camera、小人位置等）
-window.__demo = { scene, camera, controls, player, renderer, composer, colliders, resolveCollision, sun, fill };
+window.__demo = { scene, camera, controls, player, renderer, composer, colliders, resolveCollision, sun, fill, hemi, THEMES, applyTheme, setTheme, cars, ringCars, rampCars, rampPeds, pedestrians, animals, birds, fountains, actors, isRoundabout, RAMPS, findPath, adj, parks };
 
 /* ============================== 自适应 ============================== */
 addEventListener('resize', () => {
@@ -745,8 +2472,8 @@ addEventListener('resize', () => {
   camera.top = VIEW;
   camera.bottom = -VIEW;
   camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth, innerHeight);
-  composer.setSize(innerWidth, innerHeight);
+  renderer.setSize(innerWidth * PIXEL_SCALE, innerHeight * PIXEL_SCALE, false);
+  composer.setSize(innerWidth * PIXEL_SCALE, innerHeight * PIXEL_SCALE);
 });
 </script>
 </body>

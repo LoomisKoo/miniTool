@@ -1,0 +1,31 @@
+{
+  "source": "/Users/loomiskoo/loomis/Project/miniTool/food-map/style.css",
+  "target": "/Users/loomiskoo/loomis/Project/miniTool/food-map-qmuse/src/index.css",
+  "ruleDiff": "除下方 transforms 记录的新增外，选择器/声明/值与源文件逐条一致（未增删 reset、未改定位、未加 box-sizing/cursor/border）",
+  "transforms": [
+    {
+      "type": "container-selector-extension",
+      "selector": "#root",
+      "added": "#root { height: 100%; }",
+      "reason": "React 多出 #root 挂载层，需补齐高度以承接原 body > #app 的 100% 布局",
+      "note": "#app 自身声明原样保留（含 padding-top: var(--xhs-nav)），未把 #app 规则整体复制到 #root，避免 padding-top 叠加"
+    },
+    {
+      "type": "css-variable-value-change",
+      "selector": ":root",
+      "variable": "--nav-h",
+      "from": "44px (小红书容器顶栏预留)",
+      "to": "0px",
+      "reason": "经用户确认：QMuse 宿主无容器顶栏，去掉 44px 顶部预留，等同原 xiaohongshu 平台分支语义",
+      "authorizedBy": "user"
+    }
+  ],
+  "colorVariableHardcoding": {
+    "applied": false,
+    "reason": "纯自定义 CSS 项目，:root 变量仅被本 CSS 文件引用，不存在 Tailwind arbitrary value（bg-[var(--x)]），无需硬编码为原始色值"
+  },
+  "tailwind": {
+    "present": false,
+    "detail": "源项目与目标工程均未使用 Tailwind（style.css 无 @tailwind/@apply，无 tailwind.config）"
+  }
+}

@@ -61,6 +61,6 @@ node build.mjs xiaohongshu         # 仅小红书
 
 | 平台 | 状态 | 版本 | 产物 |
 | --- | --- | --- | --- |
-| 小红书 | ✅ 已上线 | 1.0.0 | `dist/xiaohongshu-meishitujian.zip` |
+| 小红书 | ✅ 已上线 | 1.0.2 | `dist/xiaohongshu-meishitujian.zip` |
 | 抖音 | 未上架 | — | `dist/douyin-meishitujian.zip` |
 | 快手 | ✅ 已上线 | 1.0.0 | `dist/kuaishou-meishitujian.zip` |

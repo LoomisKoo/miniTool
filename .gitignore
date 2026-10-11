@@ -5,6 +5,12 @@ node_modules/
 # 各工具打包产物（工具目录内也有各自 .gitignore）
 **/dist/
 
+# QMuse 上传 staging（临时副本，可随时重建；上传根必须在项目外）
+.qmuse-staging/
+
+# QMuse 导入失败日志（运行产物）
+**/.qmuse/import-errors/
+
 # iOS / Xcode
 xcuserdata/
 *.xcuserstate

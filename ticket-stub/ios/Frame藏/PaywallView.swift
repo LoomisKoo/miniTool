@@ -19,9 +19,10 @@ struct PaywallView: View {
                     .foregroundStyle(FrameTheme.textSecondary)
 
                 VStack(alignment: .leading, spacing: 12) {
-                    feature("高级票根模板与特效")
-                    feature("高清无水印导出")
-                    feature("更多本地作品保存")
+                    feature("全部高级模板与 Pro 特效")
+                    feature("2× 超高清与透明背景导出")
+                    feature("无限作品与年度合集海报")
+                    feature("保存自己的票根模板")
                 }
                 .padding(16)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -41,10 +42,10 @@ struct PaywallView: View {
                 } label: {
                     HStack {
                         Spacer()
-                        if pro.isPurchasing {
+                        if pro.isPurchasing || pro.isLoadingProduct {
                             ProgressView().tint(FrameTheme.onAccent)
                         } else {
-                            Text(pro.product?.displayPrice ?? "购买 Pro")
+                            Text(purchaseTitle)
                                 .font(.system(size: 17, weight: .bold))
                         }
                         Spacer()
@@ -53,7 +54,25 @@ struct PaywallView: View {
                     .background(FrameTheme.accentGradient, in: RoundedRectangle(cornerRadius: 16))
                     .foregroundStyle(FrameTheme.onAccent)
                 }
-                .disabled(pro.isPurchasing || pro.product == nil)
+                .disabled(pro.isPurchasing || pro.isLoadingProduct)
+
+                #if DEBUG
+                if pro.isLocalTestMode {
+                    Text("当前为 Debug 本地测试模式，不会产生真实扣款。")
+                        .font(.system(size: 11))
+                        .foregroundStyle(FrameTheme.muted)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                }
+                #endif
+
+                if pro.product == nil && !pro.isLoadingProduct {
+                    Button("重新加载商品") {
+                        Task { await pro.loadProduct() }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(FrameTheme.accent)
+                }
 
                 Button("恢复购买") {
                     Task { await pro.restore() }
@@ -85,9 +104,17 @@ struct PaywallView: View {
         .task { await pro.loadProduct() }
     }
 
+    private var purchaseTitle: String {
+        #if DEBUG
+        return pro.isLocalTestMode ? AppLocalization.text("本地测试解锁") : (pro.product?.displayPrice ?? AppLocalization.text("购买 Pro"))
+        #else
+        return pro.product?.displayPrice ?? AppLocalization.text("购买 Pro")
+        #endif
+    }
+
     private func feature(_ title: String) -> some View {
         Label {
-            Text(title).foregroundStyle(FrameTheme.text)
+            Text(LocalizedStringKey(title)).foregroundStyle(FrameTheme.text)
         } icon: {
             Image(systemName: "checkmark.circle.fill").foregroundStyle(FrameTheme.accent)
         }

@@ -975,7 +975,7 @@ struct TkStampTab: View {
             .padding(10)
             .overlay(Rectangle().strokeBorder(Color(hex: 0x785A3C, alpha: 0.26), lineWidth: 1))
             VStack(alignment: .leading, spacing: 5) {
-                Text("附捐 · SURTAX").font(.h5Mono(rem(0.46))).trackingEm(0.16, size: rem(0.46)).foregroundStyle(brown)
+                Text(AppLocalization.isEnglish ? "SURTAX" : "附捐 · SURTAX").font(.h5Mono(rem(0.46))).trackingEm(0.16, size: rem(0.46)).foregroundStyle(brown)
                 Text(t.mood).font(.h5Sans(rem(0.64))).italic().foregroundStyle(Color(hex: 0x6A5D4C))
                 HStack(spacing: 8) {
                     Text(t.date)

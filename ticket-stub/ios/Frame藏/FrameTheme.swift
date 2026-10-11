@@ -1,19 +1,19 @@
 import SwiftUI
 import UIKit
 
-/// 设计令牌：对齐 H5 `ticket-stub/src/style.css` 的 `:root` 变量（暗房 + 香槟金）。
+/// 设计令牌：暗房 + 蓝色品牌色。
 ///
 /// 硬规则：
-/// 1. **品牌色只有一个香槟金** `accent`：主 CTA、选中、Tab 着色。不再混用亮黄 / 系统黄。
+/// 1. **品牌色只有一个蓝色** `accent`：主 CTA、选中、Tab 着色。
 /// 2. **面分三层**：页面底 `bg` → 面板 / 弹层 `panel` → 卡片 `surface`；不用纯黑和系统灰。
 /// 3. 线与内嵌底统一用 `line` / `surfaceInset`，不在各处手写 `.white.opacity(x)`。
 enum FrameTheme {
     // MARK: 品牌色（= --accent / --accent-strong / --accent-dim / --accent-line）
-    static let accent = Color(hex: 0xD6B47A)
-    static let accentStrong = Color(hex: 0xE6C893)
-    static let accentDim = Color(hex: 0xD6B47A, alpha: 0.14)
-    static let accentLine = Color(hex: 0xD6B47A, alpha: 0.5)
-    /// 金色按钮上的文字（= --text-invert）
+    static let accent = Color(hex: 0x5B9BFF)
+    static let accentStrong = Color(hex: 0x82B5FF)
+    static let accentDim = Color(hex: 0x5B9BFF, alpha: 0.16)
+    static let accentLine = Color(hex: 0x5B9BFF, alpha: 0.52)
+    /// 蓝色按钮上的文字（= --text-invert）
     static let onAccent = Color(hex: 0x111113)
 
     static var accentGradient: LinearGradient {

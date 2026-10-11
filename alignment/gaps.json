@@ -1,0 +1,34 @@
+[
+  {
+    "id": "gap-001",
+    "page": "全局布局",
+    "aspect": "顶部安全区变量 --nav-h 取值",
+    "severity": "minor",
+    "expected": "原源码默认 --nav-h: 44px，为『容器顶栏』预留高度（build.mjs 注释：源码默认按小红书容器）",
+    "actual": "已按 skill 保真门禁原样保留 --nav-h: 44px，未擅自修改；QMuse 若无容器顶栏，顶部可能出现约 44px 空白",
+    "fix": "经用户确认，在 src/index.css :root 将 --nav-h 设为 0px（等同原 xiaohongshu 分支语义）",
+    "status": "fixed",
+    "note": "已按用户决定改为 0px；此为显式 CSS 变量取值调整，已记入 css-migration-map.json"
+  },
+  {
+    "id": "gap-002",
+    "page": "全局",
+    "aspect": "视觉/行为验证",
+    "severity": "minor",
+    "expected": "构建后启动本地预览，按同 viewport 采集主色/布局/交互截图与原版逐条比对",
+    "actual": "按用户要求未私自运行与截图，仅完成 typecheck + production build 与 CSS 映射核对",
+    "fix": "如需，可启动 npm run dev 并与 food-map 原版做同屏比对",
+    "status": "deferred",
+    "note": "未做视觉验证；如需可随时补做"
+  },
+  {
+    "id": "gap-003",
+    "page": "全局",
+    "aspect": "脚本缓存查询参数",
+    "severity": "minor",
+    "expected": "原 <script src=\"app.js?v=20260914d\"> 带版本查询串",
+    "actual": "改用 Vite 产物路径，无 ?v= 查询串",
+    "fix": "无需处理（仅缓存用途，不影响功能）",
+    "status": "deferred"
+  }
+]

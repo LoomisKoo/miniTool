@@ -50,16 +50,18 @@ miniTool/
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 焚香计时 | `incense-timer/` | ✅ 已上线 1.0.1 | — | ✅ 已上线 1.0.1 | — | — | `*-incense-timer.zip` |
 | 轻映 | `crop-grid/` | ✅ 已上线 1.0.1 | — | ✅ 已上线 1.0.1 | — | 未开始 | 名称「轻映」· `*-qingying.zip` |
-| 兔格拼豆 | `rabbit-bead/` | 审核中 1.0.4 | — | 审核中 1.0.4 | — | 开发中 1.0.0 | `*-rabbit-bead.zip` · iOS 已对齐 H5 主要功能（含 3D / 手绘 / 分板） |
+| 兔格拼豆 | `rabbit-bead/` | ✅ 已上线 1.0.4 | — | 审核中 1.0.4 | — | 开发中 1.0.0 | `*-rabbit-bead.zip` · iOS 已对齐 H5 主要功能（含 3D / 手绘 / 分板） |
 | 彩码 | `colorqr/` | — | — | — | — | 未开始 | 开发中 · 含花束模式 · `*-colorqr.zip` |
 | 星空跳一跳 | `xingkong-jump/` | ✅ 已上线 1.0.1 | — | ✅ 已上线 1.0.1 | — | — | 简介「跳一跳星空改良版」· `*-xingkong-jump.zip` |
 | 纸灯夜航 | `paper-lantern/` | ✅ 已上线 1.0.2 | — | ✅ 已上线 1.0.2 | — | — | 简介「休闲小游戏，杀时间必备」· `*-paper-lantern.zip` |
 | 图轻 | `tuqing/` | — | — | — | — | 未开始 | 开发中 · 图片瘦身防二次压缩 · `*-tuqing.zip` |
-| 美食地图 | `food-map/` | ✅ 已上线 1.0.0 | — | ✅ 已上线 1.0.0 | — | — | 简介「地图上看懂各地饮食」· `*-meishitujian.zip` |
+| 美食地图 | `food-map/` | ✅ 已上线 1.0.2 | — | ✅ 已上线 1.0.0 | — | — | 简介「地图上看懂各地美食」· `*-meishitujian.zip` |
 | 风铃物语 | `wind-chime/` | ✅ 已上线 1.0.0 | — | ✅ 已上线 1.0.0 | — | — | 治愈系梦幻风铃 · `*-wind-chime.zip` |
 | 爆红书 | `baohongshu/` | ✅ 已上线 1.0.0 | — | ✅ 已上线 1.0.0 | — | — | 简介「模拟爆红，看笔记从零涨到爆」· `*-baohongshu.zip` |
-| 观影座舱 | `cinema-seat/` | — | — | — | — | — | 开发中 · 第一视角影厅观感模拟 · `*-cinema-seat.zip` |
-| 取名馆 | `naming/` | — | — | — | — | — | 开发中 · 性格测试取名 / 外文名转中文名 · `*-naming.zip` |
+| 影厅模拟器 | `cinema-seat/` | ✅ 已上线 1.0.2 | — | — | — | — | 第一视角影厅观感模拟 · `*-cinema-seat.zip` |
+| 熊猫拼图 | `panda-puzzle/` | ✅ 已上线 1.0.0 | — | — | — | 开发中 | 照片真 3D 拼图 · `*-panda-puzzle.zip` |
+| 仙鹿起名 | `deerName/` | — | — | — | — | ✅ 已上架 1.0.0 | App **DeerNames** · H5 未上架 · `*-deerName.zip` |
+| 帧藏 | `ticket-stub/` | 待提交 1.0.0 | — | — | — | — | 电子票根生成器 · 简介「看过的电影走过的路，做成票根」· `*-ticket-stub.zip` |
 
 iOS 一列 `未开始` 表示已规划原生版本、`ios/` 工程尚未建立；工程建好后改为此处版本号。命名与技术选型见 [`docs/ios/README.md`](docs/ios/README.md)。
 

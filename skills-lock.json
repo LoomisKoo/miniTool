@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "skills": {
+    "abao-zip-import-dockor": {
+      "source": "modelscope.cn",
+      "sourceType": "well-known",
+      "computedHash": "c1c28a94a7dfb0ff774a124800755c8b18b3fd7e1403b774e429ce2ff01e6a84"
+    }
+  }
+}
