@@ -1,0 +1,989 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f6f6f4">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0e0e10">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>高性价比人生指南 · 随身版</title>
+<style>
+  /* ---------- 设计令牌 ---------- */
+  :root{
+    --bg:#f6f6f4; --bg-elev:#fff; --ink:#1c1c1e; --ink-2:#5c5c60; --muted:#8a8a8e;
+    --line:#e9e9e6; --line-soft:#f1f1ef; --accent:#2f6f5e; --accent-bg:#e6f1ec;
+    --star:#f0a020; --evA:#2f8f5e; --evB:#c9922a; --evC:#9a9a9e;
+    --chrome:rgba(246,246,244,.82);
+    --press:#e7e7e4; --chip:#fff;
+    --shadow-card:0 1px 2px rgba(0,0,0,.04);
+    --shadow-lift:0 8px 28px rgba(0,0,0,.10);
+    --shadow-chrome:0 1px 0 rgba(0,0,0,.05), 0 6px 20px rgba(0,0,0,.04);
+
+    /* 曲线：来自 animate skill，不自己手搓 */
+    --ease-out:cubic-bezier(0.23, 1, 0.32, 1);
+    --ease-drawer:cubic-bezier(0.32, 0.72, 0, 1);
+
+    --dur-push:340ms; --dur-fade:150ms; --dur-acc:320ms; --dur-press:120ms;
+
+    --r:14px; --r-lg:18px;
+    --safe-t:env(safe-area-inset-top,0px); --safe-b:env(safe-area-inset-bottom,0px);
+    --tab-h:calc(54px + var(--safe-b));
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#0e0e10; --bg-elev:#1a1a1d; --ink:#f2f2f4; --ink-2:#b8b8bd; --muted:#8e8e93;
+      --line:#2a2a2e; --line-soft:#232327; --accent:#5fb99c; --accent-bg:#17302a;
+      --star:#e8a83a; --evA:#5fb98c; --evB:#d9a94a; --evC:#8e8e93;
+      --chrome:rgba(14,14,16,.78);
+      --press:#232327; --chip:#1a1a1d;
+      --shadow-card:0 1px 2px rgba(0,0,0,.3);
+      --shadow-lift:0 10px 32px rgba(0,0,0,.5);
+      --shadow-chrome:0 1px 0 rgba(255,255,255,.06), 0 6px 20px rgba(0,0,0,.35);
+    }
+  }
+
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html{ -webkit-text-size-adjust:100%; }
+  html,body{margin:0;padding:0;height:100%;overscroll-behavior:none}
+
+  /* 应用外壳：整页不滚动，滚动交给每个 .page */
+  body{
+    background:var(--bg); color:var(--ink);
+    font:1rem/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",system-ui,sans-serif;
+    display:flex; flex-direction:column; height:100dvh; overflow:hidden;
+    max-width:640px; margin:0 auto;
+  }
+  button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer;text-align:left;
+    touch-action:manipulation;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+  input{font:inherit}
+  a{color:#4a6ea8;text-decoration:none}
+  @media (prefers-color-scheme: dark){ a{color:#7fa8e0} }
+
+  /* ---------- 顶栏：常驻搜索（不再有第二个搜索框） ---------- */
+  .topbar{flex:none;background:var(--chrome);backdrop-filter:saturate(180%) blur(20px);
+    -webkit-backdrop-filter:saturate(180%) blur(20px);padding:calc(8px + var(--safe-t)) 14px 8px;z-index:20;
+    box-shadow:var(--shadow-chrome)}
+  .tbrow{display:flex;align-items:center;gap:2px}
+  .tbback{flex:none;width:0;height:34px;border-radius:50%;background:var(--press);color:var(--ink);
+    opacity:0;overflow:hidden;pointer-events:none;font-size:1.4375rem;line-height:1;
+    display:flex;align-items:center;justify-content:center;padding:0 0 2px;
+    transition:width var(--dur-fade) var(--ease-out),opacity var(--dur-fade) var(--ease-out)}
+  body.searching .tbback{width:34px;opacity:1;pointer-events:auto;margin-right:8px}
+  .tbback:active{transform:scale(.9)}
+  .searchbox{display:flex;align-items:center;gap:8px;flex:1;min-width:0;background:var(--bg-elev);
+    border:1px solid var(--line);border-radius:11px;padding:8px 11px;transition:border-color var(--dur-fade) var(--ease-out)}
+  body.searching .searchbox{border-color:var(--accent)}
+  .sico{flex:none;font-size:.875rem;opacity:.5;line-height:1}
+  #q{flex:1;min-width:0;border:0;outline:0;background:none;color:var(--ink);font-size:16px;padding:0}
+  #q::placeholder{color:var(--muted)}
+  .sclr{flex:none;width:0;opacity:0;overflow:hidden;pointer-events:none;color:var(--muted);font-size:.8125rem;line-height:1;
+    transition:width var(--dur-fade) var(--ease-out),opacity var(--dur-fade) var(--ease-out)}
+  body.searching .sclr{width:18px;opacity:1;pointer-events:auto}
+
+  /* ---------- 页面层 ---------- */
+  #stack{flex:1;position:relative;min-height:0;overflow:hidden}
+  .page{position:absolute;inset:0;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;
+    -webkit-overflow-scrolling:touch;background:var(--bg);padding:0 14px 28px}
+  .page[hidden]{display:none}
+  .page.animating{will-change:transform,opacity}
+
+  /* ---------- 排版：字号分级、字距随字号变 ---------- */
+  .h1{font-size:1.375rem;font-weight:700;letter-spacing:-0.021em;line-height:1.25;margin:18px 2px 3px}
+  .sub{color:var(--muted);font-size:.8125rem;letter-spacing:0.002em;margin:0 2px 14px;line-height:1.5}
+  .seclabel{font-size:.75rem;color:var(--muted);letter-spacing:0.05em;margin:22px 2px 9px;
+    display:flex;justify-content:space-between;align-items:center;gap:10px}
+  .seclabel .delgrp{font-size:.75rem;letter-spacing:.02em;color:#a2543a;padding:2px 0}
+
+  /* 按场景 / 按章节：留在顶部，它是下面列表的控制项，滚走就没法切了 */
+  .segwrap{position:sticky;top:0;z-index:15;background:var(--chrome);
+    backdrop-filter:blur(18px) saturate(180%);-webkit-backdrop-filter:blur(18px) saturate(180%);
+    margin:0 -14px;padding:10px 14px 6px}
+  .seg{display:flex;gap:5px;background:var(--line-soft);border-radius:11px;padding:3px;margin:0}
+  .seg button{flex:1;text-align:center;padding:7px 0;border-radius:8px;font-size:.875rem;color:var(--muted);
+    transition:background var(--dur-fade) ease,color var(--dur-fade) ease}
+  .seg button.on{background:var(--bg-elev);color:var(--ink);font-weight:600;box-shadow:var(--shadow-card)}
+
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:14px}
+  .seclist{margin-top:6px}
+  .cell{background:var(--bg-elev);border:1px solid var(--line);border-radius:var(--r);padding:14px 8px 12px;
+    text-align:center;box-shadow:var(--shadow-card);
+    transition:transform var(--dur-press) var(--ease-out),background var(--dur-press) ease}
+  .cell:active{transform:scale(.96);background:var(--press)}
+  .cell .ico{font-size:1.5rem;display:block;margin-bottom:6px;line-height:1}
+  .cell .nm{font-size:.8125rem;font-weight:600;line-height:1.3;display:block;letter-spacing:-0.005em}
+  .cell .ct{font-size:.6875rem;color:var(--muted);margin-top:3px;display:block}
+
+  .row{display:flex;align-items:center;gap:12px;padding:13px 2px;border-bottom:1px solid var(--line-soft);
+    width:100%;transition:background var(--dur-press) ease}
+  .row:active{background:var(--press)}
+  .row .num{flex:0 0 30px;height:30px;border-radius:9px;background:var(--line-soft);color:var(--muted);
+    font-size:.75rem;font-weight:700;display:flex;align-items:center;justify-content:center}
+  .row .tt{flex:1;font-size:.9375rem;line-height:1.35;min-width:0;letter-spacing:-0.006em}
+  .row .tt em{font-style:normal;display:block;font-size:.71875rem;color:var(--muted);margin-top:3px;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .row .ct{font-size:.75rem;color:var(--muted);flex:none}
+  .row .arw{color:var(--muted);font-size:1.125rem;flex:none;opacity:.5}
+
+  /* ---------- 卡片 ---------- */
+  .card{background:var(--bg-elev);border:1px solid var(--line);border-radius:var(--r);padding:15px 15px 13px;
+    margin-bottom:10px;box-shadow:var(--shadow-card);
+    transition:box-shadow 220ms var(--ease-out)}
+  .card.open{box-shadow:var(--shadow-lift)}
+  .card.done{opacity:.5}
+  .card-head{display:flex;align-items:flex-start;gap:10px}
+  .card-head h3{margin:0;font-size:1.03125rem;font-weight:650;line-height:1.42;letter-spacing:-0.011em;flex:1}
+  .star{font-size:1.25rem;line-height:1;color:var(--muted);opacity:.45;padding:1px 0 0;flex:none;
+    transition:transform 160ms var(--ease-out),color 160ms ease,opacity 160ms ease}
+  .star.on{color:var(--star);opacity:1;transform:scale(1.12)}
+  .star:active{transform:scale(.82)}
+  .plain{margin:8px 0 0;font-size:.96875rem;line-height:1.6;letter-spacing:-0.003em}
+  .badges{display:flex;flex-wrap:wrap;gap:6px;margin-top:11px}
+  .bg{font-size:.6875rem;padding:2.5px 8px;border-radius:20px;background:var(--line-soft);color:var(--ink-2);
+    white-space:nowrap;letter-spacing:0.006em}
+  .bg.a{color:var(--evA);background:color-mix(in srgb,var(--evA) 12%,transparent)}
+  .bg.b{color:var(--evB);background:color-mix(in srgb,var(--evB) 14%,transparent)}
+  .bg.c{color:var(--evC);background:var(--line-soft)}
+  .bg.roi3{color:var(--accent);background:var(--accent-bg);font-weight:600}
+  .bg.roi2{color:#3e6b8a;background:color-mix(in srgb,#3e6b8a 12%,transparent)}
+  @media (prefers-color-scheme: dark){ .bg.roi2{color:#8fb6d6} }
+  .bg.warn{color:#a2543a;background:color-mix(in srgb,#a2543a 13%,transparent)}
+  @media (prefers-color-scheme: dark){ .bg.warn{color:#e0a48c} }
+
+  /* ---------- 展开 / 收起：grid-template-rows 0fr→1fr（不用 height） ---------- */
+  .detail{display:grid;grid-template-rows:0fr;transition:grid-template-rows var(--dur-acc) var(--ease-out)}
+  .card.open .detail{grid-template-rows:1fr}
+  .detail-inner{overflow:hidden;min-height:0;opacity:0;
+    transition:opacity 160ms ease}
+  .card.open .detail-inner{opacity:1;transition:opacity 240ms ease 90ms}
+
+  .field{margin:11px 0 0;font-size:.875rem;line-height:1.6}
+  .field .lb{color:var(--muted);font-size:.75rem;display:block;margin-bottom:2px;letter-spacing:0.02em}
+  .field.src{word-break:break-word;font-size:.8125rem;color:var(--ink-2)}
+  .field:first-child{margin-top:0}
+  .detail-inner > .field{border-top:1px dashed var(--line);padding-top:11px}
+  .detail-inner > .field:first-child{border-top:0;padding-top:12px}
+  .whyline{font-size:.71875rem;color:var(--muted);margin-top:9px;line-height:1.5}
+  .refs{display:flex;flex-wrap:wrap;gap:7px;margin-top:3px}
+  .refchip{font-size:.78125rem;color:var(--accent);border-bottom:1px dashed var(--accent);
+    padding:1px 0;line-height:1.5;text-align:left}
+  .acts{display:flex;gap:8px;margin-top:13px;flex-wrap:wrap;border-top:1px dashed var(--line);padding-top:12px}
+  .act{font-size:.8125rem;padding:6px 12px;border-radius:9px;background:var(--line-soft);color:var(--ink-2);
+    transition:transform var(--dur-press) var(--ease-out),background var(--dur-press) ease,color 160ms ease}
+  .act:active{transform:scale(.95);background:var(--press)}
+  .act.on{background:var(--accent-bg);color:var(--accent);font-weight:600}
+  .act.ghost{background:none;border:1px solid var(--line)}
+  /* 来源：不铺长引用，一个按钮点开 */
+  .srcbtn{display:inline-flex;align-items:center;gap:6px;font-size:.8125rem;font-weight:600;
+    color:var(--accent);background:var(--accent-bg);border-radius:9px;padding:7px 12px;
+    transition:transform var(--dur-press) var(--ease-out)}
+  .srcbtn:active{transform:scale(.95)}
+  .cardfoot{font-size:.71875rem;color:var(--muted);margin-top:11px;line-height:1.5}
+  abbr.term{text-decoration:none;border-bottom:1px dotted var(--muted);cursor:help}
+
+  /* ---------- 列表页头部（跟随本页一起滑入） ---------- */
+  .listhead{position:sticky;top:0;z-index:15;background:var(--chrome);backdrop-filter:blur(18px) saturate(180%);
+    -webkit-backdrop-filter:blur(18px) saturate(180%);padding:10px 0;display:flex;align-items:center;gap:10px;
+    margin:0 -14px;padding-left:14px;padding-right:14px}
+  .back{flex:none;width:34px;height:34px;border-radius:50%;background:var(--press);color:var(--ink);
+    display:flex;align-items:center;justify-content:center;font-size:1.4375rem;line-height:1;
+    padding:0 0 2px;transition:transform var(--dur-press) var(--ease-out),background var(--dur-press) ease}
+  .back:active{transform:scale(.9)}
+  .listhead .t{flex:1;min-width:0}
+  .listhead .t b{display:block;font-size:.96875rem;font-weight:650;letter-spacing:-0.011em;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .listhead .t span{font-size:.71875rem;color:var(--muted);display:block;white-space:nowrap;overflow:hidden;
+    text-overflow:ellipsis;margin-top:1px}
+  .fbtn{font-size:.8125rem;padding:6px 11px;border:1px solid var(--line);border-radius:9px;background:var(--bg-elev);
+    color:var(--ink-2);flex:none;transition:transform var(--dur-press) var(--ease-out),background var(--dur-press) ease}
+  .fbtn:active{transform:scale(.95)}
+  .fbtn.on{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+  .more{width:100%;padding:13px;margin-top:6px;border-radius:12px;border:1px dashed var(--line);color:var(--muted);
+    font-size:.875rem;text-align:center;background:var(--bg-elev)}
+  .more:active{background:var(--press)}
+
+  /* ---------- 我的：进度条 + 单选页签（不再重复列三遍） ---------- */
+  .progress{margin:10px 0 16px}
+  .pbar{height:6px;border-radius:99px;background:var(--line-soft);overflow:hidden}
+  .pbar i{display:block;height:100%;background:var(--accent);border-radius:99px;
+    transition:width 420ms var(--ease-out)}
+  .ptxt{font-size:.75rem;color:var(--muted);margin-top:7px;display:flex;justify-content:space-between}
+  .ptxt b{color:var(--ink);font-weight:650}
+
+  .tabs{display:flex;gap:7px;overflow-x:auto;padding:2px 0 6px;touch-action:pan-y;
+    overscroll-behavior-x:contain;scrollbar-width:none}
+  .tabs::-webkit-scrollbar{display:none}
+  .tab{flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;font-size:.8125rem;padding:7px 13px;
+    border-radius:99px;background:var(--chip);border:1px solid var(--line);color:var(--ink-2);
+    transition:transform var(--dur-press) var(--ease-out),background 180ms ease,color 180ms ease,border-color 180ms ease}
+  .tab:active{transform:scale(.95)}
+  .tab.on{background:var(--ink);border-color:var(--ink);color:var(--bg);font-weight:600}
+  .tab i{font-style:normal;font-size:.6875rem;opacity:.65;font-variant-numeric:tabular-nums}
+  .tab.on i{opacity:.8}
+  .tab.add{color:var(--accent);border-style:dashed;font-weight:600}
+
+  .iobtns{display:flex;gap:9px;margin-top:20px}
+  .iobtns button{flex:1;padding:12px 0;border:1px solid var(--line);border-radius:11px;background:var(--bg-elev);
+    font-size:.875rem;color:var(--ink-2);text-align:center;transition:transform var(--dur-press) var(--ease-out)}
+  .iobtns button:active{transform:scale(.97);background:var(--press)}
+
+  /* ---------- 精选 ---------- */
+  .hero{background:linear-gradient(152deg,#2f6f5e,#357a66);color:#fff;border-radius:var(--r-lg);
+    padding:20px 18px 18px;margin-top:2px;box-shadow:0 10px 30px rgba(47,111,94,.26)}
+  @media (prefers-color-scheme: dark){ .hero{background:linear-gradient(152deg,#24564a,#2c6355)} }
+  .hero .tag{font-size:.75rem;opacity:.85;letter-spacing:0.07em}
+  .hero-top{display:flex;align-items:center;justify-content:space-between;gap:12px}
+  .hero h2{margin:9px 0 0;font-size:1.21875rem;font-weight:700;line-height:1.35;letter-spacing:-0.017em}
+  .hero .star{color:#fff;opacity:.45;font-size:1.375rem;line-height:1;flex:none;
+    padding:6px;margin:-6px}          /* 撑大点击热区到约 34px，视觉位置不变 */
+  .hero .star.on{color:#ffd166;opacity:1}
+  .hero p{margin:8px 0 0;font-size:.90625rem;line-height:1.6;opacity:.95}
+  .banner{background:var(--bg-elev);border:1px solid var(--line);border-radius:var(--r);padding:14px 15px;
+    display:flex;align-items:center;gap:12px;margin-bottom:10px;width:100%;box-shadow:var(--shadow-card);
+    transition:transform var(--dur-press) var(--ease-out),background var(--dur-press) ease}
+  .banner:active{transform:scale(.985);background:var(--press)}
+  .banner .b1{flex:1;min-width:0}
+  .banner b{font-size:.9375rem;display:block;letter-spacing:-0.008em}
+  .banner span{font-size:.78125rem;color:var(--muted);display:block;line-height:1.45;margin-top:2px}
+  .banner .n{font-size:1.375rem;font-weight:700;color:var(--accent);flex:none;letter-spacing:-0.02em}
+
+  /* ---------- 底部页签 ---------- */
+  .tabbar{flex:none;background:var(--chrome);backdrop-filter:saturate(180%) blur(20px);
+    -webkit-backdrop-filter:saturate(180%) blur(20px);display:flex;padding:6px 0 calc(6px + var(--safe-b));
+    box-shadow:0 -1px 0 rgba(0,0,0,.05)}
+  @media (prefers-color-scheme: dark){ .tabbar{box-shadow:0 -1px 0 rgba(255,255,255,.06)} }
+  .tabbar button{flex:1;padding:4px 0;text-align:center;color:var(--muted);font-size:.6875rem;
+    letter-spacing:0.01em;transition:color 180ms ease,transform var(--dur-press) var(--ease-out)}
+  .tabbar button:active{transform:scale(.93)}
+  .tabbar button .ti{display:block;font-size:1.25rem;line-height:1.4;filter:grayscale(1);opacity:.45;
+    transition:filter 180ms ease,opacity 180ms ease,transform 220ms var(--ease-out)}
+  /* 选中：图标恢复彩色并轻微放大，文字变强调色加粗 —— 一眼能看出在哪个分区 */
+  .tabbar button.on{color:var(--accent);font-weight:600}
+  .tabbar button.on .ti{filter:none;opacity:1;transform:translateY(-1px) scale(1.12)}
+
+  /* ---------- 抽屉 ---------- */
+  .mask{position:fixed;inset:0;background:rgba(0,0,0,.32);z-index:40;opacity:0;pointer-events:none;
+    transition:opacity 240ms ease}
+  .mask.show{opacity:1;pointer-events:auto}
+  .sheet{position:fixed;left:0;right:0;bottom:0;z-index:41;background:var(--bg);
+    border-radius:20px 20px 0 0;padding:16px 16px calc(18px + var(--safe-b));
+    max-width:640px;margin:0 auto;transform:translateY(100%);
+    transition:transform 320ms var(--ease-drawer);max-height:82dvh;overflow-y:auto;
+    overscroll-behavior:contain;box-shadow:0 -12px 40px rgba(0,0,0,.25)}
+  .sheet.show{transform:translateY(0)}
+  .sheet h4{margin:0 0 3px;font-size:1rem;letter-spacing:-0.012em}
+  .sheet .sh{font-size:.75rem;color:var(--muted);margin-bottom:16px;line-height:1.5}
+  .fsect{margin-bottom:17px}
+  .fsect .fl{font-size:.78125rem;color:var(--muted);margin-bottom:8px}
+  .frow{display:flex;flex-wrap:wrap;gap:7px}
+  .srclist{display:flex;flex-direction:column;gap:8px}
+  .srcrow{display:flex;align-items:center;gap:10px;padding:11px 12px;border-radius:11px;
+    background:var(--line-soft);transition:transform var(--dur-press) var(--ease-out)}
+  .srcrow:active{transform:scale(.985)}
+  .srcrow .m{flex:1;min-width:0}
+  .srcrow .dom{display:block;font-size:.75rem;font-weight:600;color:var(--accent);
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .srcrow .cite{display:block;font-size:.75rem;color:var(--muted);line-height:1.45;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .srcrow .go{flex:none;color:var(--muted);font-size:.875rem;line-height:1}
+  .sheet .done{width:100%;margin-top:6px;padding:13px;border-radius:12px;background:var(--accent);color:#fff;
+    font-size:.9375rem;font-weight:600;text-align:center;transition:transform var(--dur-press) var(--ease-out)}
+  .sheet .done:active{transform:scale(.98)}
+  .sheet .done.ghost{background:none;color:var(--muted);border:1px solid var(--line);margin-top:9px;font-weight:400}
+
+  .empty{text-align:center;color:var(--muted);font-size:.875rem;padding:52px 20px;line-height:1.85}
+
+  /* 轻提示：不遮挡内容，跟手指近 */
+  .toast{position:fixed;left:50%;bottom:calc(var(--tab-h) + 16px);transform:translateX(-50%) translateY(8px);
+    background:var(--ink);color:var(--bg);font-size:.8125rem;padding:9px 16px;border-radius:20px;opacity:0;
+    transition:opacity 200ms ease,transform 200ms var(--ease-out);z-index:60;pointer-events:none;
+    white-space:nowrap;max-width:90vw;box-shadow:var(--shadow-lift)}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+  .foot{margin:28px 2px 6px;font-size:.71875rem;color:var(--muted);line-height:1.8}
+  .foot a{border-bottom:1px solid var(--line)}
+
+  /* 减少动态：保留透明度/颜色，去掉位移 */
+  @media (prefers-reduced-motion: reduce){
+    .detail{transition:none}
+    .detail-inner{transition:opacity 120ms ease}
+    .card.open .detail-inner{transition:opacity 150ms ease}
+    .pbar i{transition:none}
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="tbrow">
+    <button class="tbback" id="tbback" aria-label="返回">‹</button>
+    <label class="searchbox">
+      <span class="sico" aria-hidden="true">🔍</span>
+      <input id="q" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="search"
+             placeholder="搜索建议、来源、正文…" aria-label="搜索">
+      <button class="sclr" id="sclr" aria-label="清空">✕</button>
+    </label>
+  </div>
+</header>
+
+<main id="stack">
+  <section class="page" id="p0"></section>
+  <section class="page" id="p1" hidden></section>
+</main>
+
+<nav class="tabbar" id="tabbar">
+  <button data-tab="home"><span class="ti">🏠</span>首页</button>
+  <button data-tab="pick"><span class="ti">✨</span>精选</button>
+  <button data-tab="mine"><span class="ti">🔖</span>我的</button>
+</nav>
+
+<div class="mask" id="mask"></div>
+<div class="sheet" id="sheet"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============================================================
+   数据由 tools/build.mjs 从原文编译内联。原文：《高性价比人生指南》
+   https://github.com/eternity4719/HowToLiveBetter · CC BY 4.0
+   ============================================================ */
+const DB = /*__DATA__*/null;
+
+const ITEMS = DB.items;
+const BYID = Object.create(null); ITEMS.forEach(i => BYID[i.id] = i);
+const SECBY = Object.create(null); DB.secs.forEach(s => SECBY[s.n] = s);
+const SCNBY = Object.create(null); DB.scn.forEach(s => SCNBY[s.id] = s);
+const MONEY = { '0': '不花钱', '少': '花少量钱', '多': '花不少钱' };
+const TIME = { '少': '顺手', '中': '花几小时', '多': '每天占时间' };
+const WILL = { '否': '不用毅力', '些': '要一点毅力', '是': '要很多毅力' };
+const ROILV = { '极高': 3, '高': 2, '一般': 1 };
+
+ITEMS.forEach(i => {
+  const s = SECBY[i.sec];
+  i.hay = [i.title, i.human, i.gain, i.cost, i.note, i.src, i.grade, s ? s.title : '',
+    i.sc.map(x => SCNBY[x] ? SCNBY[x].nm : '').join(' ')].join('\n').toLowerCase();
+});
+
+/* 术语表 */
+let GRE = null;
+(function () {
+  // 单字母术语（d / g / r 这类效应量符号）不参与自动注释，容易误伤
+  const g = DB.gloss.filter(x => x.t.length > 1).sort((a, b) => b.t.length - a.t.length);
+  const isLatin = x => /^[A-Za-z0-9%. ]+$/.test(x.t);
+  const esc = t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const latin = g.filter(isLatin).map(x => esc(x.t));
+  const cjk = g.filter(x => !isLatin(x)).map(x => esc(x.t));
+  const parts = [];
+  if (latin.length) parts.push('(?<![A-Za-z0-9])(?:' + latin.join('|') + ')(?![A-Za-z0-9])');
+  if (cjk.length) parts.push('(?:' + cjk.join('|') + ')');
+  if (parts.length) GRE = new RegExp(parts.join('|'), 'g');
+})();
+const GBY = Object.create(null); DB.gloss.forEach(g => GBY[g.t] = g.m);
+
+/* ---------------- 状态 ---------------- */
+const LS = 'htlb.pocket.v1';
+let S = Object.assign({
+  fav: [], want: [], done: [], groups: [], theme: 'home', mode: 'scn', group: '收藏'
+}, load());
+function load() { try { return JSON.parse(localStorage.getItem(LS)) || {}; } catch (e) { return {}; } }
+function save() { try { localStorage.setItem(LS, JSON.stringify(S)); } catch (e) { } }
+
+const REDUCE = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+let EX = new Set();
+let F = { grade: [], ratio: [], lens: [], money: [], time: [], will: [], flag: [] };
+let Q = '';
+let navStack = [];
+let cur = { v: 'tab', scroll: 0 };
+let LIMIT = 40;
+const PAGE = 40;
+
+/* ---------------- 工具 ---------------- */
+const $ = s => document.querySelector(s);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+function toast(m) {
+  const t = $('#toast'); t.textContent = m; t.classList.add('show');
+  clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove('show'), 1700);
+}
+function buzz(n) { if (navigator.vibrate) { try { navigator.vibrate(n); } catch (e) { } } }
+
+const passF = i => {
+  if (F.grade.length && !F.grade.includes(i.grade)) return false;
+  if (F.ratio.length && !F.ratio.includes(i.ratio)) return false;
+  if (F.lens.length && !F.lens.includes(i.lens)) return false;
+  if (F.money.length && !F.money.includes(i.money)) return false;
+  if (F.time.length && !F.time.includes(i.time)) return false;
+  if (F.will.length && !F.will.includes(i.will)) return false;
+  if (F.flag.includes('争议') && !i.dispute) return false;
+  if (F.flag.includes('待核实') && !i.todo) return false;
+  return true;
+};
+const matchQ = i => !Q || i.hay.includes(Q.toLowerCase());
+const fCount = () => F.grade.length + F.ratio.length + F.lens.length + F.money.length +
+  F.time.length + F.will.length + F.flag.length;
+
+/* 富文本：转义 → 交叉引用可点 */
+function rich(txt, sec) {
+  let h = esc(txt);
+  h = h.replace(/见第\s*(\d+)\s*节第\s*(\d+)\s*条/g, (m, a, b) =>
+    BYID['s' + a + '-' + b] ? `<button class="refchip" data-ref="${a}-${b}">${m}</button>` : m);
+  h = h.replace(/见本节第\s*(\d+)\s*条/g, (m, b) =>
+    BYID['s' + sec + '-' + b] ? `<button class="refchip" data-ref="${sec}-${b}">${m}</button>` : m);
+  return h;
+}
+function termify(root) {
+  if (!GRE) return;
+  const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT), nodes = [];
+  let n; while ((n = w.nextNode())) if (!n.parentElement.closest('abbr,a,button')) nodes.push(n);
+  for (const node of nodes) {
+    const s = node.nodeValue;
+    GRE.lastIndex = 0;
+    if (!GRE.test(s)) continue;
+    GRE.lastIndex = 0;
+    const frag = document.createDocumentFragment();
+    let last = 0, m;
+    while ((m = GRE.exec(s))) {
+      if (m.index > last) frag.appendChild(document.createTextNode(s.slice(last, m.index)));
+      const ab = document.createElement('abbr');
+      ab.className = 'term'; ab.textContent = m[0]; ab.title = GBY[m[0]] || '';
+      frag.appendChild(ab); last = m.index + m[0].length;
+    }
+    if (last < s.length) frag.appendChild(document.createTextNode(s.slice(last)));
+    node.parentNode.replaceChild(frag, node);
+  }
+}
+
+/* ---------------- 来源 ----------------
+   原始 src 是一整段 400 字上下、最多十几个链接的引用，铺在详情里没人看。
+   这里拆成「一条引用 = 一条可点链接」，详情里只留一个按钮。 */
+function srcLinks(raw) {
+  const out = [], seen = Object.create(null);
+  String(raw == null ? '' : raw).split(/\s*[;；]\s*/).forEach(chunk => {
+    const txt = chunk.replace(/https?:\/\/\S+/g, '').replace(/[\s，,。、；;）)]+$/, '').trim();
+    const urls = chunk.match(/https?:\/\/[^\s；;，、）)】」"'<>]+/g) || [];
+    if (!urls.length) { if (txt) out.push({ url: '', text: txt }); return; }
+    urls.forEach(u => {
+      const url = u.replace(/[.,;:。，；、)\]}]+$/, '');
+      if (seen[url]) return;              // 同一条 src 里重复引同一份文献时只留一次
+      seen[url] = 1;
+      out.push({ url, text: txt });
+    });
+  });
+  return out;
+}
+const hostOf = u => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch (e) { return u; } };
+/* 用临时 a 打开：比 window.open 更不容易被当成弹窗拦掉 */
+function openUrl(u) {
+  const a = document.createElement('a');
+  a.href = u; a.target = '_blank'; a.rel = 'noopener noreferrer';
+  document.body.appendChild(a); a.click(); a.remove();
+}
+
+/* 来源区：有外链就给按钮，一条直接跳、多条进抽屉；一条链接都没有的（5 条法规类）照旧平铺 */
+function srcField(i) {
+  const raw = String(i.src || '').trim();
+  if (!raw) return '';
+  const links = srcLinks(raw).filter(l => l.url);
+  if (!links.length) return `<div class="field src"><span class="lb">来源</span>${esc(raw)}</div>`;
+  const label = links.length === 1 ? '打开来源 ↗' : `来源 · ${links.length} 条 ↗`;
+  return `<div class="field"><button class="srcbtn" data-act="src" data-id2="${i.id}">${label}</button></div>`;
+}
+
+/* ---------------- 卡片 ---------------- */
+function card(i, scnId) {
+  const on = S.fav.includes(i.id);
+  const refs = (i.refs || []).map(r =>
+    `<button class="refchip" data-ref="${r.sec}-${r.n}">第 ${r.sec} 节第 ${r.n} 条 ${esc(r.title)}</button>`).join('');
+  const why = scnId
+    ? (i.why && i.why[scnId] ? `命中关键词：${i.why[scnId].map(esc).join('、')}` : `所属章节：第 ${i.sec} 节`)
+    : '';
+  return `<article class="card${EX.has(i.id) ? ' open' : ''}${S.done.includes(i.id) ? ' done' : ''}" data-id="${i.id}">
+    <div class="card-head">
+      <h3>${esc(i.title)}</h3>
+      <button class="star${on ? ' on' : ''}" data-star="${i.id}" aria-label="收藏">${on ? '★' : '☆'}</button>
+    </div>
+    <p class="plain" data-rich="${i.id}">${rich(i.human, i.sec)}</p>
+    <div class="badges">
+      <span class="bg ${i.grade.toLowerCase()}">证据 ${i.grade}</span>
+      <span class="bg roi${ROILV[i.ratio]}">性价比 ${i.ratio}</span>
+      <span class="bg">${esc(i.lens || '')}</span>
+      <span class="bg">${esc(MONEY[i.money] || '')}</span>
+      <span class="bg">${esc(WILL[i.will] || '')}</span>
+      ${i.dispute ? '<span class="bg warn">争议</span>' : ''}
+      ${i.todo ? '<span class="bg warn">待核实</span>' : ''}
+    </div>
+    ${why ? `<div class="whyline">${why}</div>` : ''}
+    <div class="detail"><div class="detail-inner">
+      <div class="field"><span class="lb">成本</span>${esc(i.cost)}</div>
+      <div class="field"><span class="lb">收益（原始数字）</span><span data-rich="${i.id}">${rich(i.gain, i.sec)}</span></div>
+      ${srcField(i)}
+      ${i.note ? `<div class="field"><span class="lb">备注</span><span data-rich="${i.id}">${rich(i.note, i.sec)}</span></div>` : ''}
+      ${refs ? `<div class="field"><span class="lb">相关条目</span><div class="refs">${refs}</div></div>` : ''}
+      <div class="acts">
+        <button class="act${S.want.includes(i.id) ? ' on' : ''}" data-act="want" data-id2="${i.id}">${S.want.includes(i.id) ? '✓ 想做' : '想做'}</button>
+        <button class="act${S.done.includes(i.id) ? ' on' : ''}" data-act="done" data-id2="${i.id}">${S.done.includes(i.id) ? '✓ 已做' : '标记已做'}</button>
+        <button class="act ghost" data-act="group" data-id2="${i.id}">存进分组</button>
+        <button class="act ghost" data-act="share" data-id2="${i.id}">分享</button>
+      </div>
+      <div class="cardfoot">第 ${i.sec} 节第 ${i.n} 条 · ${esc(SECBY[i.sec] ? SECBY[i.sec].title : '')}</div>
+    </div></div>
+  </article>`;
+}
+function listHTML(arr, limit, scnId) {
+  if (!arr.length) return `<p class="empty">没有符合条件的条目<br>试试减少筛选条件</p>`;
+  const slice = arr.slice(0, limit), rest = arr.length - slice.length;
+  return slice.map(i => card(i, scnId)).join('') +
+    (rest > 0 ? `<button class="more" data-more="1">还有 ${rest} 条，继续加载</button>` : '');
+}
+function afterRender(root) { root.querySelectorAll('[data-rich]').forEach(n => termify(n)); }
+
+/* ---------------- 各页面 HTML ---------------- */
+function pageHome() {
+  const seg = `<div class="segwrap"><div class="seg">
+    <button data-mode="scn" class="${S.mode === 'scn' ? 'on' : ''}">按场景</button>
+    <button data-mode="sec" class="${S.mode === 'sec' ? 'on' : ''}">按章节</button>
+  </div></div>`;
+  if (S.mode === 'scn') {
+    return seg + `<div class="grid">${DB.scn.map(s => `<button class="cell" data-scn="${s.id}">
+        <span class="ico">${s.ico}</span><span class="nm">${esc(s.nm)}</span><span class="ct">${s.items.length} 条</span>
+      </button>`).join('')}</div>
+      <p class="foot">一条建议可能同时属于几个场景；点进去每张卡会写明它为什么归在这里。</p>`;
+  }
+  return seg + `<div class="seclist">${DB.secs.map(s => `<button class="row" data-sec="${s.n}">
+      <span class="num">${s.n}</span>
+      <span class="tt">${esc(s.title)}${s.desc ? `<em>${esc(s.desc.slice(0, 38))}…</em>` : ''}</span>
+      <span class="ct">${s.count}</span><span class="arw">›</span>
+    </button>`).join('')}</div>`;
+}
+
+function pagePick() {
+  const d = new Date();
+  const today = ITEMS[(d.getFullYear() * 372 + d.getMonth() * 31 + d.getDate()) % ITEMS.length];
+  const easy = ITEMS.filter(i => i.ratio === '极高' && i.cs === 0);
+  const dis = ITEMS.filter(i => i.dispute);
+  const topA = ITEMS.filter(i => i.grade === 'A');
+  const onT = S.fav.includes(today.id);
+  return `<h1 class="h1">精选</h1>
+    <p class="sub">不用全做，挑走一两条就算数</p>
+    <div class="hero">
+      <div class="hero-top">
+        <div class="tag">今日一条 · ${d.getMonth() + 1} 月 ${d.getDate()} 日</div>
+        <button class="star${onT ? ' on' : ''}" data-star="${today.id}" aria-label="收藏">${onT ? '★' : '☆'}</button>
+      </div>
+      <h2>${esc(today.title)}</h2>
+      <p>${rich(today.human, today.sec)}</p>
+    </div>
+    <p class="seclabel">省力清单</p>
+    <button class="banner" data-easy="1">
+      <div class="b1"><b>不花钱 · 不花时间 · 不用毅力</b><span>收益还落在最大一档</span></div>
+      <div class="n">${easy.length}</div>
+    </button>
+    <button class="banner" data-allA="1">
+      <div class="b1"><b>结论最硬的</b><span>证据等级 A：有具体数字、来自荟萃分析或大型试验</span></div>
+      <div class="n">${topA.length}</div>
+    </button>
+    <button class="banner" data-dispute="1">
+      <div class="b1"><b>有争议的</b><span>原书标了反方证据，做决定前先看一眼</span></div>
+      <div class="n">${dis.length}</div>
+    </button>
+    <p class="seclabel">随便看看</p>
+    <button class="banner" data-random="1">
+      <div class="b1"><b>随机一条</b><span>翻到哪条算哪条</span></div><div class="n">🎲</div>
+    </button>`;
+}
+
+function pageMine() {
+  const g = S.group;
+  let arr = [], grp = null;
+  if (g === '收藏') arr = S.fav.map(id => BYID[id]).filter(Boolean);
+  else if (g === '想做') arr = S.want.map(id => BYID[id]).filter(Boolean);
+  else if (g === '已做') arr = S.done.map(id => BYID[id]).filter(Boolean);
+  else { grp = S.groups.find(x => x.name === g) || null; arr = grp ? grp.ids.map(id => BYID[id]).filter(Boolean) : []; }
+
+  // 一个列表只出现一次：三个内置 + 自建分组，全部在这排页签里
+  const tabs = [
+    { k: '收藏', n: S.fav.length }, { k: '想做', n: S.want.length }, { k: '已做', n: S.done.length },
+    ...S.groups.map(x => ({ k: x.name, n: x.ids.length }))
+  ];
+  const pct = (S.done.length / ITEMS.length * 100);
+
+  return `<h1 class="h1">我的</h1>
+    <p class="sub">收藏、进度和分组都存在这台设备上</p>
+    <div class="progress">
+      <div class="pbar"><i style="width:${pct.toFixed(2)}%"></i></div>
+      <div class="ptxt"><span>已做进度</span><span><b>${S.done.length}</b> / ${ITEMS.length}</span></div>
+    </div>
+    <div class="tabs">
+      ${tabs.map(t => `<button class="tab ${g === t.k ? 'on' : ''}" data-group="${esc(t.k)}">${esc(t.k)}<i>${t.n}</i></button>`).join('')}
+      <button class="tab add" data-newgroup="1">＋ 新建分组</button>
+    </div>
+    <p class="seclabel">
+      <span>${esc(g)}</span>
+      ${grp ? `<button class="delgrp" data-delgroup="${esc(g)}">删除分组</button>` : `<span>${arr.length} 条</span>`}
+    </p>
+    ${arr.length ? listHTML(arr, LIMIT) : `<p class="empty">${
+      g === '收藏' ? '还没有收藏<br>点卡片右上角的 ☆ 加进来'
+      : g === '想做' ? '拿不定先做哪条时，把它们标成「想做」'
+      : g === '已做' ? '做到一条就标一条，进度会记在下面'
+      : '这个分组还是空的'}</p>`}
+    <div class="iobtns">
+      <button data-io="export">导出备份</button>
+      <button data-io="import">导入备份</button>
+    </div>
+    <p class="foot">
+      基于《高性价比人生指南》<a href="https://github.com/eternity4719/HowToLiveBetter" target="_blank" rel="noopener">原文仓库</a>，
+      正文 CC BY 4.0，共 ${ITEMS.length} 条。本工具为改编作品：新增场景索引、搜索筛选、收藏与进度功能。
+      同步版本 ${DB.meta.version}，离线可用，数据只存在本机。
+    </p>`;
+}
+
+function pageList(c) {
+  const n = fCount();
+  const arr = c.items.filter(i => matchQ(i) && passF(i));
+  return `<div class="listhead">
+      <button class="back" data-back="1" aria-label="返回">‹</button>
+      <div class="t"><b>${esc(c.title)}</b><span>${esc(c.sub || '')}${Q ? ' · 搜索「' + esc(Q) + '」' : ''} · ${arr.length} 条</span></div>
+      <button class="fbtn ${n ? 'on' : ''}" data-filter="1">筛选${n ? ' ' + n : ''}</button>
+    </div>
+    ${arr.length ? listHTML(arr, LIMIT, c.scn) : `<p class="empty">没有符合条件的条目<br>试试减少筛选条件</p>`}`;
+}
+
+function pageSearch() {
+  const arr = Q ? ITEMS.filter(matchQ) : [];
+  if (!Q) return `<p class="empty">输入关键词试试<br><br>标题、说人话、收益、来源、备注都能搜</p>`;
+  return `<p class="seclabel"><span>搜索结果</span><span>${arr.length} 条</span></p>` +
+    (arr.length ? listHTML(arr, LIMIT) : `<p class="empty">没找到。<br>试试更短的关键词，比如「头盔」「押金」「血尿」</p>`);
+}
+
+const htmlFor = p =>
+  p.v === 'list' ? pageList(p) : p.v === 'search' ? pageSearch() : p.theme === 'pick' ? pagePick() : p.theme === 'mine' ? pageMine() : pageHome();
+
+/* ---------------- 页面转场：右进右出（push / pop），页签用交叉淡入 ---------------- */
+const P = [$('#p0'), $('#p1')];
+let frontIdx = 0, animating = null;
+
+function paint(el, page) {
+  el.innerHTML = htmlFor(page);
+  afterRender(el);
+  el.scrollTop = page.scroll || 0;
+}
+
+/* 进场起始位：push 从右侧滑入、旧页左移 30%；pop 反向；页签切换只交叉淡入淡出 */
+function transitionTo(page, mode) {
+  finishTx();                     // 连点时先给上一段收尾
+  syncTabs();
+  const out = P[frontIdx], inn = P[1 - frontIdx];
+  /* 必须先取消 hidden 再渲染：display:none 时赋 scrollTop 会被忽略，
+     会导致返回列表时滚动位置丢失 */
+  inn.hidden = false; out.hidden = false;
+  paint(inn, page);
+
+  out.classList.add('animating'); inn.classList.add('animating');
+  out.style.transition = 'none'; inn.style.transition = 'none';
+
+  const props = mode === 'fade'
+    ? 'opacity var(--dur-fade) ease'
+    : 'transform var(--dur-push) var(--ease-drawer)';
+
+  const done = () => {
+    out.hidden = true; out.innerHTML = '';
+    [out, inn].forEach(el => {
+      el.classList.remove('animating');
+      el.style.transition = ''; el.style.transform = ''; el.style.opacity = '';
+      el.style.zIndex = '';
+    });
+    frontIdx = 1 - frontIdx;
+  };
+
+  /* 层叠顺序显式指定，不依赖 DOM 顺序：
+     push/fade 由新页压住旧页；pop 由正在退出的旧页压住新页。
+     位移转场全程 opacity 保持 1（页面是不透明全屏层，一旦压暗下层就会透上来，
+     视觉上就是两页文字互相穿插的“遮挡”） */
+  const innOnTop = mode !== 'pop' && !REDUCE;
+  if (innOnTop) { inn.style.zIndex = '2'; out.style.zIndex = '1'; }
+  else { inn.style.zIndex = '1'; out.style.zIndex = '2'; }
+
+  if (REDUCE) {
+    out.style.transform = ''; inn.style.transform = '';
+    out.style.opacity = '1'; inn.style.opacity = '0';
+  } else if (mode === 'fade') {
+    out.style.transform = ''; inn.style.transform = '';
+    out.style.opacity = '1'; inn.style.opacity = '0';
+  } else if (mode === 'push') {
+    out.style.transform = 'translateX(0)'; out.style.opacity = '1';
+    inn.style.transform = 'translateX(100%)'; inn.style.opacity = '1';
+  } else {                        // pop
+    out.style.transform = 'translateX(0)'; out.style.opacity = '1';
+    inn.style.transform = 'translateX(-30%)'; inn.style.opacity = '1';
+  }
+  void inn.offsetWidth;   // 强制回流，让起始态生效
+
+  out.style.transition = props; inn.style.transition = props;
+  if (mode === 'fade' || REDUCE) {
+    out.style.opacity = '0'; inn.style.opacity = '1';
+  } else if (mode === 'push') {
+    out.style.transform = 'translateX(-30%)';
+    inn.style.transform = 'translateX(0)';
+  } else {                        // pop
+    out.style.transform = 'translateX(100%)';
+    inn.style.transform = 'translateX(0)';
+  }
+
+  animating = { timer: null, done };
+  animating.timer = setTimeout(finishTx, mode === 'fade' || REDUCE ? 180 : 360);
+}
+/* 幂等收尾：定时器与 flush 共用它，保证一段动画只收尾一次。
+   若收尾跑两次，frontIdx 会被翻转两次，两页就都留在可见状态。 */
+function finishTx() {
+  if (!animating) return;
+  const tx = animating;
+  animating = null;
+  clearTimeout(tx.timer);
+  tx.done();
+}
+/* 快速连点时立刻把上一段动画收尾，不等它跑完 —— 不锁输入 */
+function flush() { finishTx(); }
+
+const front = () => P[frontIdx];
+const setSearching = on => document.body.classList.toggle('searching', on);
+const clearQ = () => { const q = $('#q'); if (q.value) q.value = ''; Q = ''; };
+/* 底部三个页签的高亮 = 当前所在的分区（在列表页里也算，因为还属于那个分区） */
+function syncTabs() {
+  document.querySelectorAll('#tabbar button').forEach(b =>
+    b.classList.toggle('on', b.dataset.tab === S.theme));
+}
+
+function go(page, mode) {
+  flush();
+  const prev = cur;
+  if (mode !== 'fade') { prev.scroll = front().scrollTop; navStack.push(prev); }
+  cur = page;
+  setSearching(page.v === 'search');
+  transitionTo(page, mode);
+}
+function pop() {
+  flush();
+  cur.scroll = front().scrollTop;
+  const back = navStack.pop() || { v: 'tab', theme: S.theme, scroll: 0 };
+  if (cur.v === 'search') { clearQ(); $('#q').blur(); }
+  cur = back;
+  setSearching(back.v === 'search');
+  transitionTo(back, 'pop');
+}
+function switchTab(t) {
+  if (S.theme === t && cur.v === 'tab' && !navStack.length) return;
+  flush();
+  S.theme = t; save(); navStack = [];
+  if (cur.v === 'search') { clearQ(); $('#q').blur(); }
+  cur = { v: 'tab', theme: t, scroll: 0 };
+  setSearching(false);
+  transitionTo(cur, 'fade');
+}
+/* ---------------- 抽屉 ---------------- */
+function openSheet(html) { $('#sheet').innerHTML = html; $('#sheet').classList.add('show'); $('#mask').classList.add('show'); }
+function closeSheet() { $('#sheet').classList.remove('show'); $('#mask').classList.remove('show'); }
+function filterSheet() {
+  const g = (label, key, opts, lab) => `<div class="fsect"><div class="fl">${label}</div><div class="frow">${
+    opts.map(o => `<button class="tab ${F[key].includes(o) ? 'on' : ''}" data-f="${key}" data-v="${esc(o)}">${esc(lab ? lab[o] : o)}</button>`).join('')}</div></div>`;
+  openSheet(`<h4>筛选</h4><div class="sh">同级多选，不同级之间是「并且」</div>
+    ${g('证据等级', 'grade', ['A', 'B', 'C'])}
+    ${g('性价比', 'ratio', ['极高', '高', '一般'])}
+    ${g('换回什么', 'lens', ['换寿命', '换钱', '换时间精力', '换人身自由'])}
+    ${g('花钱', 'money', ['0', '少', '多'], MONEY)}
+    ${g('花时间', 'time', ['少', '中', '多'], TIME)}
+    ${g('要毅力', 'will', ['否', '些', '是'], WILL)}
+    ${g('其他', 'flag', ['争议', '待核实'])}
+    <button class="done" data-close="1">完成</button>
+    ${fCount() ? '<button class="done ghost" data-clear="1">清空筛选</button>' : ''}`);
+}
+function groupSheet(id) {
+  const rows = S.groups.map(x => `<button class="tab ${x.ids.includes(id) ? 'on' : ''}" data-gadd="${esc(x.name)}" data-id2="${id}">${x.ids.includes(id) ? '✓ ' : ''}${esc(x.name)}</button>`).join('');
+  openSheet(`<h4>存进分组</h4><div class="sh">自己建分组，比如「我家用得上的」「先做这几条」</div>
+    <div class="frow">${rows || '<span style="font-size:.8125rem;color:var(--muted)">还没有分组</span>'}</div>
+    <button class="done" data-newgroup="1" data-id2="${id}" style="margin-top:18px">＋ 新建分组并加入</button>
+    <button class="done ghost" data-close="1">关闭</button>`);
+}
+
+function srcSheet(id) {
+  const i = BYID[id];
+  if (!i) return;
+  const links = srcLinks(i.src).filter(l => l.url);
+  const rows = links.map(l =>
+    `<a class="srcrow" href="${esc(l.url)}" target="_blank" rel="noopener noreferrer">
+      <span class="m"><span class="dom">${esc(hostOf(l.url))}</span><span class="cite">${esc(l.text || l.url)}</span></span>
+      <span class="go" aria-hidden="true">↗</span>
+    </a>`).join('');
+  openSheet(`<h4>来源</h4><div class="sh">共 ${links.length} 条，点一条打开原网页</div>
+    <div class="srclist">${rows}</div>
+    <button class="done ghost" data-close="1">关闭</button>`);
+}
+
+/* 就地重绘当前页（不触发转场），用于收藏、筛选、加载更多这类同一页内的状态变化 */
+function repaint() {
+  const el = front();
+  const keep = el.scrollTop;
+  el.innerHTML = htmlFor(cur);
+  afterRender(el);
+  el.scrollTop = keep;
+}
+
+/* ---------------- 事件 ---------------- */
+document.addEventListener('click', e => {
+  const t = e.target.closest('button');
+  if (!t) {
+    // 点卡片正文 = 展开/收起；点详情区（选字、点引用）不动
+    const cardEl = e.target.closest('.card');
+    if (cardEl && !e.target.closest('.detail')) {
+      const id = cardEl.dataset.id;
+      EX.has(id) ? EX.delete(id) : EX.add(id);
+      cardEl.classList.toggle('open');
+    }
+    return;
+  }
+  const d = t.dataset;
+
+  if (d.star) {
+    const id = d.star, k = S.fav.indexOf(id);
+    k < 0 ? S.fav.push(id) : S.fav.splice(k, 1); save(); buzz(8);
+    const on = S.fav.includes(id);
+    document.querySelectorAll(`[data-star="${id}"]`).forEach(b => {
+      b.classList.toggle('on', on);
+      if (b.classList.contains('star')) b.textContent = on ? '★' : '☆';
+      else b.textContent = on ? '★ 已收藏' : '☆ 收藏';
+    });
+    return;
+  }
+
+  if (d.ref) {
+    const [sec, n] = d.ref.split('-').map(Number), i = BYID['s' + sec + '-' + n];
+    if (!i) return toast('找不到这一条');
+    EX.add(i.id);
+    const el = front().querySelector('.card[data-id="' + i.id + '"]');
+    if (el) {   // 目标就在当前这一页里，就地展开并滚过去，不动页面
+      el.classList.add('open');
+      el.scrollIntoView({ block: 'center', behavior: REDUCE ? 'auto' : 'smooth' });
+    } else {
+      go({ v: 'list', title: i.title, sub: '第 ' + i.sec + ' 节第 ' + i.n + ' 条', items: [i], scroll: 0 }, 'push');
+    }
+    return;
+  }
+  if (d.act) {
+    const id = d.id2;
+    if (d.act === 'share') {
+      const i = BYID[id];
+      const txt = `《高性价比人生指南》第 ${i.sec} 节第 ${i.n} 条\n${i.title}\n\n${i.human}\n\n成本：${i.cost}\n证据等级：${i.grade}\n来源：${i.src}\n\n原文 CC BY 4.0 · https://github.com/eternity4719/HowToLiveBetter`;
+      if (navigator.share) navigator.share({ text: txt }).catch(() => { });
+      else if (navigator.clipboard) navigator.clipboard.writeText(txt).then(() => toast('已复制到剪贴板'), () => toast('复制失败'));
+      else toast('这个浏览器不支持分享');
+      return;
+    }
+    if (d.act === 'group') { groupSheet(id); return; }
+    if (d.act === 'src') {
+      const links = srcLinks(BYID[id].src).filter(l => l.url);
+      if (links.length === 1) openUrl(links[0].url); else srcSheet(id);
+      return;
+    }
+    const key = d.act, a = S[key], n = a.indexOf(id);
+    n < 0 ? a.push(id) : a.splice(n, 1); save(); buzz(8);
+    t.classList.toggle('on', a.includes(id));
+    t.textContent = (a.includes(id) ? '✓ ' : '') + (key === 'want' ? '想做' : '已做');
+    if (key === 'done') { const c = t.closest('.card'); if (c) c.classList.toggle('done', a.includes(id)); }
+    return;
+  }
+
+  if (d.gadd) {
+    const grp = S.groups.find(x => x.name === d.gadd); if (!grp) return;
+    const k = grp.ids.indexOf(d.id2);
+    k < 0 ? grp.ids.push(d.id2) : grp.ids.splice(k, 1); save(); buzz(8);
+    groupSheet(d.id2); return;
+  }
+  if (d.newgroup) {
+    const name = prompt('分组名字', '我家用得上的');
+    if (!name) return;
+    const nm = name.trim().slice(0, 12); if (!nm) return;
+    let grp = S.groups.find(x => x.name === nm);
+    if (!grp) { grp = { name: nm, ids: [] }; S.groups.push(grp); }
+    if (d.id2 && !grp.ids.includes(d.id2)) grp.ids.push(d.id2);
+    S.group = nm; save();
+    if (d.id2) { groupSheet(d.id2); toast('已加入「' + nm + '」'); } else { closeSheet(); repaint(); }
+    return;
+  }
+  if (d.delgroup) {
+    const nm = d.delgroup;
+    if (!confirm(`删除分组「${nm}」？分组里的条目不会被删掉。`)) return;
+    S.groups = S.groups.filter(x => x.name !== nm);
+    S.group = '收藏'; save(); repaint();
+    return;
+  }
+
+  if (d.mode) { S.mode = d.mode; save(); LIMIT = PAGE; repaint(); return; }
+  if (d.scn) { const s = SCNBY[d.scn]; go({ v: 'list', title: s.ico + ' ' + s.nm, sub: s.desc, items: s.items.map(id => BYID[id]).filter(Boolean), scn: s.id, scroll: 0 }, 'push'); return; }
+  if (d.sec) {
+    const s = SECBY[+d.sec];
+    go({ v: 'list', title: '第 ' + s.n + ' 节 ' + s.title, sub: s.desc || '共 ' + s.count + ' 条', items: ITEMS.filter(i => i.sec === s.n), scroll: 0 }, 'push');
+    return;
+  }
+  if (d.easy) { go({ v: 'list', title: '省力清单', sub: '不花钱 · 不花时间 · 不用毅力 · 收益还最大', items: ITEMS.filter(i => i.ratio === '极高' && i.cs === 0), scroll: 0 }, 'push'); return; }
+  if (d.allA) { go({ v: 'list', title: '结论最硬的', sub: '证据等级 A：有具体数字', items: ITEMS.filter(i => i.grade === 'A'), scroll: 0 }, 'push'); return; }
+  if (d.dispute) { go({ v: 'list', title: '有争议的', sub: '原书标了反方证据', items: ITEMS.filter(i => i.dispute), scroll: 0 }, 'push'); return; }
+  if (d.random) {
+    const i = ITEMS[Math.floor(Math.random() * ITEMS.length)];
+    EX.add(i.id);
+    go({ v: 'list', title: i.title, sub: '随机一条 · 第 ' + i.sec + ' 节第 ' + i.n + ' 条', items: [i], scroll: 0 }, 'push');
+    return;
+  }
+
+  if (d.group) { S.group = d.group; save(); LIMIT = PAGE; repaint(); return; }
+  if (d.io === 'export') {
+    const blob = new Blob([JSON.stringify({ fav: S.fav, want: S.want, done: S.done, groups: S.groups }, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'life-guide-backup.json'; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 3000); toast('已导出'); return;
+  }
+  if (d.io === 'import') {
+    const f = document.createElement('input'); f.type = 'file'; f.accept = '.json,application/json';
+    f.onchange = () => {
+      const r = new FileReader();
+      r.onload = () => {
+        try {
+          const j = JSON.parse(r.result);
+          S.fav = j.fav || []; S.want = j.want || []; S.done = j.done || []; S.groups = j.groups || [];
+          save(); repaint(); toast('已导入');
+        } catch (err) { toast('文件格式不对'); }
+      };
+      r.readAsText(f.files[0]);
+    };
+    f.click(); return;
+  }
+
+  if (d.more) { LIMIT += PAGE; repaint(); return; }
+  if (d.back) { pop(); return; }
+  if (d.filter) { filterSheet(); return; }
+  if (d.clear) { F = { grade: [], ratio: [], lens: [], money: [], time: [], will: [], flag: [] }; closeSheet(); repaint(); return; }
+  if (d.close) { closeSheet(); repaint(); return; }
+  if (d.f) {
+    const k = d.f, v = d.v, a = F[k], n = a.indexOf(v);
+    n < 0 ? a.push(v) : a.splice(n, 1);
+    filterSheet(); repaint(); return;
+  }
+});
+
+$('#mask').addEventListener('click', closeSheet);
+$('#tbback').addEventListener('click', () => { if (cur.v === 'search') pop(); });
+$('#sclr').addEventListener('click', () => { const q = $('#q'); q.value = ''; Q = ''; q.focus(); repaint(); });
+$('#tabbar').addEventListener('click', e => { const b = e.target.closest('button'); if (b) switchTab(b.dataset.tab); });
+
+/* 搜索：输入框常驻顶栏，永远不重绘它 —— 中文输入法不会被打断 */
+$('#q').addEventListener('focus', () => { if (cur.v !== 'search') go({ v: 'search', scroll: 0 }, 'push'); });
+$('#q').addEventListener('input', e => {
+  if (cur.v !== 'search') return;
+  Q = e.target.value; LIMIT = PAGE; repaint();
+});
+$('#q').addEventListener('keydown', e => { if (e.key === 'Enter') e.target.blur(); });
+
+/* 初始化 */
+$('#q').placeholder = '搜索 ' + ITEMS.length + ' 条建议、来源、正文…';
+setSearching(cur.v === 'search');
+syncTabs();
+paint(P[0], cur);
+</script>
+</body>
+</html>

@@ -21,3 +21,7 @@ build/
 *.mobileprovision
 *.xcscmblueprint
 .swiftpm/
+
+# 原文仓库缓存（构建时自动克隆，可随时删）
+.cache/
+**/tools/data.json
