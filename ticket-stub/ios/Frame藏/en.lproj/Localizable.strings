@@ -2,7 +2,21 @@
 
 /* 通用 */
 "首页" = "Home";
+"制作" = "Create";
 "我的" = "Mine";
+"全部" = "All";
+"更换模板？" = "Switch Template?";
+"更换" = "Switch";
+"会覆盖当前票根的版式与文案，此操作不可撤销。" = "This will replace the current layout and text. This can’t be undone.";
+"将切换版式。标题、特效、背景和照片会尽量保留。" = "This switches the layout. Title, effects, background, and photos are kept when possible.";
+"制作票根" = "Make a Stub";
+"挑选一张票根，开始收藏这一刻" = "Pick a ticket stub and keep this moment";
+"去制作" = "Go Create";
+"最近使用" = "Recently Used";
+"还没有收藏模板" = "No favorite templates yet";
+"点模板右上角的星标，方便下次快速找到" = "Tap the star on a template to find it faster next time";
+"收藏模板" = "Favorite Template";
+"取消收藏" = "Remove Favorite";
 "设置" = "Settings";
 "完成" = "Done";
 "取消" = "Cancel";
@@ -24,6 +38,7 @@
 "年度合集" = "Annual Review";
 "还没有作品" = "No works yet";
 "在首页编辑完成后，点击右上角书签保存。" = "Finish editing on Home, then tap the bookmark in the top-right corner to save.";
+"在「制作」页编辑完成后，点击右上角书签保存。" = "Finish editing on Create, then tap the bookmark in the top-right corner to save.";
 "搜索作品、标签或地点" = "Search works, tags, or places";
 "帧藏 Pro 已解锁" = "FrameZang Pro Unlocked";
 "全部模板与特效均可使用" = "All templates and effects are available";

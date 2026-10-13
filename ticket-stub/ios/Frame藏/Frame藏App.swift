@@ -5,6 +5,9 @@ struct Frame藏App: App {
     @State private var store = TicketStore()
     @State private var pro = ProStore()
     @State private var library = WorkLibrary()
+    @State private var templates = TemplateLibrary()
+    @State private var thumbs = TemplateThumbCache()
+    @State private var router = RootRouter()
     @AppStorage("appLanguage") private var appLanguage = "system"
 
     init() {
@@ -18,6 +21,9 @@ struct Frame藏App: App {
                 .environment(store)
                 .environment(pro)
                 .environment(library)
+                .environment(templates)
+                .environment(thumbs)
+                .environment(router)
                 .environment(\.locale, resolvedLocale)
                 .preferredColorScheme(.dark)
                 .task {

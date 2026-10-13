@@ -476,14 +476,20 @@ final class TicketStore {
         TicketCatalog.templates.filter { $0.category == category }
     }
 
+    /// 切换版式：保留标题等文案、特效、背景、照片；仅裁剪超出新模板槽位的照片。
     func select(_ template: TicketTemplate) {
         self.template = template
-        fields = template.localizedDefaults
         category = template.category
         if selectedPhotoDatas.count > template.photoSlots {
             selectedPhotoDatas = Array(selectedPhotoDatas.prefix(template.photoSlots))
             selectedPhotoData = selectedPhotoDatas.first
         }
+    }
+
+    /// 换模板并套用该模板默认文案（用于新建等需要重置文案的场景）
+    func selectResettingFields(_ template: TicketTemplate) {
+        select(template)
+        fields = template.localizedDefaults
     }
 
     func toggle(_ effect: TicketEffect) {
@@ -538,13 +544,16 @@ final class TicketStore {
     }
 
     func startNew() {
-        select(template)
+        selectResettingFields(template)
         selectedPhotoData = nil
         selectedPhotoDatas = []
         photoScale = 1
         photoOffset = .zero
+        stageBackgroundData = nil
+        stageOpacity = 1
         effects = []
         effectSettings = [:]
+        background = .ink
         editingID = nil
     }
 

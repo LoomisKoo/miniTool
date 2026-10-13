@@ -29,14 +29,20 @@ struct SheetHeader: View {
 struct TemplateSheet: View {
     @Environment(TicketStore.self) private var store
     @Environment(ProStore.self) private var pro
+    @Environment(TemplateLibrary.self) private var templates
     @Environment(\.dismiss) private var dismiss
     @State private var showPaywall = false
+    @State private var browseCategory: TicketCategory = .cinema
+    @State private var pendingTemplate: TicketTemplate?
+
+    private var browseTemplates: [TicketTemplate] {
+        TicketCatalog.templates.filter { $0.category == browseCategory }
+    }
 
     var body: some View {
-        @Bindable var store = store
         NavigationStack {
             VStack(spacing: 0) {
-                Picker("分类", selection: $store.category) {
+                Picker("分类", selection: $browseCategory) {
                     ForEach(TicketCategory.allCases) { category in
                         Text(category.displayTab).tag(category)
                     }
@@ -46,30 +52,19 @@ struct TemplateSheet: View {
                 .padding(.top, 12)
                 .padding(.bottom, 10)
                 .background(FrameTheme.panel)
-                .onChange(of: store.category) { _, category in
-                    if let first = TicketCatalog.templates.first(where: { $0.category == category }) {
-                        store.select(first)
-                    }
-                }
 
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 18) {
                     LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                        ForEach(store.categoryTemplates) { template in
-                            Button {
-                                if template.isPro && !pro.isPro {
-                                    showPaywall = true
-                                    return
-                                }
-                                store.select(template)
-                                dismiss()
-                            } label: {
-                                TemplatePreview(template: template)
-                                    .foregroundStyle(.primary)
-                            }
-                            .buttonStyle(.plain)
+                        ForEach(browseTemplates) { template in
+                            TemplateThumbCard(
+                                template: template,
+                                isSelected: store.template.id == template.id,
+                                isFavorite: templates.isFavorite(template.id),
+                                height: 126,
+                                onFavorite: { templates.toggleFavorite(template.id) },
+                                onSelect: { select(template) }
+                            )
                         }
-                    }
                     }
                     .padding(20)
                 }
@@ -94,72 +89,38 @@ struct TemplateSheet: View {
         .sheet(isPresented: $showPaywall) {
             PaywallView()
         }
+        .alert(
+            AppLocalization.text("更换模板？"),
+            isPresented: Binding(
+                get: { pendingTemplate != nil },
+                set: { if !$0 { pendingTemplate = nil } }
+            )
+        ) {
+            Button(AppLocalization.text("取消"), role: .cancel) { pendingTemplate = nil }
+            Button(AppLocalization.text("更换")) {
+                if let template = pendingTemplate {
+                    store.select(template)
+                    templates.recordRecent(template.id)
+                    dismiss()
+                }
+                pendingTemplate = nil
+            }
+        } message: {
+            Text(AppLocalization.text("将切换版式。标题、特效、背景和照片会尽量保留。"))
+        }
+        .onAppear { browseCategory = store.category }
     }
-}
 
-private struct TemplatePreview: View {
-    let template: TicketTemplate
-
-    var body: some View {
-        ZStack {
-            LinearGradient(
-                colors: [FrameTheme.surface, FrameTheme.thumbBackdrop],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            GeometryReader { proxy in
-                let size = template.size
-                let scale = min(proxy.size.width / size.width, proxy.size.height / size.height) * 0.86
-                H5TicketView()
-                    .environment(\.ticket, TicketContext(template: template, fields: template.localizedDefaults))
-                    .frame(width: size.width, height: size.height)
-                    .scaleEffect(scale)
-                    .shadow(color: .black.opacity(0.35), radius: 6 / max(scale, 0.01), y: 3 / max(scale, 0.01))
-                    .frame(width: proxy.size.width, height: proxy.size.height)
-                    .allowsHitTesting(false)
-            }
-
-            VStack(alignment: .leading, spacing: 1) {
-                Text(template.displayName)
-                    .font(.system(size: 12, weight: .semibold))
-                    .lineLimit(1)
-                Text(template.displayDetail)
-                    .font(.system(size: 8))
-                    .foregroundStyle(.white.opacity(0.72))
-                    .lineLimit(1)
-            }
-            .foregroundStyle(.white)
-            .padding(.horizontal, 9)
-            .padding(.top, 22)
-            .padding(.bottom, 8)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                LinearGradient(
-                    colors: [Color(hex: 0x0A0907, alpha: 0), Color(hex: 0x0A0907, alpha: 0.34), Color(hex: 0x0A0907, alpha: 0.74)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            )
-            .frame(maxHeight: .infinity, alignment: .bottom)
-
-            if template.isPro {
-                Label("Pro", systemImage: "sparkles")
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 4)
-                    .background(.black.opacity(0.38), in: Capsule())
-                    .padding(8)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-            }
+    private func select(_ template: TicketTemplate) {
+        if template.isPro && !pro.isPro {
+            showPaywall = true
+            return
         }
-        .frame(maxWidth: .infinity)
-        .frame(height: 126)
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(FrameTheme.line, lineWidth: 1)
+        if template.id == store.template.id {
+            dismiss()
+            return
         }
+        pendingTemplate = template
     }
 }
 

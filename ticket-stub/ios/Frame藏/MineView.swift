@@ -133,7 +133,7 @@ struct MineView: View {
                 }
 
                 if visibleItems.isEmpty {
-                    ContentUnavailableView("还没有作品", systemImage: "bookmark", description: Text("在首页编辑完成后，点击右上角书签保存。"))
+                    ContentUnavailableView("还没有作品", systemImage: "bookmark", description: Text("在「制作」页编辑完成后，点击右上角书签保存。"))
                         .padding(.top, 30)
                 } else {
                     WorkGrid(items: visibleItems, onRename: { work in

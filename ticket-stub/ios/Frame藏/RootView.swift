@@ -1,7 +1,13 @@
 import SwiftUI
 
 enum RootTab: Hashable {
-    case home, mine
+    case templates, create, mine
+}
+
+@Observable
+@MainActor
+final class RootRouter {
+    var tab: RootTab = .templates
 }
 
 enum RootRoute: Hashable {
@@ -11,16 +17,23 @@ enum RootRoute: Hashable {
 
 struct RootView: View {
     @Environment(WorkLibrary.self) private var library
-    @State private var tab: RootTab = .home
+    @Environment(RootRouter.self) private var router
 
     var body: some View {
-        TabView(selection: $tab) {
+        @Bindable var router = router
+        TabView(selection: $router.tab) {
+            NavigationStack {
+                TemplateShelfView()
+            }
+            .tabItem { Label("模板", systemImage: "rectangle.stack") }
+            .tag(RootTab.templates)
+
             NavigationStack {
                 EditorView()
                     .toolbar(.hidden, for: .navigationBar)
             }
-            .tabItem { Label("首页", systemImage: "ticket") }
-            .tag(RootTab.home)
+            .tabItem { Label("制作", systemImage: "plus.circle.fill") }
+            .tag(RootTab.create)
 
             NavigationStack {
                 MineView()
