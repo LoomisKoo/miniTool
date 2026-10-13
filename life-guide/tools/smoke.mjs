@@ -6,7 +6,7 @@ let code = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)][0][1];
 code += `\n;globalThis.__t = { pageHome, pagePick, pageMine, pageList, pageSearch, htmlFor,
   card, rich, termify, S, F, ITEMS, BYID, DB, EX, syncTabs, switchTab, go, pop,
   transitionTo, P, flush, getFront: () => frontIdx,
-  srcLinks, srcField, srcSheet, hostOf,
+  srcLinks, srcField, srcBtn, srcSheet, hostOf, pickHeroItem, spinPickHero,
   setQ:(v)=>{Q=v}, getQ:()=>Q, setCur:(c)=>{cur=c}, getCur:()=>cur,
   setStack:(s)=>{navStack=s}, getStack:()=>navStack,
   setLim:(n)=>{LIMIT=n}, passF, matchQ, fCount };`;
@@ -99,6 +99,7 @@ ok('首页·按章节', () => {
 });
 ok('精选页：hero 只有标题+星星，没有「看这条」按钮', () => {
   const h = T.htmlFor(tab('pick'));
+  if (/不用全做|class="h1">精选/.test(h)) throw new Error('精选页头文案还在');
   if (/data-open=/.test(h)) throw new Error('「看这条」按钮还在');
   if (/class="picks"/.test(h)) throw new Error('.picks 容器还在');
   if (/看这条/.test(h)) throw new Error('文案「看这条」还在');
@@ -112,12 +113,26 @@ ok('精选页：hero 只有标题+星星，没有「看这条」按钮', () => {
   if (seg.indexOf('class="tag"') > seg.indexOf('data-star=')) throw new Error('星星在 tag 左边，应该在右边');
   if (!/<h2>/.test(h.slice(iH2))) throw new Error('标题没跟在标签行后面');
   if (/\$\{|undefined|NaN/.test(h)) throw new Error('出现 ${ / undefined / NaN');
-  return '星星在「今日一条 · …」这一行的最右侧';
+  if (!/今日精选/.test(h)) throw new Error('标签应写今日精选');
+  if (!/data-pick-rand/.test(h)) throw new Error('hero 缺随机按钮');
+  if (/随便看看|data-random|随机一条/.test(h)) throw new Error('底部随机入口应已去掉');
+  return '今日精选行：随机 + 星星在右侧';
+});
+ok('精选：点随机只换 hero 内容，不推列表页', () => {
+  T.S.pickDay = '';
+  T.S.pickId = '';
+  const a = T.pickHeroItem().id;
+  T.spinPickHero();
+  const b = T.pickHeroItem().id;
+  const h = T.htmlFor(tab('pick'));
+  if (!h.includes('data-star="' + b + '"')) throw new Error('hero 未跟 pickId 同步：' + b);
+  if (T.ITEMS.length > 1 && a === b) throw new Error('随机后应与上一条不同');
+  return 'pickId 驱动 hero，仍停留在精选 tab';
 });
 ok('精选页：hero 星星跟随收藏状态', () => {
   // 注意：不要在正则字面量里做字符串拼接 —— 里面的 ' 只是普通字符，/ 才是终结符
   const heroStar = h => {
-    const m = /<button class="(star[^"]*)" data-star="([^"]+)"/.exec(h);
+    const m = /<button class="(heart[^"]*)" data-star="([^"]+)"/.exec(h);
     return m ? { cls: m[1], id: m[2] } : null;
   };
   const h0 = T.htmlFor(tab('pick'));
@@ -129,14 +144,14 @@ ok('精选页：hero 星星跟随收藏状态', () => {
 
   T.S.fav.push(id);
   const s1 = heroStar(T.htmlFor(tab('pick')));
-  if (!s1.cls.split(/\s+/).includes('on')) throw new Error('已收藏时星星没变实心');
-  if (!/★/.test(T.htmlFor(tab('pick')))) throw new Error('已收藏时没渲染实心星');
+  if (!s1.cls.split(/\s+/).includes('on')) throw new Error('已收藏时爱心没变实心底');
 
   T.S.fav = T.S.fav.filter(x => x !== id);
   const s2 = heroStar(T.htmlFor(tab('pick')));
   if (s2.cls.split(/\s+/).includes('on')) throw new Error('取消收藏后 on 类没摘掉');
   if (was) T.S.fav.push(id);
-  return 'on 类与 ★ / ☆ 都跟收藏状态一致';
+  if (/✦/.test(T.htmlFor(tab('pick')))) throw new Error('hero 不应再有四角星装饰');
+  return '爱心按钮 on 类跟收藏状态一致';
 });
 ok('首页：去掉了「找到你的事」文案，且场景/章节 tab 吸顶', () => {
   for (const mode of ['scn', 'sec']) {
@@ -149,39 +164,14 @@ ok('首页：去掉了「找到你的事」文案，且场景/章节 tab 吸顶'
   T.S.mode = 'scn';
   return '两种模式都没有标题，seg 都在 .segwrap 内';
 });
-ok('我的页：三个内置列表各只出现一次（不再重复）', () => {
+ok('收藏页：无标题区，仅列表', () => {
   const h = T.htmlFor(tab('mine'));
-  for (const k of ['收藏', '想做', '已做']) {
-    const n = (h.match(new RegExp('data-group="' + k + '"', 'g')) || []).length;
-    if (n !== 1) throw new Error(`「${k}」在选择器里出现了 ${n} 次，应为 1 次`);
+  if (/data-group|pbar|想做|已做|存进分组|data-act="want"|data-act="done"/.test(h)) {
+    throw new Error('收藏页仍残留进度/想做/已做/分组');
   }
-  if (/class="stats"/.test(h)) throw new Error('旧的 .stats 三宫格还在');
-  if (!/class="pbar"/.test(h)) throw new Error('缺进度条');
-  return '收藏 / 想做 / 已做 各 1 次，另有进度条';
-});
-ok('我的页：自建分组也进同一个选择器', () => {
-  const bak = T.S.groups, bakg = T.S.group;
-  T.S.groups = [{ name: '我家用得上的', ids: [] }, { name: '先做这几条', ids: [] }];
-  const h = T.htmlFor(tab('mine'));
-  T.S.groups = bak; T.S.group = bakg;
-  const n = (h.match(/data-group="/g) || []).length;
-  if (n !== 5) throw new Error('选择器有 ' + n + ' 项，应为 5（3 内置 + 2 自建）');
-  return '3 内置 + 2 自建 = 5 项，一条列表只出现一次';
-});
-ok('我的页：选中自建分组时给删除入口', () => {
-  const bak = T.S.groups, bakg = T.S.group;
-  T.S.groups = [{ name: '临时组', ids: [] }]; T.S.group = '临时组';
-  const h = T.htmlFor(tab('mine'));
-  T.S.groups = bak; T.S.group = bakg;
-  if (!/data-delgroup="临时组"/.test(h)) throw new Error('自建分组没有删除按钮');
-  return '有删除按钮';
-});
-ok('我的页：只剩一个分组时也能正常渲染', () => {
-  const bak = T.S.groups, bakg = T.S.group;
-  T.S.groups = [{ name: '只剩我', ids: [] }]; T.S.group = '只剩我';
-  const h = T.htmlFor(tab('mine'));
-  T.S.groups = bak; T.S.group = bakg;
-  return 'OK';
+  if (/收藏只保存在本机|<h1[^>]*>我的/.test(h)) throw new Error('不应再有页内标题或本机提示');
+  if (!/还没有收藏/.test(h) && !/class="card"/.test(h)) throw new Error('应有收藏列表或空状态');
+  return '只有收藏列表';
 });
 
 console.log('\n列表页（走真实 cur 状态）：');
@@ -225,12 +215,13 @@ ok('详情区所有内容都在 .detail-inner 里（否则展开动画会裁切�
   if (!i) throw new Error('库里找不到同时有引用和备注的条目，测试前提不成立');
   const h = T.card(i, null);
   const inner = h.slice(h.indexOf('detail-inner'));
-  for (const need of ['成本', '收益', '来源', '备注', '相关条目', 'class="acts"', 'cardfoot']) {
+  for (const need of ['成本', '收益', '来源', '备注', '相关条目', 'detail-actions', 'act-share', '分享']) {
     if (!inner.includes(need)) throw new Error(need + ' 落在了 .detail-inner 之外');
   }
   // 结束标签必须是 </div></div></article>：先收 detail-inner，再收 detail，最后收 card
   if (!/<\/div><\/div>\s*<\/article>/.test(h)) throw new Error('闭合标签不对，可能漏了 detail 的收尾');
-  return `用 ${i.id} 验证（含引用+备注），成本/收益/来源/备注/引用/操作/脚注 全在内部`;
+  if (/cardfoot|第 \d+ 节第 \d+ 条 ·/.test(h)) throw new Error('不应再显示节号脚注');
+  return `用 ${i.id} 验证（含引用+备注），成本/收益/来源/备注/引用/底栏按钮 全在内部`;
 });
 ok('已展开的卡带 .open（决定 grid-template-rows:1fr）', () => {
   const id = T.ITEMS[0].id;
@@ -278,10 +269,10 @@ ok('切到精选：只有「精选」高亮', () => {
   if (onTabs().join() !== 'pick') throw new Error('切换后应为 pick，实际 ' + onTabs().join());
   return 'home → pick，始终只有一个高亮';
 });
-ok('切到我的：只有「我的」高亮', () => {
+ok('切到收藏：只有「收藏」高亮', () => {
   T.switchTab('mine');
   if (onTabs().join() !== 'mine') throw new Error('应为 mine，实际 ' + onTabs().join());
-  return 'pick → mine';
+  return 'pick → mine（底栏文案为收藏）';
 });
 ok('切回首页：只有「首页」高亮', () => {
   T.switchTab('home');
@@ -352,17 +343,18 @@ const urlOf = i => (String(i.src).match(/https?:\/\/[^\s；;，、）)】」"'<>
   .map(u => u.replace(/[.,;:。，；、)\]}]+$/, ''));
 ok('有外链的条目：详情里不再铺整段引用', () => {
   const withUrl = T.ITEMS.filter(i => urlOf(i).length);
-  const bad = withUrl.filter(i => T.srcField(i).includes(esc0(i.src)));
-  if (bad.length) throw new Error(bad.length + ' 条还在平铺，例如 ' + bad[0].id);
+  const bad = withUrl.filter(i => T.srcField(i).includes(esc0(i.src)) || !T.srcBtn(i));
+  if (bad.length) throw new Error(bad.length + ' 条外链未走来源按钮，例如 ' + bad[0].id);
   return withUrl.length + ' 条都折叠成按钮';
 });
-ok('单链接用「打开来源」，多链接标出条数', () => {
+ok('有外链时底栏「来源」按钮，文案统一', () => {
   const one = T.ITEMS.find(i => urlOf(i).length === 1);
   const many = T.ITEMS.find(i => urlOf(i).length >= 4);
-  const a = T.srcField(one), b = T.srcField(many);
-  if (!a.includes('打开来源')) throw new Error(one.id + ' 单链接文案不对：' + a);
-  if (!b.includes('来源 · ' + urlOf(many).length + ' 条')) throw new Error(many.id + ' 多链接没标条数：' + b);
-  return `${one.id} 单链接直接跳；${many.id} 提示 ${urlOf(many).length} 条`;
+  const a = T.srcBtn(one), b = T.srcBtn(many);
+  if (!a.includes('act-src') || !/>来源</.test(a)) throw new Error(one.id + ' 来源按钮不对：' + a);
+  if (!b.includes('act-src') || !/>来源</.test(b)) throw new Error(many.id + ' 多链也应只有来源按钮：' + b);
+  if (T.srcField(one) || T.srcField(many)) throw new Error('有外链时不应再平铺 srcField');
+  return '单链/多链都是「来源」';
 });
 ok('一条链接都没有的条目照旧平铺，内容不丢', () => {
   const none = T.ITEMS.filter(i => i.src && !urlOf(i).length);
@@ -384,16 +376,18 @@ ok('srcLinks：拆出的链接数 = 去重后的 URL 数，且没有重复项', 
   }
   return checked + ' 条 obj 逐条核对通过';
 });
-ok('每条链接都能进抽屉：行数一致、都带 target 与 rel=noopener', () => {
+ok('每条链接都能进抽屉：行数一致、都是复制按钮', () => {
   const many = T.ITEMS.filter(i => urlOf(i).length >= 2)[0];
   T.srcSheet(many.id);
   const h = doc.querySelector('#sheet').innerHTML;
   const n = (h.match(/class="srcrow"/g) || []).length;
   if (n !== urlOf(many).length) throw new Error(`${many.id} 抽屉 ${n} 行 vs 链接 ${urlOf(many).length} 条`);
-  if ((h.match(/target="_blank"/g) || []).length !== n) throw new Error('有行缺 target');
-  if ((h.match(/rel="noopener noreferrer"/g) || []).length !== n) throw new Error('有行缺 noopener');
+  if ((h.match(/data-copy-url="/g) || []).length !== n) throw new Error('有行缺 data-copy-url');
+  if (/target="_blank"|href="https?:/.test(h)) throw new Error('抽屉里不应再有可跳转的 <a>');
+  if (!h.includes('点按整行复制')) throw new Error('抽屉说明文案不对');
+  if (/class="go"|>复制</.test(h)) throw new Error('抽屉行不应再有单独复制按钮');
   if (!h.includes(T.hostOf(urlOf(many)[0]))) throw new Error('没显示域名');
-  return `${many.id} → ${n} 行可点链接`;
+  return `${many.id} → ${n} 行可复制`;
 });
 ok('hostOf 能取出域名、去 www，异常输入不抛错', () => {
   const cases = [['https://www.cdc.gov/x', 'cdc.gov'], ['https://doi.org/10.1/x', 'doi.org'], ['不是链接', '不是链接']];

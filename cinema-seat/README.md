@@ -2,6 +2,16 @@
 
 移动端电影院观感模拟小工具。
 
+宣传截图（手机竖屏）：
+
+- 影厅场景统一为数字 IMAX 厅后排正中（11排09座）
+- `covers/promo-cinema-home.png`：首页参数与影厅选择
+- `covers/promo-cinema-hall-picker.png`：多种影厅类型
+- `covers/promo-cinema-seats.png`：买票式选座面板
+- `covers/promo-cinema-view-center-portrait.png`：中间座位第一视角（竖屏）
+- `covers/promo-cinema-view-center-landscape.png`：中间座位第一视角（横屏）
+- `covers/promo-cinema-light-crowd.png`：开灯与周围座位效果
+
 当前版本包含：
 
 - 普通激光厅、激光巨幕厅、三面环景厅三种轻量伪 3D 影厅

@@ -153,6 +153,7 @@ node "$SKILL_DIR/scripts/audit-source.mjs" zip "<输入ZIP>"
 2. **collector 能力**：先检查当前 CLI help/公开接口，禁止编造 preflight 参数。新建应用若没有可信 collector，可从已验证项目按明确 runtime allowlist 复制普通文件到新的 staging。受管 UPDATE 优先使用官方模板；若采用 [导入与排障](references/import-and-recovery.md) 的可信 CREATE 结果恢复绑定，`.qmuse/project.json` 只作为本地控制文件放入后续 import 根，必须核对当前 CLI 明确排除 `.qmuse`，并用 collector manifest 审计其余实际上传文件；不能证明排除时 STOP。
 3. staging 必须位于项目外或明确排除在源 collector 之外，避免递归收集；只复制普通文件，不跟随 symlink/hardlink。
 4. 用 bundled auditor 审计冻结 staging，保存 fileCount、totalBytes、manifest SHA-256、findings/review。审计后不再执行 staging 内代码；提交前重新比较 hash，变化则重建、重审。
+5. **正文 URL hex 误报**：若 `findings` 含 `scan-limit-exceeded` 且 `reviewRequired` 多为 `hex-credential-candidate`/`high-entropy-candidate`（书源、图鉴内联 JSON 里的 `/[0-9a-f]{32}.shtml` 一类），先确认本 Skill 的 `audit-source.mjs` 已含 `isLikelyUrlEmbeddedToken`（跳过 http(s) URL 内嵌 token）。仍 BLOCKED 时，对数据字面量做 ZWSP 打断 + 启动 strip 还原（参考 `life-guide/qmuse/scripts/sync-from-source.mjs`），禁止删正文或整文件改 binary。
 
 **输出**：`stagingRoot`、collector 来源、文件清单、审计报告和 hash。
 

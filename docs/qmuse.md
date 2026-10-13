@@ -94,17 +94,19 @@ node --import ./.qmuse-tools/chrome-open/register.mjs \
 
 ## 四、标准流程
 
-约定：**原工具目录保持不变**，适配产物放同级 `<工具名>-qmuse/`，方便对比与回滚。
+约定：**原工具目录保持不变**，QMuse 适配产物放在工具内的 `qmuse/`，与 `platforms/`、`ios/` 并列。
 
 ```
-food-map/            ← 原版（基准，不改）
-food-map-qmuse/      ← React 适配版（导入这个）
-.qmuse-staging/      ← 上传用的冻结副本（.gitignore）
-alignment/           ← 对齐证据（不入上传集合）
+food-map/                 ← 原版（基准，不改）
+├── platforms/            ← 小红书 / 快手等 H5 发布配置
+├── ios/                  ← 原生 iOS（如有）
+├── qmuse/                ← React 适配版（导入这个）
+.qmuse-staging/           ← 上传用的冻结副本（仓库根，.gitignore）
+alignment/                ← 对齐证据（不入上传集合）
 ```
 
 ```bash
-cd <工具名>-qmuse && npm install && npm run build
+cd <工具名>/qmuse && npm install && npm run build
 ```
 
 ### 1. 命名
@@ -113,7 +115,7 @@ cd <工具名>-qmuse && npm install && npm run build
 
 ### 2. 建 staging（项目外）
 
-按运行依赖白名单复制普通文件到 `.qmuse-staging/<工具名>-qmuse/`，必须拒绝 symlink / hardlink / 特殊文件，并输出路径清单。
+按运行依赖白名单复制普通文件到 `.qmuse-staging/<工具名>-qmuse/`（staging 名可保留 `-qmuse` 后缀便于辨认），必须拒绝 symlink / hardlink / 特殊文件，并输出路径清单。
 
 典型白名单：`package.json`、`package-lock.json`、`tsconfig.json`、`vite.config.ts`、`index.html`、`README.md`、`.gitignore`、`src/`、`public/`。
 
@@ -135,7 +137,7 @@ node .agents/skills/abao-zip-import-dockor/scripts/audit-source.mjs tree \
 
 ```bash
 node .agents/skills/abao-zip-import-dockor/scripts/pre-submit.mjs \
-  --project-root   "$(pwd)/<工具名>-qmuse" \
+  --project-root   "$(pwd)/<工具名>/qmuse" \
   --staging-root   "$(pwd)/.qmuse-staging/<工具名>-qmuse" \
   --title          "<应用名>" \
   --title-source   "README" \
@@ -149,8 +151,8 @@ node .agents/skills/abao-zip-import-dockor/scripts/pre-submit.mjs \
 ### 5. 上传
 
 ```bash
-cd <工具名>-qmuse
-$QMUSE import "$(pwd)/../.qmuse-staging/<工具名>-qmuse" \
+cd <工具名>/qmuse
+$QMUSE import "$(pwd)/../../.qmuse-staging/<工具名>-qmuse" \
   --title "<应用名>" --space-id "<spaceId>" --no-open --json \
   | tee /tmp/qmuse-stage/1-import-create.json
 
@@ -167,7 +169,7 @@ CLI 可能不会自动为外部仓库生成绑定。首次 CREATE 到 READY 后�
 
 ```bash
 node .agents/skills/abao-zip-import-dockor/scripts/create-binding.mjs \
-  "$(pwd)/<工具名>-qmuse" \
+  "$(pwd)/<工具名>/qmuse" \
   --evidence        /tmp/qmuse-stage/1-import-create.json \
   --status-evidence /tmp/qmuse-stage/2-import-status.json \
   --space-id        "<spaceId>" \
@@ -183,7 +185,7 @@ node .agents/skills/abao-zip-import-dockor/scripts/create-binding.mjs \
 
 ```bash
 # 重传必须从带 .qmuse/project.json 的项目根导入，不要用 staging 目录（staging 无绑定会误 CREATE 出新应用）
-cd <工具名>-qmuse
+cd <工具名>/qmuse
 $QMUSE import . --title "<应用名>" --space-id "<spaceId>" --no-open --json
 ```
 
@@ -198,7 +200,7 @@ READY 后必须核对：`operation=UPDATE`、`appId` 不变、`versionId` 已更
 目录：
 
 ```
-<工具名>-qmuse/
+<工具名>/qmuse/
 ├── index.html          # Vite 入口：#root + 全局元素
 ├── src/
 │   ├── main.tsx        # createRoot(...).render(<App />)，不要 StrictMode
@@ -244,7 +246,7 @@ READY 后必须核对：`operation=UPDATE`、`appId` 不变、`versionId` 已更
 
 **所有** `public/` 下在运行时动态拼出来的 URL（尤其是 `legacy/*.js`）必须用注入路径作基址，**不能**只用 `document.baseURI`（那是 `render.*`，对 `legacy/app.js` 会 **404**）。
 
-参考实现（`food-map-qmuse/src/App.tsx`、`cinema-seat-qmuse/src/App.tsx`）：
+参考实现（`food-map/qmuse/src/App.tsx`、`cinema-seat/qmuse/src/App.tsx`）：
 
 ```ts
 function assetBase(): string {
@@ -299,10 +301,12 @@ $QMUSE login --status
 | --- | --- |
 | `whoami` 一直显示个人账号，反复登录无效 | CLI 沿用浏览器 `qmuse.cn` 会话。换账号登录，或改用 `chrome-open` 钩子 |
 | `pre-submit` 返回 `BLOCKED: audit did not PASS` | 集合里有位图（PNG/JPG/GIF/WEBP）。改用 SVG 或按第一节豁免 |
+| 审计 `scan-limit-exceeded` / 大量 `hex-credential-candidate` | 常见于内联书源 URL 的 32 位 CMS hex。新版 `audit-source.mjs` 会跳过 http(s) URL 内嵌 token；兜底：sync 时对长 token 插 ZWSP、运行时 strip（见 `life-guide/qmuse/scripts/sync-from-source.mjs`） |
 | `import` 成功但没进入后续分支 | `success:true` 不是终态，必须 `import status --wait` 等到 `READY` |
+| 预发 `qmuse-pre.qmuse.cn` 打不开 / `This site can't be reached` | 预发在办公网（公网连 `110.75.144.23:443` 会超时），关 VPN 也进不去。在家调试：`.qmuse-tools/debug-home.sh login` + `dev <工具>/qmuse`；必须预发时连办公 VPN 后 `debug-home.sh login-pre` |
 | `qmuse: command not found` | 未用全局安装。使用 `.qmuse-tools/node_modules/.bin/qmuse` |
 | 导入超时 | 用**同一个** `jobId` 继续 `import status --wait`，禁止重新 `import` 造新任务 |
-| 重复 CREATE 出第二个应用 | 绑定缺失时才会发生。检查 `<工具名>-qmuse/.qmuse/project.json` 是否存在 |
+| 重复 CREATE 出第二个应用 | 绑定缺失时才会发生。检查 `<工具名>/qmuse/.qmuse/project.json` 是否存在 |
 | 页面白屏 | 检查脚本注入顺序、`#root`/`#app` 高度、是否误用了 StrictMode |
 | 预览正常，正式链接部分 UI 空白（动态区块无按钮） | 多为 `legacy/*.js` 用 `document.baseURI` 拼 URL → `render.*` 404。改为 `publicPath` / `__basement_public_path__`，见第五节「render 与 renderstatic 分离」 |
 | 正式页按钮白底白字、选中无高亮 | 妙思宿主覆盖 `button` 样式；需 `index.css` 宿主段 + `hostStyles.ts` 按 `.on` 分支，且勿在 MutationObserver 里把选中态又刷成透明 |
@@ -312,7 +316,7 @@ $QMUSE login --status
 
 ## 八、新工具上传 Checklist
 
-- [ ] 原工具目录**未改动**，适配产物在 `<工具名>-qmuse/`
+- [ ] 原工具目录**未改动**，适配产物在 `<工具名>/qmuse/`
 - [ ] `npm run build` 通过（`tsc --noEmit` + `vite build`）
 - [ ] 图标避开位图（用 SVG 或明确豁免）
 - [ ] `whoami` 的 `tenantName` = 智能体涌现奖大赛账号
@@ -331,5 +335,7 @@ $QMUSE login --status
 
 | 工具 | appId | spaceId | 首次版本 | 操作 | 备注 |
 | --- | --- | --- | --- | --- | --- |
-| 美食地图 | `4801133495066723` | `S095583120738` | `83600816`（当前） | UPDATE | `food-map-qmuse/`；修复 publicPath 后 UPDATE；勿从 staging 目录 import |
-| 影厅模拟器 | `6962773893296222` | `S095583120738` | `83600855`（当前） | UPDATE | legacy `publicPath`；横屏 `rotate-stage` + `screen.orientation` |
+| 美食地图 | `4801133495066723` | `S095583120738` | `83600816`（当前） | UPDATE | `food-map/qmuse/`；修复 publicPath 后 UPDATE；勿从 staging 目录 import |
+| 影厅模拟器 | `6962773893296222` | `S095583120738` | `83600855`（当前） | UPDATE | `cinema-seat/qmuse/`；legacy `publicPath`；横屏 `rotate-stage` + `screen.orientation` |
+| 仙鹿起名 | `2062353645372021` | `S095583120738` | `85000053`（当前） | UPDATE | `deerName/qmuse/` |
+| 高质量人生指南 | `2783590647738625` | `S095583120738` | `88500481`（当前） | UPDATE | `life-guide/qmuse/` |

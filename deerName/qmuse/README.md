@@ -27,4 +27,4 @@ npm run build
 
 ## 上传 QMuse
 
-见仓库根目录 [docs/qmuse.md](../../../docs/qmuse.md)。导入目录为本文件夹 `deerName-qmuse/`，应用名称使用「仙鹿起名」。
+见仓库根目录 [docs/qmuse.md](../../docs/qmuse.md)。导入目录为本文件夹 `deerName/qmuse/`，应用名称使用「仙鹿起名」。

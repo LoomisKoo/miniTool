@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const jpg = path.resolve(here, '../../cinema-seat/assets/sample-screen.jpg');
+const jpg = path.resolve(here, '../../assets/sample-screen.jpg');
 const out = path.resolve(here, '../src/sampleScreenDataUrl.ts');
 const b64 = fs.readFileSync(jpg).toString('base64');
 fs.writeFileSync(

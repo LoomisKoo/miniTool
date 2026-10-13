@@ -231,6 +231,9 @@ export function scan(data, name, findings, review) {
   let tm;
   while ((tm = tokenRe.exec(entropyText)) !== null) {
     const val = tm[0];
+    // 书源/正文里的 URL 路径常含 32 位 CMS hex（如 /72b4….shtml），不是凭证；
+    // 误报会堆满 review 触发 scan-limit-exceeded → BLOCKED（life-guide 案例）。
+    if (isLikelyUrlEmbeddedToken(entropyText, tm.index)) continue;
     const isHex = /^[0-9a-fA-F]{32,128}$/.test(val);
     const threshold = isHex ? 3.3 : 4.5;
     if (entropy(val) >= threshold) {
@@ -246,6 +249,13 @@ export function scan(data, name, findings, review) {
       }
     }
   }
+}
+
+/** True when the match sits in an http(s) URL path/query (lookback ≤300 chars, no whitespace break). */
+export function isLikelyUrlEmbeddedToken(text, index) {
+  const start = Math.max(0, index - 300);
+  const window = text.slice(start, index);
+  return /https?:\/\/[^\s"'<>]*$/i.test(window);
 }
 
 export function report(kind, entries, findings, review) {

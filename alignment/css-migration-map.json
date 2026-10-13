@@ -1,6 +1,6 @@
 {
   "source": "/Users/loomiskoo/loomis/Project/miniTool/food-map/style.css",
-  "target": "/Users/loomiskoo/loomis/Project/miniTool/food-map-qmuse/src/index.css",
+  "target": "/Users/loomiskoo/loomis/Project/miniTool/food-map/qmuse/src/index.css",
   "ruleDiff": "除下方 transforms 记录的新增外，选择器/声明/值与源文件逐条一致（未增删 reset、未改定位、未加 box-sizing/cursor/border）",
   "transforms": [
     {

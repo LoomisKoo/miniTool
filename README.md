@@ -18,8 +18,9 @@ miniTool/
 ├── bilibili/                  # B站规范（搁置）
 └── <工具>/                    # 一个工具一个目录
     ├── README.md
-    ├── platforms/             # 该工具的 H5 发布配置
+    ├── platforms/             # 该工具的 H5 发布配置（小红书 / 快手等）
     ├── ios/                   # 该工具的原生 iOS 工程
+    ├── qmuse/                 # 妙思（QMuse）React 适配版（如有）
     ├── build.mjs              # H5 打包脚本
     └── dist/                  # 打包产物（git 忽略）
 ```
@@ -27,9 +28,10 @@ miniTool/
 ## 目录约定
 
 - **平台目录**（`douyin/` / `kuaishou/` / `xiaohongshu/` / `bilibili/`）：只放规范与 Skill
-- **工具目录**（根下独立文件夹）：产品源码 + `platforms/` + `ios/` + `build.mjs` + `dist/`
-- **`platforms/`**：只表示 H5 内容平台适配，**不放 iOS**
+- **工具目录**（根下独立文件夹）：产品源码 + `platforms/` + `ios/` + `qmuse/` + `build.mjs` + `dist/`
+- **`platforms/`**：只表示 H5 内容平台适配，**不放 iOS / 不放 QMuse**
 - **`ios/`**：原生 iOS 工程，一个工具一个，独立上架
+- **`qmuse/`**：妙思导入用的 React 适配工程，规范见 [`docs/qmuse.md`](docs/qmuse.md)；**不要**再在仓库根放 `*-qmuse/`
 - **安装包命名**：`dist/{平台}-{工具}.zip`
 
 > 三种「平台」的辨析（根目录规范 / 工具内 `platforms/` / 工具内 `ios/`）见 [`docs/README.md`](docs/README.md)。
@@ -41,6 +43,7 @@ miniTool/
 | 写 / 改 H5 小工具并打包 zip | [`docs/platforms/`](docs/platforms/README.md) · [`.claude/minitool-zip-builder/SKILL.md`](.claude/minitool-zip-builder/SKILL.md) |
 | 新建 / 开发 iOS App | [`docs/ios/README.md`](docs/ios/README.md) · [`docs/ios/development.md`](docs/ios/development.md) |
 | 上架 iOS / 配买断与订阅 | [`docs/ios/release.md`](docs/ios/release.md) |
+| 导入 / 重传妙思 QMuse | [`docs/qmuse.md`](docs/qmuse.md) · 各工具下 `<工具>/qmuse/` |
 
 ## 发布总表
 

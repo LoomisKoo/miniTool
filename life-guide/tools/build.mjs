@@ -219,6 +219,26 @@ fs.mkdirSync(path.join(ROOT, 'tools'), { recursive: true });
 fs.writeFileSync(path.join(ROOT, 'tools/data.json'), JSON.stringify(payload, null, 1));
 
 const tpl = fs.readFileSync(path.join(ROOT, 'tools/template.html'), 'utf8');
-const out = tpl.replace('/*__DATA__*/null', dataJs);
+const iconPng = path.join(__dirname, 'icon.png');
+let iconLinks;
+if (fs.existsSync(iconPng)) {
+  const b64 = fs.readFileSync(iconPng).toString('base64');
+  const iconHref = `data:image/png;base64,${b64}`;
+  iconLinks =
+    `<link rel="icon" href="${iconHref}" type="image/png">\n` +
+    `<link rel="apple-touch-icon" href="${iconHref}">`;
+  fs.copyFileSync(iconPng, path.join(ROOT, 'icon.png'));
+} else {
+  const iconPath = path.join(__dirname, 'icon.svg');
+  const iconSvg = fs.readFileSync(iconPath, 'utf8').trim();
+  const iconHref = 'data:image/svg+xml,' + encodeURIComponent(iconSvg);
+  iconLinks =
+    `<link rel="icon" href="${iconHref}" type="image/svg+xml">\n` +
+    `<link rel="apple-touch-icon" href="${iconHref}">`;
+  fs.copyFileSync(iconPath, path.join(ROOT, 'icon.svg'));
+}
+const out = tpl
+  .replace('/*__DATA__*/null', dataJs)
+  .replace('<!--__ICON_LINKS__-->', iconLinks);
 fs.writeFileSync(path.join(ROOT, 'index.html'), out);
 console.log(`\n✓ 生成 index.html（${(out.length / 1024).toFixed(0)} KB，单文件、可离线打开）`);

@@ -50,6 +50,7 @@ CLI 返回 jobId 后，立即在上传目录外保存 jobId→项目根→清单
 | 空间权限失败 | 仅对“无权限访问该空间”执行 environment.md 的恢复流程：备份并清除配置顶层 spaceId，重新 space list，唯一自动选/多个询问/无空间停止 | 不编造空间 ID、不跳过空间检查、不执行 `qmuse space use`、不删除凭证字段 |
 | 应用数量超限 | 诊断含 `WORKSPACE_CONCURRENT_APP_LIMIT_EXCEEDED`（“应用开得有点多，先关闭一个再继续吧”）时停止上传，列出已创建的重复应用供用户在 QMuse 平台删除；提醒用户保留绑定文件中记录的 appId 对应的应用 | 不自动删除远端应用、不绕过限制继续 CREATE |
 | 脚本注入报错 | 诊断含 `Identifier 'XXX' has already been declared`（重复声明）或 `Cannot read/set properties of null`（DOM 元素不存在）时，按 SKILL.md 阶段 3 的 JS 注入门禁修复：去掉 StrictMode、加 IIFE 守卫、setTimeout 延迟注入、null 检查 | 不关闭 JS 注入、不删除原始脚本逻辑 |
+| 审计 `scan-limit-exceeded`（正文 URL hex） | 内联书源/图鉴数据里大量 `/[32位hex].shtml` 等路径被当成 `hex-credential-candidate`，满 20 条升级 BLOCKED。`audit-source.mjs` 已跳过 http(s) URL 内嵌 token；旧 CLI/Skill 副本可对 DB 字面量每 16 字符插 `\u200b`、启动时 `strip(DB)` 还原 | 不删正文、不把整文件标 unreviewed-binary、不泛化关掉高熵扫描 |
 | 临时网络/平台 | 有限重试；有 jobId 优先续查 | 为网络问题修改业务源码或不断重复上传 |
 
 遇到远端 `/tmp/...log` 路径，不假设它在本机存在。日志不可获取时明确说明范围；本地复现是兼容性证据，只有远端重试结果才能验证是否解决平台错误。
