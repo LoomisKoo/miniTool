@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>等距夜景小城 · Three.js</title>
+<title>ISO CITY ATLAS · 等距城市图鉴</title>
 <style>
   html, body { margin: 0; height: 100%; overflow: hidden; background: #050817; }
   #app canvas { image-rendering: pixelated; }
@@ -11,29 +11,392 @@
   .hud {
     position: fixed; left: 16px; bottom: 14px; pointer-events: none;
     color: #8fa4c8; font: 12px/1.7 system-ui, -apple-system, sans-serif; letter-spacing: .5px;
+    transition: opacity .35s;
   }
   .title {
     position: fixed; left: 16px; top: 14px; pointer-events: none;
     color: #dbe6ff; font: 600 14px/1.5 system-ui, sans-serif; letter-spacing: 1px;
     text-shadow: 0 0 12px rgba(120,160,255,.5);
+    transition: opacity .35s;
   }
-  #themeBtn {
-    position: fixed; left: 16px; top: 46px; z-index: 10;
+  .title .sep { opacity: .45; margin: 0 7px; }
+  .mapbar {
+    position: fixed; left: 16px; top: 44px; z-index: 10;
+    display: flex; gap: 8px;
+  }
+  .mapbar button {
     padding: 7px 14px; border-radius: 999px; cursor: pointer;
     border: 1px solid rgba(140,180,255,.35);
     background: rgba(20,28,52,.55); backdrop-filter: blur(8px);
     color: #dbe6ff; font: 600 12px/1 system-ui, sans-serif; letter-spacing: .5px;
-    transition: background .2s, border-color .2s, transform .1s;
+    transition: background .2s, border-color .2s, transform .1s, opacity .3s;
   }
-  #themeBtn:hover { background: rgba(40,58,104,.7); border-color: rgba(160,200,255,.6); }
-  #themeBtn:active { transform: scale(.96); }
+  .mapbar button:hover { background: rgba(40,58,104,.7); border-color: rgba(160,200,255,.6); }
+  .mapbar button:active { transform: scale(.96); }
+  #homeBtn { display: none; }
+
+  /* ================= 地图入口主页 ================= */
+  body.home .title, body.home .hud, body.home .mapbar { opacity: 0; pointer-events: none; }
+  #home {
+    position: fixed; inset: 0; z-index: 60;
+    display: flex; align-items: center; justify-content: center;
+    padding: 5vh 5vw; overflow: auto;
+    background:
+      radial-gradient(1100px 680px at 76% 8%, rgba(112,86,255,.26), transparent 62%),
+      radial-gradient(900px 620px at 10% 92%, rgba(0,170,255,.14), transparent 60%),
+      linear-gradient(155deg, rgba(4,7,18,.96), rgba(5,9,24,.86) 52%, rgba(8,9,26,.95));
+    backdrop-filter: blur(16px) saturate(1.15);
+    -webkit-backdrop-filter: blur(16px) saturate(1.15);
+    transition: opacity .55s ease, visibility .55s ease;
+  }
+  #home.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+  #home::before {
+    content: ''; position: absolute; inset: 0; pointer-events: none; opacity: .35;
+    background-image:
+      linear-gradient(rgba(120,160,255,.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(120,160,255,.05) 1px, transparent 1px);
+    background-size: 64px 64px;
+    mask-image: radial-gradient(ellipse at 50% 40%, #000 20%, transparent 75%);
+    -webkit-mask-image: radial-gradient(ellipse at 50% 40%, #000 20%, transparent 75%);
+  }
+  .home-inner { position: relative; width: min(1080px, 94vw); z-index: 1; }
+  .eyebrow {
+    display: flex; align-items: center; gap: 12px; margin-bottom: 16px;
+    font: 600 10px/1 system-ui, sans-serif; letter-spacing: .38em; text-transform: uppercase;
+    color: #7295dd;
+  }
+  .eyebrow::before { content: ''; width: 30px; height: 1px; background: linear-gradient(90deg, #5c86ff, transparent); }
+  .home-head h1 {
+    margin: 0 0 12px; color: #eef3ff;
+    font: 600 clamp(28px, 4vw, 44px)/1.1 system-ui, -apple-system, sans-serif; letter-spacing: .01em;
+  }
+  .home-head h1 span { color: #82a9ff; }
+  .home-head p {
+    margin: 0 0 30px; max-width: 560px; color: #8da2c7;
+    font: 13px/1.75 system-ui, sans-serif; letter-spacing: .02em;
+  }
+  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  .card {
+    display: block; appearance: none; padding: 0; margin: 0; text-align: left; cursor: pointer; color: inherit; text-decoration: none;
+    border-radius: 22px; overflow: hidden; position: relative;
+    border: 1px solid rgba(120,160,255,.16);
+    background: linear-gradient(180deg, rgba(20,28,54,.86), rgba(10,14,32,.92));
+    box-shadow: 0 20px 50px -24px rgba(0,0,0,.9), inset 0 1px 0 rgba(255,255,255,.04);
+    transition: transform .38s cubic-bezier(.2,.85,.25,1), border-color .38s, box-shadow .38s;
+  }
+  .card:hover {
+    transform: translateY(-7px) scale(1.012);
+    border-color: rgba(140,180,255,.42);
+    box-shadow: 0 32px 70px -26px rgba(30,70,190,.55), 0 0 0 1px rgba(120,170,255,.12), inset 0 1px 0 rgba(255,255,255,.07);
+  }
+  .card .art { position: relative; height: 216px; overflow: hidden; background: #0a1027; }
+  .card .fallback { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+  .card .shot {
+    position: absolute; inset: 0; background-size: cover; background-position: center;
+    opacity: 0; transition: opacity .6s ease; transform: scale(1.01);
+  }
+  .card .shot.on { opacity: 1; }
+  .card .art::after {
+    content: ''; position: absolute; inset: 0; pointer-events: none;
+    background: linear-gradient(to top, rgba(7,10,26,.96) 2%, rgba(7,10,26,.12) 46%, transparent 72%);
+  }
+  .card .num {
+    position: absolute; left: 18px; top: 15px; z-index: 2;
+    font: 600 11px/1 system-ui, sans-serif; letter-spacing: .22em; color: rgba(214,230,255,.7);
+    padding: 6px 9px; border-radius: 8px; background: rgba(8,12,30,.45); border: 1px solid rgba(140,180,255,.2);
+    backdrop-filter: blur(6px);
+  }
+  .card .live {
+    position: absolute; right: 16px; top: 15px; z-index: 2;
+    display: flex; align-items: center; gap: 6px;
+    font: 600 9px/1 system-ui, sans-serif; letter-spacing: .2em; color: #9ff0c1;
+    padding: 6px 9px; border-radius: 999px; background: rgba(8,20,20,.5); border: 1px solid rgba(110,240,180,.25);
+  }
+  .card .live i {
+    width: 5px; height: 5px; border-radius: 50%; background: #5ef0a6;
+    box-shadow: 0 0 8px #5ef0a6; animation: pulse 2.2s infinite;
+  }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+  .card-body { padding: 18px 20px 20px; position: relative; }
+  .card h2 {
+    margin: 0 0 8px; display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap;
+    color: #e9f0ff; font: 600 19px/1.3 system-ui, sans-serif; letter-spacing: .02em;
+  }
+  .card h2 em { font: 600 10px/1 system-ui, sans-serif; font-style: normal; letter-spacing: .2em; color: #779ee4; }
+  .card p { margin: 0 0 14px; color: #8da2c7; font: 12.5px/1.7 system-ui, sans-serif; }
+  .tags { display: flex; flex-wrap: wrap; gap: 6px; }
+  .tags span {
+    padding: 4px 9px; border-radius: 999px; color: #a5bce4;
+    font: 10.5px/1.35 system-ui, sans-serif; letter-spacing: .04em;
+    background: rgba(120,170,255,.08); border: 1px solid rgba(120,170,255,.16);
+  }
+  .enter {
+    margin-top: 16px; padding-top: 14px; border-top: 1px solid rgba(120,160,255,.1);
+    display: flex; justify-content: space-between; align-items: center;
+    font: 600 12px/1 system-ui, sans-serif; letter-spacing: .08em; color: #9cbfff;
+  }
+  .enter b { font-weight: 600; }
+  .enter span { font-size: 16px; transition: transform .3s; }
+  .card:hover .enter span { transform: translateX(6px); }
+  .home-foot {
+    display: flex; justify-content: space-between; align-items: center; gap: 18px; flex-wrap: wrap;
+    margin-top: 26px; padding-top: 18px; border-top: 1px solid rgba(120,160,255,.1);
+    color: #5e7398; font: 11px/1.6 system-ui, sans-serif; letter-spacing: .07em;
+  }
+  .home-foot .keys { display: flex; gap: 14px; flex-wrap: wrap; }
+  .home-foot kbd {
+    font: 600 10px/1 system-ui, sans-serif; color: #9fb7e0; padding: 4px 7px; border-radius: 5px;
+    background: rgba(120,160,255,.1); border: 1px solid rgba(120,160,255,.18); margin-right: 4px;
+  }
+  @media (max-width: 980px) {
+    .cards { grid-template-columns: 1fr 1fr; }
+  }
+  @media (max-width: 780px) {
+    #home { align-items: flex-start; padding: 6vh 5vw; }
+    .cards { grid-template-columns: 1fr; }
+    .card .art { height: 180px; }
+    .home-foot { font-size: 10px; }
+  }
 </style>
 </head>
-<body>
+<body class="home">
 <div id="app"></div>
-<div class="title">NEON BAY · <span id="clock">20:00</span></div>
-<div class="hud">WASD 移动 · 拖拽旋转 · 滚轮缩放 · N 切换昼夜</div>
-<button id="themeBtn">🌙 夜晚</button>
+<div class="title"><span id="mapTitle">NEON BAY</span><span class="sep">·</span><span id="clock">20:00</span></div>
+<div class="hud" id="mapHud">WASD 移动 · 拖拽旋转 · 滚轮缩放 · N 切换昼夜 · ESC 返回地图</div>
+<div class="mapbar">
+  <button id="homeBtn">← 地图</button>
+  <button id="themeBtn">🌙 夜晚</button>
+</div>
+
+<div id="home">
+  <div class="home-inner">
+    <div class="home-head">
+      <div class="eyebrow">ISO CITY ATLAS · 等距城市图鉴</div>
+      <h1>选择一处空间，<span>走进去</span></h1>
+      <p>两个等距城市图鉴，加一座可以真正走进去的微光城区。你可以在街道间漫步、进入建筑、留下留言，认领并布置自己的房间。</p>
+    </div>
+    <div class="cards">
+      <button class="card" data-map="city">
+        <div class="art">
+          <img class="fallback" src="preview.png" alt="霓虹湾城市预览" />
+          <div class="shot" id="shotCity"></div>
+          <span class="num">MAP 01</span>
+          <span class="live"><i></i>LIVE 3D</span>
+        </div>
+        <div class="card-body">
+          <h2>霓虹湾 <em>NEON BAY</em></h2>
+          <p>12×12 街区的等距海港都市：环形立交、匝道车流、公园动物与实时昼夜光影。</p>
+          <div class="tags"><span>程序生成</span><span>立体交通</span><span>昼夜循环</span></div>
+          <div class="enter"><b>进入地图</b><span>→</span></div>
+        </div>
+      </button>
+
+      <button class="card" data-map="canton">
+        <div class="art">
+          <svg class="fallback" viewBox="0 0 400 230" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+            <defs>
+              <linearGradient id="gSky" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#050a20"/><stop offset=".42" stop-color="#141c48"/>
+                <stop offset=".76" stop-color="#4c2c66"/><stop offset="1" stop-color="#a85f6d"/>
+              </linearGradient>
+              <linearGradient id="gTower" x1="0" y1="1" x2="0" y2="0">
+                <stop offset="0" stop-color="#57ecff"/><stop offset=".45" stop-color="#9b8bff"/>
+                <stop offset="1" stop-color="#ff7ecb"/>
+              </linearGradient>
+              <linearGradient id="gWater" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#1b2a5c"/><stop offset="1" stop-color="#05091b"/>
+              </linearGradient>
+              <linearGradient id="gGlass" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0" stop-color="#2c3f6b"/><stop offset=".5" stop-color="#4b6fa8"/><stop offset="1" stop-color="#1c2a4c"/>
+              </linearGradient>
+              <clipPath id="clipTower">
+                <path d="M162 188 C175 161 184 140 184 118 C184 101 180 90 178 79 L222 79 C220 90 216 101 216 118 C216 140 225 161 238 188 Z"/>
+              </clipPath>
+              <filter id="gGlow"><feGaussianBlur stdDeviation="2.4"/></filter>
+            </defs>
+            <rect width="400" height="230" fill="url(#gSky)"/>
+            <circle cx="320" cy="50" r="16" fill="#ffe2c2" opacity=".55" filter="url(#gGlow)"/>
+            <circle cx="320" cy="50" r="8" fill="#fff0da" opacity=".8"/>
+            <g fill="#0a1330">
+              <rect x="-8" y="152" width="40" height="70"/><rect x="38" y="163" width="26" height="60"/>
+              <rect x="70" y="144" width="20" height="78"/><rect x="96" y="158" width="34" height="64"/>
+              <rect x="258" y="150" width="24" height="72"/><rect x="288" y="160" width="38" height="62"/>
+              <rect x="332" y="140" width="22" height="82"/><rect x="360" y="156" width="46" height="66"/>
+            </g>
+            <g fill="#7fb6ff" opacity=".55">
+              <rect x="44" y="170" width="2" height="3"/><rect x="50" y="170" width="2" height="3"/>
+              <rect x="44" y="178" width="2" height="3"/><rect x="56" y="186" width="2" height="3"/>
+              <rect x="74" y="152" width="2" height="3"/><rect x="80" y="160" width="2" height="3"/>
+              <rect x="74" y="170" width="2" height="3"/><rect x="84" y="178" width="2" height="3"/>
+              <rect x="104" y="166" width="2" height="3"/><rect x="112" y="174" width="2" height="3"/>
+              <rect x="120" y="182" width="2" height="3"/><rect x="264" y="158" width="2" height="3"/>
+              <rect x="270" y="170" width="2" height="3"/><rect x="264" y="182" width="2" height="3"/>
+              <rect x="296" y="168" width="2" height="3"/><rect x="304" y="176" width="2" height="3"/>
+              <rect x="312" y="188" width="2" height="3"/><rect x="338" y="148" width="2" height="3"/>
+              <rect x="344" y="160" width="2" height="3"/><rect x="338" y="172" width="2" height="3"/>
+              <rect x="368" y="164" width="2" height="3"/><rect x="376" y="176" width="2" height="3"/>
+            </g>
+            <g>
+              <rect x="238" y="150" width="26" height="40" fill="url(#gGlass)" opacity=".8"/>
+              <rect x="144" y="158" width="24" height="32" fill="url(#gGlass)" opacity=".7"/>
+              <rect x="228" y="144" width="4" height="3" fill="#9fe0ff"/>
+              <rect x="150" y="154" width="3" height="2" fill="#ffd49b"/>
+            </g>
+            <rect y="192" width="400" height="38" fill="url(#gWater)"/>
+            <g stroke="#7cc8ff" stroke-width=".7" opacity=".22">
+              <path d="M0 200 H400 M0 208 H400 M0 216 H400 M0 224 H400"/>
+            </g>
+            <g opacity=".5">
+              <rect x="164" y="198" width="72" height="1.4" fill="#5ee6ff" opacity=".3"/>
+              <rect x="150" y="206" width="60" height="1.2" fill="#b07aff" opacity=".25"/>
+              <rect x="210" y="214" width="50" height="1.2" fill="#ff76c6" opacity=".22"/>
+            </g>
+            <ellipse cx="200" cy="190" rx="52" ry="6" fill="#040817" opacity=".65"/>
+            <path fill="#0d1738" stroke="url(#gTower)" stroke-width="1.1" d="M162 188 C175 161 184 140 184 118 C184 101 180 90 178 79 L222 79 C220 90 216 101 216 118 C216 140 225 161 238 188 Z"/>
+            <g clip-path="url(#clipTower)" stroke="url(#gTower)" stroke-width=".75" fill="none" opacity=".95">
+              <path d="M168 190 L198 78 M178 190 L204 78 M190 190 L210 78 M202 190 L216 78 M214 190 L222 78 M226 190 L228 78"/>
+              <path d="M232 190 L202 78 M222 190 L196 78 M210 190 L190 78 M198 190 L184 78 M186 190 L178 78 M174 190 L172 78"/>
+              <path d="M168 178 Q200 187 232 178 M172 165 Q200 174 228 165 M176 152 Q200 160 224 152 M178 139 Q200 146 222 139 M180 126 Q200 132 220 126 M180 113 Q200 119 220 113 M180 100 Q200 106 220 100 M179 90 Q200 96 221 90"/>
+            </g>
+            <ellipse cx="200" cy="78" rx="23" ry="5" fill="none" stroke="#ffd0ee" stroke-width="1.3" opacity=".9"/>
+            <ellipse cx="200" cy="78" rx="23" ry="5" fill="none" stroke="#ffd0ee" stroke-width="5" opacity=".12"/>
+            <line x1="200" y1="77" x2="200" y2="26" stroke="url(#gTower)" stroke-width="2"/>
+            <line x1="200" y1="77" x2="200" y2="26" stroke="#ffdff2" stroke-width=".6" opacity=".8"/>
+            <circle cx="200" cy="26" r="2.8" fill="#ff7895"/>
+            <circle cx="200" cy="26" r="7" fill="#ff5f86" opacity=".24" filter="url(#gGlow)"/>
+            <g stroke="#9fd6ff" stroke-width="1.1" fill="none" opacity=".55">
+              <path d="M50 160 Q90 138 130 160 M44 160 Q90 130 136 160"/>
+              <path d="M270 160 Q310 138 350 160"/>
+            </g>
+          </svg>
+          <div class="shot" id="shotCanton"></div>
+          <span class="num">MAP 02</span>
+          <span class="live"><i></i>LIVE 3D</span>
+        </div>
+        <div class="card-body">
+          <h2>广州塔 · 珠江新城 <em>CANTON TOWER</em></h2>
+          <p>600 米扭转钢构塔身、24 根外筒斜柱与摩天轮舱，串起东西塔、中信广场、利通、珠江城与海心桥。</p>
+          <div class="tags"><span>地标还原</span><span>珠江夜景</span><span>钢结构</span></div>
+          <div class="enter"><b>进入地图</b><span>→</span></div>
+        </div>
+      </button>
+
+      <a class="card" href="./city.html">
+        <div class="art">
+          <svg class="fallback" viewBox="0 0 400 230" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+            <defs>
+              <linearGradient id="lSky" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#aebfc4"/><stop offset=".55" stop-color="#d7ddd4"/>
+                <stop offset="1" stop-color="#efe6d4"/>
+              </linearGradient>
+              <linearGradient id="lStone" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0" stop-color="#f4efe5"/><stop offset="1" stop-color="#cfc5b3"/>
+              </linearGradient>
+              <linearGradient id="lGlass" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0" stop-color="#9db3b7"/><stop offset=".6" stop-color="#6f898f"/><stop offset="1" stop-color="#4d666e"/>
+              </linearGradient>
+              <linearGradient id="lRoad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#7c7b73"/><stop offset="1" stop-color="#55564f"/>
+              </linearGradient>
+              <linearGradient id="lSun" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0" stop-color="#ffe4b0"/><stop offset="1" stop-color="#e7a86e"/>
+              </linearGradient>
+            </defs>
+            <rect width="400" height="230" fill="url(#lSky)"/>
+            <circle cx="326" cy="44" r="34" fill="url(#lSun)" opacity=".55"/>
+            <circle cx="326" cy="44" r="17" fill="#ffe9c5" opacity=".8"/>
+            <g fill="#b9c4c0" opacity=".5">
+              <rect x="0" y="100" width="34" height="130"/><rect x="38" y="118" width="22" height="112"/>
+              <rect x="64" y="96" width="14" height="134"/><rect x="334" y="108" width="26" height="122"/>
+              <rect x="364" y="88" width="36" height="142"/>
+            </g>
+            <g>
+              <rect x="44" y="52" width="76" height="148" fill="url(#lStone)"/>
+              <rect x="52" y="66" width="60" height="134" fill="#e9e3d7" opacity=".35"/>
+              <g fill="#8ea1a4" opacity=".8">
+                <rect x="52" y="70" width="8" height="10"/><rect x="64" y="70" width="8" height="10"/>
+                <rect x="76" y="70" width="8" height="10"/><rect x="88" y="70" width="8" height="10"/>
+                <rect x="100" y="70" width="8" height="10"/><rect x="52" y="86" width="8" height="10"/>
+                <rect x="76" y="86" width="8" height="10"/><rect x="100" y="86" width="8" height="10"/>
+                <rect x="52" y="102" width="8" height="10"/><rect x="64" y="102" width="8" height="10"/>
+                <rect x="88" y="102" width="8" height="10"/><rect x="100" y="102" width="8" height="10"/>
+              </g>
+              <rect x="42" y="48" width="80" height="4" fill="#b9ae9c"/>
+            </g>
+            <g>
+              <rect x="126" y="34" width="58" height="166" fill="url(#lGlass)"/>
+              <g stroke="#d4dfdc" stroke-width=".7" opacity=".55">
+                <path d="M126 56 H184 M126 74 H184 M126 92 H184 M126 110 H184 M126 128 H184 M126 146 H184 M126 164 H184 M126 182 H184"/>
+                <path d="M138 34 V200 M150 34 V200 M162 34 V200 M174 34 V200"/>
+              </g>
+              <rect x="124" y="30" width="62" height="6" fill="#dfe3da"/>
+              <rect x="150" y="12" width="2" height="18" fill="#7f8f8f"/>
+            </g>
+            <g>
+              <rect x="190" y="76" width="70" height="124" fill="url(#lStone)"/>
+              <g fill="#8fa4a6" opacity=".75">
+                <rect x="200" y="92" width="10" height="12"/><rect x="216" y="92" width="10" height="12"/>
+                <rect x="232" y="92" width="10" height="12"/><rect x="200" y="112" width="10" height="12"/>
+                <rect x="232" y="112" width="10" height="12"/><rect x="216" y="132" width="10" height="12"/>
+                <rect x="200" y="152" width="10" height="12"/><rect x="232" y="152" width="10" height="12"/>
+              </g>
+              <rect x="196" y="176" width="24" height="24" fill="#a4714c" opacity=".7"/>
+              <rect x="200" y="72" width="50" height="6" fill="#b8ae9c"/>
+            </g>
+            <g>
+              <rect x="266" y="110" width="10" height="90" fill="#c8bfae"/>
+              <rect x="286" y="96" width="12" height="104" fill="#d5ccba"/>
+              <rect x="304" y="60" width="66" height="140" fill="#d9d4c7"/>
+              <rect x="312" y="72" width="50" height="22" fill="#8aa0a3" opacity=".7"/>
+              <rect x="312" y="104" width="50" height="18" fill="#8aa0a3" opacity=".6"/>
+              <rect x="312" y="132" width="50" height="18" fill="#8aa0a3" opacity=".55"/>
+              <rect x="312" y="160" width="50" height="26" fill="#7d8f92" opacity=".5"/>
+              <rect x="302" y="54" width="72" height="7" fill="#bfb6a4"/>
+            </g>
+            <path d="M0 200 H400 V230 H0 Z" fill="url(#lRoad)"/>
+            <path d="M0 210 H400" stroke="#d8cfae" stroke-width="1.4" stroke-dasharray="14 12" opacity=".65"/>
+            <g fill="#f2dfb8">
+              <rect x="30" y="190" width="6" height="3"/><rect x="84" y="190" width="6" height="3"/>
+              <rect x="140" y="190" width="6" height="3"/><rect x="196" y="190" width="6" height="3"/>
+              <rect x="252" y="190" width="6" height="3"/><rect x="308" y="190" width="6" height="3"/>
+            </g>
+            <g>
+              <rect x="140" y="166" width="18" height="9" fill="#e6e0d3"/>
+              <rect x="202" y="176" width="20" height="10" fill="#efe8da"/>
+              <rect x="258" y="170" width="16" height="8" fill="#d9d2c4"/>
+            </g>
+            <g>
+              <circle cx="118" cy="184" r="8" fill="#8f9f78"/>
+              <circle cx="116" cy="178" r="6" fill="#7b8e68"/>
+              <circle cx="272" cy="188" r="7" fill="#8f9f78"/>
+            </g>
+            <g fill="#2f3a37" opacity=".72">
+              <rect x="164" y="182" width="13" height="7" rx="2"/>
+              <rect x="224" y="186" width="14" height="7" rx="2"/>
+            </g>
+          </svg>
+          <span class="num">ENTRY 03</span>
+          <span class="live"><i></i>PLAYABLE 3D</span>
+        </div>
+        <div class="card-body">
+          <h2>微光城区 <em>LUMEN DISTRICT</em></h2>
+          <p>一座可以走进去的写实比例小城：主街、镜池广场、回声巷与可进入建筑。留下留言、认领房间、摆家具并分享门牌。</p>
+          <div class="tags"><span>第三人称探索</span><span>留言与认领</span><span>个人空间</span></div>
+          <div class="enter"><b>走入城区</b><span>→</span></div>
+        </div>
+      </a>
+    </div>
+    <div class="home-foot">
+      <div class="keys">
+        <span><kbd>拖拽</kbd>旋转视角</span>
+        <span><kbd>滚轮</kbd>缩放</span>
+        <span><kbd>N</kbd>昼夜切换</span>
+        <span><kbd>ESC</kbd>返回地图</span>
+      </div>
+      <span>THREE WORLDS · REAL-TIME THREE.JS</span>
+    </div>
+  </div>
+</div>
 
 <script type="importmap">
 {
@@ -121,7 +484,7 @@ drawSky(1);
 scene.background = skyTex;
 scene.fog = new THREE.FogExp2(THEMES.night.fog, THEMES.night.fogDensity);
 
-const renderer = new THREE.WebGLRenderer({ antialias: true, stencil: true });
+const renderer = new THREE.WebGLRenderer({ antialias: true, stencil: true, preserveDrawingBuffer: true });
 const PIXEL_SCALE = 0.72;
 renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
 renderer.setSize(innerWidth * PIXEL_SCALE, innerHeight * PIXEL_SCALE, false);
@@ -996,11 +1359,13 @@ const HW  = ROAD_W / 2;              // 桥面半宽
 
 const deckMat   = themedMat(new THREE.MeshStandardMaterial({ color: 0xb9c1cf, roughness: 0.9 }), 0xe2e8f2, 0x6b7390);
 const railMat   = themedMat(new THREE.MeshStandardMaterial({ color: 0xdfe4ec, roughness: 0.7 }), 0xf2f5fa, 0x8a92a8);
-const pillarMat = themedMat(new THREE.MeshStandardMaterial({ color: 0xa8b0bf, roughness: 0.9 }), 0xd4dae4, 0x646c82);
-// 匝道桥面：与主桥同高度的重叠区用 polygonOffset 提前渲染，避免深度冲突闪出接缝
+const pillarMat = themedMat(new THREE.MeshStandardMaterial({ color: 0xa8b0bf, roughness: 0.9, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 }), 0xd4dae4, 0x646c82);
+// 匝道桥面：末段与主桥桥面共面，两块重叠的面会互相“打架”。
+// 用很小的 polygonOffset 把匝道面压到主桥面之下（数值别调大，
+// 斜率放大的深度偏移在掠射角下会把桥面下的构件“顶”出来）。
 const rampDeckMat = themedMat(new THREE.MeshStandardMaterial({
   color: 0xb9c1cf, roughness: 0.9,
-  polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2
+  polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1
 }), 0xe2e8f2, 0x6b7390);
 
 // ---- 生成圆角矩形中心线（直线段 + 四分之一圆弧）----
@@ -1057,7 +1422,11 @@ const RPERIM = RING_CUM[ringPts.length];
 // 不会再出现“顶点法向被侧壁拉斜”导致的暗边（并线处看起来会像硬接缝）
 function extrudeRibbon(points, norms, halfWidth, thickness, yOf, closed = true) {
   const getY = yOf || (p => p.y || 0);
-  const n = points.length, hw = halfWidth, th = thickness / 2;
+  // 半宽可以是数字、数组，或 (i, side) => 宽度的函数
+  const hwAt = (i, s) => typeof halfWidth === 'number' ? halfWidth
+    : typeof halfWidth === 'function' ? halfWidth(i, s)
+    : halfWidth[i];
+  const n = points.length, th = thickness / 2;
   const segs = closed ? n : n - 1;
   const P = [], Wd = [], Nd = [];
   for (let i = 0; i < n; i++) {
@@ -1075,9 +1444,9 @@ function extrudeRibbon(points, norms, halfWidth, thickness, yOf, closed = true) 
 
   const pos = [], nrm = [], idx = [];
   const corner = (i, sW, sN) => ({
-    x: P[i].x + Wd[i].x * hw * sW + Nd[i].x * th * sN,
+    x: P[i].x + Wd[i].x * hwAt(i, sW) * sW + Nd[i].x * th * sN,
     y: P[i].y + Nd[i].y * th * sN,
-    z: P[i].z + Wd[i].z * hw * sW + Nd[i].z * th * sN
+    z: P[i].z + Wd[i].z * hwAt(i, sW) * sW + Nd[i].z * th * sN
   });
   const strip = (cA, cB, nA, nB) => {
     const base = pos.length / 3;
@@ -1125,8 +1494,9 @@ addRibbon(ringPts, ringNor, HW, 0.14, deckMat);
     for (const s of [1, -1]) {
       const px = p.x + ringNor[i].x * s * (HW + CURB_W * 0.5);
       const pz = p.z + ringNor[i].z * s * (HW + CURB_W * 0.5);
-      const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.11, RING_Y, 8), pillarMat);
-      pillar.position.set(px, RING_Y / 2, pz);
+      const ph = RING_Y - 0.08;                // 墩顶收在桥面板底以下
+      const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.11, ph, 8), pillarMat);
+      pillar.position.set(px, ph / 2, pz);
       pillar.castShadow = true;
       scene.add(pillar);
     }
@@ -1159,6 +1529,22 @@ function nearestRingS(px, pz) {                    // 最近的环路弧长
     if (dd < bd) { bd = dd; best = i; }
   }
   return RING_CUM[best];
+}
+
+// 到主桥中心线（折线）的距离：判断“是否已经压在主桥桥面上”要用真实距离，
+// 不能用沿汇入切向的投影，否则匝道与主桥平行的那段会算错。
+function ringDistTo(px, pz) {
+  let bd = Infinity;
+  for (let i = 0; i < ringPts.length; i++) {
+    const a = ringPts[i], b = ringPts[(i + 1) % ringPts.length];
+    const ex = b.x - a.x, ez = b.z - a.z;
+    const L2 = ex * ex + ez * ez || 1;
+    const t = Math.max(0, Math.min(1, ((px - a.x) * ex + (pz - a.z) * ez) / L2));
+    const dx = px - (a.x + ex * t), dz = pz - (a.z + ez * t);
+    const dd = dx * dx + dz * dz;
+    if (dd < bd) bd = dd;
+  }
+  return Math.sqrt(bd);
 }
 
 const RAMPS = [];
@@ -1210,175 +1596,127 @@ const RAMPS = [];
     const P2 = { x: merge.x - T3.x * k, z: merge.z - T3.z * k };
     const P3 = merge;
 
-    const N = 48, pts = [], nor = [];
-    for (let i = 0; i <= N; i++) {
-      const t = i / N, p = bez(P0, P1, P2, P3, t);
+    const NPTS = 48, pts = [], nor = [];
+    for (let i = 0; i <= NPTS; i++) {
+      const t = i / NPTS, p = bez(P0, P1, P2, P3, t);
       pts.push({ x: p.x, z: p.z, y: 0.06 });
     }
-    for (let i = 0; i <= N; i++) {                 // 由切向得到横向法向
-      const a = pts[Math.max(0, i - 1)], b = pts[Math.min(N, i + 1)];
+    for (let i = 0; i <= NPTS; i++) {              // 由切向得到横向法向
+      const a = pts[Math.max(0, i - 1)], b = pts[Math.min(NPTS, i + 1)];
       const tx = b.x - a.x, tz = b.z - a.z, L = Math.hypot(tx, tz) || 1;
       nor.push({ x: -tz / L, z: tx / L });
     }
 
-    // 高度按平面弧长分配：最后 PLATEAU 段与主桥等高。
-    // 并线重叠区的两块桥面因此完全共面，既不露台阶也不出暗色接缝。
+    // 平面弧长（高度分配用）
     const cum2d = [0];
-    for (let i = 1; i <= N; i++) cum2d.push(cum2d[i - 1] + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].z - pts[i - 1].z));
-    const rLen2 = cum2d[N] || 1;
-    const PLATEAU = 8;
-    for (let i = 0; i <= N; i++) {
+    for (let i = 1; i <= NPTS; i++) cum2d.push(cum2d[i - 1] + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].z - pts[i - 1].z));
+    const rLen2 = cum2d[NPTS] || 1;
+
+    // 匝道相对主桥的内外侧：+nor 指向城市中心
+    const HWr = RAMP_W * 0.5;
+    const sIn = (nor[NPTS].x * -merge.x + nor[NPTS].z * -merge.z) > 0 ? 1 : -1;
+    const vOut = { x: -nor[NPTS].x * sIn, z: -nor[NPTS].z * sIn };
+    const latc = [];
+    for (let i = 0; i <= NPTS; i++) latc.push((pts[i].x - merge.x) * vOut.x + (pts[i].z - merge.z) * vOut.z);
+
+    // —— 匝道一路铺到主桥中心线（正常汇入）。
+    //    末段顶面与主桥桥面**完全共面**：没有高低差就不会有台阶边线；
+    //    polygonOffset 保证匝道面稳定压在主桥面之上，不闪面。
+    const PLATEAU = 10;
+    for (let i = 0; i <= NPTS; i++) {
       const u = Math.min(1, cum2d[i] / Math.max(1, rLen2 - PLATEAU));
       pts[i].y = 0.06 + (RAMP_TOP - 0.06) * smooth(u);
     }
 
     const cum = [0];
-    for (let i = 1; i <= N; i++) {
+    for (let i = 1; i <= NPTS; i++) {
       const a = pts[i - 1], b = pts[i];
       cum.push(cum[i - 1] + Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z));
     }
-    const rLen = cum[N] || 1;
+    const rLen = cum[NPTS] || 1;
 
-    // 匝道内缘在主桥局部坐标系里的横向偏移：用来决定护栏的收尾位置和让位区间
-    const sIn = (nor[N].x * -merge.x + nor[N].z * -merge.z) > 0 ? 1 : -1;   // +nor 指向城市中心
-    const vOut = { x: -nor[N].x * sIn, z: -nor[N].z * sIn };                // 指向桥外
-    const latc = [], alongc = [];
-    let thx = pts[N].x - pts[N - 2].x, thz = pts[N].z - pts[N - 2].z;
-    const thl = Math.hypot(thx, thz) || 1; thx /= thl; thz /= thl;
-    for (let i = 0; i <= N; i++) {
-      latc.push((pts[i].x - merge.x) * vOut.x + (pts[i].z - merge.z) * vOut.z);
-      alongc.push(-((pts[i].x - merge.x) * thx + (pts[i].z - merge.z) * thz));   // 沿环路方向离汇入点的距离
-    }
-    const statS = thr => { for (let i = N - 1; i >= 0; i--) if (latc[i] > thr) return cum2d[i]; return 0; };
-    const statA = thr => { for (let i = N - 1; i >= 0; i--) if (latc[i] > thr) return alongc[i]; return 0; };
-    const cutOuter = Math.max(2.5, statA(HW + RAMP_W * 0.5 - 0.06));   // 主桥外护栏要让开的弧长
-    const cutInner = Math.max(1.5, statA(HW - RAMP_W * 0.5 + 0.06));   // 主桥内护栏要让开的弧长
-    const innerS   = Math.max(1.0, statS(HW - RAMP_W * 0.5 + 0.06));   // 匝道内护栏的收尾位置
+    addRibbon(pts, nor, HWr, 0.14, rampDeckMat, undefined, false);
 
-    addRibbon(pts, nor, RAMP_W * 0.5, 0.14, rampDeckMat, undefined, false);  // 与主桥同厚 → 顶面齐平，交接处无缝
-    // 外侧护栏一直做到并线点，与主桥外护栏自然接续；
-    // 内侧护栏在主桥内护栏处收尾，不会横在主桥车道上
-    const innerEnd = (() => { let i = N; while (i > 0 && cum2d[i] > rLen2 - innerS) i--; return i; })();
+    // 护栏：外侧一路做到并线点，正好接上主桥外侧护栏的断口；
+    // 内侧做到「匝道内缘贴上主桥外缘」的 gore 点就收尾，
+    // 不能继续往里，否则会压在主桥车道上（看起来就是路面中间一条细线）。
     for (const s of [1, -1]) {
-      const last = (s === -sIn) ? N : innerEnd;
-      const rp = [];
-      for (let i = 0; i <= last; i++) {
-        rp.push({
-          x: pts[i].x + nor[i].x * s * (RAMP_W * 0.5 - 0.05),
-          z: pts[i].z + nor[i].z * s * (RAMP_W * 0.5 - 0.05), y: pts[i].y + 0.09
-        });
+      const isInner = s === sIn;
+      const rp = [], rn = [];
+      for (let i = 0; i <= NPTS; i++) {
+        const x = pts[i].x + nor[i].x * s * (HWr - 0.06);
+        const z = pts[i].z + nor[i].z * s * (HWr - 0.06);
+        if (isInner && i > 6 && latc[i] < HW * 2 + 0.02) break;
+        rp.push({ x, z, y: pts[i].y + 0.16 });
+        rn.push(nor[i]);
       }
-      addRibbon(rp, nor.slice(0, last + 1), 0.045, 0.14, railMat, undefined, false);
+      if (rp.length >= 2) addRibbon(rp, rn, 0.055, 0.22, railMat, undefined, false);
     }
-    for (let i = 12; i <= N; i += 6) {             // 弧形支撑墩
+    for (let i = 12; i <= NPTS; i += 6) {          // 弧形支撑墩
       const p = pts[i];
       if (p.y < 0.35) continue;
-      const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, p.y, 8), pillarMat);
-      pillar.position.set(p.x, p.y / 2, p.z);
+      // 靠近主桥后由主桥桥墩承重；再打墩会从并线口桥面正中冒出来
+      if (latc[i] < RAMP_W * 2.2) continue;
+      if (Math.hypot(p.x - merge.x, p.z - merge.z) < RAMP_W * 4.5) continue;
+      // 墩身用无盖圆柱：顶面必须藏进桥面板里，带盖子会在掠射角下
+      // 从桥面里“透”出一排圆点（深度精度不够时尤其明显）
+      const ph = Math.max(0.05, p.y - 0.09);
+      const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, ph, 8, 1, true), pillarMat);
+      pillar.position.set(p.x, ph / 2, p.z);
       pillar.castShadow = true;
       scene.add(pillar);
     }
-    RAMPS.push({ foot, merge, mergeS, pts, nor, cum, len3: rLen, footNode: nid(d.k, d.j), yawUp: Math.atan2(T0.x, T0.z), cutOuter, cutInner });
+    RAMPS.push({
+      foot, merge, mergeS, pts, nor, cum, len3: rLen,
+      footNode: nid(d.k, d.j), yawUp: Math.atan2(T0.x, T0.z),
+      sIn
+    });
   }
 })();
 
-// 主桥护栏：只在匝道桥面真正压到护栏线的位置开口（外/内侧分别计算），
-// 开口由匝道自己的护栏接着，人不会再从并线口走出去
-(function addRingRails() {
-  const SIGN = 0.05;                             // 并线点往后多留的一点余量
-  const cut = (i, sgn) => {
-    const px = ringPts[i].x, pz = ringPts[i].z;
-    const sgnOuter = Math.sign(ringNor[i].x * px + ringNor[i].z * pz) || 1;
-    for (const r of RAMPS) {
-      let d = RING_CUM[i] - r.mergeS;
-      d = ((d % RPERIM) + RPERIM * 1.5) % RPERIM - RPERIM * 0.5;   // 归一到 (-P/2, P/2]
-      const len = (sgn === sgnOuter ? r.cutOuter : r.cutInner) + SIGN;
-      if (d <= 0 ? -d <= len : d <= SIGN) return true;
+// 某点是否被匝道桥面覆盖（匝道已升到桥面高度才参与判定）
+function rampCoversPoint(x, z, margin = 0) {
+  for (const r of RAMPS) {
+    // 越过并线点（主桥另一侧）不算覆盖，否则断口会多切出一截
+    const n = r.pts.length - 1;
+    const a2 = r.pts[n - 1], b2 = r.pts[n];
+    const tx = b2.x - a2.x, tz = b2.z - a2.z;
+    const tl = Math.hypot(tx, tz) || 1;
+    if (((x - b2.x) * tx + (z - b2.z) * tz) / tl > 0.02) continue;
+    let bd = Infinity, by = 0;
+    for (let i = 0; i < r.pts.length - 1; i++) {
+      const a = r.pts[i], b = r.pts[i + 1];
+      const ex = b.x - a.x, ez = b.z - a.z;
+      const L2 = ex * ex + ez * ez || 1;
+      const t = Math.max(0, Math.min(1, ((x - a.x) * ex + (z - a.z) * ez) / L2));
+      const dx = x - (a.x + ex * t), dz = z - (a.z + ez * t);
+      const dd = dx * dx + dz * dz;
+      if (dd < bd) { bd = dd; by = a.y + (b.y - a.y) * t; }
     }
-    return false;
-  };
+    if (by < RING_Y - 0.5) continue;                // 这一段匝道还没升上来
+    if (Math.sqrt(bd) < RAMP_W * 0.5 + margin) return true;
+  }
+  return false;
+}
+
+// 主桥护栏：只有被匝道桥面压住的地方断开，其余整圈连续。
+// 断口正好是匝道两条护栏的落点，所以接缝处看着就是一个 Y 形分流口。
+(function addRingRails() {
   for (const sgn of [1, -1]) {
     let pts = [], nrm = [];
     const flush = () => {
-      if (pts.length >= 2) addRibbon(pts, nrm, 0.05, 0.16, railMat, undefined, false);
+      if (pts.length >= 2) addRibbon(pts, nrm, 0.055, 0.22, railMat, undefined, false);
       pts = []; nrm = [];
     };
     for (let i = 0; i < ringPts.length; i++) {
-      if (cut(i, sgn)) { flush(); continue; }
       const p = ringPts[i], nm = ringNor[i];
-      pts.push({ x: p.x + nm.x * sgn * (HW - 0.06), z: p.z + nm.z * sgn * (HW - 0.06), y: RING_Y + 0.1 });
+      const x = p.x + nm.x * sgn * (HW - 0.06);
+      const z = p.z + nm.z * sgn * (HW - 0.06);
+      if (rampCoversPoint(x, z, 0.02)) { flush(); continue; }
+      pts.push({ x, z, y: RING_Y + 0.16 });
       nrm.push(nm);
     }
     flush();
-  }
-})();
-
-// —— 并线收口：匝道内缘与主桥外缘之间会夹出一条细长缝隙（gore），
-//    用一块渐变的桥面把它补齐。补面内边界的两端分别与主桥外缘、匝道内缘相切，
-//    所以整条桥面轮廓线没有折点；再往外仍留作正常空隙 ——
-(function addJunctionGores() {
-  const TOP = RING_Y + 0.07, TH = 0.14, HWr = RAMP_W * 0.5, HWh = ROAD_W * 0.5, GAPMAX = 2.4;
-  const mat = new THREE.MeshStandardMaterial({
-    color: 0xb9c1cf, roughness: 0.9, side: THREE.DoubleSide,
-    polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3
-  });
-  themedMat(mat, 0xe2e8f2, 0x6b7390);
-  const smooth = t => t * t * (3 - 2 * t);
-
-  for (const r of RAMPS) {
-    const N = r.pts.length - 1, M = r.merge;
-    let ux = r.pts[N].x - r.pts[N - 2].x, uz = r.pts[N].z - r.pts[N - 2].z;
-    const ul = Math.hypot(ux, uz) || 1; ux /= ul; uz /= ul;
-    let vx = -uz, vz = ux;                                   // 垂直于末端切向
-    if (vx * M.x + vz * M.z < 0) { vx = -vx; vz = -vz; }     // 取背离城市中心（桥外）的一侧
-    const toC = { x: -M.x, z: -M.z };
-    const sIn = (r.nor[N].x * toC.x + r.nor[N].z * toC.z) > 0 ? 1 : -1;   // 匝道内缘
-
-    const eIn = [];
-    for (let i = 0; i <= N; i++) {
-      const x = r.pts[i].x + r.nor[i].x * sIn * HWr;
-      const z = r.pts[i].z + r.nor[i].z * sIn * HWr;
-      eIn.push({ x, z, lat: (x - M.x) * vx + (z - M.z) * vz });
-    }
-    let hit = -1;                                            // 内缘穿回主桥外缘线以内的位置
-    for (let i = N - 1; i >= 0; i--) if (eIn[i].lat > HWh && eIn[i + 1].lat <= HWh) { hit = i; break; }
-    if (hit < 0) continue;
-    const fc = (eIn[hit].lat - HWh) / ((eIn[hit].lat - eIn[hit + 1].lat) || 1);
-    const C = { x: eIn[hit].x + (eIn[hit + 1].x - eIn[hit].x) * fc, z: eIn[hit].z + (eIn[hit + 1].z - eIn[hit].z) * fc };
-
-    let nose = hit;                                          // 缝隙超过 GAPMAX 后就让它自然敞开
-    while (nose > 0 && (eIn[nose - 1].lat - HWh) <= GAPMAX) nose--;
-    if (nose >= hit) continue;
-
-    const pts = [];
-    for (let i = nose; i <= hit; i++) pts.push({ x: eIn[i].x, z: eIn[i].z, lat: eIn[i].lat });
-    pts.push({ x: C.x, z: C.z, lat: HWh });
-
-    const outer = [], inner = [];
-    for (let k = 0; k < pts.length; k++) {
-      const tp = smooth(k / (pts.length - 1));
-      const rx = pts[k].x - vx * (pts[k].lat - HWh), rz = pts[k].z - vz * (pts[k].lat - HWh);
-      outer.push({ x: pts[k].x, z: pts[k].z });
-      inner.push({ x: rx + (pts[k].x - rx) * (1 - tp), z: rz + (pts[k].z - rz) * (1 - tp) });
-    }
-
-    const pos = [], idx = [], botY = TOP - TH;
-    const put = (p, y) => { pos.push(p.x, y, p.z); return pos.length / 3 - 1; };
-    const oT = outer.map(p => put(p, TOP)), iT = inner.map(p => put(p, TOP));
-    const oB = outer.map(p => put(p, botY)), iB = inner.map(p => put(p, botY));
-    for (let k = 0; k < pts.length - 1; k++) {
-      idx.push(oT[k], iT[k], iT[k + 1], oT[k], iT[k + 1], oT[k + 1]);
-      idx.push(oB[k], iB[k + 1], iB[k], oB[k], oB[k + 1], iB[k + 1]);
-      idx.push(oT[k], oB[k], oB[k + 1], oT[k], oB[k + 1], oT[k + 1]);
-      idx.push(iT[k], iB[k + 1], iB[k], iT[k], iT[k + 1], iB[k + 1]);
-    }
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-    geo.setIndex(idx);
-    geo.computeVertexNormals();
-    const mesh = new THREE.Mesh(geo, mat);
-    mesh.castShadow = true; mesh.receiveShadow = true;
-    scene.add(mesh);
   }
 })();
 
@@ -2317,10 +2655,1494 @@ const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(1, 1, 
 }));
 composer.setPixelRatio(Math.min(devicePixelRatio, 2));
 composer.setSize(innerWidth * PIXEL_SCALE, innerHeight * PIXEL_SCALE);
-composer.addPass(new RenderPass(scene, camera));
+const renderPass = new RenderPass(scene, camera);
+composer.addPass(renderPass);
 const bloomPass = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.18, 0.15, 1.5);
 composer.addPass(bloomPass);
 composer.addPass(new OutputPass());   // 色调映射 + sRGB 输出，缺了它画面会发灰发平
+
+/* ====================================================================== */
+/* ====================== 地图 02：广州塔 · 珠江新城 ====================== */
+/* ====================================================================== */
+const CANTON = (() => {
+  const S = new THREE.Scene();
+  S.environment = scene.environment;
+
+  let nightness = 1;
+  let elapsed = 0;
+  const emisReg = [];          // 跟随昼夜的发光材质
+  const lampPointLights = [];  // 步道点光源
+  const regEmis = (mat, day, night) => { emisReg.push({ mat, day, night }); return mat; };
+
+  /* ------------------------------ 天空穹顶 ------------------------------ */
+  // 用真正的 3D 天穹代替「竖条贴图」：渐变随视角连续，不会出现横向色带或被拉长的星点
+  const SKY_DAY   = { top: '#376ab8', mid: '#8db3e1', horizon: '#f1ddc4' };
+  const SKY_NIGHT = { top: '#020514', mid: '#111a3e', horizon: '#7a3f61' };
+  const _skyDayC = new THREE.Color(), _skyNightC = new THREE.Color();
+  const skyMat = new THREE.ShaderMaterial({
+    side: THREE.BackSide, depthWrite: false, fog: false, toneMapped: false,
+    uniforms: {
+      uTop:     { value: new THREE.Color(SKY_NIGHT.top) },
+      uMid:     { value: new THREE.Color(SKY_NIGHT.mid) },
+      uHorizon: { value: new THREE.Color(SKY_NIGHT.horizon) },
+      uFog:     { value: new THREE.Color(0x141d3c) },
+      uGlowDir: { value: new THREE.Vector3(-0.6, 0.16, -0.78).normalize() },
+      uGlowCol: { value: new THREE.Color('#ff9a6c') },
+      uGlow:    { value: 0.55 }
+    },
+    vertexShader: /* glsl */`
+      varying vec3 vDir;
+      void main() {
+        vDir = normalize(position);
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }`,
+    fragmentShader: /* glsl */`
+      uniform vec3 uTop, uMid, uHorizon, uFog, uGlowCol;
+      uniform vec3 uGlowDir;
+      uniform float uGlow;
+      varying vec3 vDir;
+      void main() {
+        float h = clamp(vDir.y, -1.0, 1.0);
+        vec3 col = mix(uHorizon, uMid, smoothstep(0.01, 0.34, h));
+        col = mix(col, uTop, smoothstep(0.30, 0.92, h));
+        // 贴近地平线时融进雾色，地面与天空不出现硬边
+        col = mix(uFog, col, smoothstep(-0.05, 0.10, h));
+        // 城市方向的暖色辉光
+        float g = max(dot(vDir, uGlowDir), 0.0);
+        col += uGlowCol * pow(g, 7.0) * uGlow * smoothstep(-0.15, 0.35, h);
+        // 抖动，消除 8bit 渐变的色带
+        float dith = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453);
+        col += (dith - 0.5) * 0.005;
+        gl_FragColor = vec4(col, 1.0);
+      }`
+  });
+  const skyDome = new THREE.Mesh(new THREE.SphereGeometry(760, 40, 24), skyMat);
+  skyDome.frustumCulled = false;
+  S.add(skyDome);
+
+  // 星点用 3D Points，绝对不会被拉成横条
+  const starPos = [];
+  for (let i = 0; i < 560; i++) {
+    const u = Math.random() * Math.PI * 2;
+    const y = 0.05 + Math.pow(Math.random(), 0.75) * 0.95;
+    const rr = Math.sqrt(Math.max(0, 1 - y * y));
+    starPos.push(Math.cos(u) * rr * 700, y * 700, Math.sin(u) * rr * 700);
+  }
+  const starGeo = new THREE.BufferGeometry();
+  starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starPos, 3));
+  const starMat = new THREE.PointsMaterial({
+    color: 0xd6e4ff, size: 2.1, sizeAttenuation: false,
+    transparent: true, opacity: 0, depthWrite: false, fog: false
+  });
+  const starField = new THREE.Points(starGeo, starMat);
+  starField.frustumCulled = false;
+  S.add(starField);
+
+  function drawCantonSky(t) {
+    const setU = (u, d, n) => u.value.copy(_skyDayC.set(d)).lerp(_skyNightC.set(n), t);
+    setU(skyMat.uniforms.uTop, SKY_DAY.top, SKY_NIGHT.top);
+    setU(skyMat.uniforms.uMid, SKY_DAY.mid, SKY_NIGHT.mid);
+    setU(skyMat.uniforms.uHorizon, SKY_DAY.horizon, SKY_NIGHT.horizon);
+    skyMat.uniforms.uGlow.value = 0.18 + t * 0.62;
+    starMat.opacity = Math.pow(t, 2.4) * 0.85;
+  }
+
+  S.fog = new THREE.FogExp2(0x101a3a, 0.0036);
+
+  /* ------------------------------ 相机 ------------------------------ */
+  const VIEW = 68;
+  let aspect = innerWidth / innerHeight;
+  const cam = new THREE.OrthographicCamera(-VIEW * aspect, VIEW * aspect, VIEW, -VIEW, -600, 1600);
+  cam.position.set(126, 156, 138);
+  cam.lookAt(0, 24, -10);
+
+  const ctrl = new OrbitControls(cam, renderer.domElement);
+  ctrl.target.set(0, 24, -10);
+  ctrl.enableDamping = true;
+  ctrl.dampingFactor = 0.07;
+  ctrl.minZoom = 0.5;
+  ctrl.maxZoom = 3.4;
+  ctrl.minPolarAngle = 0.16;
+  ctrl.maxPolarAngle = Math.PI * 0.485;
+  ctrl.enabled = false;
+
+  /* ------------------------------ 灯光 ------------------------------ */
+  const hemi = new THREE.HemisphereLight(0x9ea8ff, 0x2a2238, 1.25);
+  S.add(hemi);
+
+  const sun = new THREE.DirectionalLight(0xffb98a, 2.1);
+  sun.position.set(-70, 95, 55);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(3072, 3072);
+  sun.shadow.bias = -0.0005;
+  sun.shadow.normalBias = 0.02;
+  Object.assign(sun.shadow.camera, { left: -170, right: 170, top: 170, bottom: -170, near: 1, far: 520 });
+  sun.shadow.camera.updateProjectionMatrix();
+  S.add(sun);
+
+  const fill = new THREE.DirectionalLight(0x7f8dff, 0.85);
+  fill.position.set(65, 42, -70);
+  S.add(fill);
+
+  /* 月牙 + 光晕 */
+  function makeGlowTexture(inner = 'rgba(255,255,255,1)', outer = 'rgba(255,255,255,0)') {
+    const c = document.createElement('canvas');
+    c.width = c.height = 128;
+    const ctx = c.getContext('2d');
+    const g = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+    g.addColorStop(0, inner); g.addColorStop(0.35, inner); g.addColorStop(1, outer);
+    ctx.fillStyle = g; ctx.fillRect(0, 0, 128, 128);
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
+  }
+  const moonMat = new THREE.SpriteMaterial({
+    map: makeGlowTexture('rgba(255,240,214,1)', 'rgba(255,180,140,0)'),
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 1
+  });
+  const moon = new THREE.Sprite(moonMat);
+  moon.scale.set(26, 26, 1);
+  moon.position.set(-92, 86, -155);
+  S.add(moon);
+
+  /* ------------------------------ 贴图工具 ------------------------------ */
+  const maxAniso = renderer.capabilities.getMaxAnisotropy();
+  function texFrom(c) {
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.anisotropy = maxAniso;
+    return t;
+  }
+
+  /* 江面：黑色底 + 横向光带，作为 emissiveMap 缓慢流淌 */
+  const waterCanvas = document.createElement('canvas');
+  waterCanvas.width = waterCanvas.height = 512;
+  (() => {
+    const ctx = waterCanvas.getContext('2d');
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, 512, 512);
+    const cols = ['rgba(255,205,150,', 'rgba(130,230,255,', 'rgba(200,170,255,', 'rgba(255,160,200,'];
+    for (let i = 0; i < 260; i++) {
+      const y = Math.random() * 512;
+      const x = Math.random() * 512;
+      const w = 8 + Math.random() * 70;
+      const h = Math.random() < 0.75 ? 0.7 : 1.6;
+      const col = cols[(Math.random() * cols.length) | 0];
+      const a = 0.05 + Math.random() * 0.22;
+      const g = ctx.createLinearGradient(x, 0, x + w, 0);
+      g.addColorStop(0, col + '0)');
+      g.addColorStop(0.5, col + a + ')');
+      g.addColorStop(1, col + '0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(x, y, w, h);
+    }
+  })();
+  const waterTex = texFrom(waterCanvas);
+  waterTex.wrapS = waterTex.wrapT = THREE.RepeatWrapping;
+  waterTex.repeat.set(16, 12);
+  // 降低金属度：水面不再随视角剧烈变色，只保留柔和的高光
+  const waterMat = new THREE.MeshStandardMaterial({
+    color: 0x0a1730, roughness: 0.34, metalness: 0.22, envMapIntensity: 0.35,
+    emissive: 0xffffff, emissiveMap: waterTex, emissiveIntensity: 0.95, dithering: true
+  });
+  const water = new THREE.Mesh(new THREE.PlaneGeometry(1000, 760), waterMat);
+  water.rotation.x = -Math.PI / 2;
+  water.position.set(0, -0.55, -30);
+  S.add(water);
+
+  /* --------------------------- 沿岸地面 --------------------------- */
+  // 用几何面片拼地面（不再用整张 canvas 贴图）：边缘干净，也不会因为视角变化采样到不同 mip 而变色
+  const BANK_W = 300;
+  const groundMat = (color, rough = 0.95) => new THREE.MeshStandardMaterial({
+    color, roughness: rough, metalness: 0, envMapIntensity: 0.16, dithering: true
+  });
+  const matGrassS = groundMat(0x486a46), matGrassN = groundMat(0x3f6042);
+  const matWalk   = groundMat(0xc8c2b4), matPave = groundMat(0xa9a59a);
+  const matRoad   = groundMat(0x3a4152, 0.88), matProm = groundMat(0xbfb9ab);
+
+  const flat = (w, d, mat, x, z, y = 0.03) => {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), mat);
+    m.rotation.x = -Math.PI / 2;
+    m.position.set(x, y, z);
+    m.receiveShadow = true;
+    S.add(m);
+    return m;
+  };
+
+  const stoneBodyMat = new THREE.MeshStandardMaterial({ color: 0x39424f, roughness: 0.92, metalness: 0, envMapIntensity: 0.2 });
+  function addBank(zMin, zMax) {
+    const d = zMax - zMin, cz = (zMin + zMax) / 2;
+    const body = new THREE.Mesh(new THREE.BoxGeometry(BANK_W, 1.7, d), stoneBodyMat);
+    body.position.set(0, -0.85, cz);
+    body.receiveShadow = true;
+    S.add(body);
+    flat(BANK_W, d, zMin > 0 ? matGrassS : matGrassN, 0, cz, 0.012);
+    return { zMin, zMax, cz, d };
+  }
+  addBank(14, 172);
+  addBank(-174, -24);
+
+  /* 南岸：滨江步道 + 沿江路 + 公园 + 中轴 */
+  (() => {
+    flat(BANK_W, 9,  matProm, 0, 18.5, 0.03);                 // 滨江步道
+    flat(BANK_W, 5,  matRoad, 0, 25.5, 0.032);                // 沿江路
+    flat(8, 148, matWalk, 0, 92, 0.034);                      // 中轴步道
+    for (const z of [56, 82, 108, 134, 160]) flat(BANK_W, 3.4, matWalk, 0, z, 0.033);
+    for (const x of [-124, -92, -62, 62, 92, 124]) flat(4.4, 148, matWalk, x, 92, 0.033);
+    // 塔前广场周围的一圈草坪色差
+    const ring = new THREE.Mesh(new THREE.RingGeometry(14, 19, 64), groundMat(0x3c5c3c));
+    ring.rotation.x = -Math.PI / 2; ring.position.set(0, 0.033, 34);
+    ring.receiveShadow = true; S.add(ring);
+    // 广场外的树阵铺装
+    flat(60, 30, matPave, 0, 52, 0.026);
+  })();
+
+  /* 北岸：珠江新城路网 + 花城广场中轴 */
+  (() => {
+    flat(BANK_W, 7,  matProm, 0, -27.5, 0.03);                // 北岸步道
+    flat(BANK_W, 6,  matRoad, 0, -34, 0.032);                 // 沿江路
+    const Z0 = -37, Z1 = -174;
+    // 花城广场：绿化 + 中央步道
+    flat(24, Z0 - Z1, matGrassN, 22, (Z0 + Z1) / 2, 0.026);
+    flat(8,  Z0 - Z1, matWalk,  22, (Z0 + Z1) / 2, 0.03);
+    for (const z of [-52, -76, -100, -124, -148, -170]) {
+      flat(24, 3.2, matWalk, 22, z, 0.031);
+    }
+    // 横向道路
+    flat(BANK_W, 5.5, matRoad, 0, -60, 0.034);
+    flat(BANK_W, 5.5, matRoad, 0, -90, 0.034);
+    flat(BANK_W, 5.5, matRoad, 0, -120, 0.034);
+    flat(BANK_W, 5.5, matRoad, 0, -150, 0.034);
+    // 纵向道路（避开中轴与地标）
+    for (const x of [-136, -104, -72, -44, -20, 56, 86, 116, 146]) {
+      flat(5.5, 140, matRoad, x, -107, 0.034);
+    }
+  })();
+
+  /* 江岸石墙 + 栏杆 + 灯带 */
+  const railMat = new THREE.MeshStandardMaterial({ color: 0xd3d9e3, metalness: 0.65, roughness: 0.35 });
+  const ledgeMat = new THREE.MeshStandardMaterial({ color: 0xb9b3a8, roughness: 0.8 });
+  const edgeGlowMat = regEmis(new THREE.MeshStandardMaterial({
+    color: 0x203040, emissive: 0x79d8ff, emissiveIntensity: 2.4, roughness: 0.4
+  }), 0.05, 2.4);
+  const edgePositions = [];
+  for (const z of [14, -24]) {
+    const wall = new THREE.Mesh(new THREE.BoxGeometry(300, 1.5, 0.9), ledgeMat);
+    wall.position.set(0, -0.6, z + (z > 0 ? -0.1 : 0.1));
+    wall.castShadow = wall.receiveShadow = true;
+    S.add(wall);
+    const strip = new THREE.Mesh(new THREE.BoxGeometry(288, 0.05, 0.08), edgeGlowMat);
+    strip.position.set(0, 0.26, z + (z > 0 ? -0.32 : 0.32));
+    S.add(strip);
+    for (let x = -148; x <= 148; x += 2.6) edgePositions.push([x, z]);
+    // 上下两道横杆
+    for (const y of [0.78, 0.5]) {
+      const rail = new THREE.Mesh(new THREE.BoxGeometry(288, 0.045, 0.045), railMat);
+      rail.position.set(0, y, z + (z > 0 ? -0.2 : 0.2));
+      rail.castShadow = true;
+      S.add(rail);
+    }
+  }
+  const postGeo = new THREE.BoxGeometry(0.06, 0.8, 0.06);
+  const posts = new THREE.InstancedMesh(postGeo, railMat, edgePositions.length);
+  {
+    const m = new THREE.Matrix4();
+    edgePositions.forEach(([x, z], i) => {
+      m.makeTranslation(x, 0.42, z + (z > 0 ? -0.2 : 0.2));
+      posts.setMatrixAt(i, m);
+    });
+    posts.castShadow = true;
+    S.add(posts);
+  }
+
+  /* 塔前圆形广场 */
+  function makePlazaTexture() {
+    const P = 1024;
+    const c = document.createElement('canvas');
+    c.width = c.height = P;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#cbc5b7';
+    ctx.fillRect(0, 0, P, P);
+    const cx = P / 2, cy = P / 2;
+    for (let r = 40; r < P / 2; r += 46) {
+      ctx.strokeStyle = 'rgba(90,88,82,.28)';
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
+    }
+    for (let a = 0; a < 64; a++) {
+      const ang = a / 64 * Math.PI * 2;
+      ctx.strokeStyle = a % 2 ? 'rgba(90,88,82,.16)' : 'rgba(255,255,255,.18)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(ang) * 118, cy + Math.sin(ang) * 118);
+      ctx.lineTo(cx + Math.cos(ang) * (P / 2), cy + Math.sin(ang) * (P / 2));
+      ctx.stroke();
+    }
+    ctx.fillStyle = 'rgba(78,78,74,.18)';
+    ctx.beginPath(); ctx.arc(cx, cy, 118, 0, Math.PI * 2); ctx.fill();
+    return texFrom(c);
+  }
+  const plaza = new THREE.Mesh(new THREE.CircleGeometry(14, 80), new THREE.MeshStandardMaterial({
+    map: makePlazaTexture(), roughness: 0.86, metalness: 0, envMapIntensity: 0.2, dithering: true
+  }));
+  plaza.rotation.x = -Math.PI / 2;
+  plaza.position.set(0, 0.035, 34);
+  plaza.receiveShadow = true;
+  S.add(plaza);
+
+  /* ------------------------------ 广州塔 ------------------------------ */
+  const TOWER = new THREE.Group();
+  TOWER.position.set(0, 0, 34);
+  S.add(TOWER);
+
+  const TB = 2.4, TH = 43.2, TWAIST = 0.617, TTOP = TB + TH;
+  const EA0 = 4.0, EB0 = 3.0, EAW = 1.5, EBW = 1.32, EA1 = 2.7, EB1 = 2.0;
+  const TWIST = 2.36;          // 上下椭圆相对扭转 135°
+  const TAU = Math.PI * 2;
+  // 双曲面轮廓：腰部以上/以下都按双曲线自然张开（比二次曲线更接近真实塔身）
+  function towerRadius(t) {
+    const u = t < TWAIST ? (TWAIST - t) / TWAIST : (t - TWAIST) / (1 - TWAIST);
+    const P = 2.55;
+    const k = (Math.sqrt(1 + u * u * P * P) - 1) / (Math.sqrt(1 + P * P) - 1);
+    const top = t < TWAIST ? 0 : 1;
+    return {
+      a: EAW + ((top ? EA1 : EA0) - EAW) * k,
+      b: EBW + ((top ? EB1 : EB0) - EBW) * k
+    };
+  }
+  function towerPoint(t, ang, mul = 1) {
+    const r = towerRadius(t);
+    const a = ang + TWIST * t;
+    return new THREE.Vector3(Math.cos(a) * r.a * mul, TB + t * TH, Math.sin(a) * r.b * mul);
+  }
+
+  const podiumMat = new THREE.MeshStandardMaterial({ color: 0xdde3ea, roughness: 0.55, metalness: 0.08 });
+  const darkGlassMat = new THREE.MeshStandardMaterial({
+    color: 0x0b1830, roughness: 0.16, metalness: 0.85, envMapIntensity: 1.15
+  });
+  const roofDark = new THREE.MeshStandardMaterial({ color: 0x323a4a, roughness: 0.7, metalness: 0.15 });
+
+  // 台阶 / 基座
+  const step = new THREE.Mesh(new THREE.CylinderGeometry(8.3, 8.9, 0.55, 56), podiumMat);
+  step.scale.z = 0.82; step.position.y = 0.275;
+  step.castShadow = step.receiveShadow = true;
+  TOWER.add(step);
+
+  const pod = new THREE.Mesh(new THREE.CylinderGeometry(6.9, 7.5, 1.9, 56), podiumMat);
+  pod.scale.z = 0.82; pod.position.y = 0.55 + 0.95;
+  pod.castShadow = pod.receiveShadow = true;
+  TOWER.add(pod);
+
+  const podGlassMat = regEmis(new THREE.MeshStandardMaterial({
+    color: 0x14283c, emissive: 0xffc98a, emissiveIntensity: 1.5, roughness: 0.22, metalness: 0.5
+  }), 0.08, 1.5);
+  const podGlass = new THREE.Mesh(new THREE.CylinderGeometry(6.96, 6.96, 0.78, 56, 1, true), podGlassMat);
+  podGlass.scale.z = 0.82; podGlass.position.y = 1.72;
+  TOWER.add(podGlass);
+
+  const podRoof = new THREE.Mesh(new THREE.CylinderGeometry(6.95, 6.95, 0.22, 56), podiumMat);
+  podRoof.scale.z = 0.82; podRoof.position.y = 2.5;
+  podRoof.castShadow = true;
+  TOWER.add(podRoof);
+
+  // 入口雨棚
+  const canopy = new THREE.Mesh(new THREE.CylinderGeometry(4.6, 4.6, 0.2, 40), podiumMat);
+  canopy.scale.z = 0.72; canopy.position.set(0, 3.1, 5.4);
+  canopy.castShadow = true;
+  TOWER.add(canopy);
+  for (const a of [-0.6, 0.6]) {
+    const px = Math.sin(a) * 3.2, pz = 5.4 + Math.cos(a) * 2.4;
+    const col = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.14, 2.6, 8), podiumMat);
+    col.position.set(px, 1.75, pz);
+    col.castShadow = true;
+    TOWER.add(col);
+  }
+  const canopyLED = new THREE.Mesh(new THREE.CylinderGeometry(4.5, 4.5, 0.04, 40, 1, true), edgeGlowMat);
+  canopyLED.scale.z = 0.72; canopyLED.position.set(0, 2.98, 5.4);
+  TOWER.add(canopyLED);
+
+  // 塔身文字
+  {
+    const c = document.createElement('canvas');
+    c.width = 512; c.height = 128;
+    const ctx = c.getContext('2d');
+    ctx.clearRect(0, 0, 512, 128);
+    ctx.fillStyle = 'rgba(8,14,26,.72)';
+    ctx.fillRect(0, 0, 512, 128);
+    ctx.strokeStyle = 'rgba(140,220,255,.5)';
+    ctx.lineWidth = 3; ctx.strokeRect(2, 2, 508, 124);
+    ctx.fillStyle = '#e9f6ff';
+    ctx.textAlign = 'center';
+    ctx.font = '600 54px "PingFang SC","Microsoft YaHei",system-ui,sans-serif';
+    ctx.fillText('广 州 塔', 256, 62);
+    ctx.fillStyle = '#8fd8ff';
+    ctx.font = '600 24px system-ui,sans-serif';
+    ctx.fillText('CANTON TOWER', 256, 100);
+    const t = texFrom(c);
+    const sign = new THREE.Mesh(new THREE.PlaneGeometry(4.6, 1.15), new THREE.MeshBasicMaterial({
+      map: t, transparent: true
+    }));
+    sign.position.set(0, 1.45, 6.55);
+    TOWER.add(sign);
+  }
+
+  // 内筒
+  const corePts = [];
+  for (let i = 0; i <= 24; i++) {
+    const t = i / 24;
+    const r = towerRadius(t);
+    corePts.push(new THREE.Vector2(Math.min(r.a, r.b) * 0.62, TB + t * TH));
+  }
+  const core = new THREE.Mesh(new THREE.LatheGeometry(corePts, 24), darkGlassMat);
+  core.scale.z = 0.84;
+  core.castShadow = true;
+  TOWER.add(core);
+
+  const floorBandMat = regEmis(new THREE.MeshStandardMaterial({
+    color: 0x1c2333, emissive: 0x8fd2ff, emissiveIntensity: 1.9, roughness: 0.3
+  }), 0.04, 1.9);
+  for (let i = 1; i < 12; i++) {
+    const t = i / 12;
+    const r = towerRadius(t);
+    const band = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 0.045, 32, 1, true), floorBandMat);
+    band.scale.set(Math.min(r.a, r.b) * 0.72, 1, Math.min(r.a, r.b) * 0.6);
+    band.position.y = TB + t * TH;
+    TOWER.add(band);
+  }
+
+  // 外筒钢构：24 根斜柱 + 47 道椭圆环梁 + 连续斜撑（真实广州塔的镂空网格）
+  const segs = [];
+  const NCOL = 24, NLEV = 46, NRING = 56;
+  for (let k = 0; k <= NLEV; k++) {
+    const t = k / NLEV;
+    for (let j = 0; j < NRING; j++) {
+      segs.push({
+        A: towerPoint(t, j / NRING * TAU),
+        B: towerPoint(t, (j + 1) / NRING * TAU),
+        r: 0.034, kind: 1, t
+      });
+    }
+  }
+  for (let k = 0; k < NLEV; k++) {
+    const t1 = k / NLEV, t2 = (k + 1) / NLEV, tm = (t1 + t2) / 2;
+    for (let j = 0; j < NCOL; j++) {
+      const a1 = j / NCOL * TAU, a2 = (j + 1) / NCOL * TAU;
+      // 斜柱
+      segs.push({ A: towerPoint(t1, a1), B: towerPoint(t2, a1), r: 0.072, kind: 0, t: tm });
+      // 单斜撑，逐层换向，形成拉伸的菱形
+      const A = (j + k) % 2 ? towerPoint(t1, a1) : towerPoint(t1, a2);
+      const B = (j + k) % 2 ? towerPoint(t2, a2) : towerPoint(t2, a1);
+      segs.push({ A, B, r: 0.024, kind: 2, t: tm });
+    }
+  }
+
+  const latGeo = new THREE.CylinderGeometry(1, 1, 1, 5, 1, true);
+  const latMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  const lattice = new THREE.InstancedMesh(latGeo, latMat, segs.length);
+  lattice.frustumCulled = false;
+  const _m4 = new THREE.Matrix4();
+  const _q = new THREE.Quaternion();
+  const _up = new THREE.Vector3(0, 1, 0);
+  const _dir = new THREE.Vector3();
+  const _mid = new THREE.Vector3();
+  const _scale = new THREE.Vector3();
+  const segMeta = [];
+  const _steel = new THREE.Color(0.63, 0.68, 0.78);
+  const _cc = new THREE.Color();
+  const _nn = new THREE.Color();
+  segs.forEach((s, i) => {
+    _dir.subVectors(s.B, s.A);
+    const len = _dir.length();
+    _dir.normalize();
+    _q.setFromUnitVectors(_up, _dir);
+    _mid.addVectors(s.A, s.B).multiplyScalar(0.5);
+    _scale.set(s.r, len, s.r);
+    _m4.compose(_mid, _q, _scale);
+    lattice.setMatrixAt(i, _m4);
+    lattice.setColorAt(i, _steel);
+    segMeta.push({
+      t: s.t,
+      hue: 0.52 + s.t * 0.34 + (s.kind === 0 ? 0.015 * (i % 9) : 0.008 * (i % 13)),
+      bri: s.kind === 1 ? 1.25 : s.kind === 0 ? 1.55 : 0.95
+    });
+  });
+  lattice.instanceMatrix.needsUpdate = true;
+  lattice.instanceColor.needsUpdate = true;
+  TOWER.add(lattice);
+
+  // 顶部观景平台 + 摩天轮舱
+  const deck = new THREE.Mesh(new THREE.CylinderGeometry(EA1 * 1.12, EA1 * 1.08, 0.32, 48), podiumMat);
+  deck.scale.z = EB1 / EA1; deck.position.y = TTOP + 0.16;
+  deck.castShadow = deck.receiveShadow = true;
+  TOWER.add(deck);
+
+  const deckGlassMat = new THREE.MeshStandardMaterial({
+    color: 0x9fdcff, transparent: true, opacity: 0.22, roughness: 0.08,
+    metalness: 0.35, side: THREE.DoubleSide, depthWrite: false
+  });
+  const deckGlass = new THREE.Mesh(new THREE.CylinderGeometry(EA1 * 1.14, EA1 * 1.14, 0.56, 48, 1, true), deckGlassMat);
+  deckGlass.scale.z = EB1 / EA1; deckGlass.position.y = TTOP + 0.6;
+  TOWER.add(deckGlass);
+
+  const deckLEDMat = regEmis(new THREE.MeshStandardMaterial({
+    color: 0x203040, emissive: 0xffb46a, emissiveIntensity: 2.6, roughness: 0.4
+  }), 0.05, 2.6);
+  const deckLED = new THREE.Mesh(new THREE.CylinderGeometry(EA1 * 1.15, EA1 * 1.15, 0.045, 48, 1, true), deckLEDMat);
+  deckLED.scale.z = EB1 / EA1; deckLED.position.y = TTOP + 0.34;
+  TOWER.add(deckLED);
+
+  const capsuleRingY = TTOP + 1.65;
+  const capsuleA = EA1 * 1.16, capsuleB = EB1 * 1.16;
+  const trackPts = [];
+  for (let i = 0; i < 64; i++) {
+    const a = i / 64 * Math.PI * 2;
+    trackPts.push(new THREE.Vector3(Math.cos(a) * capsuleA, capsuleRingY, Math.sin(a) * capsuleB));
+  }
+  const trackCurve = new THREE.CatmullRomCurve3(trackPts, true);
+  const trackMat = regEmis(new THREE.MeshStandardMaterial({
+    color: 0x1a2434, emissive: 0xb6e4ff, emissiveIntensity: 1.7, roughness: 0.35, metalness: 0.5
+  }), 0.06, 1.7);
+  TOWER.add(new THREE.Mesh(new THREE.TubeGeometry(trackCurve, 96, 0.035, 5, true), trackMat));
+
+  const capsuleGlassMat = new THREE.MeshStandardMaterial({
+    color: 0xbfe7ff, transparent: true, opacity: 0.34, roughness: 0.08,
+    metalness: 0.45, envMapIntensity: 1.4
+  });
+  const capsuleCoreMat = regEmis(new THREE.MeshStandardMaterial({
+    color: 0x2a1e18, emissive: 0xffc88a, emissiveIntensity: 2.2, roughness: 0.4
+  }), 0.1, 2.2);
+  const capsuleGeo = new THREE.SphereGeometry(0.4, 16, 12);
+  const capsules = [];
+  for (let i = 0; i < 16; i++) {
+    const a = i / 16 * Math.PI * 2;
+    const g = new THREE.Group();
+    const glass = new THREE.Mesh(capsuleGeo, capsuleGlassMat);
+    glass.scale.set(1.05, 0.72, 0.72);
+    g.add(glass);
+    const coreMesh = new THREE.Mesh(new THREE.SphereGeometry(0.22, 12, 8), capsuleCoreMat);
+    coreMesh.scale.set(1.1, 0.55, 0.55);
+    g.add(coreMesh);
+    const hanger = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.5, 5), trackMat);
+    hanger.position.y = 0.45;
+    g.add(hanger);
+    g.position.set(Math.cos(a) * capsuleA, capsuleRingY, Math.sin(a) * capsuleB);
+    TOWER.add(g);
+    capsules.push({ g, a });
+  }
+
+  // 天线桅杆
+  const antenna = new THREE.Group();
+  const antMat = new THREE.MeshStandardMaterial({ color: 0xdde5ef, roughness: 0.35, metalness: 0.7 });
+  const antRed = new THREE.MeshStandardMaterial({ color: 0xb23a3a, roughness: 0.5 });
+  let ay = TTOP + 0.7;
+  const antSegs = [[0.43, 0.3, 4.4], [0.3, 0.16, 4.2], [0.16, 0.045, 3.0]];
+  for (const [rb, rt, h] of antSegs) {
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, 10), antMat);
+    m.position.y = ay + h / 2;
+    m.castShadow = true;
+    antenna.add(m);
+    const band = new THREE.Mesh(new THREE.CylinderGeometry(rb * 0.93, rb * 0.97, 0.28, 10), antRed);
+    band.position.y = ay + 0.35;
+    antenna.add(band);
+    const platform = new THREE.Mesh(new THREE.CylinderGeometry(rb * 2.1, rb * 2.1, 0.1, 12), podiumMat);
+    platform.position.y = ay;
+    antenna.add(platform);
+    ay += h;
+  }
+  const beaconMat = new THREE.MeshBasicMaterial({ color: 0xff5d6e });
+  const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.18, 12, 8), beaconMat);
+  beacon.position.y = ay + 0.1;
+  antenna.add(beacon);
+  const beaconGlowMat = new THREE.SpriteMaterial({
+    map: makeGlowTexture('rgba(255,92,120,1)', 'rgba(255,40,80,0)'),
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0.9
+  });
+  const beaconGlow = new THREE.Sprite(beaconGlowMat);
+  beaconGlow.scale.set(3.2, 3.2, 1);
+  beaconGlow.position.y = ay + 0.1;
+  antenna.add(beaconGlow);
+  TOWER.add(antenna);
+
+  // 塔身灯光倒影
+  const reflectionStrips = [];
+  const reflTex = makeGlowTexture('rgba(255,255,255,.9)', 'rgba(255,255,255,0)');
+  for (let i = 0; i < 9; i++) {
+    const w = 0.25 + Math.random() * 0.5;
+    const len = 6 + Math.random() * 12;
+    const mat = new THREE.MeshBasicMaterial({
+      map: reflTex, transparent: true, opacity: 0.16 + Math.random() * 0.14,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+      color: new THREE.Color().setHSL(0.55 + i * 0.035, 0.85, 0.6)
+    });
+    const strip = new THREE.Mesh(new THREE.PlaneGeometry(w, len), mat);
+    strip.rotation.x = -Math.PI / 2;
+    strip.position.set((Math.random() - 0.5) * 7, -0.53, 12 - Math.random() * 26);
+    S.add(strip);
+    reflectionStrips.push({ mat, phase: Math.random() * 6.28, base: mat.opacity });
+  }
+
+  /* --------------------------- 立面贴图工厂 --------------------------- */
+  function makeFacade(kind) {
+    const W = 128, H = 256;
+    const dc = document.createElement('canvas'); dc.width = W; dc.height = H;
+    const ec = document.createElement('canvas'); ec.width = W; ec.height = H;
+    const d = dc.getContext('2d'), e = ec.getContext('2d');
+    let base = '#1b2c50', mullion = 'rgba(150,185,235,.5)', win = '#223a63', frame = '#0d1526';
+    if (kind === 'dark') { base = '#141d2d'; mullion = 'rgba(120,160,215,.32)'; win = '#1b2942'; frame = '#0a111d'; }
+    if (kind === 'diagrid') { base = '#263a5c'; mullion = 'rgba(235,244,255,.72)'; win = '#2e476f'; frame = '#162033'; }
+    if (kind === 'stone') { base = '#b9b4a8'; mullion = 'rgba(80,80,76,.35)'; win = '#3d4858'; frame = '#8e897e'; }
+    d.fillStyle = base; d.fillRect(0, 0, W, H);
+    e.fillStyle = '#000'; e.fillRect(0, 0, W, H);
+    const cols = 6, rows = 16;
+    const cw = W / cols, ch = H / rows;
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        d.fillStyle = win;
+        d.fillRect(c * cw + 3, r * ch + 4, cw - 6, ch - 8);
+        d.fillStyle = frame;
+        d.fillRect(c * cw + 2, r * ch + ch - 4, cw - 4, 3);
+        const rnd = Math.random();
+        if (rnd < (kind === 'stone' ? 0.36 : 0.44)) {
+          e.fillStyle = Math.random() < 0.78 ? 'rgba(255,205,140,.95)' : 'rgba(155,220,255,.9)';
+          e.fillRect(c * cw + 3, r * ch + 4, cw - 6, ch - 8);
+        }
+      }
+    }
+    d.fillStyle = mullion;
+    for (let c = 0; c <= cols; c++) d.fillRect(c * cw - 1, 0, 2, H);
+    if (kind === 'diagrid') {
+      d.strokeStyle = mullion; d.lineWidth = 2;
+      for (let k = -4; k < 6; k++) {
+        d.beginPath(); d.moveTo(k * 40, 0); d.lineTo(k * 40 + H, H); d.stroke();
+        d.beginPath(); d.moveTo(k * 40, H); d.lineTo(k * 40 + H, 0); d.stroke();
+      }
+    }
+    const map = texFrom(dc), emi = texFrom(ec);
+    map.wrapS = map.wrapT = THREE.RepeatWrapping;
+    emi.wrapS = emi.wrapT = THREE.RepeatWrapping;
+    return { map, emi };
+  }
+  const FACADES = {
+    blue: makeFacade('blue'),
+    dark: makeFacade('dark'),
+    diagrid: makeFacade('diagrid'),
+    stone: makeFacade('stone')
+  };
+
+  function facadeMat(pair, rx, ry, opts = {}) {
+    const map = pair.map.clone(); map.repeat.set(rx, ry); map.needsUpdate = true;
+    const emi = pair.emi.clone(); emi.repeat.set(rx, ry); emi.needsUpdate = true;
+    const mat = new THREE.MeshStandardMaterial({
+      map, emissiveMap: emi, emissive: 0xffffff,
+      roughness: opts.rough != null ? opts.rough : 0.32,
+      metalness: opts.metal != null ? opts.metal : 0.55,
+      color: opts.tint || 0xffffff
+    });
+    regEmis(mat, 0.05, opts.night != null ? opts.night : 1.35);
+    return mat;
+  }
+
+  const crownCoolMat = regEmis(new THREE.MeshStandardMaterial({
+    color: 0x223044, emissive: 0x9fdcff, emissiveIntensity: 2.2, roughness: 0.4
+  }), 0.05, 2.2);
+  const crownWarmMat = regEmis(new THREE.MeshStandardMaterial({
+    color: 0x2a2418, emissive: 0xffc27a, emissiveIntensity: 2.1, roughness: 0.4
+  }), 0.05, 2.1);
+  const crownPinkMat = regEmis(new THREE.MeshStandardMaterial({
+    color: 0x2c1c2c, emissive: 0xff86c8, emissiveIntensity: 2.0, roughness: 0.4
+  }), 0.05, 2.0);
+
+  function addCrown(x, z, w, d, y, mat, t = 0.13) {
+    for (const [sx, sz, ox, oz] of [
+      [w + 0.05, t, 0, -d / 2], [w + 0.05, t, 0, d / 2],
+      [t, d + 0.05, -w / 2, 0], [t, d + 0.05, w / 2, 0]
+    ]) {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(sx, 0.16, sz), mat);
+      m.position.set(x + ox, y, z + oz);
+      S.add(m);
+    }
+  }
+
+  const towerRoofMat = new THREE.MeshStandardMaterial({ color: 0x2c3442, roughness: 0.62, metalness: 0.2 });
+  function addTowerBox(x, z, w, d, h, y, pair, opts = {}) {
+    const side = facadeMat(pair, Math.max(1, Math.round(w / 2.6)), Math.max(2, Math.round(h / 3.4)), opts);
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), [side, side, towerRoofMat, towerRoofMat, side, side]);
+    mesh.position.set(x, y + h / 2, z);
+    mesh.castShadow = mesh.receiveShadow = true;
+    S.add(mesh);
+    return mesh;
+  }
+
+  /* --------------------------- 珠江新城地标 --------------------------- */
+  // 广州周大福金融中心（东塔，530m）
+  (function ctf() {
+    const X = 44, Z = -56;
+    let y = 0;
+    const tiers = [[11, 11, 30], [10.2, 10.2, 7.6], [9.3, 9.3, 6.4], [8.2, 8.2, 5.4], [6.4, 6.4, 3]];
+    for (const [w, d, h] of tiers) {
+      addTowerBox(X, Z, w, d, h, y, FACADES.dark, { night: 1.5, rough: 0.24, metal: 0.7 });
+      addCrown(X, Z, w, d, y + h - 0.1, crownCoolMat, 0.16);
+      y += h;
+    }
+    // 顶部竖向冠鳍
+    for (let i = 0; i < 8; i++) {
+      const a = i / 8 * Math.PI * 2;
+      const fin = new THREE.Mesh(new THREE.BoxGeometry(0.18, 4.2, 0.6), new THREE.MeshStandardMaterial({
+        color: 0xdbe7f5, roughness: 0.35, metalness: 0.7, emissive: 0x9fdcff, emissiveIntensity: 0.4
+      }));
+      fin.position.set(X + Math.cos(a) * 3.2, y + 1.4, Z + Math.sin(a) * 3.2);
+      fin.rotation.y = -a;
+      fin.castShadow = true;
+      S.add(fin);
+    }
+    const spire = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.34, 5.5, 8), antMat);
+    spire.position.set(X, y + 2.7, Z);
+    spire.castShadow = true;
+    S.add(spire);
+    const glow = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: makeGlowTexture('rgba(150,220,255,1)', 'rgba(80,150,255,0)'),
+      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending
+    }));
+    glow.scale.set(4, 4, 1);
+    glow.position.set(X, y + 5.5, Z);
+    S.add(glow);
+  })();
+
+  // 广州国际金融中心（西塔，438m）
+  (function ifc() {
+    const X = 2, Z = -54;
+    let y = 0;
+    addTowerBox(X, Z, 9.2, 9.2, 27, y, FACADES.diagrid, { night: 1.25, rough: 0.26, metal: 0.6 });
+    addCrown(X, Z, 9.2, 9.2, y + 26.9, crownCoolMat, 0.14);
+    y += 27;
+    addTowerBox(X, Z, 8.2, 8.2, 9, y, FACADES.diagrid, { night: 1.25, rough: 0.26, metal: 0.6 });
+    y += 9;
+    addTowerBox(X, Z, 7.1, 7.1, 6, y, FACADES.diagrid, { night: 1.35 });
+    y += 6;
+    // 斜切冠顶
+    const crownGeo = new THREE.BoxGeometry(6.1, 4.6, 6.1);
+    const pos = crownGeo.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      if (pos.getY(i) > 0) pos.setX(i, pos.getX(i) + 1.6);
+    }
+    crownGeo.computeVertexNormals();
+    const crown = new THREE.Mesh(crownGeo, facadeMat(FACADES.diagrid, 2, 2, { night: 1.3 }));
+    crown.position.set(X, y + 2.3, Z);
+    crown.castShadow = true;
+    S.add(crown);
+    const spire = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.2, 4.4, 6), antMat);
+    spire.position.set(X + 1.1, y + 6.5, Z);
+    S.add(spire);
+  })();
+
+  // 广东省博物馆
+  (function museum() {
+    const X = 40, Z = -42;
+    const c = document.createElement('canvas'); c.width = 256; c.height = 128;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#15181f'; ctx.fillRect(0, 0, 256, 128);
+    for (let i = 0; i < 22; i++) {
+      ctx.fillStyle = Math.random() < 0.5 ? 'rgba(196,74,48,.55)' : 'rgba(122,50,40,.45)';
+      const w = 8 + Math.random() * 26, h = 6 + Math.random() * 18;
+      ctx.fillRect(Math.random() * 256, Math.random() * 128, w, h);
+    }
+    const map = texFrom(c);
+    const emiCanvas = document.createElement('canvas'); emiCanvas.width = 256; emiCanvas.height = 128;
+    const ec = emiCanvas.getContext('2d');
+    ec.fillStyle = '#000'; ec.fillRect(0, 0, 256, 128);
+    for (let i = 0; i < 14; i++) {
+      ec.fillStyle = Math.random() < 0.6 ? 'rgba(255,110,70,.95)' : 'rgba(255,180,110,.9)';
+      ec.fillRect(Math.random() * 256, Math.random() * 128, 6 + Math.random() * 20, 4 + Math.random() * 10);
+    }
+    const emi = texFrom(emiCanvas);
+    const mat = new THREE.MeshStandardMaterial({
+      map, emissiveMap: emi, emissive: 0xffffff, roughness: 0.55, metalness: 0.32
+    });
+    regEmis(mat, 0.05, 1.6);
+    const body = new THREE.Mesh(new THREE.BoxGeometry(14, 4.4, 9), [mat, mat, towerRoofMat, towerRoofMat, mat, mat]);
+    body.position.set(X, 2.2, Z);
+    body.castShadow = body.receiveShadow = true;
+    S.add(body);
+    const roof = new THREE.Mesh(new THREE.BoxGeometry(15.4, 0.5, 10.2), podiumMat);
+    roof.position.set(X, 4.65, Z);
+    roof.castShadow = true;
+    S.add(roof);
+    const entry = new THREE.Mesh(new THREE.BoxGeometry(5, 2.4, 0.4), darkGlassMat);
+    entry.position.set(X, 1.2, Z + 4.6);
+    S.add(entry);
+    const entryGlow = new THREE.Mesh(new THREE.BoxGeometry(4.4, 0.08, 0.08), crownWarmMat);
+    entryGlow.position.set(X, 2.35, Z + 4.82);
+    S.add(entryGlow);
+  })();
+
+  // 广州大剧院：两块鹅卵石
+  (function opera() {
+    const pebbleMat = new THREE.MeshStandardMaterial({
+      color: 0x222a36, roughness: 0.12, metalness: 0.88, envMapIntensity: 1.5,
+      emissive: 0x3a2a1c, emissiveIntensity: 0.55
+    });
+    regEmis(pebbleMat, 0.05, 1.15);
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(9, 9.4, 0.35, 40), new THREE.MeshStandardMaterial({
+      color: 0xc8c2b5, roughness: 0.85
+    }));
+    base.scale.z = 0.7;
+    base.position.set(-27, 0.17, -40);
+    base.receiveShadow = true;
+    S.add(base);
+    const geo = new THREE.SphereGeometry(1, 36, 24);
+    const a = new THREE.Mesh(geo, pebbleMat);
+    a.scale.set(4.6, 1.7, 3.0);
+    a.position.set(-29.5, 1.15, -40);
+    a.rotation.y = 0.2;
+    a.castShadow = a.receiveShadow = true;
+    S.add(a);
+    const b = new THREE.Mesh(geo, pebbleMat);
+    b.scale.set(3.4, 1.35, 2.3);
+    b.position.set(-23.5, 0.85, -37.5);
+    b.rotation.y = -0.4;
+    b.castShadow = b.receiveShadow = true;
+    S.add(b);
+    // 玻璃门厅
+    const lobby = new THREE.Mesh(new THREE.BoxGeometry(3.2, 1.1, 2), darkGlassMat);
+    lobby.position.set(-26.5, 0.55, -36.4);
+    S.add(lobby);
+    const lobbyLED = new THREE.Mesh(new THREE.BoxGeometry(3, 0.07, 0.07), crownWarmMat);
+    lobbyLED.position.set(-26.5, 1.12, -35.35);
+    S.add(lobbyLED);
+  })();
+
+  // 广州图书馆：层叠的白色书页
+  (function library() {
+    const X = -52, Z = -44;
+    for (let k = 0; k < 6; k++) {
+      const w = 10 - (k % 2) * 0.9 + (k === 5 ? 1.4 : 0);
+      const d = 8.4;
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, 0.85, d), k === 5 ? podiumMat : new THREE.MeshStandardMaterial({
+        color: 0xdfe3e8, roughness: 0.7, metalness: 0.08
+      }));
+      m.position.set(X + (k % 3 - 1) * 0.35, 0.45 + k * 1.02, Z);
+      m.castShadow = m.receiveShadow = true;
+      S.add(m);
+      const glow = new THREE.Mesh(new THREE.BoxGeometry(w * 0.94, 0.14, d * 0.94), crownWarmMat);
+      glow.position.set(X + (k % 3 - 1) * 0.35, 0.94 + k * 1.02, Z);
+      S.add(glow);
+    }
+    const coreTower = new THREE.Mesh(new THREE.BoxGeometry(2.4, 6.6, 2.4), darkGlassMat);
+    coreTower.position.set(X + 3.6, 3.3, Z - 2.6);
+    coreTower.castShadow = true;
+    S.add(coreTower);
+  })();
+
+  // 海心沙：江心岛 + 体育场
+  (function haixinsha() {
+    const X = 37, Z = -5;
+    const island = new THREE.Mesh(new THREE.CylinderGeometry(9.4, 10, 1.1, 48), new THREE.MeshStandardMaterial({
+      color: 0x3c5b3e, roughness: 0.95
+    }));
+    island.scale.z = 0.6;
+    island.position.set(X, -0.05, Z);
+    island.receiveShadow = true;
+    S.add(island);
+    const rim = new THREE.Mesh(new THREE.CylinderGeometry(10.1, 10.4, 0.7, 48, 1, true), ledgeMat);
+    rim.scale.z = 0.6; rim.position.set(X, -0.35, Z);
+    S.add(rim);
+    const outer = new THREE.Mesh(new THREE.CylinderGeometry(7.2, 7.7, 1.6, 40, 1, true), new THREE.MeshStandardMaterial({
+      color: 0xd9dee6, roughness: 0.5, metalness: 0.25
+    }));
+    outer.scale.z = 0.6; outer.position.set(X, 0.8, Z);
+    outer.castShadow = true;
+    S.add(outer);
+    const tiers = [[6.6, 1.1, 0x2c3d58], [5.9, 1.35, 0x334762], [5.1, 1.6, 0x3a506d]];
+    for (const [r, h, col] of tiers) {
+      const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r + 0.2, 0.26, 36), new THREE.MeshStandardMaterial({
+        color: col, roughness: 0.7
+      }));
+      m.scale.z = 0.6; m.position.set(X, h, Z);
+      m.receiveShadow = true;
+      S.add(m);
+    }
+    const field = new THREE.Mesh(new THREE.CylinderGeometry(4.4, 4.4, 0.16, 36), new THREE.MeshStandardMaterial({
+      color: 0x3f7a44, roughness: 1
+    }));
+    field.scale.z = 0.6; field.position.set(X, 0.5, Z);
+    S.add(field);
+    // 白色拱架
+    const curve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(X - 8, 0.6, Z), new THREE.Vector3(X, 5.6, Z), new THREE.Vector3(X + 8, 0.6, Z)
+    ]);
+    const arch = new THREE.Mesh(new THREE.TubeGeometry(curve, 32, 0.11, 6, false), railMat);
+    arch.castShadow = true;
+    S.add(arch);
+    for (const s of [-1, 1]) {
+      const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.14, 4.6, 8), railMat);
+      mast.position.set(X + s * 8, 2.3, Z);
+      S.add(mast);
+      const lamp = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.3, 0.3), crownCoolMat);
+      lamp.position.set(X + s * 8, 4.6, Z);
+      S.add(lamp);
+    }
+  })();
+
+  // 中信广场：八角塔身 + 双尖塔（391m）
+  (function citic() {
+    const X = 22, Z = -140;
+    let y = 0;
+    addTowerBox(X, Z, 22, 22, 4.2, y, FACADES.stone, { night: 0.95, rough: 0.6, metal: 0.18 });
+    y += 4.2;
+    const shaft = new THREE.Mesh(
+      new THREE.CylinderGeometry(9.4, 9.4, 22, 8),
+      [facadeMat(FACADES.stone, 5, 9, { night: 1.15, rough: 0.5, metal: 0.3 }), towerRoofMat, towerRoofMat]
+    );
+    shaft.rotation.y = Math.PI / 8;
+    shaft.position.set(X, y + 11, Z);
+    shaft.castShadow = shaft.receiveShadow = true;
+    S.add(shaft);
+    y += 22;
+    for (const [r, h] of [[8.2, 3], [7, 2.2]]) {
+      const m = new THREE.Mesh(
+        new THREE.CylinderGeometry(r, r + 0.6, h, 8),
+        [facadeMat(FACADES.stone, 4, 2, { night: 1.2, rough: 0.5, metal: 0.3 }), towerRoofMat, towerRoofMat]
+      );
+      m.rotation.y = Math.PI / 8;
+      m.position.set(X, y + h / 2, Z);
+      m.castShadow = true;
+      S.add(m);
+      y += h;
+    }
+    const rim = new THREE.Mesh(new THREE.CylinderGeometry(7.06, 7.06, 0.22, 8, 1, true), crownWarmMat);
+    rim.rotation.y = Math.PI / 8;
+    rim.position.set(X, y - 0.11, Z);
+    S.add(rim);
+    for (const s of [-1, 1]) {
+      const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.42, 7, 8), antMat);
+      mast.position.set(X + s * 4.4, y + 3.5, Z);
+      mast.castShadow = true;
+      S.add(mast);
+      const tip = new THREE.Mesh(new THREE.SphereGeometry(0.15, 8, 6), new THREE.MeshBasicMaterial({ color: 0xff6b7a }));
+      tip.position.set(X + s * 4.4, y + 7.1, Z);
+      S.add(tip);
+    }
+  })();
+
+  // 利通广场：斜切顶玻璃棱柱（303m）
+  (function leatop() {
+    const X = -8, Z = -106;
+    let y = 0;
+    addTowerBox(X, Z, 12.5, 12.5, 4.5, y, FACADES.stone, { night: 1.0, rough: 0.55 });
+    y += 4.5;
+    addTowerBox(X, Z, 9.6, 9.6, 25, y, FACADES.blue, { night: 1.45, rough: 0.2, metal: 0.75 });
+    y += 25;
+    const g = new THREE.BoxGeometry(9.6, 3.6, 9.6);
+    const p = g.attributes.position;
+    for (let i = 0; i < p.count; i++) {
+      if (p.getY(i) > 0) p.setY(i, p.getY(i) + (p.getX(i) > 0 ? 2.2 : 0));
+    }
+    g.computeVertexNormals();
+    const cap = new THREE.Mesh(g, facadeMat(FACADES.blue, 3, 1, { night: 1.5 }));
+    cap.position.set(X, y + 1.8, Z);
+    cap.castShadow = true;
+    S.add(cap);
+    y += 3.6;
+  })();
+
+  // 珠江城大厦：弧顶 + 两个风洞（309m）
+  (function pearlRiver() {
+    const X = -70, Z = -96;
+    let y = 0;
+    addTowerBox(X, Z, 13, 11, 4, y, FACADES.stone, { night: 1.0, rough: 0.6 });
+    y += 4;
+    addTowerBox(X, Z, 10, 8.4, 22, y, FACADES.blue, { night: 1.4, rough: 0.22, metal: 0.72 });
+    y += 22;
+    addTowerBox(X, Z, 9, 7.6, 5, y, FACADES.blue, { night: 1.45, rough: 0.22, metal: 0.72 });
+    y += 5;
+    // 风洞：两条贯穿的黑色横槽
+    for (const yy of [y - 7.6, y - 4.4]) {
+      const slot = new THREE.Mesh(new THREE.BoxGeometry(10.6, 1.1, 8.8), darkGlassMat);
+      slot.position.set(X, yy, Z);
+      S.add(slot);
+    }
+    // 弧形顶冠
+    const capCurve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(-4.5, 0, 0), new THREE.Vector3(0, 3.4, 0), new THREE.Vector3(4.5, 0, 0)
+    ]);
+    const cap = new THREE.Mesh(new THREE.TubeGeometry(capCurve, 24, 0.5, 8, false), podiumMat);
+    cap.position.set(X, y, Z);
+    cap.castShadow = true;
+    S.add(cap);
+    const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.16, 3.2, 6), antMat);
+    mast.position.set(X, y + 2.4, Z);
+    S.add(mast);
+  })();
+
+  // 广晟国际大厦：细长塔身 + 发光冠（360m）
+  (function guangsheng() {
+    const X = 74, Z = -104;
+    let y = 0;
+    addTowerBox(X, Z, 14, 12, 5, y, FACADES.stone, { night: 1.0, rough: 0.55 });
+    y += 5;
+    addTowerBox(X, Z, 10, 9, 24, y, FACADES.dark, { night: 1.5, rough: 0.22, metal: 0.7 });
+    y += 24;
+    addTowerBox(X, Z, 8.6, 7.8, 4, y, FACADES.dark, { night: 1.55 });
+    y += 4;
+    addCrown(X, Z, 8.6, 7.8, y - 0.1, crownCoolMat, 0.16);
+    const spire = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.26, 4.6, 8), antMat);
+    spire.position.set(X, y + 2.3, Z);
+    spire.castShadow = true;
+    S.add(spire);
+  })();
+
+  /* 北岸 / 南岸的普通高层 */
+  const cbdSpots = [
+    [-118, -54, 6.4, 6.4, 21], [-96, -70, 7.2, 7.2, 26], [-120, -92, 6.6, 6.6, 19],
+    [-56, -72, 6.4, 6.4, 20], [-32, -80, 6.6, 6.6, 23], [-2, -78, 6.2, 6.2, 17],
+    [70, -58, 6, 6, 16], [98, -78, 7, 7, 26], [118, -104, 6.6, 6.6, 21],
+    [42, -112, 6.4, 6.4, 18], [100, -136, 7, 7, 23], [-92, -134, 6.8, 6.8, 25],
+    [-130, -142, 6.6, 6.6, 17], [-44, -100, 6, 6, 15], [40, -84, 6, 6, 16],
+    [-104, -110, 6.2, 6.2, 20], [62, -140, 6.4, 6.4, 19], [-142, -70, 6.2, 6.2, 14],
+    [132, -58, 6, 6, 15], [126, -160, 6.4, 6.4, 13], [-118, -168, 6.4, 6.4, 16]
+  ];
+  const pairs = [FACADES.blue, FACADES.dark, FACADES.blue, FACADES.stone];
+  cbdSpots.forEach(([x, z, w, d, h], i) => {
+    const pair = pairs[i % pairs.length];
+    addTowerBox(x, z, w, d, h, 0, pair, { night: 1.1 + (i % 3) * 0.2 });
+    const cr = [crownCoolMat, crownWarmMat, crownPinkMat][i % 3];
+    addCrown(x, z, w, d, h - 0.12, cr, 0.12);
+    if (i % 4 === 0) {
+      const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.1, 2.4, 6), antMat);
+      mast.position.set(x, h + 1.2, z);
+      S.add(mast);
+    }
+  });
+
+  const southSpots = [
+    [-56, 58, 7, 7, 13], [-76, 74, 6.6, 6.6, 17], [-100, 62, 7.4, 7.4, 11],
+    [-120, 86, 7, 7, 15], [-40, 92, 7, 7, 19], [-64, 112, 8, 8, 13],
+    [50, 52, 6.6, 6.6, 12], [70, 70, 7.4, 7.4, 18], [96, 56, 7, 7, 10],
+    [112, 84, 7.6, 7.6, 15], [78, 108, 7, 7, 12], [44, 92, 6.6, 6.6, 16],
+    [8, 72, 6.4, 6.4, 9], [-14, 96, 6.4, 6.4, 15], [24, 126, 7, 7, 14],
+    [-90, 138, 7, 7, 12], [56, 140, 6.6, 6.6, 11], [124, 126, 7, 7, 13],
+    [-130, 112, 6.6, 6.6, 14], [-30, 140, 7, 7, 16], [96, 166, 7, 7, 12],
+    [-106, 164, 7, 7, 13]
+  ];
+  southSpots.forEach(([x, z, w, d, h], i) => {
+    addTowerBox(x, z, w, d, h, 0, [FACADES.stone, FACADES.blue][i % 2], { night: 1.05 });
+    addCrown(x, z, w, d, h - 0.12, i % 2 ? crownWarmMat : crownCoolMat, 0.11);
+  });
+
+  // 塔两侧的低层文化建筑
+  (function lowRise() {
+    const mats = [
+      new THREE.MeshStandardMaterial({ color: 0xd7d2c6, roughness: 0.65, metalness: 0.1 }),
+      new THREE.MeshStandardMaterial({ color: 0x9aa6b8, roughness: 0.5, metalness: 0.35 })
+    ];
+    for (const [x, z, w, d, h, m] of [
+      [-33, 39, 16, 8, 3.4, 0], [32, 40, 12, 9, 4.2, 1], [-22, 55, 7, 7, 5.6, 1],
+      [24, 56, 8, 8, 6.4, 0], [-46, 32, 9, 10, 2.8, 1]
+    ]) {
+      const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mats[m]);
+      b.position.set(x, h / 2, z);
+      b.castShadow = b.receiveShadow = true;
+      S.add(b);
+      addCrown(x, z, w, d, h - 0.08, crownWarmMat, 0.1);
+    }
+  })();
+
+  /* --------------------------- 海心桥 --------------------------- */
+  (function haixinBridge() {
+    const pts = [];
+    const N = 44;
+    for (let i = 0; i <= N; i++) {
+      const u = i / N;
+      const x = 9 + Math.sin(u * Math.PI) * 5.2 + Math.sin(u * Math.PI * 2) * 1.4;
+      const z = 15 - u * 40;
+      const y = 0.36 + Math.sin(u * Math.PI) * 1.18;
+      pts.push({ x, z, y });
+    }
+    const nor = [];
+    for (let i = 0; i <= N; i++) {
+      const a = pts[Math.max(0, i - 1)], b = pts[Math.min(N, i + 1)];
+      const dx = b.x - a.x, dz = b.z - a.z, L = Math.hypot(dx, dz) || 1;
+      nor.push({ x: -dz / L, z: dx / L });
+    }
+    const deckMat = new THREE.MeshStandardMaterial({ color: 0xd4d9e1, roughness: 0.55, metalness: 0.25 });
+    const deck = new THREE.Mesh(extrudeRibbon(pts, nor, 0.72, 0.13, p => p.y, false), deckMat);
+    deck.castShadow = deck.receiveShadow = true;
+    S.add(deck);
+    // 桥面侧沿 LED
+    for (const s of [1, -1]) {
+      const rp = [], rn = [];
+      for (let i = 0; i <= N; i++) {
+        rp.push({ x: pts[i].x + nor[i].x * s * 0.7, z: pts[i].z + nor[i].z * s * 0.7, y: pts[i].y + 0.05 });
+        rn.push(nor[i]);
+      }
+      const led = new THREE.Mesh(extrudeRibbon(rp, rn, 0.032, 0.03, p => p.y, false), edgeGlowMat);
+      S.add(led);
+      // 玻璃护栏
+      const railPts = [], railNor = [];
+      for (let i = 0; i <= N; i++) {
+        railPts.push({ x: pts[i].x + nor[i].x * s * 0.69, z: pts[i].z + nor[i].z * s * 0.69, y: pts[i].y + 0.56 });
+        railNor.push(nor[i]);
+      }
+      const rail = new THREE.Mesh(extrudeRibbon(railPts, railNor, 0.025, 0.48, p => p.y, false), deckGlassMat);
+      S.add(rail);
+    }
+    // 倾斜拱
+    const archCurve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(fs(0.1).x - 3.2, 0.5, 10),
+      new THREE.Vector3(fs(0.32).x - 4.4, 4.7, -2),
+      new THREE.Vector3(fs(0.55).x - 2.2, 7.8, -12),
+      new THREE.Vector3(fs(0.8).x + 0.6, 4.2, -21),
+      new THREE.Vector3(fs(0.94).x + 0.4, 0.6, -25)
+    ]);
+    const archMat = new THREE.MeshStandardMaterial({ color: 0xe7ecf3, roughness: 0.35, metalness: 0.55 });
+    const arch = new THREE.Mesh(new THREE.TubeGeometry(archCurve, 72, 0.17, 8, false), archMat);
+    arch.castShadow = true;
+    S.add(arch);
+    // 吊索
+    for (let i = 0; i < 13; i++) {
+      const u = 0.1 + i / 12 * 0.85;
+      const top = archCurve.getPoint((i + 1) / 15);
+      const p = fs(u);
+      const cable = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 1, 4), railMat);
+      const dx = p.x - top.x, dy = p.y + 0.2 - top.y, dz = p.z - top.z;
+      const len = Math.hypot(dx, dy, dz);
+      cable.scale.y = Math.max(0.1, len);
+      cable.position.set((p.x + top.x) / 2, (p.y + 0.2 + top.y) / 2, (p.z + top.z) / 2);
+      cable.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(dx, dy, dz).normalize());
+      S.add(cable);
+    }
+    // 桥墩
+    for (const u of [0.22, 0.5, 0.78]) {
+      const p = fs(u);
+      const pier = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.5, p.y + 0.55, 8, 1, true), ledgeMat);
+      pier.position.set(p.x, (p.y - 0.55) / 2, p.z);
+      pier.castShadow = true;
+      S.add(pier);
+    }
+    function fs(u) {
+      u = Math.max(0, Math.min(1, u));
+      const s = u * N, i = Math.min(N - 1, Math.floor(s)), f = s - i;
+      return {
+        x: pts[i].x + (pts[i + 1].x - pts[i].x) * f,
+        z: pts[i].z + (pts[i + 1].z - pts[i].z) * f,
+        y: pts[i].y + (pts[i + 1].y - pts[i].y) * f
+      };
+    }
+  })();
+
+  /* --------------------------- 植被 / 灯 / 人 --------------------------- */
+  // 棕榈
+  const palmPositions = [];
+  for (let x = -146; x <= 146; x += 6.2) {
+    if (Math.abs(x - 9) > 5.5) palmPositions.push([x + (Math.random() - 0.5) * 1.4, 17.2 + Math.random() * 0.8]);
+  }
+  for (let x = -146; x <= 146; x += 6.4) {
+    if (Math.abs(x - 9) > 6) palmPositions.push([x + (Math.random() - 0.5) * 1.4, -27.2 - Math.random() * 0.8]);
+  }
+  for (let i = 0; i < 10; i++) {
+    const a = i / 10 * Math.PI * 2 + 0.2;
+    palmPositions.push([Math.cos(a) * 12.2, 34 + Math.sin(a) * 12.2]);
+  }
+  for (let i = 0; i < 8; i++) {
+    const a = i / 8 * Math.PI * 2 + 0.5;
+    palmPositions.push([37 + Math.cos(a) * 6.4, -5 + Math.sin(a) * 4.2]);
+  }
+
+  const palmTrunkGeo = new THREE.CylinderGeometry(0.07, 0.11, 1, 6);
+  const palmTrunkMat = new THREE.MeshStandardMaterial({ color: 0x6b5742, roughness: 0.95, flatShading: true });
+  const palmHeights = palmPositions.map(() => 1.8 + Math.random() * 0.9);
+  const palmTrunkIM = new THREE.InstancedMesh(palmTrunkGeo, palmTrunkMat, palmPositions.length);
+  {
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), s = new THREE.Vector3();
+    palmPositions.forEach(([x, z], i) => {
+      const h = palmHeights[i];
+      p.set(x, h / 2, z); s.set(1, h, 1); q.setFromAxisAngle(new THREE.Vector3(0, 0, 1), (Math.random() - 0.5) * 0.14);
+      m.compose(p, q, s);
+      palmTrunkIM.setMatrixAt(i, m);
+    });
+    palmTrunkIM.castShadow = true;
+    S.add(palmTrunkIM);
+  }
+  const frondGeo = new THREE.PlaneGeometry(2.2, 0.56, 8, 1);
+  frondGeo.rotateX(-Math.PI / 2);
+  frondGeo.translate(1.05, 0, 0);
+  {
+    const pos = frondGeo.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i);
+      const k = x / 2.1;
+      pos.setY(i, -0.62 * k * k);
+      pos.setZ(i, pos.getZ(i) * (1 - 0.72 * k));
+    }
+    frondGeo.computeVertexNormals();
+  }
+  const frondMat = new THREE.MeshStandardMaterial({
+    color: 0x38713f, roughness: 0.9, flatShading: true, side: THREE.DoubleSide
+  });
+  const frondIM = new THREE.InstancedMesh(frondGeo, frondMat, palmPositions.length * 8);
+  {
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), s = new THREE.Vector3();
+    const e = new THREE.Euler();
+    palmPositions.forEach(([x, z], pi) => {
+      const h = palmHeights[pi];
+      for (let j = 0; j < 8; j++) {
+        const yaw = j / 8 * Math.PI * 2 + pi * 0.73;
+        e.set(0, yaw, (j % 2 ? 0.06 : -0.05));
+        q.setFromEuler(e);
+        p.set(x, h - 0.03, z);
+        s.set(0.85 + (j % 3) * 0.08, 1, 1);
+        m.compose(p, q, s);
+        frondIM.setMatrixAt(pi * 8 + j, m);
+      }
+    });
+    frondIM.castShadow = true;
+    S.add(frondIM);
+  }
+
+  // 阔叶树
+  const treePos = [];
+  const rand = (a, b) => a + Math.random() * (b - a);
+  for (let i = 0; i < 210; i++) {
+    const x = rand(-144, 144);
+    let z = rand(26, 168);
+    if (Math.abs(x) < 17 && Math.abs(z - 34) < 18) continue;
+    if (Math.abs(x) < 5.5) continue;              // 中轴步道
+    treePos.push([x, z]);
+  }
+  for (let i = 0; i < 80; i++) {
+    const x = rand(-144, 144);
+    const z = rand(-166, -42);
+    if (x > 8 && x < 36) continue;                // 花城广场中轴
+    if (Math.abs(z + 60) < 4 || Math.abs(z + 90) < 4 || Math.abs(z + 120) < 4 || Math.abs(z + 150) < 4) continue;
+    treePos.push([x, z]);
+  }
+  for (let i = 0; i < 46; i++) treePos.push([rand(-144, 144), 22 + Math.random() * 2]);
+  for (let i = 0; i < 34; i++) treePos.push([rand(-144, 144), -33.2 + Math.random() * 1.4]);
+  const trunkGeo2 = new THREE.CylinderGeometry(0.06, 0.1, 1, 5);
+  const trunkIM = new THREE.InstancedMesh(trunkGeo2, palmTrunkMat, treePos.length);
+  const crownGeo2 = new THREE.IcosahedronGeometry(1, 0);
+  const leafMat2 = new THREE.MeshStandardMaterial({ color: 0x4a7c4d, roughness: 0.95, flatShading: true });
+  const crownIM = new THREE.InstancedMesh(crownGeo2, leafMat2, treePos.length);
+  {
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), s = new THREE.Vector3();
+    treePos.forEach(([x, z], i) => {
+      const h = 0.75 + Math.random() * 0.55;
+      p.set(x, h / 2, z); s.set(0.8, h, 0.8); q.identity();
+      m.compose(p, q, s); trunkIM.setMatrixAt(i, m);
+      const cs = 0.65 + Math.random() * 0.55;
+      p.set(x, h + cs * 0.55, z); s.set(cs, cs * 0.9, cs);
+      q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.random() * 6.28);
+      m.compose(p, q, s); crownIM.setMatrixAt(i, m);
+    });
+    trunkIM.castShadow = crownIM.castShadow = true;
+    S.add(trunkIM, crownIM);
+  }
+
+  // 步道灯
+  const lampPos = [];
+  for (let x = -146; x <= 146; x += 9) {
+    if (Math.abs(x - 9) > 4) lampPos.push([x, 15.6]);
+    lampPos.push([x, -25.6]);
+  }
+  const lampPoleMat = new THREE.MeshStandardMaterial({ color: 0x1b2331, roughness: 0.6, metalness: 0.4 });
+  const lampPoleGeo = new THREE.CylinderGeometry(0.035, 0.05, 1.15, 6);
+  const lampPoleIM = new THREE.InstancedMesh(lampPoleGeo, lampPoleMat, lampPos.length);
+  const lampHeadMat = regEmis(new THREE.MeshStandardMaterial({
+    color: 0x4a3a26, emissive: 0xffc27a, emissiveIntensity: 4.2, roughness: 0.4
+  }), 0.1, 4.2);
+  const lampHeadGeo = new THREE.SphereGeometry(0.09, 8, 6);
+  const lampHeadIM = new THREE.InstancedMesh(lampHeadGeo, lampHeadMat, lampPos.length);
+  {
+    const m = new THREE.Matrix4();
+    lampPos.forEach(([x, z], i) => {
+      m.makeTranslation(x, 0.575, z); lampPoleIM.setMatrixAt(i, m);
+      m.makeTranslation(x, 1.2, z); lampHeadIM.setMatrixAt(i, m);
+    });
+    lampPoleIM.castShadow = true;
+    S.add(lampPoleIM, lampHeadIM);
+  }
+  for (const [x, z] of [[-16, 18], [10, 15.8], [-10, -26], [28, -26], [55, 15.8], [-52, -25.8]]) {
+    const pl = new THREE.PointLight(0xffb066, 2.2, 16, 2);
+    pl.position.set(x, 1.4, z);
+    S.add(pl);
+    lampPointLights.push(pl);
+  }
+
+  // 行人
+  const people = [];
+  function makeCantonPerson(color) {
+    const g = new THREE.Group();
+    const coat = new THREE.MeshStandardMaterial({ color, roughness: 0.8, flatShading: true });
+    const body = new THREE.Mesh(pedBodyGeo, coat); body.position.y = 0.42; g.add(body);
+    const head = new THREE.Mesh(pedHeadGeo, pedSkinMat); head.position.y = 0.68; g.add(head);
+    const legL = new THREE.Mesh(pedLegGeo, pedPantMat); legL.position.set(-0.055, 0.14, 0); g.add(legL);
+    const legR = new THREE.Mesh(pedLegGeo, pedPantMat); legR.position.set(0.055, 0.14, 0); g.add(legR);
+    g.scale.setScalar(0.62);
+    g.traverse(o => { if (o.isMesh) o.castShadow = true; });
+    return { g, legL, legR };
+  }
+  for (let i = 0; i < 34; i++) {
+    const isSouth = i % 2 === 0;
+    const p = makeCantonPerson(PED_COLORS[i % PED_COLORS.length]);
+    const z = isSouth ? 18.6 + Math.random() * 2.2 : -27.4 - Math.random() * 2.2;
+    const x = -136 + Math.random() * 272;
+    p.g.position.set(x, 0, z);
+    S.add(p.g);
+    people.push({ ...p, z, x, dir: Math.random() < 0.5 ? 1 : -1, speed: 0.6 + Math.random() * 0.5, phase: Math.random() * 6.28 });
+  }
+
+  // 江面游船
+  const boats = [];
+  function makeBoat(hue) {
+    const g = new THREE.Group();
+    const hullMat = new THREE.MeshStandardMaterial({ color: 0xe8edf4, roughness: 0.4, metalness: 0.3 });
+    const hull = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.34, 1.0), hullMat);
+    hull.position.y = 0.2; g.add(hull);
+    const bow = new THREE.Mesh(new THREE.ConeGeometry(0.5, 1.1, 4), hullMat);
+    bow.rotation.z = -Math.PI / 2; bow.rotation.x = Math.PI / 4;
+    bow.position.set(1.85, 0.2, 0); g.add(bow);
+    const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.55, 0.8), new THREE.MeshStandardMaterial({
+      color: 0x223a55, roughness: 0.18, metalness: 0.7, emissive: 0x1b2b40, emissiveIntensity: 0.6
+    }));
+    cabin.position.set(-0.15, 0.64, 0); g.add(cabin);
+    const win = new THREE.Mesh(new THREE.BoxGeometry(1.45, 0.2, 0.82), regEmis(new THREE.MeshStandardMaterial({
+      color: 0x3a2d20, emissive: 0xffcb85, emissiveIntensity: 2.4, roughness: 0.4
+    }), 0.08, 2.4));
+    win.position.set(-0.15, 0.72, 0); g.add(win);
+    const stripMat = new THREE.MeshBasicMaterial({ color: new THREE.Color().setHSL(hue, 0.9, 0.65) });
+    const strip = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.05, 0.04), stripMat);
+    strip.position.set(0, 0.36, 0.52); g.add(strip);
+    const strip2 = strip.clone(); strip2.position.z = -0.52; g.add(strip2);
+    const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.03, 0.9, 5), railMat);
+    mast.position.set(-1.1, 0.85, 0); g.add(mast);
+    const lampMat = new THREE.MeshBasicMaterial({ color: 0xffe6b0 });
+    const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.06, 6, 5), lampMat);
+    lamp.position.set(-1.1, 1.32, 0); g.add(lamp);
+    g.traverse(o => { if (o.isMesh) o.castShadow = true; });
+    return g;
+  }
+  for (let i = 0; i < 7; i++) {
+    const g = makeBoat(0.5 + i * 0.09);
+    const z = [-19, -15.5, 7, 4, -8, 1, -21][i];
+    const x = -170 + Math.random() * 340;
+    g.position.set(x, -0.35, z);
+    S.add(g);
+    boats.push({ g, z, dir: i % 2 ? 1 : -1, speed: 1.2 + Math.random() * 1.2, phase: Math.random() * 6.28 });
+  }
+
+  // 沿江车流
+  const cars = [];
+  for (let i = 0; i < 16; i++) {
+    const type = CAR_TYPES[(Math.random() * CAR_TYPES.length) | 0];
+    const { group } = makeCar(type);
+    group.scale.setScalar(0.62);
+    const z = i % 2 ? -31.2 : -32.4;
+    const x = -140 + Math.random() * 280;
+    const dir = i % 2 ? 1 : -1;
+    group.position.set(x, 0.04, z);
+    group.rotation.y = dir > 0 ? Math.PI / 2 : -Math.PI / 2;
+    S.add(group);
+    cars.push({ g: group, z, x, dir, speed: 2.4 + Math.random() * 2.6 });
+  }
+
+  /* --------------------------- 昼夜 / 动画 --------------------------- */
+  function applyTheme(t) {
+    nightness = t;
+    drawCantonSky(t);
+    S.fog.color.copy(_skyDayC.set(0x9db4d4)).lerp(_skyNightC.set(0x131c3c), t);
+    skyMat.uniforms.uFog.value.copy(S.fog.color);
+    S.fog.density = THREE.MathUtils.lerp(0.0014, 0.0021, t);
+
+    hemi.color.set(0xd6e4ff).lerp(new THREE.Color(0x9ea8ff), t);
+    hemi.groundColor.set(0x8d8a86).lerp(new THREE.Color(0x2a2238), t);
+    hemi.intensity = THREE.MathUtils.lerp(1.25, 1.3, t);
+    sun.color.set(0xffe6c9).lerp(new THREE.Color(0xffb98a), t);
+    sun.intensity = THREE.MathUtils.lerp(2.7, 2.1, t);
+    fill.color.set(0x9db8f0).lerp(new THREE.Color(0x7f8dff), t);
+    fill.intensity = THREE.MathUtils.lerp(0.55, 0.9, t);
+
+    for (const { mat, day, night } of emisReg) mat.emissiveIntensity = THREE.MathUtils.lerp(day, night, t);
+    waterMat.emissiveIntensity = THREE.MathUtils.lerp(0.08, 0.95, t);
+    moonMat.opacity = Math.max(0, t * 1.1 - 0.1);
+    for (const l of lampPointLights) l.intensity = THREE.MathUtils.lerp(0.2, 2.4, t);
+  }
+
+  function updateLattice() {
+    const hueShift = nightness > 0.5 ? (elapsed * 0.035) % 1 : 0;
+    const pulse = (elapsed * 0.055) % 1.5 - 0.25;
+    for (let i = 0; i < segMeta.length; i++) {
+      const m = segMeta[i];
+      _nn.setHSL((m.hue + hueShift) % 1, 0.88, 0.56);
+      let bri = m.bri * (1.65 + Math.sin(elapsed * 1.15 + m.t * 6.2) * 0.26);
+      const d = Math.abs(m.t - pulse);
+      if (d < 0.1) bri *= 1.4 + (1 - d / 0.1) * 1.5;
+      _nn.multiplyScalar(bri);
+      _cc.copy(_steel).lerp(_nn, nightness);
+      lattice.setColorAt(i, _cc);
+    }
+    lattice.instanceColor.needsUpdate = true;
+  }
+
+  function update(dt, t, theme) {
+    elapsed = t;
+    waterTex.offset.x = (waterTex.offset.x + dt * 0.006) % 1;
+    waterTex.offset.y = (waterTex.offset.y + dt * 0.002) % 1;
+
+    // 塔身灯光
+    updateLattice();
+    beaconGlow.material.opacity = 0.55 + Math.sin(t * 3.2) * 0.4;
+    for (let i = 0; i < reflectionStrips.length; i++) {
+      const r = reflectionStrips[i];
+      r.mat.opacity = r.base * (0.65 + Math.sin(t * 1.6 + r.phase) * 0.35);
+    }
+
+    // 摩天轮舱缓慢环绕
+    for (let i = 0; i < capsules.length; i++) {
+      const c = capsules[i];
+      const a = c.a + t * 0.035;
+      c.g.position.x = Math.cos(a) * capsuleA;
+      c.g.position.z = Math.sin(a) * capsuleB;
+    }
+
+    // 行人
+    for (const p of people) {
+      p.x += p.dir * p.speed * dt;
+      if (p.x > 140) { p.x = 140; p.dir = -1; }
+      if (p.x < -140) { p.x = -140; p.dir = 1; }
+      p.g.position.x = p.x;
+      p.g.position.y = Math.abs(Math.sin(t * 5 + p.phase)) * 0.02;
+      p.g.rotation.y = p.dir > 0 ? Math.PI / 2 : -Math.PI / 2;
+      p.phase += dt * 9;
+      const sw = Math.sin(p.phase) * 0.6;
+      p.legL.rotation.x = sw;
+      p.legR.rotation.x = -sw;
+    }
+
+    // 游船
+    for (const b of boats) {
+      b.g.position.x += b.dir * b.speed * dt;
+      if (b.g.position.x > 190) b.g.position.x = -190;
+      if (b.g.position.x < -190) b.g.position.x = 190;
+      b.g.position.y = -0.35 + Math.sin(t * 1.2 + b.phase) * 0.035;
+      b.g.rotation.z = Math.sin(t * 0.9 + b.phase) * 0.012;
+      b.g.rotation.y = b.dir > 0 ? 0 : Math.PI;
+    }
+
+    // 车辆
+    for (const c of cars) {
+      c.x += c.dir * c.speed * dt;
+      if (c.x > 146) c.x = -146;
+      if (c.x < -146) c.x = 146;
+      c.g.position.x = c.x;
+      c.g.rotation.y = c.dir > 0 ? Math.PI / 2 : -Math.PI / 2;
+    }
+  }
+
+  return {
+    scene: S, camera: cam, controls: ctrl, applyTheme, update,
+    get nightness() { return nightness; }
+  };
+})();
 
 /* ====================== 主题应用：白天 ⇄ 黑夜 ====================== */
 let themeMix = 1;      // 0 = 白天, 1 = 黑夜（当前插值值）
@@ -2354,6 +4176,9 @@ function applyTheme(t) {
   // 后处理 + 曝光
   bloomPass.strength = THREE.MathUtils.lerp(THEMES.day.bloom, THEMES.night.bloom, t);
   renderer.toneMappingExposure = THREE.MathUtils.lerp(THEMES.day.exposure, THEMES.night.exposure, t);
+
+  // 广州塔场景同步昼夜
+  CANTON.applyTheme(t);
 }
 
 const themeBtn = document.getElementById('themeBtn');
@@ -2370,6 +4195,109 @@ addEventListener('keydown', e => { if (e.code === 'KeyN') setTheme(themeTarget >
 applyTheme(1);
 setTheme(1);
 
+/* ====================== 地图入口 / 场景切换 ====================== */
+const homeEl = document.getElementById('home');
+const mapTitleEl = document.getElementById('mapTitle');
+const mapHudEl = document.getElementById('mapHud');
+const homeBtn = document.getElementById('homeBtn');
+let activeMap = 'home';
+
+const MAP_META = {
+  city: {
+    title: 'NEON BAY',
+    hud: 'WASD 移动 · 拖拽旋转 · 滚轮缩放 · N 切换昼夜 · ESC 返回地图'
+  },
+  canton: {
+    title: 'CANTON TOWER · 广州塔',
+    hud: '拖拽旋转 · 滚轮缩放 · N 切换昼夜 · ESC 返回地图'
+  }
+};
+
+function syncView() {
+  if (activeMap === 'canton') {
+    renderPass.scene = CANTON.scene;
+    renderPass.camera = CANTON.camera;
+    controls.enabled = false;
+    CANTON.controls.enabled = true;
+  } else {
+    renderPass.scene = scene;
+    renderPass.camera = camera;
+    controls.enabled = true;
+    CANTON.controls.enabled = false;
+  }
+}
+
+function enterMap(id) {
+  activeMap = id;
+  homeEl.classList.add('hidden');
+  document.body.classList.remove('home');
+  homeBtn.style.display = 'inline-flex';
+  themeBtn.style.display = 'inline-flex';
+  mapTitleEl.textContent = MAP_META[id].title;
+  mapHudEl.textContent = MAP_META[id].hud;
+  controls.autoRotate = false;
+  syncView();
+}
+
+function enterHome() {
+  activeMap = 'home';
+  homeEl.classList.remove('hidden');
+  document.body.classList.add('home');
+  homeBtn.style.display = 'none';
+  themeBtn.style.display = 'none';
+  controls.autoRotate = true;
+  syncView();
+}
+
+document.querySelectorAll('.card[data-map]').forEach(el => {
+  el.addEventListener('click', () => enterMap(el.dataset.map));
+});
+homeBtn.addEventListener('click', enterHome);
+addEventListener('keydown', e => {
+  if (e.code === 'Escape' && activeMap !== 'home') enterHome();
+});
+
+/* ---- 用真实场景渲染地图缩略图，作为主页卡片封面 ---- */
+function captureThumb(sceneRef, camRef) {
+  renderPass.scene = sceneRef;
+  renderPass.camera = camRef;
+  composer.render();
+  try { return renderer.domElement.toDataURL('image/jpeg', 0.86); } catch (err) { return null; }
+}
+function buildHomeThumbs() {
+  const ar = innerWidth / innerHeight;
+
+  const cityCam = new THREE.OrthographicCamera(-40 * ar, 40 * ar, 40, -40, -400, 900);
+  cityCam.position.set(82, 82, 82);
+  cityCam.lookAt(0, 0, 0);
+  const cityURL = captureThumb(scene, cityCam);
+  if (cityURL) {
+    const el = document.getElementById('shotCity');
+    el.style.backgroundImage = `url(${cityURL})`;
+    el.classList.add('on');
+  }
+
+  const ctCam = new THREE.OrthographicCamera(-68 * ar, 68 * ar, 68, -68, -600, 1600);
+  ctCam.position.set(126, 156, 138);
+  ctCam.lookAt(0, 24, -10);
+  CANTON.update(0.016, 1.2);          // 先跑一帧，让塔身灯带进入夜景状态
+  const ctURL = captureThumb(CANTON.scene, ctCam);
+  if (ctURL) {
+    const el = document.getElementById('shotCanton');
+    el.style.backgroundImage = `url(${ctURL})`;
+    el.classList.add('on');
+  }
+
+  syncView();
+}
+
+document.body.classList.add('home');
+themeBtn.style.display = 'none';
+homeBtn.style.display = 'none';
+controls.autoRotate = true;
+syncView();
+buildHomeThumbs();
+
 /* ============================== 循环 ============================== */
 const clock = new THREE.Clock();
 
@@ -2382,6 +4310,20 @@ function animate() {
     themeMix += (themeTarget - themeMix) * Math.min(1, dt * 2.5);
     if (Math.abs(themeMix - themeTarget) <= 0.001) themeMix = themeTarget;
     applyTheme(themeMix);
+  }
+
+  if (activeMap === 'home') {
+    /* 主页背景：让霓虹湾缓慢自转 */
+    controls.update();
+    composer.render();
+    return;
+  }
+
+  if (activeMap === 'canton') {
+    CANTON.update(dt, clock.elapsedTime);
+    CANTON.controls.update();
+    composer.render();
+    return;
   }
 
   /* ---- 1. 按 WASD 计算相对相机的移动方向 ---- */
@@ -2462,7 +4404,7 @@ function animate() {
 animate();
 
 // 方便在控制台里调参（改灯光、camera、小人位置等）
-window.__demo = { scene, camera, controls, player, renderer, composer, colliders, resolveCollision, sun, fill, hemi, THEMES, applyTheme, setTheme, cars, ringCars, rampCars, rampPeds, pedestrians, animals, birds, fountains, actors, isRoundabout, RAMPS, findPath, adj, parks };
+window.__demo = { scene, camera, controls, player, renderer, composer, colliders, resolveCollision, sun, fill, hemi, THEMES, applyTheme, setTheme, cars, ringCars, rampCars, rampPeds, pedestrians, animals, birds, fountains, actors, isRoundabout, RAMPS, findPath, adj, parks, CANTON, enterMap, enterHome };
 
 /* ============================== 自适应 ============================== */
 addEventListener('resize', () => {
@@ -2472,6 +4414,11 @@ addEventListener('resize', () => {
   camera.top = VIEW;
   camera.bottom = -VIEW;
   camera.updateProjectionMatrix();
+  CANTON.camera.left = -68 * aspect;
+  CANTON.camera.right = 68 * aspect;
+  CANTON.camera.top = 68;
+  CANTON.camera.bottom = -68;
+  CANTON.camera.updateProjectionMatrix();
   renderer.setSize(innerWidth * PIXEL_SCALE, innerHeight * PIXEL_SCALE, false);
   composer.setSize(innerWidth * PIXEL_SCALE, innerHeight * PIXEL_SCALE);
 });

@@ -1,0 +1,39 @@
+{
+  "name": "lumen-district",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "ISO CITY 第三个入口：可探索、可进入建筑、可留言与认领空间的 3D 城市 Demo",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "dev:web": "vite",
+    "dev:api": "node server/index.mjs",
+    "build": "vite build && node scripts/postbuild.mjs",
+    "preview": "vite preview",
+    "start": "node server/index.mjs",
+    "reset": "node server/reset.mjs"
+  },
+  "dependencies": {
+    "@react-three/drei": "^9.117.3",
+    "@react-three/fiber": "^8.17.10",
+    "@react-three/postprocessing": "^2.19.1",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.1",
+    "pg": "^8.13.1",
+    "postprocessing": "^6.39.5",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "three": "^0.169.0",
+    "zustand": "^4.5.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.0",
+    "@types/pg": "^8.11.10",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@types/three": "^0.169.0",
+    "@vitejs/plugin-react": "^4.3.3",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.10"
+  }
+}

@@ -1,0 +1,239 @@
+import {
+  alley,
+  alleyMouth,
+  buildings,
+  cedarLane,
+  CITY_BOUNDS,
+  crossStreet,
+  eastAvenue,
+  mainStreet,
+  plaza,
+  plazaFountain,
+  southCross,
+  westAvenue,
+  type BuildingDef,
+  type BuildingStyle,
+} from './city'
+
+// 程序化街区。
+//
+// 整座城原来只有 23 栋手写建筑，散落在几百米见方的地面上，大道两侧是空地，
+// 走在街上完全没有"城市"的感觉。这里按路网生成沿街的连续街墙：
+// - 每一条大街两侧都排一行楼，进深、高度、材质按种子变化；
+// - 路口、广场、巷子和已有建筑自动让位；
+// - 只生成体量与立面（background），几十栋楼只多几十次 draw call。
+
+type Rect = { x0: number; x1: number; z0: number; z1: number }
+
+const rectOf = (x: number, z: number, w: number, d: number, pad = 0): Rect => ({
+  x0: x - w / 2 - pad,
+  x1: x + w / 2 + pad,
+  z0: z - d / 2 - pad,
+  z1: z + d / 2 + pad,
+})
+
+const overlaps = (a: Rect, b: Rect) =>
+  a.x0 < b.x1 && a.x1 > b.x0 && a.z0 < b.z1 && a.z1 > b.z0
+
+/** 稳定伪随机：同一座城每次刷新都一样。 */
+function rng(seed: number) {
+  let s = seed >>> 0
+  return () => {
+    s = (s * 1664525 + 1013904223) >>> 0
+    return s / 4294967296
+  }
+}
+
+const STYLES: BuildingStyle[] = ['stone', 'brick', 'metal', 'stone', 'brick', 'glass']
+const BODIES = ['#c9d2da', '#c4ccd6', '#d0d5d2', '#b9c4cf', '#cdd3d8', '#b3bfc9', '#bcc6cd']
+const TRIMS = ['#8e9dac', '#7f8f9f', '#95a09f', '#8394a4', '#8f9fae', '#97a3ae']
+
+/** 不可建设：广场、巷子、喷泉与已有建筑。道路由沿街布置本身避开。 */
+function reservedRects(): Rect[] {
+  const list: Rect[] = [
+    rectOf(plaza.x, plaza.z, plaza.w, plaza.d, 2),
+    rectOf(plazaFountain.x, plazaFountain.z, plazaFountain.r * 2, plazaFountain.r * 2, 4),
+    rectOf(alley.x, alley.z, alley.w, alley.d, 2),
+    rectOf(alleyMouth.x, alleyMouth.z, alleyMouth.w, alleyMouth.d, 2),
+    rectOf(cedarLane.x, cedarLane.z, cedarLane.w, cedarLane.d, 2),
+    // 空中连廊（CityScene / SkyBridges）下方的地块留空，别让新楼把桥穿掉
+    rectOf(47, -16, 30, 9, 2),
+    rectOf(30, 74, 30, 9, 2),
+    rectOf(-22, 82, 9, 28, 2),
+  ]
+  for (const b of buildings) {
+    // 可进入的建筑门前要留出通道，否则招牌和入口会被新楼堵死
+    list.push(rectOf(b.x, b.z, b.w, b.d, b.target ? 10 : 4))
+  }
+  return list
+}
+
+type Street = {
+  /** 沿哪条轴延伸 */
+  axis: 'x' | 'z'
+  /** 街道中心线坐标（axis 为 z 时是 x，反之是 z） */
+  center: number
+  /** 到人行道外缘的距离 */
+  half: number
+}
+
+const STREETS: Street[] = [
+  { axis: 'z', center: mainStreet.x, half: mainStreet.w / 2 + 5 },
+  { axis: 'z', center: westAvenue.x, half: westAvenue.w / 2 + 4.5 },
+  { axis: 'z', center: eastAvenue.x, half: eastAvenue.w / 2 + 4.5 },
+  { axis: 'x', center: crossStreet.z, half: crossStreet.d / 2 + 4.5 },
+  { axis: 'x', center: southCross.z, half: southCross.d / 2 + 4.5 },
+]
+
+/** 交叉口附近不建楼，保证每条街都能看穿、能转弯。 */
+function nearIntersection(axis: 'x' | 'z', along: number) {
+  const crossings =
+    axis === 'z'
+      ? [crossStreet.z, southCross.z]
+      : [mainStreet.x, westAvenue.x, eastAvenue.x]
+  return crossings.some((c) => Math.abs(along - c) < 13)
+}
+
+export function generateInfill(): BuildingDef[] {
+  const out: BuildingDef[] = []
+  const blocked = reservedRects()
+  const rand = rng(20261023)
+  const limit = CITY_BOUNDS - 14
+
+  for (const street of STREETS) {
+    for (const side of [-1, 1]) {
+      let along = -limit
+      while (along < limit) {
+        const w = 10 + Math.round(rand() * 10)
+        const d = 11 + Math.round(rand() * 8)
+        const step = w + 1.4 + rand() * 2.6
+        const t = along + w / 2
+        along += step
+
+        if (nearIntersection(street.axis, t)) continue
+        // 留一些空隙，街墙不至于整齐得像贴图
+        if (rand() < 0.08) continue
+        if (out.length >= 84) break
+
+        // 建筑中心在街道中心线外侧：人行道 + 半个进深
+        const out1 = street.center + side * (street.half + d / 2)
+        const x = street.axis === 'z' ? out1 : t
+        const z = street.axis === 'z' ? t : out1
+        const ww = street.axis === 'z' ? d : w
+        const dd = street.axis === 'z' ? w : d
+        let lot = rectOf(x, z, ww, dd, 0.6)
+        if (blocked.some((r) => overlaps(lot, r))) {
+          // 主地块被占，退一步试试更窄的街屋
+          lot = rectOf(x, z, ww, Math.max(8, dd * 0.62), 0.6)
+          if (blocked.some((r) => overlaps(lot, r))) continue
+        }
+
+        const style = STYLES[Math.floor(rand() * STYLES.length)]
+        // 越靠近城市中心越高，外围压成低矮的街墙
+        const core = 1 - Math.min(1, Math.hypot(x, z) / 170)
+        const base = 12 + core * 26
+        const h = Math.round(base + rand() * (18 + core * 44))
+
+        // 临街面：竖街看 x 方向，横街看 z 方向
+        const facing =
+          street.axis === 'z'
+            ? side > 0
+              ? 'west'
+              : 'east'
+            : side > 0
+              ? 'north'
+              : 'south'
+
+        out.push({
+          id: `infill-${out.length}`,
+          name: '街区',
+          x,
+          z,
+          w: ww,
+          d: dd,
+          h,
+          facing,
+          style,
+          body: BODIES[Math.floor(rand() * BODIES.length)],
+          trim: TRIMS[Math.floor(rand() * TRIMS.length)],
+          roof: 'plain',
+          background: true,
+          balconies: style === 'brick' && rand() > 0.55,
+          setback: h > 48 && rand() > 0.45,
+          taper: rand() > 0.75 ? 0.1 : 0,
+        })
+        blocked.push(lot)
+      }
+      if (out.length >= 84) break
+    }
+    if (out.length >= 84) break
+  }
+
+  // 外圈：沿城市边界再排一圈楼，走出主街时视线有落点，城市不会突然断在空地上。
+  const edge = CITY_BOUNDS - 12
+  for (const side of [-1, 1]) {
+    for (const horizontal of [false, true]) {
+      let along = -edge
+      while (along < edge) {
+        if (out.length >= 86) break
+        const w = 16 + Math.round(rand() * 20)
+        const d = 14 + Math.round(rand() * 16)
+        const t = along + w / 2
+        along += w + 2 + rand() * 3
+
+        const x = horizontal ? t : side * (edge + d / 2)
+        const z = horizontal ? side * (edge + d / 2) : t
+        const ww = horizontal ? w : d
+        const dd = horizontal ? d : w
+        const lot = rectOf(x, z, ww, dd, 0.5)
+        if (blocked.some((r) => overlaps(lot, r))) continue
+
+        const style = STYLES[Math.floor(rand() * STYLES.length)]
+        const h = 34 + Math.round(rand() * 58)
+        // 外圈楼的临街面朝向城内
+        const facing =
+          horizontal
+            ? side > 0
+              ? 'north'
+              : 'south'
+            : side > 0
+              ? 'west'
+              : 'east'
+
+        out.push({
+          id: `infill-${out.length}`,
+          name: '街区',
+          x,
+          z,
+          w: ww,
+          d: dd,
+          h,
+          facing,
+          style,
+          body: BODIES[Math.floor(rand() * BODIES.length)],
+          trim: TRIMS[Math.floor(rand() * TRIMS.length)],
+          roof: 'plain',
+          background: true,
+          setback: rand() > 0.45,
+          taper: rand() > 0.6 ? 0.12 : 0,
+        })
+        blocked.push(lot)
+      }
+    }
+  }
+
+  return out
+}
+
+export const infill = generateInfill()
+
+/** 沿新街区临街面生成的街灯位置（每第三栋一盏），补足街道尺度细节。 */
+export const infillLamps: Array<[number, number]> = infill
+  .filter((_, i) => i % 3 === 0)
+  .map((b) => {
+    const sideX = b.facing === 'east' || b.facing === 'west'
+    const half = sideX ? b.w / 2 : b.d / 2
+    const nx = b.facing === 'east' ? 1 : b.facing === 'west' ? -1 : 0
+    const nz = b.facing === 'south' ? 1 : b.facing === 'north' ? -1 : 0
+    return [b.x + nx * (half + 2.1), b.z + nz * (half + 2.1)] as [number, number]
+  })
