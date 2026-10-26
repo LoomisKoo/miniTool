@@ -3,7 +3,7 @@
 // 关键约束：必须用「绝对时间」而不是 clock.elapsedTime，否则两个客户端
 // 看到的宠物会差一个页面加载时长，刷新页面也会瞬移。
 
-import { hashString, mulberry } from '../catalog/recipes'
+import { hashString, mulberry } from '../catalog/random'
 
 export type RoamPose = { x: number; z: number; speed: number }
 

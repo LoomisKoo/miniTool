@@ -41,6 +41,12 @@ type Props = {
   colliders?: Collider[]
   bounds: { minX: number; maxX: number; minZ: number; maxZ: number }
   interactables: Interactable[]
+  /**
+   * 会动的交互点（宠物、车辆）：每次检测时现取。
+   * 不走 interactables 是因为那张表是 useMemo 出来的静态数组，
+   * 为了 40 只每分钟都在走的宠物去重建整张表不划算。
+   */
+  liveInteractables?: () => Interactable[]
   cameraDistance?: number
   interior?: boolean
 }
@@ -599,6 +605,7 @@ export function PlayerRig({
   colliders = [],
   bounds,
   interactables,
+  liveInteractables,
   cameraDistance = 5.6,
   interior = false,
 }: Props) {
@@ -1364,16 +1371,21 @@ export function PlayerRig({
       let best: Interactable | null = null
       let bestDistance = Infinity
       if (!interior && ferris.riding >= 0) best = ferrisExit
-      else for (const item of interactables) {
-        const planar = Math.hypot(item.x - walker.position.x, item.z - walker.position.z)
-        const vertical = Math.abs(walker.position.y - (item.y ?? 0))
-        // NPC 优先：站在楼门口聊天时，门口的入口点往往比人更近，
-        // 按 E 会直接进楼，看起来就是"对话没反应"。给人 3m 的优先度。
-        const score = planar - (item.id.startsWith('npc-') ? 3 : 0)
-        if (planar < item.radius && vertical < (item.y === undefined ? 12 : 3) && score < bestDistance) {
-          best = item
-          bestDistance = score
+      else {
+        const dynamic = liveInteractables ? liveInteractables() : null
+        const scan = (item: Interactable) => {
+          const planar = Math.hypot(item.x - walker.position.x, item.z - walker.position.z)
+          const vertical = Math.abs(walker.position.y - (item.y ?? 0))
+          // NPC 优先：站在楼门口聊天时，门口的入口点往往比人更近，
+          // 按 E 会直接进楼，看起来就是"对话没反应"。给人 3m 的优先度。
+          const score = planar - (item.id.startsWith('npc-') ? 3 : 0)
+          if (planar < item.radius && vertical < (item.y === undefined ? 12 : 3) && score < bestDistance) {
+            best = item
+            bestDistance = score
+          }
         }
+        for (const item of interactables) scan(item)
+        if (dynamic) for (const item of dynamic) scan(item)
       }
       app.setNearby(paused ? null : best)
     }

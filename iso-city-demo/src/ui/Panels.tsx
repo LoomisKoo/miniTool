@@ -1,5 +1,7 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useApp } from '../store'
+import { RARITY_LABEL, SPECIES } from '../catalog/species'
+import { petThumb } from '../catalog/thumb3d'
 import type { FurnitureType, Post, SpaceDetail } from '../types'
 import { cityShareUrl, copyText, mediaGradient, playSoundPlaceholder, relativeTime } from '../util'
 import { FURNITURE_META } from '../indoor/Furniture'
@@ -1145,6 +1147,154 @@ function ElevatorPanel({ id }: { id: string }) {
   )
 }
 
+/**
+ * 缩略图是 3D 离屏渲染出来的，一张要一两次 draw。30 个品种一次全渲会在打开
+ * 面板的瞬间顿一下，所以按帧切片：每帧最多 10ms，先出图先显示。
+ */
+const RARITY_COLOR = { common: '#8ea0b5', uncommon: '#7fd1a8', rare: '#f2c86b' } as const
+
+function useCatalogThumbs() {
+  const [urls, setUrls] = useState<Record<string, string>>({})
+  const list = useMemo(
+    () => SPECIES.flatMap((species) => species.breeds.map((breed) => ({ species: species.id, breed: breed.id }))),
+    [],
+  )
+
+  useEffect(() => {
+    let cancelled = false
+    let cursor = 0
+
+    const step = () => {
+      if (cancelled) return
+      const started = performance.now()
+      const batch: Record<string, string> = {}
+      while (cursor < list.length && performance.now() - started < 10) {
+        const item = list[cursor++]
+        try {
+          const url = petThumb(item.species, item.breed)
+          if (url) batch[`${item.species}/${item.breed}`] = url
+        } catch {
+          /* 拿不到 WebGL 上下文时退回纯色块，不挡住图鉴本身 */
+        }
+      }
+      if (Object.keys(batch).length) setUrls((prev) => ({ ...prev, ...batch }))
+      if (cursor < list.length) requestAnimationFrame(step)
+    }
+
+    step()
+    return () => {
+      cancelled = true
+    }
+  }, [list])
+
+  return urls
+}
+
+function CatalogPanel() {
+  const closePanel = useApp((state) => state.closePanel)
+  const seen = useApp((state) => state.seenPets)
+  const thumbs = useCatalogThumbs()
+
+  const seenSet = useMemo(() => new Set(seen), [seen])
+  const total = useMemo(() => SPECIES.reduce((sum, species) => sum + species.breeds.length, 0), [])
+  const found = useMemo(
+    () => SPECIES.reduce((sum, species) => sum + species.breeds.filter((b) => seen.includes(`${species.id}/${b.id}`)).length, 0),
+    [seen],
+  )
+
+  return (
+    <Modal
+      label="图鉴"
+      title="宠物图鉴"
+      subtitle={`已记录 ${found} / ${total} · 在街上走近野生宠物按 E 观察`}
+      onClose={closePanel}
+      wide
+    >
+      {SPECIES.map((species) => {
+        const speciesFound = species.breeds.filter((b) => seenSet.has(`${species.id}/${b.id}`)).length
+        return (
+          <section key={species.id} style={{ marginBottom: 20 }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8 }}>
+              <b style={{ fontSize: 13, letterSpacing: 0.6 }}>
+                {species.name}
+                {species.kind === 'wild' ? ' · 野生' : ''}
+                <span style={{ marginLeft: 6, fontSize: 10.5, fontWeight: 400, color: RARITY_COLOR[species.rarity] }}>
+                  {RARITY_LABEL[species.rarity]}
+                </span>
+              </b>
+              <span style={{ fontSize: 11, color: '#8ea0b5' }}>
+                {speciesFound} / {species.breeds.length}
+              </span>
+            </div>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(82px, 1fr))',
+                gap: 8,
+              }}
+            >
+              {species.breeds.map((breed) => {
+                const key = `${species.id}/${breed.id}`
+                const known = seenSet.has(key)
+                const url = thumbs[key]
+                return (
+                  <figure key={breed.id} style={{ margin: 0 }}>
+                    <div
+                      style={{
+                        aspectRatio: '1 / 1',
+                        borderRadius: 8,
+                        overflow: 'hidden',
+                        border: '1px solid rgba(255,255,255,0.08)',
+                        background: 'rgba(255,255,255,0.045)',
+                        display: 'grid',
+                        placeItems: 'center',
+                      }}
+                    >
+                      {url ? (
+                        <img
+                          src={url}
+                          alt={known ? breed.name : ''}
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'contain',
+                            // 没记录过的只降低饱和度：能看清是什么动物，名字保留为 ???
+                            filter: known ? 'none' : 'saturate(0.45) brightness(0.78)',
+                          }}
+                        />
+                      ) : (
+                        <span
+                          style={{
+                            width: '54%',
+                            height: '54%',
+                            borderRadius: '50%',
+                            background: known ? breed.swatch : 'rgba(255,255,255,0.12)',
+                          }}
+                        />
+                      )}
+                    </div>
+                    <figcaption
+                      style={{
+                        marginTop: 4,
+                        fontSize: 10.5,
+                        lineHeight: 1.4,
+                        textAlign: 'center',
+                        color: known ? '#e8eef5' : '#5c6b7c',
+                      }}
+                    >
+                      {known ? breed.name : '???'}
+                    </figcaption>
+                  </figure>
+                )
+              })}
+            </div>
+          </section>
+        )
+      })}
+    </Modal>
+  )
+}
+
 export function Panels() {
   const panel = useApp((state) => state.panel)
   const closePanel = useApp((state) => state.closePanel)
@@ -1153,6 +1303,7 @@ export function Panels() {
   if (panel.type === 'space') return <SpacePanel id={panel.id} />
   if (panel.type === 'elevator') return <ElevatorPanel id={panel.id} />
   if (panel.type === 'favorites') return <FavoritesPanel />
+  if (panel.type === 'catalog') return <CatalogPanel />
   if (panel.type === 'about') return <AboutPanel />
   if (panel.type === 'editor') return <EditorPanel />
   return (

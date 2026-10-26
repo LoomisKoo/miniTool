@@ -19,6 +19,7 @@ import { GradeEffect } from './GradeEffect'
 import { DistantCity } from './DistantCity'
 import { StreetDetail } from './StreetDetail'
 import { NoticeBoard, boardSpot as noticeSpot } from './NoticeBoard'
+import { CatalogBooth } from './CatalogBooth'
 import { entrancesOfBuilding, floorsOf, isUnitBuilding, unitBuilding, unitsOf } from '../data/units'
 
 import { Building, InfillBuilding } from './Building'
@@ -29,6 +30,7 @@ import { CityProps } from './Props'
 import { Traffic } from './Traffic'
 import { Citizens } from './Citizens'
 import { WildPets } from '../pets/WildPets'
+import { petInteractables } from '../pets/interact'
 import { PlayerRig, type Collider, type Interactable } from './PlayerRig'
 import { collidersOfBuilding } from './buildingColliders'
 import { EntrancePortal, Marker } from './Markers'
@@ -685,6 +687,20 @@ function PlayerLamp() {
   return <pointLight ref={light} color="#ffe6b8" intensity={0.3} distance={2.2} decay={2} />
 }
 
+/**
+ * 图鉴亭落在广场东侧的空地上。
+ *
+ * `noticeSpot` 本来就是"避开喷泉、车道和楼"的落点求解器，留言板在用它，
+ * 这里直接复用——放一个会撞墙的亭子比放一块牌子难得多。
+ */
+const CATALOG_SPOT = noticeSpot(plazaFountain.x + 9.5, plazaFountain.z + 4.5)
+const CATALOG_YAW = Math.atan2(plazaFountain.x - CATALOG_SPOT[0], plazaFountain.z - CATALOG_SPOT[1])
+/** 亭子正面（玩家站的位置）：光环和提示放这里，不要塞进台基底下。 */
+const CATALOG_FRONT = {
+  x: CATALOG_SPOT[0] + Math.sin(CATALOG_YAW) * 1.9,
+  z: CATALOG_SPOT[1] + Math.cos(CATALOG_YAW) * 1.9,
+}
+
 export function CityScene({ active = true }: { active?: boolean }) {
   const world = useApp((state) => state.world)
   const night = useApp((state) => state.night)
@@ -710,6 +726,15 @@ export function CityScene({ active = true }: { active?: boolean }) {
         maxY: 1.2,
       })
     }
+    // 图鉴亭占一块地：四柱之间可以站人，但台基和展板不能穿
+    list.push({
+      minX: CATALOG_SPOT[0] - 1.35,
+      maxX: CATALOG_SPOT[0] + 1.35,
+      minZ: CATALOG_SPOT[1] - 1.05,
+      maxZ: CATALOG_SPOT[1] + 1.05,
+      minY: 0,
+      maxY: 2.7,
+    })
     return list
   }, [])
 
@@ -762,6 +787,15 @@ export function CityScene({ active = true }: { active?: boolean }) {
       z: boardSpot.z,
       radius: 4.5,
       action: boardFerris,
+    })
+    list.push({
+      id: 'catalog-booth',
+      label: '宠物图鉴',
+      hint: '按 E 翻阅图鉴',
+      x: CATALOG_FRONT.x,
+      z: CATALOG_FRONT.z,
+      radius: 3.0,
+      action: () => useApp.getState().openPanel({ type: 'catalog' }),
     })
     for (const npc of npcs) {
       list.push({
@@ -930,6 +964,20 @@ export function CityScene({ active = true }: { active?: boolean }) {
             actionId="ferris-board"
             onOpen={boardFerris}
           />
+
+          {/* 图鉴亭：一个真的能走到的地点，而不是菜单里的一个按钮 */}
+          <CatalogBooth x={CATALOG_SPOT[0]} z={CATALOG_SPOT[1]} yaw={CATALOG_YAW} />
+          <EntrancePortal x={CATALOG_FRONT.x} z={CATALOG_FRONT.z} color="#ffce9a" strength={0.9} />
+          <Marker
+            x={CATALOG_SPOT[0]}
+            y={3.0}
+            z={CATALOG_SPOT[1]}
+            title="宠物图鉴"
+            subtitle="按 E 翻阅"
+            tone="kiosk"
+            actionId="catalog-booth"
+            onOpen={() => useApp.getState().openPanel({ type: 'catalog' })}
+          />
           {world?.places
             .filter((place) => place.id !== 'gallery-lobby' && place.id !== 'corner-cafe')
             .map((place) => (
@@ -1024,6 +1072,7 @@ export function CityScene({ active = true }: { active?: boolean }) {
             ]}
             bounds={{ minX: -WALK_BOUNDS, maxX: WALK_BOUNDS, minZ: -WALK_BOUNDS, maxZ: WALK_BOUNDS }}
             interactables={interactables}
+            liveInteractables={petInteractables}
             cameraDistance={5.6}
           />
         </Suspense>

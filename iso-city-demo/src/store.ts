@@ -21,6 +21,7 @@ export type Panel =
   | { type: 'elevator'; id: string }
   | { type: 'editor'; id: string }
   | { type: 'favorites' }
+  | { type: 'catalog' }
   | { type: 'about' }
 
 export type Screen = 'intro' | 'city' | 'interior'
@@ -78,6 +79,8 @@ type AppState = {
   favorites: Favorite[]
   visitedSpaces: string[]
   reportedIds: string[]
+  /** 已记录的宠物，格式 `族/品种`。存在 localStorage，不依赖后端。 */
+  seenPets: string[]
   editor: EditorDraft | null
   selectedFurnitureId: string | null
   placingType: FurnitureType | null
@@ -114,6 +117,8 @@ type AppState = {
   renameSelf: (name: string) => Promise<void>
   setHud: (hud: Hud) => void
   setNearby: (nearby: NearbyInfo | null) => void
+  /** 记录一只观察过的宠物。重复调用无副作用。 */
+  recordPet: (key: string) => void
   setPointerLocked: (locked: boolean) => void
   toggleNight: () => void
   setQuality: (quality: number) => void
@@ -204,6 +209,28 @@ const newId = () =>
     ? crypto.randomUUID()
     : `item-${Math.random().toString(36).slice(2)}`
 
+// 图鉴记录：只记「见过哪些品种」，不涉及后端，所以放本地。
+const SEEN_KEY = 'lumen-pets-seen'
+
+function loadSeen(): string[] {
+  try {
+    const raw = window.localStorage.getItem(SEEN_KEY)
+    if (!raw) return []
+    const parsed: unknown = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : []
+  } catch {
+    return []
+  }
+}
+
+function saveSeen(list: string[]) {
+  try {
+    window.localStorage.setItem(SEEN_KEY, JSON.stringify(list))
+  } catch {
+    /* 隐私模式下写不进去，这一局照样能看图鉴 */
+  }
+}
+
 export const useApp = create<AppState>((set, get) => ({
   booted: false,
   booting: false,
@@ -231,6 +258,7 @@ export const useApp = create<AppState>((set, get) => ({
   favorites: [],
   visitedSpaces: [],
   reportedIds: [],
+  seenPets: loadSeen(),
   editor: null,
   selectedFurnitureId: null,
   placingType: null,
@@ -606,6 +634,13 @@ export const useApp = create<AppState>((set, get) => ({
     const current = get().nearby
     if (nearby?.id === current?.id && nearby?.hint === current?.hint) return
     set({ nearby })
+  },
+
+  recordPet: (key) => {
+    if (get().seenPets.includes(key)) return
+    const next = [...get().seenPets, key]
+    saveSeen(next)
+    set({ seenPets: next })
   },
 
   setPointerLocked: (pointerLocked) => set({ pointerLocked }),
