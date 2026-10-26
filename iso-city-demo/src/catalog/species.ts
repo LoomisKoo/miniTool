@@ -2,11 +2,18 @@
 //
 // 形象来自体素图纸 src/pets/voxel/designs.ts：每个物种一个模板，品种 = 换色 +
 // 特征组合（折耳、短腿、卷尾、花纹……）。这里只补图鉴需要的元数据：名字、
-// 稀有度、出现权重、在城里的身高。新增品种只改 designs.ts。
+// 出现权重、在城里的身高。新增品种只改 designs.ts。
+//
+// 稀有度不手写：图鉴上的星数直接由「每小时能在街上遇到几只」推出来
+// （物种出现权重 × 品种权重 ÷ 总权重 × 每小时刷新池容量）。这样调权重、
+// 加品种之后星数会自动跟着变，不会出现「一半动物都是一星」这种事。
 
 import { VOXEL_DESIGNS } from '../pets/voxel/designs'
 
-export type Rarity = 'common' | 'uncommon' | 'rare'
+/** 每小时整批刷新的野生宠物数量（和 pets/wild.ts 的刷新池一致） */
+export const WILD_SLOTS = 40
+
+export type Rarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary'
 
 export type Breed = {
   id: string
@@ -19,6 +26,10 @@ export type Breed = {
   weight?: number
   /** 主毛色：缩略图还没渲染出来时的色块 */
   swatch: string
+  /** 稀有度，由 perHour 推出来 */
+  rarity: Rarity
+  /** 一小时里平均能遇到几只 */
+  perHour: number
 }
 
 export type Species = {
@@ -33,17 +44,39 @@ export type Species = {
   height: number
   /** 在城里出现的权重 */
   spawn: number
+  /** 物种整体的稀有度：取这个物种里最容易遇到的那个品种 */
   rarity: Rarity
+  /** 一小时里平均能遇到几只（含所有品种） */
+  perHour: number
   breeds: Breed[]
 }
 
 export const RARITY_LABEL: Record<Rarity, string> = {
   common: '常见',
-  uncommon: '少见',
-  rare: '稀有',
+  uncommon: '较常见',
+  rare: '少见',
+  epic: '稀有',
+  legendary: '极稀有',
 }
 
-type Meta = Omit<Species, 'breeds'>
+export const RARITY_STARS: Record<Rarity, number> = {
+  common: 1,
+  uncommon: 2,
+  rare: 3,
+  epic: 4,
+  legendary: 5,
+}
+
+/** 一小时里平均遇到几只 → 稀有度。分档按当前刷新池的实际分布定，保证五档都有人。 */
+function rarityOf(perHour: number): Rarity {
+  if (perHour >= 1.2) return 'common'
+  if (perHour >= 0.8) return 'uncommon'
+  if (perHour >= 0.5) return 'rare'
+  if (perHour >= 0.28) return 'epic'
+  return 'legendary'
+}
+
+type Meta = Omit<Species, 'breeds' | 'rarity' | 'perHour'>
 
 const META: Meta[] = [
   {
@@ -54,7 +87,6 @@ const META: Meta[] = [
     timeRange: 'any',
     height: 0.9,
     spawn: 22,
-    rarity: 'common',
   },
   {
     id: 'dog',
@@ -64,7 +96,6 @@ const META: Meta[] = [
     timeRange: 'any',
     height: 0.95,
     spawn: 18,
-    rarity: 'common',
   },
   {
     id: 'bunny',
@@ -74,7 +105,6 @@ const META: Meta[] = [
     timeRange: 'any',
     height: 0.95,
     spawn: 10,
-    rarity: 'common',
   },
   {
     id: 'panda',
@@ -83,8 +113,7 @@ const META: Meta[] = [
     description: '很少在城区出现的访客，走路慢吞吞，却总能吸引目光。',
     timeRange: 'any',
     height: 1.1,
-    spawn: 3,
-    rarity: 'rare',
+    spawn: 2,
   },
   {
     id: 'fox',
@@ -93,8 +122,7 @@ const META: Meta[] = [
     description: '很少在城区停留的野生访客，喜欢在边缘地带观察灯火。',
     timeRange: 'any',
     height: 1.0,
-    spawn: 4,
-    rarity: 'rare',
+    spawn: 3,
   },
   {
     id: 'squirrel',
@@ -104,7 +132,6 @@ const META: Meta[] = [
     timeRange: 'any',
     height: 0.7,
     spawn: 9,
-    rarity: 'common',
   },
   {
     id: 'pig',
@@ -114,7 +141,6 @@ const META: Meta[] = [
     timeRange: 'any',
     height: 0.8,
     spawn: 6,
-    rarity: 'common',
   },
   {
     id: 'sheep',
@@ -124,7 +150,6 @@ const META: Meta[] = [
     timeRange: 'any',
     height: 0.9,
     spawn: 5,
-    rarity: 'common',
   },
   {
     id: 'hedgehog',
@@ -133,8 +158,7 @@ const META: Meta[] = [
     description: '夜里在灌木和花坛边上翻找吃的，一有动静就缩成一个刺球。',
     timeRange: 'any',
     height: 0.45,
-    spawn: 4,
-    rarity: 'uncommon',
+    spawn: 1.5,
   },
   {
     id: 'raccoon',
@@ -143,8 +167,7 @@ const META: Meta[] = [
     description: '城里的翻找能手，眼睛上像戴着一副黑色面罩，尾巴一圈一圈的。',
     timeRange: 'any',
     height: 0.7,
-    spawn: 3,
-    rarity: 'rare',
+    spawn: 1.4,
   },
 ]
 
@@ -182,19 +205,15 @@ const BREED_DESCRIPTIONS: Record<string, string> = {
   'bunny-dutch': '现实档案：荷兰兔常有清晰的双色分区，花纹十分醒目。城市观察：它像一枚在街区里移动的黑白标记。',
   'panda-classic': '现实档案：大熊猫原产中国，主要以竹子为食，行动从容。城市观察：它出现时，连最吵的街角都会安静几秒。',
   'panda-brown': '现实档案：棕色熊猫是十分少见的毛色变异。城市观察：它像一块从山林误入城市的旧木雕。',
-  'squirrel-red': '现实档案：红松鼠耳朵尖上有一撮长毛，尾巴几乎和身体一样大。城市观察：它把公园长椅当成了自己的仓库。',
-  'squirrel-grey': '现实档案：灰松鼠在城市里适应得很好，藏食物的地点能记很久。城市观察：它总在花坛里翻出别人早就忘掉的东西。',
-  'squirrel-black': '现实档案：黑松鼠是灰松鼠的黑色变异，在城市公园里并不罕见。城市观察：天一暗，它就只剩下尾巴的轮廓。',
-  'pig-pink': '现实档案：家猪的嗅觉比狗还灵敏，鼻子前端是一块专门的拱土盘。城市观察：它把每一块松动的砖都拱开看看。',
-  'pig-black': '现实档案：黑猪多为地方土种，耐粗饲、性子稳。城市观察：它走路不急，好像整条街都归它管。',
-  'pig-spotted': '现实档案：花猪的斑点分布几乎不重复。城市观察：它往墙根一躺，就像一片掉在地上的旧瓷砖。',
-  'sheep-white': '现实档案：绵羊的毛会一直长，需要定期剪。城市观察：它慢悠悠地啃过一整条人行道边的草。',
-  'sheep-black': '现实档案：黑绵羊的深色毛在羊群里格外显眼。城市观察：夜里它像一小团没被路灯照到的影子。',
-  'sheep-brown': '现实档案：棕羊多见于山区，毛色接近干草。城市观察：它站在秋天的树下时，几乎和背景分不开。',
-  'hedgehog-brown': '现实档案：刺猬受惊时会卷成一个球，把刺全都朝外。城市观察：它只在路灯照不到的角落活动。',
-  'hedgehog-grey': '现实档案：灰刺猬的刺更浅，腹部仍是柔软的绒毛。城市观察：它穿过草地时，像一颗慢慢移动的松果。',
-  'raccoon-grey': '现实档案：浣熊的前爪非常灵活，几乎什么都能打开。城市观察：它认识城里每一个没盖严的垃圾桶。',
-  'raccoon-brown': '现实档案：棕浣熊是较暖色的毛色型，面罩依旧清晰。城市观察：它翻东西时格外安静，只留下尾巴的一圈圈影子。',
+  'squirrel-red': '现实档案：红松鼠耳朵尖上有一撮长毛，尾巴几乎和身体一样大、能绕过背卷起来。城市观察：它把公园长椅当成了自己的仓库。',
+  'squirrel-grey': '现实档案：灰松鼠没有耳簇，身子更长，尾巴像一把大刷子垂在身后。城市观察：它总在花坛里翻出别人早就忘掉的东西。',
+  'squirrel-chipmunk': '现实档案：花栗鼠背上五道纵纹、脸上有两条过眼纹，尾巴短而竖起。城市观察：它比松鼠小一圈，胆子却大得多。',
+  'pig-house': '现实档案：家猪的嗅觉比狗还灵敏，鼻子前端是一块专门的拱土盘，头几乎和身体齐平。城市观察：它把每一块松动的砖都拱开看看。',
+  'pig-boar': '现实档案：野猪吻更长、鬃毛竖立，嘴边有一对向上翘的獠牙。城市观察：它走路不紧不慢，路过的人都自动绕开。',
+  'sheep-wool': '现实档案：绵羊的毛会一直长，需要定期剪，脸小、身子是一整团羊毛。城市观察：它慢悠悠地啃过一整条人行道边的草。',
+  'sheep-goat': '现实档案：山羊短毛、瘦身、向后弯的长角，下巴有一撮胡须。城市观察：它会站起来够树篱上最嫩的那几片叶子。',
+  'hedgehog-brown': '现实档案：刺猬背上是一整层朝外支棱的棘刺，吻尖、腿短，受惊时会卷成一个球。城市观察：它只在路灯照不到的角落活动。',
+  'raccoon-grey': '现实档案：浣熊的前爪非常灵活，几乎什么都能打开；眼睛上一道黑色面罩，尾巴一圈一圈。城市观察：它认识城里每一个没盖严的垃圾桶。',
 }
 
 const CATALOG_META: Record<string, { id: string; name: string; description?: string }> = {
@@ -227,38 +246,45 @@ const CATALOG_META: Record<string, { id: string; name: string; description?: str
   'fox-red': { id: 'fox-red', name: '赤狐', description: '现实档案：赤狐分布广泛，聪明、警觉，尾巴蓬松。城市观察：它会在街区边缘等待人群散开。' },
   'fox-arctic': { id: 'fox-arctic', name: '北极狐', description: '现实档案：北极狐生活在寒冷地区，冬季毛色会变浅。城市观察：它像一片从远方雪原飘来的安静影子。' },
   'fox-fennec': { id: 'fox-fennec', name: '耳廓狐', description: '现实档案：耳廓狐原产北非，巨大的耳朵帮助它散热和捕捉声音。城市观察：它能先听见拐角后的霓虹灯嗡鸣。' },
-  'squirrel-red': { id: 'squirrel-red', name: '红松鼠', description: '耳尖带一撮长毛、尾巴蓬松向上卷起的松鼠。城市公园里最常见的那一种。' },
-  'squirrel-grey': { id: 'squirrel-grey', name: '灰松鼠', description: '灰毛、身形更圆，尾巴几乎和身体一样大。藏东西的地方它能记很久。' },
-  'squirrel-black': { id: 'squirrel-black', name: '黑松鼠', description: '灰松鼠的黑色变异，在城市公园里并不罕见。天一暗就只剩尾巴的轮廓。' },
-  'pig-pink': { id: 'pig', name: '家猪', description: '圆身子、扁平鼻子盘、卷尾巴。嗅觉比狗还灵敏，喜欢把松动的砖一块块拱开。' },
-  'pig-black': { id: 'pig', name: '家猪' },
-  'pig-spotted': { id: 'pig', name: '家猪' },
-  'sheep-white': { id: 'sheep', name: '绵羊', description: '一大团羊毛配一张深色的长脸，四条细腿。头总是从毛堆里往前探出去。' },
-  'sheep-black': { id: 'sheep', name: '绵羊' },
-  'sheep-brown': { id: 'sheep', name: '绵羊' },
-  'hedgehog-brown': { id: 'hedgehog', name: '刺猬', description: '拱形的背上长满朝外发散的尖刺，浅色的脸和肚子，鼻尖一点点黑。' },
-  'hedgehog-grey': { id: 'hedgehog', name: '刺猬' },
+  'squirrel-red': { id: 'squirrel-red', name: '红松鼠', description: '耳尖一撮长毛，尾巴几乎和身体一样大、能绕过背卷起来。松鼠里最有辨识度的一种。' },
+  'squirrel-grey': { id: 'squirrel-grey', name: '灰松鼠', description: '没有耳簇，身子更长，尾巴像一把大刷子垂在身后。城市公园里最常见的那种。' },
+  'squirrel-chipmunk': { id: 'squirrel-chipmunk', name: '花栗鼠', description: '背上五道纵纹、脸上两条过眼纹，尾巴短而竖起。比松鼠小一圈，胆子却大得多。' },
+  'pig-house': { id: 'pig', name: '家猪', description: '桶形身子、扁平鼻子盘、往前耷拉的大耳朵，头和背几乎齐平。嗅觉比狗还灵敏。' },
+  'pig-boar': { id: 'pig', name: '野猪' },
+  'sheep-wool': { id: 'sheep', name: '绵羊', description: '一整团羊毛配一张小小的深色脸，脸从毛里往前探出来，四条细腿藏在毛底下。' },
+  'sheep-goat': { id: 'sheep', name: '山羊' },
+  'hedgehog-brown': { id: 'hedgehog', name: '刺猬', description: '低矮的圆拱壳上长满朝外支棱的尖刺，浅色的吻尖、短短的腿。' },
   'raccoon-grey': { id: 'raccoon', name: '浣熊', description: '横过眼睛的黑色面罩和一圈一圈的尾巴。前爪灵活到几乎什么都能打开。' },
-  'raccoon-brown': { id: 'raccoon', name: '浣熊' },
 }
 
-export const SPECIES: Species[] = META.map((meta) => {
-  const design = VOXEL_DESIGNS[meta.id]
-  return {
-    ...meta,
-    breeds: design.breeds.map((b) => ({
-      id: b.id,
-      name: CATALOG_META[b.id]?.name ?? b.name,
-      description:
-        CATALOG_META[b.id]?.description ??
-        BREED_DESCRIPTIONS[b.id] ??
-        `${b.name}有着自己的外观特征和生活节奏。`,
-      catalogId: CATALOG_META[b.id]?.id ?? b.id,
-      weight: b.weight,
-      swatch: b.palette?.fur ?? design.palette.fur,
-    })),
-  }
-})
+export const SPECIES: Species[] = (() => {
+  const totalSpawn = META.reduce((sum, item) => sum + item.spawn, 0)
+  return META.map((meta) => {
+    const design = VOXEL_DESIGNS[meta.id]
+    // 每小时这个物种会刷出几只，再按品种权重分下去
+    const perHourSpecies = (meta.spawn / totalSpawn) * WILD_SLOTS
+    const totalWeight = design.breeds.reduce((sum, b) => sum + (b.weight ?? 1), 0)
+    const breeds: Breed[] = design.breeds.map((b) => {
+      const perHour = perHourSpecies * ((b.weight ?? 1) / totalWeight)
+      return {
+        id: b.id,
+        name: CATALOG_META[b.id]?.name ?? b.name,
+        description:
+          CATALOG_META[b.id]?.description ??
+          BREED_DESCRIPTIONS[b.id] ??
+          `${b.name}有着自己的外观特征和生活节奏。`,
+        catalogId: CATALOG_META[b.id]?.id ?? b.id,
+        weight: b.weight,
+        swatch: b.palette?.fur ?? design.palette.fur,
+        rarity: rarityOf(perHour),
+        perHour,
+      }
+    })
+    // 物种稀有度取最好遇到的那个品种：图鉴里「这个物种算什么稀有」看的是最容易见到的一面
+    const easiest = Math.max(...breeds.map((b) => b.perHour))
+    return { ...meta, breeds, perHour: perHourSpecies, rarity: rarityOf(easiest) }
+  })
+})()
 
 const byId = new Map(SPECIES.map((s) => [s.id, s]))
 

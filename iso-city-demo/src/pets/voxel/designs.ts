@@ -1188,23 +1188,20 @@ const bunny: VoxelDesign = {
 }
 
 // ===========================================================================
-// 松鼠：辨识点全在尾巴——一条比身子还大、从屁股后面立起来在背上卷成一圈的
-// 蓬松大尾巴，耳尖再加一撮毛。不靠花纹也能一眼认出来。
+// 松鼠
+//   红松鼠：耳尖一撮长毛 + 尾巴从屁股后面立起来绕过背，末梢在头顶后方勾回来
+//   灰松鼠：没有耳簇，身子更长、尾巴更平更大，垂在身后
+//   花栗鼠：小一号，背上有五道纵纹，尾巴短而竖起
+// 「一眼是松鼠」靠的是大尾巴，所以三个品种的尾巴形状都不一样，不是只换颜色。
 // ===========================================================================
 
-function squirrelEar(s: 1 | -1): PartDef {
+function squirrelEar(tufted: boolean, s: 1 | -1): PartDef {
   const f = side(s)
-  return {
-    name: s === 1 ? 'earR' : 'earL',
-    parent: 'head',
-    pivot: f([3.4, 16.2, 0.5]),
-    layers: [
-      tri(f([1.5, 16.9, 0.5]), f([5.8, 15.4, 0.5]), f([4.8, 21.8, 0.3]), 1.9),
-      // 耳尖的毛簇
-      cap([f([4.6, 21.0, 0.5]), f([5.4, 24.4, 0.4])], [0.9, 0.45]),
-      tri(f([2.5, 17.2, 1.4]), f([5.0, 16.2, 1.4]), f([4.5, 20.4, 1.3]), 0.8, 'inner', true),
-    ],
-  }
+  const layers: Layer[] = [tri(f([1.5, 16.9, 0.5]), f([5.8, 15.4, 0.5]), f([4.8, 21.8, 0.3]), 1.9)]
+  // 耳尖的毛簇：红松鼠最有辨识度的一处，比耳朵本身还长
+  if (tufted) layers.push(cap([f([4.6, 21.0, 0.5]), f([5.6, 24.8, 0.4])], [0.9, 0.4]))
+  layers.push(tri(f([2.5, 17.2, 1.4]), f([5.0, 16.2, 1.4]), f([4.5, 20.4, 1.3]), 0.8, 'inner', true))
+  return { name: s === 1 ? 'earR' : 'earL', parent: 'head', pivot: f([3.4, 16.2, 0.5]), layers }
 }
 
 const SQUIRREL_FACE = sym(27, [...EYES, '.............', '....PP.......', '....PP.......', '...........NN', '..........M..', '...........M.'])
@@ -1213,22 +1210,26 @@ const squirrel: VoxelDesign = {
   id: 'squirrel',
   palette: { ...BASE_PALETTE, fur: '#b4703f', fur2: '#7a4526', belly: '#f7e9d3', muzzle: '#f7e9d3', paw: '#8a5330' },
   breeds: [
-    { id: 'squirrel-red', name: '红松鼠', weight: 3 },
+    { id: 'squirrel-red', name: '红松鼠', weight: 3, traits: { tail: 'curl', tufts: 1, pattern: 'plain' } },
     {
       id: 'squirrel-grey',
       name: '灰松鼠',
       weight: 3,
+      traits: { tail: 'plume', tufts: 0, pattern: 'plain', build: 1.12 },
       palette: { fur: '#9ba0a6', fur2: '#6e7278', belly: '#f4f2ee', muzzle: '#f4f2ee', paw: '#7c8085' },
     },
     {
-      id: 'squirrel-black',
-      name: '黑松鼠',
+      id: 'squirrel-chipmunk',
+      name: '花栗鼠',
       weight: 1,
-      palette: { fur: '#3a3438', fur2: '#26222a', belly: '#e8e2da', muzzle: '#e8e2da', paw: '#2c282e' },
+      traits: { tail: 'short', tufts: 0, pattern: 'chipmunk', build: 0.86 },
+      palette: { fur: '#c98f5c', fur2: '#5b3a24', belly: '#fbf1e2', muzzle: '#fbf1e2', paw: '#8a6240' },
     },
   ],
-  build: () => {
+  build: (t) => {
     const headP = 2.6
+    const kind = str(t, 'tail', 'curl')
+    const small = num(t, 'build', 1)
     const headC: Vec3 = [0, 12.6, 1.6]
     const headR: Vec3 = [5.5, 4.9, 4.7]
     const bodyCy = 6.0
@@ -1237,14 +1238,32 @@ const squirrel: VoxelDesign = {
     const bodyZ = 2.8 - bodyR[2]
     const neckY = bodyCy + bodyRy - 1.4 - (headC[1] - headR[1])
     const t0 = bodyZ - bodyR[2] + 1.2
-    // 尾巴：从屁股后面立起来绕过背，末梢在头顶后方往前勾
-    const tailPath: Vec3[] = [
-      [0, 6.2, t0],
-      [0, 9.2, t0 - 2.8],
-      [0, 13.6, t0 - 3.8],
-      [0, 17.2, t0 - 1.6],
-      [0, 18.0, t0 + 1.8],
-    ]
+    // 三条尾巴：绕背一圈 / 垂在身后的大蓬尾 / 短而竖起
+    const tails: Record<string, Vec3[]> = {
+      curl: [
+        [0, 6.2, t0],
+        [0, 9.2, t0 - 2.8],
+        [0, 13.6, t0 - 3.8],
+        [0, 17.2, t0 - 1.6],
+        [0, 18.0, t0 + 1.8],
+      ],
+      plume: [
+        [0, 6.4, t0],
+        [0, 6.0, t0 - 3.6],
+        [0, 7.6, t0 - 6.8],
+        [0, 11.4, t0 - 8.4],
+      ],
+      short: [
+        [0, 6.8, t0],
+        [0, 9.6, t0 - 2.0],
+        [0, 12.4, t0 - 2.4],
+      ],
+    }
+    const radii: Record<string, number[]> = {
+      curl: [1.3, 3.0, 3.6, 3.4, 2.0],
+      plume: [1.4, 2.6, 3.2, 2.2],
+      short: [1.2, 2.0, 1.1],
+    }
     return {
       fuzz: 0.5,
       parts: stance([
@@ -1258,108 +1277,172 @@ const squirrel: VoxelDesign = {
             ell([3.4, bodyCy - 1.2, -3.0], [1.6, 2.2, 2.6]),
             ell([-3.4, bodyCy - 1.2, -3.0], [1.6, 2.2, 2.6]),
           ],
+          // 花栗鼠：背脊一道深色纵纹 + 两侧各一道浅色
+          paint: (x, y, z, cur) => {
+            if (str(t, 'pattern', 'plain') !== 'chipmunk') return undefined
+            if (cur !== 'fur') return undefined
+            if (z > 1.4 || y < 4.6) return undefined
+            const ax = Math.abs(x)
+            if (ax < 0.9) return 'fur2'
+            if (ax > 2.2 && ax < 3.3) return 'belly'
+            return undefined
+          },
         },
         {
           name: 'head',
           pivot: [0, 9.5, 1.2],
-          layers: [head(headC, headR, { p: headP }), muzzle(0, 10.4, faceFront(headC, headR, headP, undefined, 10.4), 2.1, 1.6, 1.2)],
+          layers: [
+            head(headC, headR, { p: headP }),
+            muzzle(0, 10.4, faceFront(headC, headR, headP, undefined, 10.4), 2.1, 1.6, 1.2),
+          ],
           decal: SQUIRREL_FACE,
+          // 花栗鼠的过眼纹：从鼻子穿过眼睛一直到耳根
+          paint: (x, y, z, cur) =>
+            str(t, 'pattern', 'plain') === 'chipmunk' && cur === 'fur' && Math.abs(y - 13.4) < 1.1 && z > 2.6 ? 'fur2' : undefined,
         },
-        squirrelEar(1),
-        squirrelEar(-1),
+        squirrelEar(num(t, 'tufts', 0) > 0, 1),
+        squirrelEar(num(t, 'tufts', 0) > 0, -1),
         ...legs({ x: 2.5, front: 1.8, back: t0 + 2.2, top: 5.0, r: 1.3, paw: 'paw' }),
-        { name: 'tail', pivot: tailPath[0], layers: [cap(tailPath, [1.3, 3.0, 3.6, 3.4, 2.0])] },
-      ], { lift: 0.7, legR: 1.0, neck: [neckY, 0.5] }),
+        { name: 'tail', pivot: tails[kind][0], layers: [cap(tails[kind], radii[kind])] },
+      ], {
+        lift: 0.7,
+        legR: 1.0,
+        body: [small, small, small],
+        neck: [neckY, 0.5],
+      }),
     }
   },
 }
 
 // ===========================================================================
-// 猪：圆滚滚的身子 + 正前方一块扁平的鼻子盘 + 两只往前耷拉的大耳朵，
-// 尾巴是一小卷。鼻子上两个鼻孔是唯一的花纹。
+// 猪
+// 猪和狗最大的区别是头的姿态：狗把头顶在身体上方，猪的头跟身子是同一个高度，
+// 直接长在桶形身体的前端，几乎没有脖子。所以这里 headC 的 y 和身体中心几乎相等，
+// 再用 neck 把 stance 自动抬高抵消掉，头就不会像狗一样抬起来。
+// 另外加了三样：扁平的鼻子盘、往前耷拉到眼睛上的大耳朵、垂下来的两腮肉。
 // ===========================================================================
 
-function pigEar(s: 1 | -1): PartDef {
+function pigEar(kind: string, s: 1 | -1): PartDef {
   const f = side(s)
+  const name = s === 1 ? 'earR' : 'earL'
+  if (kind === 'prick') {
+    // 野猪：小而竖立的尖耳
+    return {
+      name,
+      parent: 'head',
+      pivot: f([3.0, 11.0, 1.0]),
+      layers: [
+        tri(f([1.8, 11.6, 0.6]), f([4.6, 11.2, 0.6]), f([6.2, 15.4, 1.2]), 1.2),
+        tri(f([2.4, 11.8, 1.5]), f([4.2, 11.5, 1.5]), f([5.6, 14.6, 1.8]), 0.4, 'inner', true),
+      ],
+    }
+  }
   return {
-    name: s === 1 ? 'earR' : 'earL',
+    name,
     parent: 'head',
-    pivot: f([3.9, 16.4, 0.6]),
+    pivot: f([2.6, 11.0, 2.0]),
     layers: [
-      // 耳朵向后上方立起，耳尖往前耷拉
-      tri(f([1.3, 17.2, 0.6]), f([6.5, 17.0, 0.6]), f([7.6, 21.4, 3.2]), 1.9),
-      tri(f([2.4, 17.5, 1.5]), f([5.8, 17.4, 1.5]), f([6.9, 20.6, 3.4]), 0.8, 'inner', true),
+      // 耳根长在头顶，整片往前盖住眼睛，耳尖朝前下方
+      tri(f([0.8, 12.0, 0.6]), f([5.6, 11.2, 0.6]), f([8.4, 8.0, 5.6]), 1.4),
+      tri(f([2.0, 11.6, 1.8]), f([5.0, 11.2, 1.8]), f([7.2, 8.6, 5.2]), 0.5, 'inner', true),
     ],
   }
 }
 
-const PIG_FACE = sym(29, [
-  '.............',
-  ...EYES,
-  '.............',
-  '.............',
-  '.............',
-  '.........DD..',
-  '.........DD..',
-])
+const PIG_FACE = sym(20, [...EYES, '.............', '.............'])
 
 const pig: VoxelDesign = {
   id: 'pig',
   palette: { ...BASE_PALETTE, inner: '#fbd9dc', fur: '#f2b8b2', fur2: '#b8696b', belly: '#f8d7d2', muzzle: '#f8d7d2', paw: '#8f6b64', nose: '#c95f6b' },
   breeds: [
-    { id: 'pig-pink', name: '粉猪', weight: 3 },
+    { id: 'pig-house', name: '家猪', weight: 3, traits: { snout: 'disc', ears: 'flop' } },
     {
-      id: 'pig-black',
-      name: '黑猪',
+      id: 'pig-boar',
+      name: '野猪',
       weight: 1,
-      palette: { inner: '#7a6068', fur: '#4a4348', fur2: '#7a5058', belly: '#6b6268', muzzle: '#6b6268', nose: '#b06a74' },
-    },
-    {
-      id: 'pig-spotted',
-      name: '花猪',
-      weight: 1,
-      palette: { inner: '#f8e4e6', fur: '#efe0d2', fur2: '#b98a7a', belly: '#f8efe6', muzzle: '#f8efe6', nose: '#c98a90' },
+      traits: { snout: 'long', ears: 'prick', tusks: 1 },
+      palette: { inner: '#8a6a70', fur: '#6b5a4c', fur2: '#3c332c', belly: '#8a7768', muzzle: '#4a4038', paw: '#332b26', nose: '#2c2420' },
     },
   ],
-  build: () => {
-    const headP = 2.6
-    const headC: Vec3 = [0, 12.8, 1.4]
-    const headR: Vec3 = [6.3, 5.3, 4.9]
-    const bodyCy = 6.0
-    const bodyRy = 4.6
-    const bodyR: Vec3 = [5.2, bodyRy, 5.8]
-    const bodyZ = 2.4 - bodyR[2]
-    const neckY = bodyCy + bodyRy - 1.6 - (headC[1] - headR[1])
-    const front = faceFront(headC, headR, headP, undefined, 10.6)
-    const t0 = bodyZ - bodyR[2] + 1.0
+  build: (t) => {
+    const headP = 2.5
+    const boar = str(t, 'snout', 'disc') === 'long'
+    const bodyCy = 7.2
+    const bodyRy = 4.3
+    const bodyR: Vec3 = [5.4, bodyRy, 5.2]
+    const bodyZ = 1.2 - bodyR[2]
+    // 头和身体几乎同一个高度：这是猪不像狗的关键
+    const headCy = 7.5
+    const headC: Vec3 = [0, headCy, 3.2]
+    const headR: Vec3 = [4.9, 4.4, 3.5]
+    // 野猪的吻更长更窄，家猪是一块扁平的鼻子盘
+    const snoutY = headCy - 1.7
+    const snoutZ = faceFront(headC, headR, headP, undefined, snoutY)
+    const t0 = bodyZ - bodyR[2] + 1.2
     return {
-      fuzz: 0.16,
+      fuzz: boar ? 0.55 : 0.16,
       parts: stance([
         {
           name: 'body',
           pivot: [0, bodyCy, bodyZ],
-          layers: [body([0, bodyCy, bodyZ], bodyR), ell([0, bodyCy - 0.4, 2.4], [3.4, 3.4, 2.0], 'belly', true)],
+          layers: [
+            body([0, bodyCy, bodyZ], bodyR),
+            ell([0, bodyCy - 0.6, 1.8], [3.5, 3.4, 2.4], 'belly', true),
+            // 野猪的鬃毛：背脊一道立起来的毛
+            ...(boar
+              ? [
+                  cap([[0, bodyCy + 3.6, 2.2], [0, bodyCy + 4.6, -1.0], [0, bodyCy + 4.2, -4.6]], [0.9, 1.3, 0.8], 'fur2'),
+                ]
+              : []),
+          ],
         },
         {
           name: 'head',
-          pivot: [0, 9.6, 1.0],
+          pivot: [0, headCy, 1.4],
           layers: [
             head(headC, headR, { p: headP }),
-            // 鼻子盘：正面一块扁平的圆盘，比狗嘴短得多
-            { kind: 'ellipsoid', c: [0, 10.6, front + 0.5], r: [2.5, 2.0, 1.3], p: 2.8, color: 'nose' },
+            // 两腮肉：家猪最圆的地方
+            ell([2.8, headCy - 1.4, snoutZ - 1.6], [2.0, 2.2, 2.0], 'fur'),
+            ell([-2.8, headCy - 1.4, snoutZ - 1.6], [2.0, 2.2, 2.0], 'fur'),
+            // 鼻子盘：一块几乎垂直的扁平圆盘，不是狗的锥形嘴。
+            // 宽度只有脸的一半、高度 1/3 左右，太大了就成了熊嘴
+            {
+              kind: 'ellipsoid',
+              c: [0, snoutY, snoutZ + (boar ? 1.6 : 0.5)],
+              r: boar ? [1.3, 1.1, 1.9] : [1.9, 1.15, 0.8],
+              p: 2.4,
+              color: 'nose',
+            },
+            // 野猪的獠牙
+            ...(boar
+              ? [
+                  cap([[1.5, snoutY - 1.4, snoutZ + 2.0], [2.0, snoutY - 0.2, snoutZ + 2.9]], [0.5, 0.2], 'belly'),
+                  cap([[-1.5, snoutY - 1.4, snoutZ + 2.0], [-2.0, snoutY - 0.2, snoutZ + 2.9]], [0.5, 0.2], 'belly'),
+                ]
+              : []),
           ],
           decal: PIG_FACE,
         },
-        pigEar(1),
-        pigEar(-1),
-        ...legs({ x: 3.0, front: 1.6, back: t0 + 2.4, top: 4.6, r: 1.5, paw: 'paw' }),
+        pigEar(str(t, 'ears', 'flop'), 1),
+        pigEar(str(t, 'ears', 'flop'), -1),
+        ...legs({ x: 3.1, front: 2.2, back: t0 + 2.6, top: 5.2, r: 1.5, paw: 'paw' }),
         // 卷尾巴
         {
           name: 'tail',
-          pivot: [0, 8.4, t0],
-          layers: [cap([[0, 8.4, t0], [0, 9.8, t0 - 1.7], [0, 10.8, t0 - 0.5], [0, 9.8, t0 + 0.5]], [0.85, 0.85, 0.85, 0.8])],
+          pivot: [0, bodyCy + 1.6, t0],
+          layers: [
+            cap(
+              [
+                [0, bodyCy + 1.6, t0],
+                [0, bodyCy + 3.0, t0 - 1.8],
+                [0, bodyCy + 4.2, t0 - 0.6],
+                [0, bodyCy + 3.4, t0 + 0.6],
+              ],
+              [0.85, 0.85, 0.85, 0.8],
+            ),
+          ],
         },
-      ], { lift: 0.6, legR: 1.0, neck: [neckY, 0.5] }),
+      ], { lift: 0.4, neck: [-0.4, 0.4], legR: 1.05 }),
     }
   },
 }
@@ -1407,15 +1490,7 @@ const raccoon: VoxelDesign = {
     muzzle: '#f2f0ec',
     paw: '#2f2b31',
   },
-  breeds: [
-    { id: 'raccoon-grey', name: '浣熊', weight: 3 },
-    {
-      id: 'raccoon-brown',
-      name: '棕浣熊',
-      weight: 1,
-      palette: { fur: '#9a7d68', fur2: '#332a26', ear: '#8a6f5c', belly: '#efe6da', muzzle: '#f2ece2' },
-    },
-  ],
+  breeds: [{ id: 'raccoon-grey', name: '浣熊', weight: 1 }],
   build: () => {
     const headP = 2.8
     const headC: Vec3 = [0, 12.8, 1.6]
@@ -1469,11 +1544,14 @@ const raccoon: VoxelDesign = {
 }
 
 // ===========================================================================
-// 羊：一大团毛（不是光滑的身体）+ 一张深色的长脸往前伸出去 + 四条细长的深色腿。
-// 头不是坐在毛上面，而是从毛堆里往前探出来——这一点是羊和狗最大的区别。
+// 羊
+//   绵羊：一整团羊毛（不是光滑的身体）+ 一张小小的深色脸从毛里探出来 + 四根细腿
+//   山羊：短毛的瘦身子 + 向后弯的长角 + 竖起来的耳朵 + 下巴一撮胡须
+// 两者不靠颜色区分：角和毛是两套完全不同的轮廓。
 // ===========================================================================
 
-const SHEEP_FACE = sym(25, [
+// 绵羊的脸在毛团前半部、山羊的脸更高更前，贴花 top 得分开写，否则眼睛会顶到头顶
+const SHEEP_FACE = sym(22, [
   '.............',
   '.............',
   '.............',
@@ -1487,104 +1565,179 @@ const SHEEP_FACE = sym(25, [
   '............M',
 ])
 
+const GOAT_FACE = sym(25, [
+  '.............',
+  '.............',
+  '.......BBBBB.',
+  '......BBKKKBB',
+  '......BBKWKBB',
+  '.......BBKKBB',
+  '.............',
+  '............N',
+  '...........M.',
+  '............M',
+])
+
+/** 羊毛：一大团 + 头顶三团 + 后臀一团。团数少、每团大，轮廓才是云而不是疙瘩 */
+function woolClumps(bodyCy: number, bodyZ: number): Layer[] {
+  return [
+    body([0, bodyCy, bodyZ], [5.2, 4.2, 5.4]),
+    ell([0, bodyCy + 3.2, bodyZ + 1.0], [3.8, 2.2, 4.2]),
+    ell([3.0, bodyCy + 2.4, bodyZ - 1.4], [2.4, 2.2, 2.8]),
+    ell([-3.0, bodyCy + 2.4, bodyZ - 1.4], [2.4, 2.2, 2.8]),
+    ell([0, bodyCy + 0.6, bodyZ - 4.2], [3.6, 3.4, 2.4]),
+    // 脖子：把毛往前推到脸的根部，脸才不像贴上去的
+    ell([0, bodyCy + 0.6, bodyZ + 6.0], [2.9, 2.7, 1.8]),
+  ]
+}
+
 const sheep: VoxelDesign = {
   id: 'sheep',
-  palette: { ...BASE_PALETTE, fur: '#efe7d8', fur2: '#4a4448', ear: '#5a5358', belly: '#f7f2e8', muzzle: '#6b6367', paw: '#3f3a3e' },
+  palette: { ...BASE_PALETTE, fur: '#efe7d8', fur2: '#46404a', ear: '#5a5358', belly: '#f7f2e8', muzzle: '#6b6367', paw: '#3f3a3e' },
   breeds: [
-    { id: 'sheep-white', name: '绵羊', weight: 3 },
+    { id: 'sheep-wool', name: '绵羊', weight: 3, traits: { kind: 'wool' } },
     {
-      id: 'sheep-black',
-      name: '黑绵羊',
-      weight: 1,
-      palette: { fur: '#4a4249', fur2: '#2c282e', ear: '#3a343a', belly: '#5c535a', muzzle: '#3a343a', paw: '#26222a' },
-    },
-    {
-      id: 'sheep-brown',
-      name: '棕羊',
-      weight: 1,
-      palette: { fur: '#b9946a', fur2: '#584a40', ear: '#66564a', belly: '#c9a97e', muzzle: '#6e5f52', paw: '#4a3f37' },
+      id: 'sheep-goat',
+      name: '山羊',
+      weight: 2,
+      traits: { kind: 'goat' },
+      palette: { fur: '#e2d8c6', fur2: '#6b6157', ear: '#cbbfa9', belly: '#f2ece0', muzzle: '#7a6f62', paw: '#4a4239' },
     },
   ],
-  build: () => {
-    const headP = 2.8
-    // 头往前伸：z 比身体前沿还出去一截，但比毛团小一圈
-    const headC: Vec3 = [0, 10.6, 4.6]
-    const headR: Vec3 = [3.4, 3.4, 3.5]
-    const bodyCy = 7.0
-    const bodyRy = 4.6
-    const bodyZ = -1.0
-    // 毛团：一圈大小不一的椭球叠在身体上，做出一团羊毛的轮廓
-    const wool: Layer[] = [
-      body([0, bodyCy, bodyZ], [5.4, bodyRy, 6.2]),
-      ell([0, bodyCy + 2.8, bodyZ + 0.4], [4.2, 2.4, 5.0]),
-      ell([3.8, bodyCy + 1.6, bodyZ - 1.8], [2.6, 2.6, 3.2]),
-      ell([-3.8, bodyCy + 1.6, bodyZ - 1.8], [2.6, 2.6, 3.2]),
-      ell([4.0, bodyCy - 0.8, bodyZ + 1.6], [2.4, 2.6, 2.8]),
-      ell([-4.0, bodyCy - 0.8, bodyZ + 1.6], [2.4, 2.6, 2.8]),
-      ell([0, bodyCy + 1.2, bodyZ - 5.0], [3.6, 3.2, 2.6]),
-      ell([0, bodyCy - 2.0, bodyZ - 2.6], [4.2, 2.0, 4.0]),
+  build: (t) => {
+    const goat = str(t, 'kind', 'wool') === 'goat'
+    const headP = goat ? 2.7 : 2.8
+    const bodyCy = goat ? 8.6 : 7.4
+    const bodyRy = goat ? 3.2 : 4.6
+    const bodyZ = goat ? -0.2 : -1.2
+    // 绵羊的脸小而圆、从毛里往前探出来；山羊的脸窄而长
+    const headC: Vec3 = goat ? [0, 12.4, 3.6] : [0, 10.6, 4.8]
+    const headR: Vec3 = goat ? [3.1, 3.2, 3.9] : [2.8, 2.9, 3.0]
+    const front = faceFront(headC, headR, headP, undefined, headC[1] - 0.8)
+    const parts: PartDef[] = [
+      {
+        name: 'body',
+        pivot: [0, bodyCy, bodyZ],
+        layers: goat
+          ? [
+              { kind: 'ellipsoid', c: [0, bodyCy, bodyZ], r: [3.6, bodyRy, 5.4], p: 2.2, color: 'fur' },
+              ell([0, bodyCy - 0.6, bodyZ + 2.0], [2.4, 2.2, 1.8], 'belly', true),
+            ]
+          : woolClumps(bodyCy, bodyZ),
+      },
+      {
+        name: 'head',
+        pivot: [0, bodyCy - 1.0, 2.0],
+        layers: [
+          { kind: 'ellipsoid', c: headC, r: headR, p: headP, color: 'fur2' },
+          // 吻：山羊更长更窄，绵羊短一点、位置压在眼睛下面
+          muzzle(
+            0,
+            headC[1] - (goat ? 1.0 : 1.9),
+            front,
+            goat ? 1.5 : 1.7,
+            goat ? 1.3 : 1.25,
+            goat ? 2.4 : 1.6,
+            'muzzle',
+          ),
+          // 山羊的下巴胡须
+          ...(goat
+            ? [cap([[0, headC[1] - 2.6, front - 0.6], [0, headC[1] - 4.6, front - 1.6]], [0.8, 0.5], 'fur2')]
+            : []),
+          // 绵羊额头上的一撮毛
+          ...(goat ? [] : [ell([0, headC[1] + 2.4, headC[2] + 0.8], [1.6, 1.0, 1.5], 'fur')]),
+        ],
+        decal: goat ? GOAT_FACE : SHEEP_FACE,
+      },
     ]
-    return {
-      fuzz: 0.9,
-      parts: stance([
-        { name: 'body', pivot: [0, bodyCy, bodyZ], layers: wool },
-        {
-          name: 'head',
-          pivot: [0, 8.0, 2.0],
+    if (goat) {
+      // 向后上方弯的长角
+      for (const s of [1, -1] as const) {
+        parts.push({
+          name: s === 1 ? 'earR' : 'earL',
+          parent: 'head',
+          pivot: [s * 2.2, headC[1] + 2.8, headC[2] - 0.4],
           layers: [
-            // 深色的脸，不是毛色
-            { kind: 'ellipsoid', c: headC, r: headR, p: headP, color: 'fur2' },
-            muzzle(0, 8.8, faceFront(headC, headR, headP, undefined, 8.8), 1.9, 1.6, 1.8, 'muzzle'),
+            cap(
+              [
+                [s * 2.2, headC[1] + 2.8, headC[2] - 0.4],
+                [s * 3.0, headC[1] + 4.6, headC[2] - 1.8],
+                [s * 3.4, headC[1] + 5.0, headC[2] - 3.8],
+              ],
+              [1.0, 0.7, 0.4],
+              'ear',
+            ),
+            // 竖起来的耳朵，在角下面
+            tri([s * 3.0, headC[1] + 1.6, headC[2] + 0.4], [s * 4.6, headC[1] + 2.6, headC[2] - 0.8], [s * 6.4, headC[1] + 3.0, headC[2] - 1.6], 1.0, 'ear'),
           ],
-          decal: SHEEP_FACE,
-        },
-        // 垂下来的小尖耳
-        {
-          name: 'earR',
+        })
+      }
+    } else {
+      // 垂下来的小耳
+      for (const s of [1, -1] as const) {
+        parts.push({
+          name: s === 1 ? 'earR' : 'earL',
           parent: 'head',
-          pivot: [3.0, 12.4, 4.2],
-          layers: [rotEll([4.7, 11.8, 4.0], [1.8, 0.8, 1.1], [0, 0, 0.4], 'ear')],
-        },
-        {
-          name: 'earL',
-          parent: 'head',
-          pivot: [-3.0, 12.4, 4.2],
-          layers: [rotEll([-4.7, 11.8, 4.0], [1.8, 0.8, 1.1], [0, 0, -0.4], 'ear')],
-        },
-        ...legs({ x: 2.9, front: 3.0, back: -4.6, top: 6.0, r: 1.05, color: 'fur2', smooth: true }),
-        { name: 'tail', pivot: [0, bodyCy + 1.0, bodyZ - 5.6], layers: [ell([0, bodyCy + 0.4, bodyZ - 6.2], [1.7, 2.0, 1.5], 'fur')] },
-      ], { lift: 0, neck: [0, 0] }),
+          pivot: [s * 2.6, headC[1] + 1.6, headC[2] + 0.4],
+          layers: [rotEll([s * 4.2, headC[1] + 0.2, headC[2] - 0.4], [1.9, 0.85, 1.1], [0, 0, s * 0.45], 'ear')],
+        })
+      }
+    }
+    parts.push(
+      ...legs({
+        x: goat ? 2.2 : 2.8,
+        front: goat ? 2.6 : 3.0,
+        back: goat ? -3.4 : -4.6,
+        top: goat ? 8.0 : 6.4,
+        r: goat ? 0.95 : 1.15,
+        color: 'fur2',
+        smooth: true,
+      }),
+    )
+    parts.push({
+      name: 'tail',
+      pivot: [0, bodyCy + 1.2, bodyZ - 5.4],
+      layers: [
+        goat
+          ? cap([[0, bodyCy + 1.2, bodyZ - 5.4], [0, bodyCy + 2.6, bodyZ - 6.2]], [0.7, 0.4], 'fur2')
+          : ell([0, bodyCy + 0.6, bodyZ - 6.0], [1.7, 1.8, 1.5], 'fur'),
+      ],
+    })
+    return {
+      fuzz: goat ? 0.35 : 1.05,
+      parts: stance(parts, { lift: 0, neck: [0, 0] }),
     }
   },
 }
 
 // ===========================================================================
-// 刺猬：圆拱形的身子 + 背上一整片尖刺 + 往前探的尖鼻子。腿上几乎没有存在感。
-// 刺是按身体椭球表面法线一根根生成的，所以刺的方向是发散的，不会像一张毛毯。
+// 刺猬：一个低矮的圆拱壳 + 壳上一根根朝外支出去的尖刺 + 从壳前面伸出来的尖鼻子。
+// 刺不能只是「表面的毛」：必须撑出轮廓，侧面看才是一把会走路的刷子。
+// 所以刺从壳体表面往外长 2 格，而且是沿着法线方向、长度足够、顶端收成尖的。
 // ===========================================================================
 
-function hedgehogSpikes(): Layer[] {
-  const cy = 6.8
-  const cz = -1.8
-  const rx = 4.0
-  const ry = 3.3
-  const rz = 4.7
+function hedgehogSpikes(cy: number, cz: number, rx: number, ry: number, rz: number): Layer[] {
   const out: Layer[] = []
-  for (let ix = -4; ix <= 4; ix++) {
-    for (let iz = -4; iz <= 4; iz++) {
-      const u = ix / 4.0
-      const w = iz / 4.8
-      const s = 1 - u * u - w * w
-      if (s < 0.22) continue
-      // 只覆盖背面和侧面，正面留给脸
-      if (iz > 2 && Math.abs(ix) < 3) continue
-      const x = rx * u * 0.82
-      const z = cz + rz * w * 0.82
-      const y = cy + ry * Math.sqrt(1 - (u * u + w * w) * 0.82 * 0.82)
+  // 按「从头顶往外一圈圈」排，保证整个壳（包括两侧）都长满刺，
+  // 侧面轮廓才是一把刷子，而不是头顶稀稀拉拉几根。
+  const rings = [0.18, 0.5, 0.82, 1.12, 1.36]
+  const counts = [1, 7, 11, 13, 13]
+  for (let r = 0; r < rings.length; r++) {
+    const theta = rings[r]
+    for (let i = 0; i < counts[r]; i++) {
+      const phi = counts[r] === 1 ? 0 : (i / counts[r]) * Math.PI * 2 + (r % 2 ? 0.28 : 0)
+      const sx = Math.sin(theta) * Math.cos(phi)
+      const sz = Math.sin(theta) * Math.sin(phi)
+      const sy = Math.cos(theta)
+      const x = rx * sx * 0.9
+      const z = cz + rz * sz * 0.9
+      const y = cy + ry * sy * 0.9
+      // 正前方整片留出来给脸：不然会有一根刺从脸上方伸出去
+      if (sz > 0.42) continue
       const n: Vec3 = [x / (rx * rx), (y - cy) / (ry * ry), (z - cz) / (rz * rz)]
       const len = Math.hypot(n[0], n[1], n[2])
-      const k = 2.0 / len
-      out.push(cap([[x, y, z], [x + n[0] * k, y + n[1] * k, z + n[2] * k]], [0.62, 0.24], 'fur2'))
+      const k = 2.2 / len
+      out.push(cap([[x, y, z], [x + (n[0] / len) * k, y + (n[1] / len) * k, z + (n[2] / len) * k]], [0.8, 0.22], 'fur2'))
     }
   }
   return out
@@ -1592,45 +1745,44 @@ function hedgehogSpikes(): Layer[] {
 
 const hedgehog: VoxelDesign = {
   id: 'hedgehog',
-  palette: { ...BASE_PALETTE, fur: '#d8b48e', fur2: '#4f4034', belly: '#f0dcc4', muzzle: '#f0dcc4', paw: '#6b5744' },
-  breeds: [
-    { id: 'hedgehog-brown', name: '刺猬', weight: 3 },
-    {
-      id: 'hedgehog-grey',
-      name: '灰刺猬',
-      weight: 1,
-      palette: { fur: '#cfc6b8', fur2: '#6a6158', belly: '#ece6dc', muzzle: '#ece6dc', paw: '#7c7267' },
-    },
-  ],
+  palette: { ...BASE_PALETTE, fur: '#e2c9a8', fur2: '#4a3a2c', belly: '#f4e6d2', muzzle: '#f4e6d2', paw: '#6b5744' },
+  breeds: [{ id: 'hedgehog-brown', name: '刺猬', weight: 1 }],
   build: () => {
-    const headCy = 6.2
-    const headCz = 3.4
+    const cy = 5.2
+    const cz = -1.4
+    const rx = 4.6
+    const ry = 3.1
+    const rz = 5.0
+    const faceZ = cz + rz * 0.92
     return {
-      fuzz: 0.25,
+      fuzz: 0.2,
       parts: stance([
         {
           name: 'body',
-          pivot: [0, 6.6, -1.4],
+          pivot: [0, cy, cz],
           layers: [
-            // 浅色的下半身和肚子
-            { kind: 'ellipsoid', c: [0, 5.4, -1.2], r: [4.5, 3.6, 5.4], p: 2.2, color: 'fur' },
-            // 深色的刺壳，只盖住背和两侧
-            { kind: 'ellipsoid', c: [0, 6.8, -1.8], r: [3.8, 3.0, 4.4], p: 2.2, color: 'fur2' },
-            ...hedgehogSpikes(),
+            // 浅色的下身：肚子和四条腿根
+            { kind: 'ellipsoid', c: [0, cy - 1.0, cz], r: [4.4, 2.9, 4.9], p: 2.2, color: 'fur' },
+            // 深色的刺壳，比刺的根小一圈，刺才不会被吃掉
+            { kind: 'ellipsoid', c: [0, cy, cz], r: [4.1, 3.0, 4.6], p: 2.2, color: 'fur2' },
+            ...hedgehogSpikes(cy, cz, rx, ry, rz),
           ],
         },
         {
           name: 'head',
-          pivot: [0, 4.0, 1.0],
+          pivot: [0, 3.0, 1.6],
           layers: [
-            { kind: 'ellipsoid', c: [0, headCy, headCz], r: [2.9, 2.6, 2.6], p: 2.2, color: 'fur' },
-            // 往前探的尖鼻子
-            { kind: 'ellipsoid', c: [0, headCy - 0.4, headCz + 2.6], r: [1.3, 1.2, 2.2], p: 2.2, color: 'muzzle' },
-            { kind: 'ellipsoid', c: [0, headCy - 0.3, headCz + 4.4], r: [0.7, 0.7, 0.8], p: 2, color: 'nose' },
+            // 吻：从壳的前下方伸出来的一根锥子，越往前越细
+            cap([[0, 5.4, faceZ - 0.6], [0, 4.6, faceZ + 2.6], [0, 3.9, faceZ + 4.6]], [2.6, 1.7, 0.72], 'muzzle'),
+            { kind: 'ellipsoid', c: [0, 3.85, faceZ + 5.1], r: [0.7, 0.65, 0.6], p: 2, color: 'nose' },
+            // 眼睛和耳朵用小球，锥面上贴花会歪
+            { kind: 'ellipsoid', c: [1.45, 5.5, faceZ + 0.4], r: [0.6, 0.72, 0.55], p: 2, color: 'eye' },
+            { kind: 'ellipsoid', c: [-1.45, 5.5, faceZ + 0.4], r: [0.6, 0.72, 0.55], p: 2, color: 'eye' },
+            { kind: 'ellipsoid', c: [2.3, 6.3, faceZ - 1.2], r: [0.85, 1.0, 0.45], p: 2, color: 'fur' },
+            { kind: 'ellipsoid', c: [-2.3, 6.3, faceZ - 1.2], r: [0.85, 1.0, 0.45], p: 2, color: 'fur' },
           ],
-          decal: sym(15, ['.............', '.............', '....KKK......', '...KWKK......', '...KKKK......', '....KKK......']),
         },
-        ...legs({ x: 2.4, front: 1.8, back: -3.2, top: 4.2, r: 1.1, color: 'fur2', paw: 'paw' }),
+        ...legs({ x: 2.6, front: 2.2, back: -3.6, top: 4.2, r: 1.0, color: 'paw', paw: 'paw' }),
       ], { lift: 0.4, legR: 1.0, neck: [0, 0] }),
     }
   },
