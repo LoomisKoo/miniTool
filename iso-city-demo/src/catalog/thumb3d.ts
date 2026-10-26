@@ -63,10 +63,10 @@ function render(speciesId: string, breedId: string) {
   scene.updateMatrixWorld(true)
 
   const sphere = box.getBoundingSphere(new THREE.Sphere())
-  const half = sphere.radius * 0.92
+  const half = sphere.radius * 0.9
   const camera = new THREE.OrthographicCamera(-half, half, half, -half, 0.01, sphere.radius * 8)
-  // 正面偏侧的 3/4 视角：脸看得清，身体和尾巴也露出来
-  const dir = new THREE.Vector3(0.62, 0.38, 0.7).normalize()
+  // 更接近正面、略低的 3/4 视角：大眼和口鼻是主角，尾巴仍然露一点
+  const dir = new THREE.Vector3(0.55, 0.26, 0.82).normalize()
   camera.position.copy(sphere.center).addScaledVector(dir, sphere.radius * 4)
   camera.lookAt(sphere.center)
 

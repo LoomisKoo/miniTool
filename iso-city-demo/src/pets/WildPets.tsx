@@ -7,16 +7,64 @@
 // 走 / 停交替用确定性的周期：位置只在「走」的那段时间推进，停下时原地待机，
 // 不会出现播着待机动画却在地上滑行。
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame } from '@react-three/fiber'
+import { Html } from '@react-three/drei'
 import * as THREE from 'three'
 import { speciesOf } from '../catalog/species'
 import { walker } from '../game/walker'
-import { flinch, petHeading, petPose } from './roam'
+import { useApp } from '../store'
+import { petHeading, petPose } from './roam'
 import { currentBucket, wildPool, type WildPet } from './wild'
 import { live } from './live'
 import { isBlinking, voxelMaterial, type VoxelPet } from './voxel/build'
 import { buildModels, partMatrices, petModel, petScale } from './voxel/runtime'
+
+function PetInteractionTag() {
+  const group = useRef<THREE.Group>(null)
+  const label = useRef<HTMLSpanElement>(null)
+  const nameTag = useRef<HTMLDivElement>(null)
+  const hint = useRef<HTMLElement>(null)
+
+  useFrame(() => {
+    const node = group.current
+    if (!node) return
+    const app = useApp.getState()
+    if (app.panel || app.screen !== 'city') {
+      node.visible = false
+      return
+    }
+    let best: (typeof live)[number] | null = null
+    let distance = 8.5
+    for (const pet of live) {
+      const d = Math.hypot(pet.x - walker.position.x, pet.z - walker.position.z)
+      if (d < distance) {
+        distance = d
+        best = pet
+      }
+    }
+    node.visible = Boolean(best)
+    if (!best) return
+    node.position.set(best.x, 1.65, best.z)
+    if (label.current) label.current.textContent = best.breed
+    const active = useApp.getState().nearby?.id === `pet-${best.id}`
+    if (nameTag.current) nameTag.current.classList.toggle('is-active', active)
+    if (hint.current) hint.current.style.opacity = active ? '1' : '0'
+  })
+
+  return (
+    <group ref={group} visible={false}>
+      <Html center position={[0, 0, 0]} style={{ pointerEvents: 'none' }} zIndexRange={[18, 0]}>
+        <div ref={nameTag} className="pet-world-name">
+          <span ref={label}>宠物</span>
+        </div>
+        <div className="pet-world-e">
+          <kbd ref={hint}>E</kbd>
+        </div>
+      </Html>
+    </group>
+  )
+}
 
 const EPOCH = Date.UTC(2026, 0, 1)
 const GROUND_Y = 0.03
@@ -168,7 +216,9 @@ function animateFlock(flock: Flock, time: number) {
       const clock = roamClock(time + offset)
 
       const pose = petPose(pet.id, pet.spot, clock.roam, 0.9)
-      const away = flinch(pose, walker.position)
+      // 宠物不是刚体：玩家可以走到身边观察和互动，不应被宠物的躲避逻辑反向挤走。
+      // 未领养宠物仍然保持自己的漫游轨迹，交互状态由 nearby 负责表达。
+      const away = { x: pose.x, z: pose.z, shy: 0 }
       const heading = petHeading(pet.id, pet.spot, clock.roam, 0.9)
       const shy = away.shy > 0.05
 
@@ -256,8 +306,15 @@ export function WildPets() {
 
   useFrame(() => {
     // 固定纪元：不能对 86400 取模，否则每天零点整批宠物会瞬移一次
-    if (flock) animateFlock(flock, (Date.now() - EPOCH) / 1000)
+    if (flock && !useApp.getState().panel && useApp.getState().screen === 'city') {
+      animateFlock(flock, (Date.now() - EPOCH) / 1000)
+    }
   })
 
-  return flock ? <primitive object={flock.group} /> : null
+  return flock ? (
+    <>
+      <primitive object={flock.group} />
+      <PetInteractionTag />
+    </>
+  ) : null
 }

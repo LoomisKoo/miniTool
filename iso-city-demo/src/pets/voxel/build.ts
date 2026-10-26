@@ -13,7 +13,7 @@ export type Vec3 = [number, number, number]
 
 export type Shape =
   /** p>2 是「超椭球」：越大越接近圆角方块，脸会更平，贴花不会被曲面扭歪 */
-  | { kind: 'ellipsoid'; c: Vec3; r: Vec3; p?: number; rot?: Vec3 }
+  | { kind: 'ellipsoid'; c: Vec3; r: Vec3; p?: number; rot?: Vec3; taper?: [number, number] }
   /** 折线胶囊，每个点一个半径：可以做弯尾巴、上粗下细的腿 */
   | { kind: 'capsule'; pts: Vec3[]; r: number[] }
   /** 有厚度的三角片：猫耳、狐狸耳 */
@@ -92,18 +92,22 @@ const DECAL_KEYS: Record<string, string> = {
 
 function bounds(s: Shape): [Vec3, Vec3] {
   switch (s.kind) {
-    case 'ellipsoid':
+    case 'ellipsoid': {
+      // taper 会在中间把截面放大到不超过 max(taper)，包围盒按最大的那个算
+      const k = s.taper ? Math.max(s.taper[0], s.taper[1], 1) : 1
+      const r: Vec3 = [s.r[0] * k, s.r[1], s.r[2] * k]
       if (s.rot) {
-        const m = Math.max(s.r[0], s.r[1], s.r[2])
+        const m = Math.max(r[0], r[1], r[2])
         return [
           [s.c[0] - m, s.c[1] - m, s.c[2] - m],
           [s.c[0] + m, s.c[1] + m, s.c[2] + m],
         ]
       }
       return [
-        [s.c[0] - s.r[0], s.c[1] - s.r[1], s.c[2] - s.r[2]],
-        [s.c[0] + s.r[0], s.c[1] + s.r[1], s.c[2] + s.r[2]],
+        [s.c[0] - r[0], s.c[1] - r[1], s.c[2] - r[2]],
+        [s.c[0] + r[0], s.c[1] + r[1], s.c[2] + r[2]],
       ]
+    }
     case 'capsule': {
       const lo: Vec3 = [Infinity, Infinity, Infinity]
       const hi: Vec3 = [-Infinity, -Infinity, -Infinity]
@@ -162,15 +166,25 @@ function inside(s: Shape, p: Vec3, slack = 0): boolean {
     case 'ellipsoid': {
       const e = s.p ?? 2
       const d = local(s, p)
-      const x = Math.abs(d[0] / s.r[0])
+      // taper：截面的宽 / 深随高度线性收窄。[底, 顶] 两个倍数，
+      // 底部收窄就是「尖下巴的三角脸」，狐狸、猫都靠这个
+      let rx = s.r[0]
+      let rz = s.r[2]
+      if (s.taper) {
+        const t = Math.max(0, Math.min(1, (d[1] / s.r[1] + 1) * 0.5))
+        const k = s.taper[0] + (s.taper[1] - s.taper[0]) * t
+        rx *= k
+        rz *= k
+      }
+      const x = Math.abs(d[0] / rx)
       const y = Math.abs(d[1] / s.r[1])
-      const zs = d[2] / s.r[2]
+      const zs = d[2] / rz
       const z = Math.abs(zs)
       const v = (x ** e + y ** e + z ** e) ** (1 / e)
       // 正面（脸、胸口）不加毛边：贴花要落在平整的面上
       if (!slack || zs > 0.3 || v <= 1) return v <= 1
       // 用梯度把「v 超出 1 多少」换算成真实距离，细长的耳朵才不会被毛边撑长
-      const g = v ** (1 - e) * Math.hypot(x ** (e - 1) / s.r[0], y ** (e - 1) / s.r[1], z ** (e - 1) / s.r[2])
+      const g = v ** (1 - e) * Math.hypot(x ** (e - 1) / rx, y ** (e - 1) / s.r[1], z ** (e - 1) / rz)
       return v - 1 <= slack * g
     }
     case 'capsule': {
@@ -260,7 +274,8 @@ function voxelize(part: PartDef, res: number, fuzz: number, decal = part.decal):
         for (let j = Math.max(lo[1], Math.floor(a[1] * res)); j < Math.min(hi[1], Math.ceil(b[1] * res)); j++) {
           for (let i = Math.max(lo[0], Math.floor(a[0] * res)); i < Math.min(hi[0], Math.ceil(b[0] * res)); i++) {
             // 毛边：平滑的低频起伏、只往外鼓。逐格白噪声会变成满身小坑（密集恐惧）
-            const slack = f ? f * clumps((i + 0.5) / res, (j + 0.5) / res, (k + 0.5) / res) : 0
+            // x 取绝对值：毛簇左右镜像，否则高毛量的动物会左右不对称
+            const slack = f ? f * clumps(Math.abs((i + 0.5) / res), (j + 0.5) / res, (k + 0.5) / res) : 0
             if (!inside(layer, [(i + 0.5) / res, (j + 0.5) / res, (k + 0.5) / res], slack)) continue
             const idx = at(i, j, k)
             if (paint && cells[idx] < 0) continue
@@ -314,7 +329,7 @@ function voxelize(part: PartDef, res: number, fuzz: number, decal = part.decal):
 // 出网格：每个外露面一个四边形，顶点色 = 调色板色 × 体素抖动 × AO
 // ---------------------------------------------------------------------------
 
-const AO_LEVEL = [0.6, 0.74, 0.87, 1]
+const AO_LEVEL = [0.72, 0.82, 0.92, 1]
 
 const CLUMP = 2.2
 
@@ -363,8 +378,8 @@ type Occ = (i: number, j: number, k: number) => 0 | 1
  */
 function mesh(grid: Grid, palette: Palette, pivot: Vec3, world: Occ, res: number) {
   const { lo, size, cells, keys } = grid
-  // 高分辨率下颜色起伏更大一点：读起来像毛，而不是塑料
-  const jitterAmp = res > 1 ? 0.07 : 0.09
+  // 只保留很轻的明暗差，避免高分辨率下表面发脏、发麻
+  const jitterAmp = res > 1 ? 0.035 : 0.05
   const colors = keys.map((k) => new THREE.Color(palette[k] ?? '#ff00ff'))
   const occ = (i: number, j: number, k: number): 0 | 1 => {
     const x = i - lo[0]
@@ -525,7 +540,8 @@ export function buildVoxelPet(design: VoxelDesign, breedId?: string, res = 1): V
   // 部件在同一位置各画一个面，会 z-fighting 闪烁。
   const shape = design.build(breed?.traits ?? {})
   const defs = shape.parts
-  const fuzz = (shape.fuzz ?? 0) * Math.min(1, Math.max(0, res - 1))
+  // 毛边只留一点轮廓起伏：之前的高频毛簇会变成密集的小坑
+  const fuzz = (shape.fuzz ?? 0) * Math.min(1, Math.max(0, res - 1)) * 0.3
   const grids = defs.map((part) => voxelize(part, res, fuzz))
   const order = defs.map((_, i) => i).sort((a, b) => PRIORITY[defs[a].name] - PRIORITY[defs[b].name])
   const owner = new Map<string, number>()

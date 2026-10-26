@@ -7,6 +7,7 @@
 
 import { walker } from '../game/walker'
 import { useApp } from '../store'
+import { catalogKeyOf } from '../catalog/species'
 import type { Interactable } from '../scene/PlayerRig'
 import { live } from './live'
 
@@ -46,13 +47,13 @@ export function petInteractables(): Interactable[] {
 
   const pet = live[best]
   const lines = LINES[pet.species] ?? ['它看了你一会儿，然后转身走开了。']
-  const key = `${pet.speciesId}/${pet.breedId}`
+  const key = catalogKeyOf(pet.speciesId, pet.breedId)
 
   return [
     {
       id: `pet-${pet.id}`,
       label: pet.breed,
-      hint: '按 E 观察 · 记入图鉴',
+      hint: '按 E 互动 · 记入图鉴',
       x: pet.x,
       z: pet.z,
       radius: REACH,
