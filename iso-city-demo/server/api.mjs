@@ -204,9 +204,22 @@ export function createApi({ store, authSecret, appUrl = '', storage = 'json', lo
         store.listSpaces(),
         store.stats(),
       ])
+      // 楼内户现在有近千间，完整 layout 会让首屏响应变成几 MB。
+      // 世界列表只带“门口需要知道的信息”，房间详情仍走 /api/spaces/:id。
+      const spaceSummaries = spaces.map((space) => ({
+        id: space.id,
+        name: space.name,
+        building: space.building,
+        template: space.template,
+        ownerId: space.ownerId,
+        owner: space.owner,
+        isOpen: space.isOpen,
+        visitCount: space.visitCount,
+        postCount: space.postCount,
+      }))
       return json(200, {
         places,
-        spaces,
+        spaces: spaceSummaries,
         stats,
         user: publicUser(user),
         userClaimedSpaceId: claimedSpace?.id || null,

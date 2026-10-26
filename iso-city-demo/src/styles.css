@@ -75,6 +75,19 @@ a {
   inset: 0;
 }
 
+/* 城市与内景两套 Canvas 都常驻，靠这一层切换可见性。
+   用 visibility 而不是 display:none：WebGL 上下文和贴图都保住，
+   切回来时不会重新分配显存、重新编译着色器。 */
+.scene-layer {
+  position: absolute;
+  inset: 0;
+}
+
+.scene-asleep {
+  visibility: hidden;
+  pointer-events: none;
+}
+
 .scene-root canvas {
   display: block;
   touch-action: none;
@@ -989,8 +1002,9 @@ kbd {
   padding: 5px 12px 5px 5px;
   border: 1px solid rgba(246, 241, 230, 0.3);
   border-radius: 999px;
-  background: rgba(22, 27, 25, 0.84);
-  backdrop-filter: blur(10px);
+  /* 不用 backdrop-filter：它是把整块 WebGL 画布回读再模糊，标签一多、
+     镜头一动就是每帧一次全屏采样。底色调实一点观感几乎一样。 */
+  background: rgba(22, 27, 25, 0.9);
   color: var(--cream);
   cursor: pointer;
   user-select: none;
@@ -7772,4 +7786,172 @@ kbd {
 
 .hud-flight.on kbd {
   background: rgba(255, 255, 255, 0.1);
+}
+
+/* ============================================================
+   楼内电梯：楼层按钮
+   ============================================================ */
+.elevator-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(86px, 1fr));
+  gap: 10px;
+}
+
+.elevator-floor {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-height: 64px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.07);
+  color: #f5f7fa;
+  text-align: left;
+  cursor: pointer;
+  transition: background 160ms var(--ar-ease), border-color 160ms var(--ar-ease), transform 160ms var(--ar-ease);
+}
+
+.elevator-floor:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.28);
+  transform: translateY(-1px);
+}
+
+.elevator-floor b {
+  font: 600 17px/1.1 var(--ui-font);
+  letter-spacing: 0.02em;
+}
+
+.elevator-floor span {
+  font: 500 11px/1.2 var(--ui-font);
+  color: rgba(226, 234, 243, 0.62);
+  letter-spacing: 0.06em;
+}
+
+.elevator-floor.on {
+  background: #f7f9fc;
+  border-color: #f7f9fc;
+  color: #121820;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.28);
+}
+
+.elevator-floor.on span {
+  color: rgba(18, 24, 32, 0.6);
+}
+
+.elevator-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+/* NPC 对话框 */
+.npc-dialog {
+  position: fixed;
+  left: 50%;
+  bottom: 96px;
+  transform: translateX(-50%);
+  width: min(560px, calc(100vw - 32px));
+  padding: 16px 20px 12px;
+  border-radius: 16px;
+  background: rgba(16, 20, 28, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(14px);
+  color: #eef3f8;
+  z-index: 40;
+  cursor: pointer;
+  animation: npc-dialog-in 180ms ease-out;
+}
+.npc-dialog-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+.npc-dialog-head strong { font-size: 15px; color: #ffd9a6; }
+.npc-dialog-head span { font-size: 12px; opacity: 0.6; }
+.npc-dialog p {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.6;
+  animation: npc-line-in 220ms ease-out;
+}
+.npc-dialog-foot {
+  margin-top: 10px;
+  font-size: 12px;
+  opacity: 0.55;
+  text-align: right;
+}
+.npc-dialog kbd {
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  font-family: inherit;
+  font-size: 11px;
+}
+@keyframes npc-dialog-in {
+  from { opacity: 0; transform: translate(-50%, 8px); }
+}
+@keyframes npc-line-in {
+  from { opacity: 0; transform: translateY(4px); }
+}
+
+.prompt-tag {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 4px 4px 12px;
+  border-radius: 999px;
+  background: rgba(14, 20, 28, 0.78);
+  border: 1px solid rgba(220, 243, 255, 0.35);
+  color: #eef5fb;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  backdrop-filter: blur(10px);
+  cursor: pointer;
+  transition: opacity 180ms ease-out, translate 220ms ease-out, border-color 160ms ease-out;
+}
+/* 只有 E 的圆标：门牌已经写在门上，气泡里再写一遍编号是重复信息。 */
+.prompt-tag.is-icon {
+  padding: 4px;
+  gap: 0;
+}
+/* 真的能按 E / 真的能点的时候描边亮起来 */
+.prompt-tag.is-active {
+  border-color: rgba(160, 230, 255, 0.9);
+  box-shadow: 0 0 14px rgba(110, 200, 255, 0.35);
+}
+.prompt-tag kbd {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: #dff3ff;
+  color: #10202e;
+  transition: opacity 160ms ease-out;
+  font-family: inherit;
+  font-size: 12px;
+}
+
+/* 昼夜切换的暗幕：遮住重建材质时的那一两帧卡顿 */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: #05080e;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 90;
+  transition: opacity 220ms ease;
+}
+body.night-switching::after {
+  opacity: 1;
 }

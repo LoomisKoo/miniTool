@@ -1,9 +1,18 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { randomBytes, randomInt, randomUUID } from 'node:crypto'
+import { buildUnitSpaces, isUnitSpaceId, UNIT_SEED_VERSION } from '../../shared/units.mjs'
 import { npcUsers, places as seedPlaces, posts as seedPosts, seededVisits, spaces as seedSpaces } from '../seed.mjs'
 
 const COLORS = ['#4f7f74', '#c4774c', '#7a6b98', '#a9853f', '#58758c', '#9b6b73']
+
+// 楼内户的样板数据按需取：即使数据库是旧版本、或启动后新加了一栋楼，
+// 打开某个具体户型时也能即时补出来，而不是回一个 404 让玩家站在空房间里。
+let unitTemplates = null
+function unitTemplate(id) {
+  if (!unitTemplates) unitTemplates = new Map(buildUnitSpaces().map((space) => [space.id, space]))
+  return unitTemplates.get(id) || null
+}
 
 function seedData() {
   const users = npcUsers.map((u) => ({
@@ -58,7 +67,43 @@ export class JsonStore {
       this.data = seedData()
       await this.#flush()
     }
+    await this.#ensureUnitSpaces()
     return this
+  }
+
+  /**
+   * 已经存在的本地数据也要补上「每栋楼每一户」。
+   * 只追加缺失 id，不会覆盖任何人已经认领/布置过的房间。
+   */
+  async #ensureUnitSpaces() {
+    const version = this.data.meta?.unitSeedVersion || 1
+    if (version >= UNIT_SEED_VERSION) return
+    const fresh = buildUnitSpaces()
+    const freshIds = new Set(fresh.map((space) => space.id))
+    // 楼型重排后每层户数会变：旧编号（06 室之类）在新平面里没有对应房间，
+    // 留着只会让前端退回假尺寸、家具乱摆。只删我们自己生成、还没人认领的。
+    const before = this.data.spaces.length
+    this.data.spaces = this.data.spaces.filter(
+      (space) => !isUnitSpaceId(space.id) || space.ownerId || freshIds.has(space.id),
+    )
+    const pruned = before - this.data.spaces.length
+    const known = new Set(this.data.spaces.map((space) => space.id))
+    const now = new Date().toISOString()
+    let added = 0
+    for (const space of fresh) {
+      if (known.has(space.id)) continue
+      this.data.spaces.push({
+        ...space,
+        visitCount: 0,
+        createdAt: now,
+        updatedAt: now,
+      })
+      added += 1
+    }
+    this.data.meta = { ...this.data.meta, unitSeedVersion: UNIT_SEED_VERSION }
+    if (pruned) console.log(`[store] removed ${pruned} stale unit spaces`)
+    // 即使没有新增（例如另一个进程已经写入），也要把版本号落盘，避免每次启动都重建列表。
+    await this.#flush()
   }
 
   async #flush() {
@@ -159,9 +204,21 @@ export class JsonStore {
   }
 
   async getSpace(id) {
-    return this.#read((d) => {
+    const existing = await this.#read((d) => {
       const s = d.spaces.find((x) => x.id === id)
       return s ? this.#spaceView(d, s) : null
+    })
+    if (existing) return existing
+
+    const seed = unitTemplate(id)
+    if (!seed) return null
+    return this.#write((d) => {
+      const known = d.spaces.find((x) => x.id === id)
+      if (known) return this.#spaceView(d, known)
+      const now = new Date().toISOString()
+      const space = { ...seed, visitCount: 0, createdAt: now, updatedAt: now }
+      d.spaces.push(space)
+      return this.#spaceView(d, space)
     })
   }
 

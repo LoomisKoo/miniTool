@@ -65,6 +65,18 @@ export type Space = {
   updatedAt: string
 }
 
+export type SpaceSummary = {
+  id: string
+  name: string
+  building: string
+  template: string
+  ownerId: string | null
+  owner: Owner | null
+  isOpen: boolean
+  visitCount: number
+  postCount: number
+}
+
 export type Post = {
   id: string
   targetType: 'place' | 'space'
@@ -95,7 +107,7 @@ export type WorldStats = {
 
 export type World = {
   places: Place[]
-  spaces: Space[]
+  spaces: SpaceSummary[]
   stats: WorldStats
   user: User | null
   userClaimedSpaceId: string | null
@@ -126,6 +138,7 @@ export type Favorite = {
 export type InteriorRef =
   | { kind: 'public'; id: 'gallery' | 'cafe' }
   | { kind: 'space'; id: string }
+  | { kind: 'building'; id: string; floor?: number; core?: number; from?: string }
 
 export type NearbyInfo = {
   id: string

@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { api, ApiError, clearToken, getToken, setToken } from './api'
-import { restoreReturnSpot, saveReturnSpot } from './game/walker'
+import { restoreReturnSpot, saveReturnSpot, startCityFlyIn } from './game/walker'
+import { floorLabel, unitBuilding } from './data/units'
 import type {
   EditorDraft,
   Favorite,
@@ -17,11 +18,23 @@ import type {
 export type Panel =
   | { type: 'place'; id: string }
   | { type: 'space'; id: string }
+  | { type: 'elevator'; id: string }
   | { type: 'editor'; id: string }
   | { type: 'favorites' }
   | { type: 'about' }
 
 export type Screen = 'intro' | 'city' | 'interior'
+
+/** NPC 对话：一句一句往下翻，翻完自动关闭。 */
+export type Dialog = {
+  name: string
+  role: string
+  lines: string[]
+  index: number
+  /** 说话人的位置：走远了自动结束对话 */
+  x?: number
+  z?: number
+}
 
 type Hud = {
   x: number
@@ -41,9 +54,14 @@ type AppState = {
   bootError: string | null
   user: User | null
   world: World | null
+  /** 已经开始入城流程（片头淡出中）：用于提前预热场景。 */
+  entering: boolean
   screen: Screen
   interior: InteriorRef | null
   interiorLabel: string
+  buildingFloor: number
+  /** 从楼内走廊/公共室内进入房间时，返回上一层而不是直接回街道。 */
+  returnTarget: InteriorRef | null
   panel: Panel | null
   placeDetail: PlaceDetail | null
   spaceDetail: SpaceDetail | null
@@ -51,6 +69,7 @@ type AppState = {
   panelError: string | null
   nearby: NearbyInfo | null
   toast: string | null
+  dialog: Dialog | null
   hud: Hud
   night: boolean
   /** 画质档位：0 流畅 / 1 标准 / 2 精细，由帧率自适应调整，也可手动切换。 */
@@ -66,6 +85,8 @@ type AppState = {
 
   boot: () => Promise<void>
   startExploring: () => void
+  /** 点击“进入城市”的瞬间：让场景趁片头淡出预热一次，别把开销留到运镜收尾。 */
+  beginEnter: () => void
   refreshWorld: () => Promise<void>
   openPlace: (id: string, silent?: boolean) => Promise<void>
   openSpace: (id: string, silent?: boolean) => Promise<void>
@@ -73,6 +94,8 @@ type AppState = {
   openPanel: (panel: Panel) => void
   enterTarget: (target: InteriorRef, label?: string) => void
   exitCity: () => void
+  openElevator: (id: string) => void
+  setBuildingFloor: (floor: number) => void
   markVisited: (id: string) => Promise<void>
   sendMessage: (input: {
     targetType: 'place' | 'space'
@@ -95,6 +118,9 @@ type AppState = {
   toggleNight: () => void
   setQuality: (quality: number) => void
   showToast: (message: string) => void
+  openDialog: (dialog: Omit<Dialog, 'index'>) => void
+  nextDialog: () => void
+  closeDialog: () => void
   startEditing: () => void
   cancelEditing: () => void
   editorPatch: (patch: Partial<EditorDraft>) => void
@@ -132,6 +158,29 @@ const errorMessage = (error: unknown) =>
 
 let toastTimer: ReturnType<typeof setTimeout> | undefined
 
+let curtainBusy = false
+
+/**
+ * 先压一层暗幕再执行重建类改动，等暗幕盖满才切，切完下一帧再揭开。
+ * 昼夜切换、画质档切换都会重建材质/后处理，那几帧是画面最不稳的时候。
+ */
+function behindCurtain(apply: () => void) {
+  if (curtainBusy) return
+  curtainBusy = true
+  document.body.classList.add('night-switching')
+  setTimeout(() => {
+    apply()
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() =>
+        setTimeout(() => {
+          document.body.classList.remove('night-switching')
+          curtainBusy = false
+        }, 60),
+      ),
+    )
+  }, 220)
+}
+
 function releasePointer() {
   if (document.pointerLockElement) document.exitPointerLock()
 }
@@ -161,9 +210,12 @@ export const useApp = create<AppState>((set, get) => ({
   bootError: null,
   user: null,
   world: null,
+  entering: false,
   screen: 'intro',
   interior: null,
   interiorLabel: '',
+  buildingFloor: 1,
+  returnTarget: null,
   panel: null,
   placeDetail: null,
   spaceDetail: null,
@@ -171,6 +223,7 @@ export const useApp = create<AppState>((set, get) => ({
   panelError: null,
   nearby: null,
   toast: null,
+  dialog: null,
   hud: { x: 0, y: 0, z: 26, yaw: 0, stamina: 1, gliding: false, flying: false, overview: false, speed: 0 },
   night: true,
   quality: 2,
@@ -216,7 +269,7 @@ export const useApp = create<AppState>((set, get) => ({
       const space = params.get('space')
       const place = params.get('place')
       const enter = params.get('enter')
-      if (space || place || enter) set({ screen: 'city' })
+      if (space || place || enter) set({ screen: 'city', entering: true })
       if (space) {
         await get().openSpace(space)
         if (params.get('enter') === '1') get().enterTarget({ kind: 'space', id: space })
@@ -224,6 +277,9 @@ export const useApp = create<AppState>((set, get) => ({
         await get().openPlace(place)
       } else if (enter === 'gallery' || enter === 'cafe') {
         get().enterTarget({ kind: 'public', id: enter })
+      } else if (enter?.startsWith('building:')) {
+        const [id, floor] = enter.slice(9).split('@')
+        get().enterTarget({ kind: 'building', id, floor: floor ? Number(floor) : 1 })
       } else if (enter?.startsWith('space:')) {
         get().enterTarget({ kind: 'space', id: enter.slice(6) })
       }
@@ -232,8 +288,12 @@ export const useApp = create<AppState>((set, get) => ({
     }
   },
 
+  beginEnter: () => set({ entering: true }),
+
   startExploring: () => {
-    set({ screen: 'city' })
+    // 先记时间戳：镜头接下来会从片头的高空机位俯冲到主角身后
+    startCityFlyIn()
+    set({ screen: 'city', entering: true })
     setMeta(DEFAULT_TITLE, DEFAULT_DESC)
   },
 
@@ -287,17 +347,27 @@ export const useApp = create<AppState>((set, get) => ({
 
   enterTarget: (target, label) => {
     if (get().screen === 'city') saveReturnSpot()
+    const current = get().interior
+    const fromInterior = get().screen === 'interior' && current !== null
+    const returnTarget =
+      target.kind === 'space' && fromInterior && current && current.kind !== 'space' ? current : null
+    const building = target.kind === 'building' ? unitBuilding(target.id) : null
+    const floor = target.kind === 'building' ? target.floor ?? 1 : 1
     const name =
       label ||
       (target.kind === 'public'
         ? target.id === 'gallery'
           ? '光盒美术馆 · 中庭'
           : '街角咖啡'
-        : get().world?.spaces.find((s) => s.id === target.id)?.name || '个人空间')
+        : target.kind === 'building'
+          ? `${building?.name || target.id} · ${floorLabel(floor)}`
+          : get().world?.spaces.find((s) => s.id === target.id)?.name || '个人空间')
     set({
       screen: 'interior',
-      interior: target,
+      interior: target.kind === 'building' ? { ...target, floor } : target,
+      buildingFloor: floor,
       interiorLabel: name,
+      returnTarget,
       panel: null,
       editor: null,
       selectedFurnitureId: null,
@@ -310,17 +380,67 @@ export const useApp = create<AppState>((set, get) => ({
     if (target.kind === 'space') {
       void get().openSpace(target.id, true)
       void get().markVisited(target.id)
-    } else {
+    } else if (target.kind === 'public') {
       void get().openPlace(target.id === 'gallery' ? 'gallery-lobby' : 'corner-cafe', true)
     }
   },
 
+  openElevator: (id) => {
+    releasePointer()
+    set({ panel: { type: 'elevator', id } })
+  },
+
+  setBuildingFloor: (floor) => {
+    const interior = get().interior
+    if (!interior || interior.kind !== 'building') return
+    const building = unitBuilding(interior.id)
+    const name = building?.name || interior.id
+    set({
+      interior: { ...interior, floor, from: undefined },
+      buildingFloor: floor,
+      interiorLabel: `${name} · ${floorLabel(floor)}`,
+      panel: null,
+      nearby: null,
+    })
+    if (document.pointerLockElement) document.exitPointerLock()
+    get().showToast(`电梯到达 ${floorLabel(floor)}`)
+  },
+
   exitCity: () => {
+    const back = get().returnTarget
+    if (back) {
+      const floor = back.kind === 'building' ? back.floor ?? 1 : 1
+      const label =
+        back.kind === 'building'
+          ? `${unitBuilding(back.id)?.name || back.id} · ${floorLabel(floor)}`
+          : back.kind === 'public'
+            ? back.id === 'gallery'
+              ? '光盒美术馆 · 中庭'
+              : '街角咖啡'
+            : '室内空间'
+      const current = get().interior
+      set({
+        screen: 'interior',
+        interior: back.kind === 'building' && current?.kind === 'space' ? { ...back, from: current.id } : back,
+        interiorLabel: label,
+        buildingFloor: floor,
+        returnTarget: null,
+        panel: null,
+        editor: null,
+        nearby: null,
+        selectedFurnitureId: null,
+        placingType: null,
+      })
+      if (document.pointerLockElement) document.exitPointerLock()
+      return
+    }
     restoreReturnSpot()
     set({
       screen: 'city',
       interior: null,
       interiorLabel: '',
+      buildingFloor: 1,
+      returnTarget: null,
       panel: null,
       editor: null,
       nearby: null,
@@ -470,9 +590,15 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   setHud: (hud) => set({ hud }),
-  toggleNight: () => set({ night: !get().night }),
+  toggleNight: () => {
+    // 昼夜切换要重建一批贴图和合批网格，会卡一两帧。先压一层暗幕，
+    // 等暗幕盖满再切，卡顿发生在幕后；切完下一帧再揭开。
+    behindCurtain(() => set({ night: !get().night }))
+  },
   setQuality: (quality) => {
     if (get().quality === quality) return
+    // 档位现在只改 AO 采样与 Bloom 强度，不会重建 composer / canvas，
+    // 所以不需要暗幕：走暗幕反而会在每次降档时闪一下黑。
     set({ quality })
   },
 
@@ -483,6 +609,19 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   setPointerLocked: (pointerLocked) => set({ pointerLocked }),
+
+  openDialog: (dialog) => {
+    set({ dialog: { ...dialog, index: 0 } })
+  },
+
+  nextDialog: () => {
+    const d = get().dialog
+    if (!d) return
+    if (d.index + 1 >= d.lines.length) set({ dialog: null })
+    else set({ dialog: { ...d, index: d.index + 1 } })
+  },
+
+  closeDialog: () => set({ dialog: null }),
 
   showToast: (message) => {
     set({ toast: message })

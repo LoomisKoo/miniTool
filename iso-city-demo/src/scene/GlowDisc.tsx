@@ -42,7 +42,11 @@ export function GlowDisc({
 }) {
   const texture = useMemo(() => radialTexture(color), [color])
   return (
-    <mesh position={position} rotation={vertical ? [0, 0, 0] : [-Math.PI / 2, 0, 0]}>
+    <mesh
+      position={position}
+      rotation={vertical ? [0, 0, 0] : [-Math.PI / 2, 0, 0]}
+      renderOrder={3}
+    >
       <planeGeometry args={[size, size]} />
       <meshBasicMaterial
         map={texture}
@@ -51,6 +55,11 @@ export function GlowDisc({
         toneMapped={false}
         depthWrite={false}
         blending={THREE.AdditiveBlending}
+        // 和地面光池同理：路面/铺装都带斜率相关的负深度偏移，
+        // 光晕只要贴着它们就会被切掉一角，这里也要往相机方向再压一次。
+        polygonOffset
+        polygonOffsetFactor={-16}
+        polygonOffsetUnits={-32}
       />
     </mesh>
   )

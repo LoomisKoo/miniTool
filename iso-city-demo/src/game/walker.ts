@@ -22,6 +22,8 @@ export const walker = {
   returnPitch: 0.24,
   returnCamDist: 5.6,
   returnOverview: false,
+  // 点"进入城市"的时间戳：非 0 时镜头从城市上空落到主角身后。
+  flyInStart: 0,
 }
 
 export const keys = new Set<string>()
@@ -92,6 +94,14 @@ export function restoreReturnSpot() {
   walker.grounded = true
   walker.gliding = false
   walker.flying = false
+}
+
+/**
+ * 点"进入城市"时调用：镜头从片头的高空机位俯冲落到主角身后。
+ * 这里只记时间戳，真正的插值在 PlayerRig 的相机分支里做。
+ */
+export function startCityFlyIn() {
+  walker.flyInStart = performance.now()
 }
 
 export const isTyping = () => {

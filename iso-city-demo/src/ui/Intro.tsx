@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useApp } from '../store'
 
 export function Intro() {
@@ -6,11 +7,23 @@ export function Intro() {
   const bootError = useApp((state) => state.bootError)
   const world = useApp((state) => state.world)
   const startExploring = useApp((state) => state.startExploring)
+  const beginEnter = useApp((state) => state.beginEnter)
   const boot = useApp((state) => state.boot)
   const openPanel = useApp((state) => state.openPanel)
+  // 点击后先让片头淡出，再把镜头交给城市；两段不重叠，就不会硬切一帧。
+  const [leaving, setLeaving] = useState(false)
+
+  const enter = () => {
+    if (!booted || booting || leaving) return
+    setLeaving(true)
+    beginEnter()
+    // 等片头淡出整段走完再切场景：切换那一刻画面已经全空，
+    // 接着入城镜头从高空落到主角，中间不会闪一帧。
+    window.setTimeout(startExploring, 300)
+  }
 
   return (
-    <div className="intro">
+    <div className={`intro ${leaving ? 'is-leaving' : ''}`}>
       <div className="intro-scrim" aria-hidden="true" />
 
       <header className="intro-top">
@@ -41,7 +54,7 @@ export function Intro() {
         </p>
 
         <div className="intro-actions">
-          <button className="intro-primary" disabled={!booted || booting} onClick={startExploring}>
+          <button className="intro-primary" disabled={!booted || booting || leaving} onClick={enter}>
             {booted ? '进入城市' : booting ? '正在点亮城市…' : '城市还没有醒来'}
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="M12 5v14M6 13l6 6 6-6" />

@@ -128,6 +128,8 @@ export function Hud() {
       if (!spaceDetail || spaceDetail.space.id !== interior.id) void openSpace(interior.id, true)
     } else if (interior?.kind === 'public') {
       url = cityShareUrl({ enter: interior.id })
+    } else if (interior?.kind === 'building') {
+      url = cityShareUrl({ enter: `building:${interior.id}@${interior.floor ?? 1}` })
     } else {
       url = cityShareUrl()
     }
@@ -165,6 +167,7 @@ export function Hud() {
           {screen === 'city' && (
             <button
               className={`hud-round ${hud.overview ? 'on' : ''}`}
+              aria-pressed={hud.overview}
               onClick={() => {
                 toggleOverview()
                 showToast(walker.overview ? '城市总览 · V 返回街道' : '已回到街道视角')
@@ -177,6 +180,7 @@ export function Hud() {
           )}
           <button
             className="hud-round"
+            aria-pressed={night}
             onClick={() => {
               toggleNight()
               showToast(night ? '已切换为黄昏' : '已切换为夜间')
@@ -219,7 +223,6 @@ export function Hud() {
         </div>
       )}
 
-      {pointerLocked && <span className="hud-reticle" aria-hidden="true" />}
 
       <div className="hud-dock">
         {flying && (
@@ -230,12 +233,13 @@ export function Hud() {
           <div className="hud-dock-row">
             <button
               className={`hud-flight ${flying ? 'on' : ''}`}
+              aria-pressed={flying}
               onClick={() => {
                 toggleFlight()
                 showToast(flying ? '已降落' : '起飞：空格上升 · C 下降 · Shift 加速')
               }}
             >
-              {!flying && <kbd>F</kbd>}
+              <kbd>F</kbd>
               <span>{flying ? '降落' : '起飞'}</span>
             </button>
             {claimedSpace && (
@@ -243,9 +247,7 @@ export function Hud() {
                 className="hud-soft"
                 onClick={() => {
                   openSpace(claimedSpace.id)
-                  if (['river-loft', 'sound-room', 'light-gallery'].includes(claimedSpace.id)) {
-                    showToast('从对应建筑入口进去就能进入你的空间')
-                  }
+                  showToast('从对应楼层的房门进去，就是你的空间')
                 }}
               >
                 我的空间

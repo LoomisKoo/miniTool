@@ -1,105 +1,81 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
-import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
-import { walkerRoutes } from '../data/city'
+import { pedestrianRoutes } from '../data/infill'
 import { addBody, placeBody, pruneBodies, type DynamicBody } from '../game/bodies'
-import { useApp } from '../store'
-import { palettes, seeded, type Palette } from './theme'
+import { seeded } from './theme'
+import { buildPerson, randomLook, type Look } from './people'
+import { PersonMesh, animateIdle, animateWalk, emptyLimbs, type Limbs } from './PersonMesh'
 
 type Person = {
-  route: (typeof walkerRoutes)[number]
+  route: (typeof pedestrianRoutes)[number]
   t: number
+  /** 走完这一段就往回走：可走的段落被楼切开了，不能直接瞬移过去。 */
+  dir: 1 | -1
   speed: number
-  coat: string
-  pants: string
-  skin: string
+  /** 人行道上的横向站位：每个人都走在自己的这条线上，不会排成一列。 */
+  lane: number
+  laneBase: number
+  /** 这一帧想挪到的横向位置（避让同路线的人时会往旁边让）。 */
+  laneTarget: number
+  /** 到端点原地停一下再转身：瞬间折返看起来像"弹回去"。 */
+  wait: number
+  look: Look
   scale: number
   phase: number
 }
 
-const COATS = ['#c9d6e2', '#8fa3b6', '#697c8f', '#dfe6ec', '#aab8c5', '#7e93a6', '#c2b8a8']
-const PANTS = ['#2f3b47', '#3b4754', '#26303a', '#4a5460', '#39424c']
-const SKIN = ['#d9b294', '#c39572', '#a97650', '#e3c1a4']
-
-/** 把一簇几何烘焙上顶点色后合并，行人的躯干/手臂/头/头发就能从 5 个 mesh 变成 1 个。 */
-function tintedGeometry(geo: THREE.BufferGeometry, color: string) {
-  const c = new THREE.Color(color)
-  const count = geo.attributes.position.count
-  const array = new Float32Array(count * 3)
-  for (let i = 0; i < count; i++) {
-    array[i * 3] = c.r
-    array[i * 3 + 1] = c.g
-    array[i * 3 + 2] = c.b
-  }
-  geo.setAttribute('color', new THREE.BufferAttribute(array, 3))
-  return geo
-}
-
-function buildBody(coats: string, pants: string, skin: string) {
-  const torso = new THREE.CylinderGeometry(0.2, 0.17, 0.62, 10)
-  torso.scale(1, 1, 0.72)
-  torso.translate(0, 1.06, 0)
-  const armL = new THREE.CapsuleGeometry(0.055, 0.44, 3, 6)
-  armL.translate(-0.19, 1.18, 0)
-  const armR = new THREE.CapsuleGeometry(0.055, 0.44, 3, 6)
-  armR.translate(0.19, 1.18, 0)
-  const head = new THREE.SphereGeometry(0.115, 12, 10)
-  head.translate(0, 1.5, 0)
-  const hair = new THREE.SphereGeometry(0.122, 12, 8, 0, Math.PI * 2, 0, Math.PI * 0.55)
-  hair.translate(0, 1.55, -0.01)
-  void pants
-
-  const parts = [
-    tintedGeometry(torso, coats),
-    tintedGeometry(armL, coats),
-    tintedGeometry(armR, coats),
-    tintedGeometry(head, skin),
-    tintedGeometry(hair, '#2a2622'),
-  ]
-  const merged = mergeGeometries(parts, false)!
-  parts.forEach((geo) => geo.dispose())
-  return merged
-}
-
-const BODY_MATERIAL = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.86 })
-const LEG_GEOMETRY = new THREE.CapsuleGeometry(0.075, 0.5, 3, 6)
+/** 横向可挪动的范围：人行道内侧到路缘石之间。 */
+const LANE_LIMIT = 0.98
+/** 同一个路线上，前后这么近就要错开。 */
+const PERSONAL_SPACE = 1.7
 
 export function Citizens() {
-  const night = useApp((state) => state.night)
-  const palette = night ? palettes.night : palettes.dusk
   const roots = useRef<Array<THREE.Group | null>>([])
-  const legs = useRef<Array<[THREE.Group | null, THREE.Group | null]>>([])
+  const limbs = useRef<Array<{ current: Limbs }>>([])
 
   const people = useMemo<Person[]>(() => {
-    const rnd = seeded('citizens-v2')
+    const rnd = seeded('citizens-v4')
     const list: Person[] = []
     const total = 20
     for (let i = 0; i < total; i++) {
-      const route = walkerRoutes[i % walkerRoutes.length]
+      const route = pedestrianRoutes[i % pedestrianRoutes.length]
       const span =
         route.kind === 'line'
           ? Math.abs(route.to - route.from)
           : Math.PI * 2
+      // 横向站位取随机：同一路线上的人不能都踩在中线，否则永远走成一条直线
+      const lane = (rnd() * 2 - 1) * LANE_LIMIT * 0.62
       list.push({
         route,
-        t: (i / total) * span + rnd() * 8,
+        // 初始位置必须落在 [0, span] 里：之前是 (i/total)*span + rnd()*8，
+        // 越过 span 的人一登场就处在折返的临界点上。
+        t: (((i / total) * span + rnd() * 8) % span) || 0.01,
+        dir: route.dir,
         speed: (route.kind === 'line' ? route.speed : route.speed) * (0.8 + rnd() * 0.5),
-        coat: COATS[Math.floor(rnd() * COATS.length)],
-        pants: PANTS[Math.floor(rnd() * PANTS.length)],
-        skin: SKIN[Math.floor(rnd() * SKIN.length)],
-        scale: 0.94 + rnd() * 0.12,
+        lane,
+        laneBase: lane,
+        laneTarget: lane,
+        wait: rnd() * 0.8,
+        look: randomLook(rnd),
+        scale: 0.94 + rnd() * 0.1,
         phase: rnd() * Math.PI * 2,
       })
     }
     return list
   }, [])
 
-  const bodies = useMemo(
-    () => people.map((person) => buildBody(person.coat, person.pants, person.skin)),
-    [people],
+  const bodies = useMemo(() => people.map((person) => buildPerson(person.look)), [people])
+  useEffect(
+    () => () =>
+      bodies.forEach((geo) => {
+        geo.body.dispose()
+        geo.arm.dispose()
+        geo.leg.dispose()
+      }),
+    [bodies],
   )
-  useEffect(() => () => bodies.forEach((geo) => geo.dispose()), [bodies])
+  if (limbs.current.length !== people.length) limbs.current = people.map(() => ({ current: emptyLimbs() }))
 
   // 行人也是刚体：站在他前面会被挡住，但不会把玩家推走。
   // 同样在 effect 里登记，避免 StrictMode 的二次挂载把刚体清空。
@@ -115,45 +91,120 @@ export function Citizens() {
     }
   }, [people])
 
-  const legMaterials = useMemo(
-    () => people.map((person) => new THREE.MeshStandardMaterial({ color: person.pants, roughness: 0.9 })),
-    [people],
-  )
-  useEffect(() => () => legMaterials.forEach((mat) => mat.dispose()), [legMaterials])
-
   useFrame((state, rawDelta) => {
     const dt = Math.min(rawDelta, 0.05)
-    people.forEach((person, i) => {
-      const node = roots.current[i]
-      if (!node) return
-      const route = person.route
-      if (route.kind === 'line') {
-        const span = Math.abs(route.to - route.from)
-        person.t = (person.t + person.speed * dt) % span
-        const travelled = route.dir === 1 ? person.t : span - person.t
-        const pos = route.from + travelled
-        if (route.axis === 'z') {
-          node.position.set(route.offset, 0, pos)
-          node.rotation.y = route.dir === 1 ? 0 : Math.PI
-        } else {
-          node.position.set(pos, 0, route.offset)
-          node.rotation.y = route.dir === 1 ? Math.PI / 2 : -Math.PI / 2
-        }
-      } else {
-        person.t += person.speed * dt * route.dir
-        const angle = person.t
-        node.position.set(route.cx + Math.cos(angle) * route.r, 0, route.cz + Math.sin(angle) * route.r)
-        node.rotation.y = -angle + (route.dir === 1 ? 0 : Math.PI)
-      }
-      const swing = Math.sin(state.clock.elapsedTime * 7 + person.phase) * 0.45
-      const pair = legs.current[i]
-      if (pair) {
-        if (pair[0]) pair[0].rotation.x = swing
-        if (pair[1]) pair[1].rotation.x = -swing
-      }
-      node.position.y = Math.abs(Math.sin(state.clock.elapsedTime * 7 + person.phase)) * 0.03
+    const t = state.clock.elapsedTime
 
-      const body = solids.current[i]
+    people.forEach((person) => {
+      const route = person.route
+      if (route.kind !== 'line') return
+      // ---- 同路线避让 ----
+      // 前后 1.7m 内有人就往旁边让，同时把步速压下来：
+      // 以前 20 个人各自沿固定直线匀速走，相遇时直接互相穿过去。
+      person.laneTarget = person.laneBase
+      let slow = 1
+      for (const other of people) {
+        if (other === person || other.route !== route) continue
+        const along = Math.abs(other.t - person.t)
+        if (along > PERSONAL_SPACE) continue
+        // 往与对方相反的一侧让，两个人同时让就自动分到两边
+        const away = person.lane >= other.lane ? 1 : -1
+        person.laneTarget = THREE.MathUtils.clamp(
+          person.laneBase + away * 0.62,
+          -LANE_LIMIT,
+          LANE_LIMIT,
+        )
+        // 同向而且对方在前：跟着走，别贴着推
+        const ahead = (other.t - person.t) * person.dir
+        if (other.dir === person.dir && ahead > 0) {
+          slow = Math.min(slow, THREE.MathUtils.clamp((ahead - 0.7) / 1.2, 0.15, 1))
+        }
+      }
+      person.lane = THREE.MathUtils.damp(person.lane, person.laneTarget, 3.2, dt)
+
+      // ---- 到端点：停一步、转身，再走回去 ----
+      if (person.wait > 0) {
+        person.wait = Math.max(0, person.wait - dt)
+      } else {
+        const span = Math.abs(route.to - route.from)
+        person.t += person.speed * slow * dt * person.dir
+        if (person.t >= span) {
+          person.t = span
+          person.dir = -1
+          person.wait = 0.7 + (person.phase % 1.1)
+        } else if (person.t <= 0) {
+          person.t = 0
+          person.dir = 1
+          person.wait = 0.7 + (person.phase % 1.1)
+        }
+      }
+
+      const span = Math.abs(route.to - route.from)
+      const pos = route.from + (route.from <= route.to ? person.t : span - person.t)
+      const node = roots.current[people.indexOf(person)]
+      if (!node) return
+      if (route.axis === 'z') {
+        node.position.set(route.offset + person.lane, 0, pos)
+      } else {
+        node.position.set(pos, 0, route.offset + person.lane)
+      }
+
+      // 朝向也要插值：折返时瞬间转 180° 看起来像闪了一下
+      const yaw =
+        route.axis === 'z'
+          ? person.dir === 1
+            ? 0
+            : Math.PI
+          : person.dir === 1
+            ? Math.PI / 2
+            : -Math.PI / 2
+      let diff = yaw - node.rotation.y
+      diff = Math.atan2(Math.sin(diff), Math.cos(diff))
+      node.rotation.y += diff * Math.min(1, dt * 8)
+
+      const walking = person.wait <= 0
+      const bird = limbs.current[people.indexOf(person)].current
+      if (walking) {
+        // 步频跟着实际速度走，脚才不打滑
+        const phase = t * (3.2 + person.speed * 2.4) + person.phase
+        animateWalk(bird, phase, 0.6 + slow * 0.25)
+        node.position.y = Math.abs(Math.sin(phase)) * 0.025
+      } else {
+        animateIdle(bird, t, person.phase)
+        node.position.y = 0
+      }
+
+      const body = solids.current[people.indexOf(person)]
+      if (body) {
+        placeBody(body, node.position.x, node.position.z, 0.42 * person.scale, 0.42 * person.scale)
+        body.maxY = 1.8 * person.scale
+      }
+    })
+
+    // 环形步道那几条（广场外圈）不走折返逻辑，只按角速度转
+    people.forEach((person) => {
+      const route = person.route
+      if (route.kind !== 'circle') return
+      const index = people.indexOf(person)
+      const node = roots.current[index]
+      if (!node) return
+      if (person.wait > 0) {
+        person.wait = Math.max(0, person.wait - dt)
+      } else {
+        person.t += person.speed * dt * person.dir
+      }
+      const angle = person.t
+      node.position.set(route.cx + Math.cos(angle) * route.r, 0, route.cz + Math.sin(angle) * route.r)
+      node.rotation.y = -angle + (person.dir === 1 ? 0 : Math.PI)
+      const phase = t * (3.2 + person.speed * 2.4) + person.phase
+      if (person.wait > 0) {
+        animateIdle(limbs.current[index].current, t, person.phase)
+        node.position.y = 0
+      } else {
+        animateWalk(limbs.current[index].current, phase, 0.85)
+        node.position.y = Math.abs(Math.sin(phase)) * 0.025
+      }
+      const body = solids.current[index]
       if (body) {
         placeBody(body, node.position.x, node.position.z, 0.42 * person.scale, 0.42 * person.scale)
         body.maxY = 1.8 * person.scale
@@ -164,19 +215,8 @@ export function Citizens() {
   return (
     <group userData={{ dynamic: true }}>
       {people.map((person, i) => (
-        <group
-          key={i}
-          ref={(el) => (roots.current[i] = el)}
-          scale={person.scale}
-        >
-          <group ref={(el) => (legs.current[i] = [el, legs.current[i]?.[1] ?? null])}>
-            <mesh position={[-0.11, 0.4, 0]} geometry={LEG_GEOMETRY} material={legMaterials[i]} castShadow />
-          </group>
-          <group ref={(el) => (legs.current[i] = [legs.current[i]?.[0] ?? null, el])}>
-            <mesh position={[0.11, 0.4, 0]} geometry={LEG_GEOMETRY} material={legMaterials[i]} castShadow />
-          </group>
-          <mesh geometry={bodies[i]} material={BODY_MATERIAL} castShadow />
-
+        <group key={i} ref={(el) => (roots.current[i] = el)} scale={person.scale}>
+          <PersonMesh geo={bodies[i]} limbs={limbs.current[i]} />
         </group>
       ))}
     </group>

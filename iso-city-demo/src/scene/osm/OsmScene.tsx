@@ -398,8 +398,10 @@ export function OsmScene() {
     <div className="scene-root">
       <Canvas
         id="city-canvas"
-        shadows={quality > 0 ? 'soft' : false}
-        dpr={quality >= 2 ? [1, 1.25] : quality === 1 ? 1 : 0.8}
+        // 阴影与像素比不跟画质档走：切档时重建 shadow map / 绘制缓冲会卡一下，
+        // 而且阴影突然消失会让整座城亮一档。档位只降后处理采样数。
+        shadows="soft"
+        dpr={1.25}
         camera={{ fov: 62, near: 0.45, far: 2600, position: [START.x, 4, START.z + 34] }}
         gl={{ antialias: true, powerPreference: 'high-performance', logarithmicDepthBuffer: true }}
         onCreated={({ gl }) => {
@@ -424,7 +426,6 @@ export function OsmScene() {
               跟着玩家走时，楼一旦进出阴影视锥，影子会突然出现/消失。 */}
           <Environment
             night={night}
-            quality={quality}
             sky={false}
             shadowExtent={800}
             shadowFollow={false}
@@ -473,7 +474,7 @@ export function OsmScene() {
               key={chunk.key}
               geometry={chunk.geometry}
               material={buildingMaterial}
-              castShadow={quality > 0}
+              castShadow
               receiveShadow
             />
           ))}
@@ -504,17 +505,16 @@ export function OsmScene() {
           />
           <Preload all />
         </Suspense>
-        {quality > 0 && (
-          <EffectComposer multisampling={0} enableNormalPass={false} resolutionScale={quality >= 2 ? 1 : 0.8}>
-            <SMAA />
-            <Bloom
-              luminanceThreshold={night ? 0.62 : 0.86}
-              luminanceSmoothing={0.3}
-              intensity={night ? 0.72 : 0.26}
-              mipmapBlur
-            />
-          </EffectComposer>
-        )}
+        {/* 后处理常开：挂在 quality > 0 里时，掉一档整条链会消失，画面突然发灰过曝 */}
+        <EffectComposer multisampling={0} enableNormalPass={false}>
+          <SMAA />
+          <Bloom
+            luminanceThreshold={night ? 0.62 : 0.86}
+            luminanceSmoothing={0.3}
+            intensity={night ? 0.72 : 0.26}
+            mipmapBlur
+          />
+        </EffectComposer>
       </Canvas>
     </div>
   )

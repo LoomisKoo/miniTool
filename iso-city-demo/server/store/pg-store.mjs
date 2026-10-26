@@ -1,9 +1,17 @@
 import { readFile } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
 import pg from 'pg'
+import { buildUnitSpaces, isUnitSpaceId, UNIT_SEED_VERSION } from '../../shared/units.mjs'
 import { npcUsers, places as seedPlaces, posts as seedPosts, seededVisits, spaces as seedSpaces } from '../seed.mjs'
 
 const { Pool } = pg
+
+// 同 json-store：旧库或新增楼栋的户型没 seed 时，按需补一条。
+let unitTemplates = null
+function unitTemplate(id) {
+  if (!unitTemplates) unitTemplates = new Map(buildUnitSpaces().map((space) => [space.id, space]))
+  return unitTemplates.get(id) || null
+}
 
 const SPACE_FIELDS = {
   name: 'name',
@@ -81,7 +89,74 @@ export class PgStore {
     const schema = await readFile(new URL('../db/schema.sql', import.meta.url), 'utf8')
     await this.pool.query(schema)
     await this.#seed()
+    await this.#ensureUnitSpaces()
     return this
+  }
+
+  /** 给已有库补楼内户；重复启动是幂等的。 */
+  async #ensureUnitSpaces() {
+    await this.pool.query(
+      `CREATE TABLE IF NOT EXISTS app_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)`,
+    )
+    const versionRow = await this.pool.query(
+      `SELECT value FROM app_meta WHERE key='unit_seed_version'`,
+    )
+    if (Number(versionRow.rows[0]?.value || 0) >= UNIT_SEED_VERSION) return
+    const spaces = buildUnitSpaces()
+    const freshIds = spaces.map((space) => space.id)
+    const client = await this.pool.connect()
+    try {
+      await client.query('BEGIN')
+      // 先清掉旧编号：楼型重排后这些 id 在新平面里没有对应房间，且都还没人认领
+      const stale = await client.query(`SELECT id FROM spaces WHERE owner_id IS NULL`)
+      const doomed = stale.rows.map((row) => row.id).filter((id) => isUnitSpaceId(id) && !freshIds.includes(id))
+      for (let offset = 0; offset < doomed.length; offset += 200) {
+        await client.query(`DELETE FROM spaces WHERE id = ANY($1) AND owner_id IS NULL`, [
+          doomed.slice(offset, offset + 200),
+        ])
+      }
+      for (let offset = 0; offset < spaces.length; offset += 60) {
+        const chunk = spaces.slice(offset, offset + 60)
+        const values = []
+        const params = []
+        chunk.forEach((s, i) => {
+          const n = i * 11
+          values.push(
+            `($${n + 1},$${n + 2},$${n + 3},$${n + 4},$${n + 5},$${n + 6},$${n + 7},$${n + 8},$${n + 9},$${n + 10},$${n + 11})`,
+          )
+          params.push(
+            s.id,
+            s.name,
+            s.description,
+            s.building,
+            s.template,
+            s.wallColor,
+            s.floorColor,
+            JSON.stringify(s.art),
+            JSON.stringify(s.layout),
+            s.ownerId,
+            s.isOpen,
+          )
+        })
+        await client.query(
+          `INSERT INTO spaces
+            (id, name, description, building, template, wall_color, floor_color, art, layout, owner_id, is_open)
+           VALUES ${values.join(',')} ON CONFLICT (id) DO NOTHING`,
+          params,
+        )
+      }
+      await client.query(
+        `INSERT INTO app_meta (key, value) VALUES ('unit_seed_version', $1)
+         ON CONFLICT (key) DO UPDATE SET value=$1`,
+        [String(UNIT_SEED_VERSION)],
+      )
+      await client.query('COMMIT')
+    } catch (error) {
+      await client.query('ROLLBACK')
+      throw error
+    } finally {
+      client.release()
+    }
   }
 
   async close() {
@@ -240,7 +315,30 @@ export class PgStore {
 
   async getSpace(id) {
     const { rows } = await this.pool.query(`${this.#spaceSelect('WHERE s.id=$1')}`, [id])
-    return mapSpace(rows[0])
+    if (rows[0]) return mapSpace(rows[0])
+
+    const seed = unitTemplate(id)
+    if (!seed) return null
+    await this.pool.query(
+      `INSERT INTO spaces
+        (id, name, description, building, template, wall_color, floor_color, art, layout, owner_id, is_open)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT (id) DO NOTHING`,
+      [
+        seed.id,
+        seed.name,
+        seed.description,
+        seed.building,
+        seed.template,
+        seed.wallColor,
+        seed.floorColor,
+        JSON.stringify(seed.art),
+        JSON.stringify(seed.layout),
+        seed.ownerId,
+        seed.isOpen,
+      ],
+    )
+    const again = await this.pool.query(`${this.#spaceSelect('WHERE s.id=$1')}`, [id])
+    return mapSpace(again.rows[0])
   }
 
   async claimSpace(spaceId, userId) {

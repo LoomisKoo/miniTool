@@ -26,6 +26,12 @@ export function useGameInput() {
       const state = useApp.getState()
       if (key === 'e' && !event.repeat) {
         if (state.panel || state.screen === 'intro') return
+        // 对话中：E 翻到下一句
+        if (state.dialog) {
+          event.preventDefault()
+          state.nextDialog()
+          return
+        }
         const nearby = state.nearby
         if (nearby) {
           event.preventDefault()
@@ -49,6 +55,7 @@ export function useGameInput() {
         if (state.panel || state.screen === 'intro') return
         state.toggleNight()
       }
+      if (key === 'escape' && state.dialog) state.closeDialog()
       if (key === 'escape' && state.panel) {
         if (state.editor) state.cancelEditing()
         else state.closePanel()

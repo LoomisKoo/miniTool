@@ -8,6 +8,7 @@
     "moduleResolution": "Bundler",
     "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
+    "allowJs": true,
     "isolatedModules": true,
     "noEmit": true,
     "jsx": "react-jsx",
@@ -16,5 +17,5 @@
     "noUnusedParameters": false,
     "types": ["vite/client"]
   },
-  "include": ["src"]
+  "include": ["src", "shared"]
 }

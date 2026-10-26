@@ -1,10 +1,14 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
+import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
+import { MarchingCubes } from 'three/examples/jsm/objects/MarchingCubes.js'
 import { useApp } from '../store'
-import { makeCloudTexture } from './textures'
 import { keys, resetWalker, walker } from '../game/walker'
+import { cabinFloor, ferris, ferrisExit } from '../game/ferris'
 import { hitsDynamic, pushOut } from '../game/bodies'
+import { OcclusionFade } from './OcclusionFade'
+import { attachSilhouette } from './silhouette'
 
 export type Collider = {
   minX: number
@@ -15,6 +19,8 @@ export type Collider = {
   maxY?: number
   walk?: boolean
   camera?: boolean
+  /** 能站上去的平台（阳台、裙房顶、退台）：不受"至少 4m 宽才算支撑面"的限制 */
+  stand?: boolean
 }
 
 export type Interactable = {
@@ -24,6 +30,8 @@ export type Interactable = {
   x: number
   z: number
   radius: number
+  /** 不在地面的交互点（楼顶）：只在这个高度附近才触发。 */
+  y?: number
   action: () => void
 }
 
@@ -40,6 +48,7 @@ type Props = {
 const PLAYER_RADIUS = 0.42
 const CAM_MIN = 2.6
 const CAM_MAX = 210
+const INTERIOR_CAM_MAX = 9
 const PIVOT_HEIGHT = 1.46
 /** lean 组的枢轴在髋部，body 要抵消这段高度；每帧写 position 时必须带上它。 */
 const BODY_BASE = -0.94
@@ -70,6 +79,8 @@ function blocked(x: number, z: number, colliders: Collider[], y = 0, fromX = x, 
     if (c.walk === false) continue
     // 飞得比建筑高时不受水平碰撞限制，可以真正飞越街区。
     if (y > (c.maxY ?? 100) - 0.3) continue
+    // 从悬空的平台（阳台）下面走过时不挡
+    if (y + 1.75 < (c.minY ?? 0)) continue
     // 已经卡在碰撞盒里（出生点压到家具等）时不再拦截，否则任何方向都走不出来。
     if (overlaps(fromX, fromZ, c)) continue
     if (overlaps(x, z, c)) return true
@@ -93,8 +104,8 @@ function supportAt(x: number, z: number, colliders: Collider[], fromY: number) {
     if (c.walk === false) continue
     const maxY = c.maxY ?? 0
     if (maxY <= 0.01 || maxY > ceiling) continue
-    // 只有"楼"级别的体量才当支撑面：家具、这类的体量站不上去
-    if (c.maxX - c.minX < 4 || c.maxZ - c.minZ < 4) continue
+    // 只有"楼"级别的体量才当支撑面：家具、这类的体量站不上去；平台例外
+    if (!c.stand && (c.maxX - c.minX < 4 || c.maxZ - c.minZ < 4)) continue
     if (!overlaps(x, z, c)) continue
     if (maxY > top) top = maxY
   }
@@ -135,219 +146,408 @@ function lathe(profile: Array<[number, number]>, segments = 20, flattenZ = 1) {
   return geo
 }
 
-/** 云絮贴图：一张柔边圆点，聚成一团就是积云。
-    球体拼出来的"云"总有一圈硬接缝和玻璃感，Sprite 反而更像水汽。 */
-let cloudTextureCache: THREE.Texture | null = null
-function cloudTexture() {
-  if (!cloudTextureCache) cloudTextureCache = makeCloudTexture()
-  return cloudTextureCache
-}
-
-/** 筋斗云：脚下托着一朵云，飞行时身后拖出一串逐渐变淡的云絮。 */
-const CLOUD_SCALE = 0.74
-/** 云心高度：云的顶面要盖过脚踝，脚才是"陷进云里"而不是"站在云上"。
-    贴得太高会像踩在一块悬空的板子上，所以整体压低一点。 */
-const CLOUD_Y = -0.02
+/**
+ * 筋斗云：一颗 metaball 融成的软云团（Marching Cubes 生成一次，之后是静态几何），
+ * 表面是连续曲面、平滑法线，所以轮廓圆润、明暗过渡柔和；
+ * 云头两侧各一只如意卷，身后一小截渐隐的飘带。角色的 +Z 是前方。
+ */
+const CLOUD_Y = -0.14
 /** 角色前倾时脚会往后上方走，云要跟着脚走，否则一定会穿帮。 */
 const FOOT_PIVOT = 0.94
-const TRAIL_LENGTH = 8
-const TRAIL_INTERVAL = 0.035
-/** [x, y, z, 尺寸]：中间大、四周小，压扁之后是云的轮廓。 */
-const CLOUD_PUFFS: Array<[number, number, number, number]> = [
-  [0, 0.1, 0, 1.95],
-  [0.82, -0.02, 0.14, 1.42],
-  [-0.8, 0.0, -0.1, 1.36],
-  [0.34, 0.26, -0.44, 1.18],
-  [-0.32, 0.28, 0.44, 1.14],
-  [0.04, -0.14, 0.04, 1.78],
-  [1.26, -0.04, -0.06, 0.96],
-  [-1.24, -0.02, 0.08, 0.94],
-  [0.02, 0.42, 0.02, 1.0],
-  [-0.6, 0.18, 0.58, 0.9],
-  [0.58, 0.16, 0.54, 0.92],
-  // 往脚踝上包的低云絮：从侧面看脚是"埋"进云里的
-  [0.24, 0.34, 0.2, 0.86],
-  [-0.26, 0.32, -0.16, 0.82],
-  // 云底再垫两片大一点的：镜头从下往上看时，脚底被这层挡住
-  [0.0, -0.24, -0.02, 1.5],
-  [0.5, -0.16, 0.18, 1.05],
-  [-0.52, -0.14, -0.14, 1.0],
+/** 云尾的水汽团：池子大小、每走多远吐一团。 */
+// 小而多、沿路径连续插值：大团稀疏的水汽一团团往后喷，像放屁；
+// 池子太小又会在高速时被吃空，拖尾一截一截断掉。
+const PUFF_COUNT = 260
+const PUFF_STEP = 0.11
+const PUFF_HIDDEN = new THREE.Vector3(0, -80, 0)
+
+/**
+ * 云胚：一串互相重叠的球（坐标在 [-1,1]，会被归一化到目标尺寸）。
+ * 上面鼓、下面平、四周对称地散开，融合后就是一朵蓬松的团云。
+ * [x, y, z, 半径]
+ */
+const CLOUD_BLOBS: Array<[number, number, number, number]> = [
+  // 主体：左右两翼 + 中间撑起来
+  [-0.34, 0.0, 0.0, 0.3],
+  [0.34, 0.0, 0.0, 0.3],
+  [0.0, 0.04, 0.0, 0.34],
+  // 顶上的圆包
+  [-0.16, 0.2, 0.06, 0.22],
+  [0.18, 0.19, -0.04, 0.21],
+  [0.02, 0.14, 0.22, 0.2],
+  // 前后铺开
+  [0.04, 0.0, 0.34, 0.24],
+  [-0.26, -0.01, 0.26, 0.2],
+  [-0.06, 0.03, -0.32, 0.22],
+  [0.26, -0.01, -0.24, 0.19],
+  // 两端的碎絮
+  [-0.56, -0.03, 0.06, 0.16],
+  [0.56, -0.04, -0.02, 0.16],
+  // 底：压平，坐在脚下
+  [0.0, -0.1, 0.0, 0.32],
+  [-0.28, -0.09, 0.04, 0.22],
+  [0.28, -0.09, 0.02, 0.22],
 ]
 
+/**
+ * 采样 metaball 场，得到一张连续、柔软的曲面。
+ *
+ * 注意 MarchingCubes 的两套坐标：addBall 吃的是 [0,1] 的网格坐标（内部再乘 size），
+ * 而求出来的顶点又映射回 [-1,1]。以前把 [-1,1] 的云胚直接喂给 addBall，
+ * 球心全部落到格子外被裁掉，只剩下角落里的碎面——屏幕上就是"几条被裁切的边"。
+ */
+let cloudGeoCache: THREE.BufferGeometry | null = null
+
+function buildCloudGeometry() {
+  // 只在第一次进场算一遍 MarchingCubes。以前每次挂载都重算 48³ 的场，
+  // 反复进出场景时又要把这几十毫秒重新付一次。
+  if (cloudGeoCache) return cloudGeoCache
+  const RES = 48
+  const mc = new MarchingCubes(RES, new THREE.MeshBasicMaterial(), false, false, 24000)
+  // addBall 的场：r²/d² - 1；isolation 略大于 0，表面大致落在球的半径上
+  mc.isolation = 0.06
+  mc.reset()
+  for (const [x, y, z, r] of CLOUD_BLOBS) mc.addBall((x + 1) / 2, (y + 1) / 2, (z + 1) / 2, (r / 2) ** 2, 1)
+  mc.update()
+
+  const verts = mc.count
+  const src = mc.geometry.getAttribute('position').array as Float32Array
+  const raw = new THREE.BufferGeometry()
+  raw.setAttribute('position', new THREE.BufferAttribute(src.slice(0, verts * 3), 3))
+  // 合并重复顶点：平滑法线要靠共享顶点，否则一颗颗三角面会闪
+  const geo = mergeVertices(raw, 1e-4)
+  raw.dispose()
+  geo.computeVertexNormals()
+  geo.computeBoundingBox()
+  const bb = geo.boundingBox!
+  const center = new THREE.Vector3()
+  const size = new THREE.Vector3()
+  bb.getCenter(center)
+  bb.getSize(size)
+  geo.translate(-center.x, -center.y, -center.z)
+  const k = 2.5 / Math.max(size.x, 1e-3)
+  geo.scale(k, k * 0.62, k)
+  geo.computeBoundingSphere()
+  // MarchingCubes 只是临时计算用的容器，几何体已经拷出来了
+  mc.geometry.dispose()
+  ;(mc.material as THREE.Material).dispose()
+  cloudGeoCache = geo
+  return geo
+}
+
+/** 一团软边水汽：几颗高斯斑叠在一起，边缘不规则，看着才像云絮而不是圆片。 */
+let puffTexCache: THREE.CanvasTexture | null = null
+function puffTexture() {
+  if (puffTexCache) return puffTexCache
+  const size = 128
+  const canvas = document.createElement('canvas')
+  canvas.width = size
+  canvas.height = size
+  const ctx = canvas.getContext('2d')!
+  const blobs: Array<[number, number, number, number]> = [
+    [0.5, 0.52, 0.34, 0.9],
+    [0.36, 0.56, 0.22, 0.7],
+    [0.64, 0.58, 0.22, 0.7],
+    [0.47, 0.4, 0.2, 0.62],
+    [0.58, 0.42, 0.17, 0.55],
+    [0.3, 0.46, 0.14, 0.45],
+    [0.7, 0.48, 0.14, 0.45],
+  ]
+  for (const [x, y, r, a] of blobs) {
+    const g = ctx.createRadialGradient(x * size, y * size, 0, x * size, y * size, r * size)
+    g.addColorStop(0, `rgba(255,255,255,${a})`)
+    g.addColorStop(0.55, `rgba(255,255,255,${a * 0.42})`)
+    g.addColorStop(1, 'rgba(255,255,255,0)')
+    ctx.fillStyle = g
+    ctx.fillRect(0, 0, size, size)
+  }
+  puffTexCache = new THREE.CanvasTexture(canvas)
+  return puffTexCache
+}
+
+// 水汽团是面向镜头的公告板：在顶点着色器里按实例中心展开，
+// 每团有自己的透明度和自转角，InstancedMesh 一次画完。
+const PUFF_VERT = /* glsl */ `
+attribute float aAlpha;
+attribute float aSpin;
+varying vec2 vUv;
+varying float vAlpha;
+void main() {
+  vUv = uv;
+  vAlpha = aAlpha;
+  vec4 center = modelViewMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0);
+  float s = length(instanceMatrix[0].xyz);
+  float c = cos(aSpin);
+  float n = sin(aSpin);
+  vec2 p = vec2(position.x * c - position.y * n, position.x * n + position.y * c);
+  center.xy += p * s;
+  gl_Position = projectionMatrix * center;
+}`
+
+const PUFF_FRAG = /* glsl */ `
+uniform sampler2D map;
+uniform vec3 uTop;
+uniform vec3 uBottom;
+varying vec2 vUv;
+varying float vAlpha;
+void main() {
+  float a = texture2D(map, vUv).a * vAlpha;
+  if (a < 0.004) discard;
+  // 上亮下暗：受光面偏暖白，底面带一点天空的蓝灰，体积感就出来了
+  vec3 col = mix(uBottom, uTop, smoothstep(0.15, 0.85, vUv.y));
+  gl_FragColor = vec4(col, a);
+  #include <colorspace_fragment>
+}`
+
+type Puff = {
+  pos: THREE.Vector3
+  vel: THREE.Vector3
+  age: number
+  life: number
+  s0: number
+  s1: number
+  a0: number
+  spin: number
+  spinRate: number
+  alive: boolean
+}
+
 function HoverRig({ visible }: { visible: boolean }) {
+  const { scene } = useThree()
   const group = useRef<THREE.Group>(null)
-  const trail = useRef<THREE.Group>(null)
-  const puffs = useRef<Array<THREE.Sprite | null>>([])
-  const wisps = useRef<Array<THREE.Sprite | null>>([])
-  const anchor = useRef(new THREE.Vector3())
-  const history = useRef(
-    Array.from({ length: TRAIL_LENGTH }, () => new THREE.Vector3(0, -999, 0)),
-  )
-  const timer = useRef(0)
-  const local = useMemo(() => new THREE.Vector3(), [])
-  const tex = useMemo(cloudTexture, [])
+  const body = useRef<THREE.Group>(null)
+  const shell = useRef<THREE.Mesh>(null)
+  const anchor = useMemo(() => new THREE.Vector3(), [])
+  const lastAnchor = useMemo(() => new THREE.Vector3(), [])
+  const moveDir = useMemo(() => new THREE.Vector3(), [])
+  const tmpM = useMemo(() => new THREE.Matrix4(), [])
+  const tmpS = useMemo(() => new THREE.Vector3(), [])
+  const tmpQ = useMemo(() => new THREE.Quaternion(), [])
+  const travelled = useRef(0)
+  const idleTimer = useRef(0)
+  const hasLast = useRef(false)
+  // 预热帧：云和水汽的材质要到第一次真正绘制时才编译着色器。
+  // 起飞那一瞬间再编译就是一次卡顿，所以进场后先在看不见的地方画几十帧。
+  const warm = useRef(0)
 
-  // 每块云絮单独一份材质：底部偏冷、顶部纯白。
-  // 全用纯白的话不管怎么摆都会像一团棉花糖，有明暗层次才看得出体积。
-  const cloudMats = useMemo(
+  const cloudGeo = useMemo(buildCloudGeometry, [])
+
+  // 纯白、高粗糙度、带一点点自发光：受光面到背光面是连续渐变，
+  // 没有卡通分层的硬台阶，看起来才是"软"的
+  const cloudMat = useMemo(
     () =>
-      CLOUD_PUFFS.map(([, py]) => {
-        const shade = THREE.MathUtils.clamp((py + 0.18) / 0.56, 0, 1)
-        const color = new THREE.Color('#bcdff4').lerp(new THREE.Color('#ffffff'), shade)
-        return new THREE.SpriteMaterial({
-          map: tex,
-          color,
-          transparent: true,
-          opacity: 0.95,
-          depthWrite: false,
-          toneMapped: false,
-        })
+      new THREE.MeshStandardMaterial({
+        color: '#ffffff',
+        roughness: 0.98,
+        metalness: 0,
+        emissive: '#cfe4f4',
+        emissiveIntensity: 0.22,
+        transparent: true,
       }),
-    [tex],
+    [],
   )
 
-  // 拖尾每片要有自己的透明度，所以各自一份材质。
-  const wispMats = useMemo(
+  const puffs = useMemo<Puff[]>(
     () =>
-      Array.from(
-        { length: TRAIL_LENGTH },
-        () =>
-          new THREE.SpriteMaterial({
-            map: tex,
-            color: '#eaf7ff',
-            transparent: true,
-            opacity: 0,
-            depthWrite: false,
-            toneMapped: false,
-          }),
-      ),
-    [tex],
+      Array.from({ length: PUFF_COUNT }, () => ({
+        pos: new THREE.Vector3(),
+        vel: new THREE.Vector3(),
+        age: 0,
+        life: 1,
+        s0: 1,
+        s1: 1,
+        a0: 0,
+        spin: 0,
+        spinRate: 0,
+        alive: false,
+      })),
+    [],
   )
+
+  const puffMesh = useMemo(() => {
+    const geo = new THREE.PlaneGeometry(1, 1)
+    geo.setAttribute('aAlpha', new THREE.InstancedBufferAttribute(new Float32Array(PUFF_COUNT), 1))
+    geo.setAttribute('aSpin', new THREE.InstancedBufferAttribute(new Float32Array(PUFF_COUNT), 1))
+    const mat = new THREE.ShaderMaterial({
+      vertexShader: PUFF_VERT,
+      fragmentShader: PUFF_FRAG,
+      uniforms: {
+        map: { value: puffTexture() },
+        uTop: { value: new THREE.Color('#fffaf2') },
+        uBottom: { value: new THREE.Color('#c9d8e6') },
+      },
+      transparent: true,
+      depthWrite: false,
+    })
+    const mesh = new THREE.InstancedMesh(geo, mat, PUFF_COUNT)
+    mesh.count = 0
+    mesh.frustumCulled = false
+    mesh.renderOrder = 4
+    mesh.userData.noOcclude = true
+    mesh.userData.dynamic = true
+    mesh.raycast = () => {}
+    return mesh
+  }, [])
+
+  // 水汽留在世界空间（不跟着人走），所以直接挂在场景根上
+  useEffect(() => {
+    scene.add(puffMesh)
+    return () => {
+      scene.remove(puffMesh)
+    }
+  }, [scene, puffMesh])
 
   useEffect(
     () => () => {
-      cloudMats.forEach((mat) => mat.dispose())
-      wispMats.forEach((mat) => mat.dispose())
+      // cloudGeo 是模块级缓存，跨挂载复用，不在这里释放
+      cloudMat.dispose()
+      puffMesh.geometry.dispose()
+      ;(puffMesh.material as THREE.Material).dispose()
     },
-    [cloudMats, wispMats],
+    [cloudMat, puffMesh],
   )
+
+  const spawnPos = useMemo(() => new THREE.Vector3(), [])
+  const spawn = (speed: number, idle: boolean, at: THREE.Vector3) => {
+    // 池子满了就回收最老的一团，而不是直接不吐（那样拖尾会断）
+    let p = puffs.find((q) => !q.alive)
+    if (!p) {
+      p = puffs[0]
+      for (const q of puffs) if (q.age / q.life > p.age / p.life) p = q
+    }
+    const jitter = idle ? 0.45 : 0.22 + speed * 0.12
+    p.pos.copy(at)
+    if (!idle) p.pos.addScaledVector(moveDir, -0.6)
+    p.pos.x += (Math.random() - 0.5) * jitter * 2
+    p.pos.y += (Math.random() - 0.5) * 0.12 - (idle ? 0.14 : 0.06)
+    p.pos.z += (Math.random() - 0.5) * jitter * 2
+    if (idle) p.vel.set((Math.random() - 0.5) * 0.1, -0.16 - Math.random() * 0.08, (Math.random() - 0.5) * 0.1)
+    // 水汽留在原地慢慢散开，只带一点点惯性，不往后喷
+    else p.vel.set((Math.random() - 0.5) * 0.25, 0.04 + Math.random() * 0.06, (Math.random() - 0.5) * 0.25).addScaledVector(moveDir, -0.15)
+    p.age = 0
+    p.life = idle ? 1.0 + Math.random() * 0.4 : 0.75 + Math.random() * 0.35 + speed * 0.35
+    p.s0 = idle ? 0.35 + Math.random() * 0.15 : 0.42 + Math.random() * 0.14
+    p.s1 = idle ? 0.75 + Math.random() * 0.25 : 0.95 + Math.random() * 0.35 + speed * 0.35
+    p.a0 = idle ? 0.14 : 0.11 + speed * 0.06
+    p.spin = Math.random() * Math.PI * 2
+    p.spinRate = (Math.random() - 0.5) * 0.8
+    p.alive = true
+  }
 
   useFrame((state, rawDelta) => {
     const dt = Math.min(rawDelta, 0.05)
     const t = state.clock.elapsedTime
-    // store 里的 hud 每 0.12 秒才同步一次，用它会出现"已经起飞了云还没出来"。
     const active = visible || walker.flying
     const node = group.current
     if (!node) return
-
-    node.visible = active
-    // 云跟着脚走：身体前倾时脚向后上方移动，云也要同步平移，
-    // 否则速度一快（倾角最大 0.76rad）脚就会从云里露出来。
+    const warming = !active && warm.current < 40
+    if (warming) warm.current += 1
+    node.visible = active || warming
     const lean = pose.lean
-    node.position.set(
-      0,
-      FOOT_PIVOT * (1 - Math.cos(lean)) * 0.7 + Math.sin(t * 1.9) * 0.04 - 0.02,
-      -FOOT_PIVOT * Math.sin(lean) * 0.92,
-    )
-
-    // 云的尺寸是恒定的：离地高低不影响体积，否则"贴地时变小"看起来像在缩水。
-    // 起飞阶段只做透明度淡入，空间尺寸全程不变。
-    const reveal = THREE.MathUtils.clamp(walker.position.y / 0.4, 0, 1)
-
-    // 云朵缓慢起伏：每块云絮按各自相位漂一点，静止时也不会像一块死贴图。
-    for (let i = 0; i < CLOUD_PUFFS.length; i++) {
-      const sprite = puffs.current[i]
-      if (!sprite) continue
-      const [px, py, pz, size] = CLOUD_PUFFS[i]
-      const phase = i * 1.7
-      sprite.position.set(
-        (px + Math.sin(t * 0.9 + phase) * 0.05) * CLOUD_SCALE,
-        CLOUD_Y + (py + Math.sin(t * 1.4 + phase) * 0.04) * CLOUD_SCALE,
-        (pz + Math.cos(t * 0.8 + phase) * 0.045) * CLOUD_SCALE,
+    if (shell.current) shell.current.castShadow = !warming
+    if (warming) node.position.set(0, -80, 0)
+    else
+      node.position.set(
+        0,
+        FOOT_PIVOT * (1 - Math.cos(lean)) * 0.7 + Math.sin(t * 1.9) * 0.04 + CLOUD_Y,
+        -FOOT_PIVOT * Math.sin(lean) * 0.92,
       )
-      // 横向更宽、纵向压扁：这是"云"而不是"球"的关键
-      sprite.scale.set(size * 1.26 * CLOUD_SCALE, size * 0.7 * CLOUD_SCALE, 1)
+
+    const reveal = THREE.MathUtils.clamp(walker.position.y / 0.4, 0, 1)
+    cloudMat.opacity = warming ? 0 : reveal
+    cloudMat.depthWrite = reveal > 0.9
+    if (body.current) {
+      // 云体缓慢呼吸 + 微微侧倾，静止时也是活的
+      const breathe = 1 + Math.sin(t * 2.1) * 0.025
+      body.current.scale.set(breathe, 1 / breathe, breathe)
+      body.current.rotation.z = Math.sin(t * 1.3) * 0.04
     }
 
-    // 淡入只改材质透明度，不改尺寸
-    for (const mat of cloudMats) mat.opacity = 0.95 * reveal
+    // ---------- 水汽 ----------
+    node.getWorldPosition(anchor)
+    moveDir.set(walker.velocity.x, walker.vy, walker.velocity.z)
+    const motion = moveDir.length()
+    if (motion > 1e-3) moveDir.divideScalar(motion)
+    const speed = THREE.MathUtils.clamp(motion / 8, 0, 1)
+    const emitting = active && !warming && reveal > 0.9
 
-    // ---------- 拖尾 ----------
-    const trailGroup = trail.current
-    if (!trailGroup) return
-    node.getWorldPosition(anchor.current)
-    timer.current += dt
-    if (timer.current >= TRAIL_INTERVAL) {
-      timer.current = 0
-      for (let i = TRAIL_LENGTH - 1; i > 0; i--) {
-        history.current[i].copy(history.current[i - 1])
+    if (emitting) {
+      // 位置突变（进出楼、传送、起降瞬间被拉回地面）不算"移动"，
+      // 否则会在两点之间吐出一长串水汽——这就是切换飞行时那条异常长的拖尾。
+      const step = hasLast.current ? anchor.distanceTo(lastAnchor) : 0
+      if (!hasLast.current || step > 3) travelled.current = 0
+      else if (motion > 0.6) travelled.current += step
+      // 这一帧走过的线段上按固定间距补点：帧率低或飞得快都不会出现空档
+      let n = 0
+      const total = travelled.current
+      while (travelled.current > PUFF_STEP && n < 14) {
+        travelled.current -= PUFF_STEP
+        const f = step > 1e-4 ? THREE.MathUtils.clamp(1 - travelled.current / Math.max(step, total), 0, 1) : 1
+        spawn(speed, false, spawnPos.lerpVectors(lastAnchor, anchor, f))
+        n++
       }
-      history.current[0].copy(anchor.current)
+      if (travelled.current > PUFF_STEP) travelled.current = 0
+      // 悬停时云底缓缓往下漏几缕
+      idleTimer.current += dt
+      if (motion < 0.6 && idleTimer.current > 0.4) {
+        idleTimer.current = 0
+        spawn(0, true, anchor)
+      }
+      lastAnchor.copy(anchor)
+      hasLast.current = true
+    } else {
+      hasLast.current = false
+      travelled.current = 0
     }
 
-    const speed = THREE.MathUtils.clamp(walker.speed / 4, 0, 1)
-    const show = active && speed > 0.06 && reveal > 0.9
-    trailGroup.visible = show
-    if (!show) return
-
-    // 拖尾留在世界空间里：转身的时候云絮不会跟着甩成一条直线。
-    trailGroup.updateWorldMatrix(true, false)
-    for (let i = 0; i < TRAIL_LENGTH; i++) {
-      const sprite = wisps.current[i]
-      const past = history.current[i]
-      if (!sprite) continue
-      if (past.y < -100) {
-        sprite.visible = false
+    const alpha = puffMesh.geometry.getAttribute('aAlpha') as THREE.InstancedBufferAttribute
+    const spin = puffMesh.geometry.getAttribute('aSpin') as THREE.InstancedBufferAttribute
+    let count = 0
+    for (const p of puffs) {
+      if (!p.alive) continue
+      p.age += dt
+      const k = p.age / p.life
+      if (k >= 1) {
+        p.alive = false
         continue
       }
-      local.copy(past)
-      trailGroup.worldToLocal(local)
-      const age = i / (TRAIL_LENGTH - 1)
-      const fade = 1 - age
-      sprite.visible = true
-      sprite.position.set(
-        local.x + Math.sin(age * 9 + t * 2.2) * 0.08 * age,
-        local.y - 0.02 - age * 0.12,
-        local.z + Math.cos(age * 8 + t * 1.9) * 0.08 * age,
-      )
-      // 拖尾只是"云的余韵"：比云小一圈，越远越小
-      const size = (0.62 - fade * 0.28) * (0.75 + speed * 0.4)
-      sprite.scale.set(size * 1.3, size * 0.7, 1)
-      const mat = sprite.material as THREE.SpriteMaterial
-      mat.opacity = Math.pow(fade, 1.8) * (0.16 + speed * 0.26)
+      p.vel.multiplyScalar(Math.exp(-2.2 * dt))
+      p.vel.y += 0.05 * dt
+      p.pos.addScaledVector(p.vel, dt)
+      p.spin += p.spinRate * dt
+      const grow = 1 - Math.pow(1 - k, 2.2)
+      const size = p.s0 + (p.s1 - p.s0) * grow
+      const fade = THREE.MathUtils.smoothstep(k, 0, 0.08) * Math.pow(1 - k, 1.8)
+      tmpS.setScalar(size)
+      tmpM.compose(p.pos, tmpQ, tmpS)
+      puffMesh.setMatrixAt(count, tmpM)
+      alpha.setX(count, fade * p.a0)
+      spin.setX(count, p.spin)
+      count++
     }
+    if (warming && count === 0) {
+      // 预热：一团几乎透明的水汽画在地下，把着色器编译掉
+      tmpS.setScalar(0.01)
+      tmpM.compose(PUFF_HIDDEN, tmpQ, tmpS)
+      puffMesh.setMatrixAt(0, tmpM)
+      alpha.setX(0, 0.005)
+      count = 1
+    }
+    puffMesh.count = count
+    puffMesh.instanceMatrix.needsUpdate = true
+    alpha.needsUpdate = true
+    spin.needsUpdate = true
   })
 
   return (
-    <group ref={group} visible={visible}>
-      {CLOUD_PUFFS.map(([, , , size], i) => (
-        <sprite
-          key={i}
-          ref={(el) => {
-            puffs.current[i] = el
-          }}
-          material={cloudMats[i]}
-          scale={[size * 1.26 * CLOUD_SCALE, size * 0.7 * CLOUD_SCALE, 1]}
-        />
-      ))}
-
-      {/* 云底的一点冷光：只照亮云本身，不要把人打成蓝色发光体 */}
-      <pointLight position={[0, 0.02, 0]} color="#9fdcff" intensity={0.9} distance={2.6} decay={2} />
-
-      <group ref={trail}>
-        {Array.from({ length: TRAIL_LENGTH }).map((_, i) => (
-          <sprite
-            key={i}
-            ref={(el) => {
-              wisps.current[i] = el
-            }}
-            material={wispMats[i]}
-            visible={false}
-          />
-        ))}
+    <group ref={group} visible={visible} userData={{ noGhost: true }}>
+      <group ref={body}>
+        {/* 云体本身：一朵蓬松的团云 */}
+        <mesh ref={shell} geometry={cloudGeo} material={cloudMat} castShadow frustumCulled={false} />
       </group>
-    </group>
-  )
+      {/* 云体自带的那盏暖光挪到了 CityScene 的 PlayerLamp：
+          它跟着 visible 一起隐藏时会让点光数量变化，进场那一刻整城重编译。 */}
+    </group>  )
 }
 
 /** 角色的关节角度，统一用阻尼过渡。 */
@@ -385,6 +585,14 @@ const pose: Pose = {
   bob: 0,
 }
 
+// 入城运镜时长：正好覆盖片头淡出，落到主角身后时 HUD 也刚好就位。
+const FLY_IN_MS = 1800
+
+const prefersReducedMotion = () =>
+  typeof window !== 'undefined' &&
+  typeof window.matchMedia === 'function' &&
+  window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
 export function PlayerRig({
   start,
   startYaw = 0,
@@ -395,8 +603,15 @@ export function PlayerRig({
   interior = false,
 }: Props) {
   const { camera } = useThree()
+  const interiorRef = useRef(interior)
+  interiorRef.current = interior
   const flying = useApp((state) => state.hud.flying)
   const model = useRef<THREE.Group>(null)
+  // 被楼、树、车挡住的部分画一层半透明剪影，任何时候都知道人在哪
+  useEffect(() => {
+    if (!model.current) return
+    return attachSilhouette(model.current)
+  }, [])
   const body = useRef<THREE.Group>(null)
   const lean = useRef<THREE.Group>(null)
   const head = useRef<THREE.Group>(null)
@@ -417,14 +632,29 @@ export function PlayerRig({
   const accumulator = useRef(0)
   const nearAccumulator = useRef(0)
   const camReady = useRef(false)
+  const fovReady = useRef(false)
   const baseFov = useRef(62)
   const desired = useRef(new THREE.Vector3())
-  const overviewBlend = useRef(0)
+  // 总览状态直接跟随 walker：切场景后第一帧就落在目标机位，不做推拉动画。
+  // 室内一律从 0 开始：城市总览的机位不能带进走廊里再慢慢收回来。
+  const overviewBlend = useRef(interior ? 0 : walker.overview ? 1 : 0)
   const overviewCenter = useRef(new THREE.Vector3())
   // 片头运镜：把城市当主角，缓慢环绕。离开片头后 3 秒内平滑交还给玩家镜头。
-  const introBlend = useRef(1)
+  // 只有真正的片头才从 1 开始；进出楼内/房间时镜头必须立刻到位，不能先飞一圈。
+  const introBlend = useRef(useApp.getState().screen === 'intro' ? 1 : 0)
+  const introLock = useRef(false)
   const introCam = useRef(new THREE.Vector3())
   const introTarget = useRef(new THREE.Vector3())
+  // 片头 → 城市：镜头绕主角俯冲落位。用球面插值而不是两点直线，
+  // 否则镜头会从楼体中间穿过。
+  const fly = useRef({
+    active: false,
+    start: 0,
+    from: new THREE.Spherical(),
+    to: new THREE.Spherical(),
+    fromLook: new THREE.Vector3(),
+  })
+  const flyVec = useRef(new THREE.Vector3())
   const target = useRef(new THREE.Vector3())
   const pivot = useRef(new THREE.Vector3())
   const forward = useRef(new THREE.Vector3())
@@ -572,11 +802,16 @@ export function PlayerRig({
   }, [camera])
 
   useEffect(() => {
-    if (start) resetWalker(start[0], start[1], startYaw, 0.24)
-    else walker.pitch = 0.24
+    if (start) {
+      resetWalker(start[0], start[1], startYaw, 0.24)
+      walker.camDist = cameraDistance
+      walker.camTarget = cameraDistance
+    } else {
+      // 回到城市时沿用进入前的俯仰与缩放（restoreReturnSpot 已经恢复过），
+      // 这样切场景时镜头只是"切回去"，不会顺便换一个机位。
+      walker.camDist = walker.camTarget
+    }
     keys.clear()
-    walker.camDist = cameraDistance
-    walker.camTarget = cameraDistance
     camReady.current = false
     if (model.current) model.current.rotation.y = startYaw + Math.PI
   }, [start?.[0], start?.[1], startYaw, interior, cameraDistance])
@@ -590,12 +825,19 @@ export function PlayerRig({
     }
     const onWheel = (event: WheelEvent) => {
       if (!document.pointerLockElement) return
+      // 城市和室内的 PlayerRig 同时挂着：不在当前场景的那个别动相机距离，
+      // 否则室内的上限会把城里的镜头也夹死在近处。
+      if (interiorRef.current !== (useApp.getState().screen === 'interior')) return
       event.preventDefault()
       // 按 deltaY 连续缩放：传统滚轮一格约 1.09 倍，触控板则是细密的小步，
       // 单次事件最大不超过 1.12 倍，避免一搓就到总览。
       const raw = THREE.MathUtils.clamp(event.deltaY * 0.0009, -0.12, 0.12)
       const factor = Math.exp(raw)
-      walker.camTarget = THREE.MathUtils.clamp(walker.camTarget * factor, CAM_MIN, CAM_MAX)
+      walker.camTarget = THREE.MathUtils.clamp(
+        walker.camTarget * factor,
+        CAM_MIN,
+        interiorRef.current ? INTERIOR_CAM_MAX : CAM_MAX,
+      )
       walker.overview = false
     }
     window.addEventListener('mousemove', onMove)
@@ -612,6 +854,11 @@ export function PlayerRig({
     return () => window.removeEventListener('blur', onBlur)
   }, [])
 
+  // 优先级 -1：把相机放到本帧最前面更新。
+  // drei 的 Html 气泡在它自己的 useFrame 里用当前相机矩阵投影，而 useFrame 是
+  // 按注册顺序（= JSX 顺序）执行的；PlayerRig 挂在最后，气泡就总是按上一帧的
+  // 相机摆位投影，人一走整排气泡相对标记抖一下——这就是"锚点气泡抖动"。
+  // 负数优先级只调整顺序，不会像正数那样接管渲染。
   useFrame((state, rawDelta) => {
     const dt = Math.min(rawDelta, 0.05)
     const app = useApp.getState()
@@ -619,7 +866,9 @@ export function PlayerRig({
     if (interior) {
       walker.flying = false
       walker.overview = false
-      walker.camTarget = THREE.MathUtils.clamp(walker.camTarget, CAM_MIN, 26)
+      // 室内最远只能拉到 INTERIOR_CAM_MAX：超过 22 会进入"远景"模式、关掉墙体避让，
+      // 镜头直接穿出房间，看到的就是楼壳里那堵灰墙。
+      walker.camTarget = THREE.MathUtils.clamp(walker.camTarget, CAM_MIN, INTERIOR_CAM_MAX)
     }
     const sprint = keys.has('shift')
     const fwdInput = (keys.has('w') ? 1 : 0) - (keys.has('s') ? 1 : 0)
@@ -701,7 +950,16 @@ export function PlayerRig({
       }
     }
 
-    if (!paused) {
+    if (!interior && ferris.riding >= 0) {
+      // 坐在摩天轮车厢里：位置每帧跟着车厢，视角照常可转
+      const seat = cabinFloor(ferris.riding)
+      walker.position.set(seat.x, seat.y, seat.z)
+      walker.velocity.set(0, 0, 0)
+      walker.vy = 0
+      walker.flying = false
+      walker.gliding = false
+      walker.grounded = true
+    } else if (!paused) {
       const nextX = walker.position.x + walker.velocity.x * dt
       const { x: px, z: pz, y: py } = walker.position
       if (!blocked(nextX, pz, colliders, py, px, pz)) walker.position.x = nextX
@@ -801,24 +1059,27 @@ export function PlayerRig({
       : 0
 
     if (walker.flying) {
-      // 飞行：速度越快身体越前倾、手臂越向后掠；悬停时几乎是直立漂浮
+      // 御云：人是坐在云上的，不是趴着飞。
+      // 大腿向前放平、小腿垂下，上身几乎直立；前进后退都不改变俯仰角——
+      // 以前按速度把身体压前倾，看着像在冲浪而不是坐着。
       const t = state.clock.elapsedTime
-      const rush = THREE.MathUtils.clamp(walker.speed / 26, 0, 1)
-      const flutter = Math.sin(t * 2.6) * 0.045
-      hipLTarget = -0.12 - rush * 0.2 + flutter
-      hipRTarget = -0.16 - rush * 0.2 - flutter
-      kneeLTarget = 0.24 + rush * 0.14
-      kneeRTarget = 0.3 + rush * 0.16
-      ankleLTarget = 0.16
-      ankleRTarget = 0.2
-      armLTarget = -0.16 - rush * 0.44 - flutter * 0.5
-      armRTarget = -0.16 - rush * 0.44 + flutter * 0.5
-      spreadL = -0.22 - rush * 0.16
-      spreadR = 0.22 + rush * 0.16
-      elbowLTarget = 0.24 + rush * 0.1
-      elbowRTarget = 0.24 + rush * 0.1
-      leanTarget = 0.14 + rush * 0.62
-      bobTarget = Math.sin(t * 2.2) * 0.02
+      const flutter = Math.sin(t * 2.6) * 0.022
+      hipLTarget = -1.34 + flutter
+      hipRTarget = -1.34 - flutter
+      kneeLTarget = 1.38
+      kneeRTarget = 1.38
+      ankleLTarget = -0.12
+      ankleRTarget = -0.12
+      // 手搭在膝上：上臂略前垂，肘部弯一点
+      armLTarget = -0.42 - flutter * 0.5
+      armRTarget = -0.42 + flutter * 0.5
+      spreadL = -0.1
+      spreadR = 0.1
+      elbowLTarget = 0.62
+      elbowRTarget = 0.62
+      // 只留极轻的呼吸式摆动，速度再快也不俯仰
+      leanTarget = 0.02
+      bobTarget = Math.sin(t * 2.2) * 0.018
     } else if (glide) {
       // 滑翔：手臂张开成翼型，腿略收
       hipLTarget = -0.14
@@ -875,14 +1136,17 @@ export function PlayerRig({
     const HIP_Y = 0.92
     const legDrop = (hip: number, knee: number) =>
       THIGH * Math.cos(hip) + SHIN * Math.cos(hip + knee)
+    // 御云时是把身体整个放低：坐着的话胯要落在云面上，
+    // 而不是保持站立高度、两腿悬在云里。
     const stanceTarget = walker.flying
-      ? 0
+      ? -0.7
       : Math.max(legDrop(pose.hipL, pose.kneeL), legDrop(pose.hipR, pose.kneeR)) +
         ANKLE_TO_SOLE -
         HIP_Y +
         FOOT_GROUND
     // 下限保护：两条腿同时弯曲时身体会很低，别让鞋底穿进路面。
-    stance.current = damp(stance.current, Math.max(stanceTarget, -0.035), 22)
+    // 御云时不受这条限制——那是故意坐到云面以下的高度。
+    stance.current = damp(stance.current, walker.flying ? stanceTarget : Math.max(stanceTarget, -0.035), 22)
 
     if (hipL.current) {
       hipL.current.rotation.x = pose.hipL
@@ -949,7 +1213,7 @@ export function PlayerRig({
     // ---------- 摄像机 ----------
     walker.camDist = damp(walker.camDist, walker.camTarget, 7)
     const dist = walker.camDist
-    const far = dist > 22
+    const far = !interior && dist > 22
     const shoulder = far ? 0 : 0.34
     overviewBlend.current = damp(overviewBlend.current, walker.overview ? 1 : 0, 4.5)
     pivot.current.set(
@@ -970,10 +1234,18 @@ export function PlayerRig({
     )
     desired.current.y = Math.max(0.7, desired.current.y)
 
-    // 片头运镜：缓慢环绕，进入城市后几秒内平滑交还玩家镜头。
+    // 片头运镜：缓慢环绕，进入城市后立即交还玩家镜头。
+    // 这里不做过渡：切场景时镜头必须是"切过去"，不能扫一段。
     // 必须叠加在常规机位之上，否则紧随其后的 desired.set 会把它覆盖掉。
-    introBlend.current = damp(introBlend.current, app.screen === 'intro' ? 1 : 0, 3.4)
+    introBlend.current = app.screen === 'intro' ? 1 : 0
     const intro = introBlend.current
+    if (intro > 0.5) {
+      introLock.current = true
+    } else if (introLock.current) {
+      // 片头结束的那一帧直接把镜头钉到玩家机位，避免一段扫镜。
+      introLock.current = false
+      camReady.current = false
+    }
     if (intro > 0.001) {
       const a = state.clock.elapsedTime * 0.03 + 0.9
       const radius = 206
@@ -985,10 +1257,32 @@ export function PlayerRig({
       desired.current.lerp(introCam.current, intro)
     }
 
+    // ---------- 片头 → 城市的入城运镜 ----------
+    // 点"进入城市"时只记了时间戳，这里在第一帧抓住当时的机位，
+    // 之后一路绕主角俯冲落到身后。开始时必须抓"当前屏幕上的机位"，
+    // 从逻辑机位起算会先跳一下再飞。
+    const flyState = fly.current
+    if (flyState.active && interior) {
+      // 万一在飞行途中进了室内，立刻收手，别把高空机位带进房间
+      flyState.active = false
+      walker.flyInStart = 0
+    }
+    if (walker.flyInStart > 0 && !flyState.active && !interior) {
+      const elapsed = performance.now() - walker.flyInStart
+      if (elapsed > 4000 || prefersReducedMotion()) {
+        walker.flyInStart = 0
+      } else {
+        flyState.active = true
+        flyState.start = walker.flyInStart
+        flyState.from.setFromVector3(flyVec.current.copy(camera.position).sub(pivot.current))
+        flyState.fromLook.copy(target.current)
+      }
+    }
+
     const ray = desired.current.clone().sub(pivot.current)
     let nearest = 1
     // 片头机位在城市外围，做墙体避让只会把镜头拽回地面。
-    if (!far && intro < 0.02) {
+    if (!far && intro < 0.02 && !flyState.active) {
       for (const collider of colliders) {
         if (collider.camera === false) continue
         const hit = segmentBox(pivot.current, ray, collider)
@@ -997,7 +1291,11 @@ export function PlayerRig({
     }
     const blockedByWall = nearest < 1
     if (blockedByWall) {
-      desired.current.copy(pivot.current).add(ray.multiplyScalar(Math.max(0.18, nearest - 0.04)))
+      // 停在墙前 0.6m：近裁剪面有 0.45m，只差 4% 的距离时镜头的视锥已经
+      // 插进墙里，屏幕上就是"看到楼里面"
+      const len = Math.max(ray.length(), 1e-3)
+      const keep = Math.max(0.06, nearest - 0.6 / len)
+      desired.current.copy(pivot.current).add(ray.multiplyScalar(keep))
     }
 
     if (!camReady.current) {
@@ -1013,7 +1311,36 @@ export function PlayerRig({
       introTarget.current.set(0, 6, 0)
       target.current.lerp(introTarget.current, intro)
     }
+
+    // 入城运镜：原点不动、半径与俯仰角一起收，镜头是"绕下来"而不是直线坠落。
+    if (flyState.active) {
+      const p = THREE.MathUtils.clamp((performance.now() - flyState.start) / FLY_IN_MS, 0, 1)
+      // 首尾都静止，用 ease-in-out；没有手势动量就不该回弹。
+      const e = p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2
+      flyState.to.setFromVector3(flyVec.current.copy(desired.current).sub(pivot.current))
+      let dTheta = flyState.to.theta - flyState.from.theta
+      dTheta = Math.atan2(Math.sin(dTheta), Math.cos(dTheta))
+      camera.position
+        .setFromSphericalCoords(
+          flyState.from.radius + (flyState.to.radius - flyState.from.radius) * e,
+          flyState.from.phi + (flyState.to.phi - flyState.from.phi) * e,
+          flyState.from.theta + dTheta * e,
+        )
+        .add(pivot.current)
+      // 视线同步从城市中心收到主角身上，交接时和常规机位完全重合。
+      target.current.lerpVectors(flyState.fromLook, pivot.current, e)
+      if (p >= 1) {
+        flyState.active = false
+        walker.flyInStart = 0
+        camera.position.copy(desired.current)
+        target.current.copy(pivot.current)
+      }
+    }
+
     camera.lookAt(target.current)
+    // 气泡（drei Html）用 matrixWorldInverse 投影，它要等渲染时才刷新；
+    // 不在这里立即更新，气泡就总是按上一帧的相机摆位，人一动就抖。
+    camera.updateMatrixWorld()
 
     const perspective = camera as THREE.PerspectiveCamera
     const fovTarget =
@@ -1021,7 +1348,12 @@ export function PlayerRig({
       (sprint && walker.speed > 6.4 && !far && intro < 0.02 ? 6 : 0) +
       (walker.overview ? 10 : 0) -
       (far && !walker.overview ? 6 : 0)
-    if (Math.abs(perspective.fov - fovTarget) > 0.02) {
+    if (!fovReady.current) {
+      // 每个场景的 Canvas 初始 fov 不一样，切场景时直接对齐，避免一次轻微推镜。
+      fovReady.current = true
+      perspective.fov = fovTarget
+      perspective.updateProjectionMatrix()
+    } else if (Math.abs(perspective.fov - fovTarget) > 0.02) {
       perspective.fov = THREE.MathUtils.damp(perspective.fov, fovTarget, 5, dt)
       perspective.updateProjectionMatrix()
     }
@@ -1031,12 +1363,16 @@ export function PlayerRig({
       nearAccumulator.current = 0
       let best: Interactable | null = null
       let bestDistance = Infinity
-      for (const item of interactables) {
+      if (!interior && ferris.riding >= 0) best = ferrisExit
+      else for (const item of interactables) {
         const planar = Math.hypot(item.x - walker.position.x, item.z - walker.position.z)
-        const vertical = Math.abs(walker.position.y)
-        if (planar < item.radius && vertical < 12 && planar < bestDistance) {
+        const vertical = Math.abs(walker.position.y - (item.y ?? 0))
+        // NPC 优先：站在楼门口聊天时，门口的入口点往往比人更近，
+        // 按 E 会直接进楼，看起来就是"对话没反应"。给人 3m 的优先度。
+        const score = planar - (item.id.startsWith('npc-') ? 3 : 0)
+        if (planar < item.radius && vertical < (item.y === undefined ? 12 : 3) && score < bestDistance) {
           best = item
-          bestDistance = planar
+          bestDistance = score
         }
       }
       app.setNearby(paused ? null : best)
@@ -1057,10 +1393,18 @@ export function PlayerRig({
         speed: walker.speed,
       })
     }
-  })
+    // 优先级 -1：先把相机摆好，再让标记气泡（drei Html）按这一帧的相机算位置。
+    // 同一优先级时气泡用的是上一帧的相机，人一走动气泡就会跟着抖。
+  }, -1)
 
   return (
-    <group ref={model} userData={{ dynamic: true }} position={[walker.position.x, 0, walker.position.z]}>
+    <group
+      ref={model}
+      userData={{ dynamic: true, noOcclude: true }}
+      position={[walker.position.x, 0, walker.position.z]}
+    >
+      {/* 挡在人前面的东西淡出去，人物永远看得见 */}
+      <OcclusionFade />
       <HoverRig visible={flying} />
       <group ref={lean} position={[0, 0.94, 0]}>
         <group ref={body} position={[0, -0.94, 0]}>

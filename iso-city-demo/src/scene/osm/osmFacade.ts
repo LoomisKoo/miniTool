@@ -102,9 +102,10 @@ const fragmentMain = /* glsl */ `
   if ( abs( nrm.y ) > 0.5 ) {
     // ---------- 屋顶 ----------
     float grain = osmNoise( vOsmWorld.xz * 0.8 );
-    outColor = mix( tint * 0.26, tint * 0.38, grain );
-    // 屋顶顺带压暗，否则夜里的楼顶是一块亮白的板
-    outColor *= mix( 1.0, 0.42, night );
+    // 屋面（防水卷材/碎石）反照率其实不低，夜里也要能看出材质，
+    // 原来压到 0.26×0.42 ≈ 0.11，俯视就是一片纯黑
+    outColor = mix( tint * 0.46, tint * 0.62, grain );
+    outColor *= mix( 1.0, 0.72, night );
     outRough = 0.95;
     outMetal = 0.02;
     outColor *= mix( 0.8, 1.0, smoothstep( 0.5, 0.95, abs( nrm.y ) ) );

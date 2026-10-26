@@ -10,6 +10,8 @@ export type DynamicBody = {
   maxX: number
   minZ: number
   maxZ: number
+  /** 底面高度：飞在空中的车不会挡住站在地面上的人 */
+  minY: number
   /** 顶面高度：玩家飞得比它高就可以越过 */
   maxY: number
   /** 登记它的组件卸载时置 false，避免残留幽灵碰撞 */
@@ -19,7 +21,7 @@ export type DynamicBody = {
 export const dynamicBodies: DynamicBody[] = []
 
 export function addBody(maxY: number): DynamicBody {
-  const body: DynamicBody = { minX: 0, maxX: 0, minZ: 0, maxZ: 0, maxY, active: true }
+  const body: DynamicBody = { minX: 0, maxX: 0, minZ: 0, maxZ: 0, minY: 0, maxY, active: true }
   dynamicBodies.push(body)
   return body
 }
@@ -48,6 +50,8 @@ export function hitsDynamic(x: number, z: number, radius: number, y: number) {
   for (const body of dynamicBodies) {
     if (!body.active) continue
     if (y > body.maxY - 0.35) continue
+    // 从悬空的车底下走过
+    if (y + 0.9 < body.minY) continue
     if (x + radius > body.minX && x - radius < body.maxX && z + radius > body.minZ && z - radius < body.maxZ) {
       return true
     }
@@ -63,6 +67,7 @@ export function pushOut(x: number, z: number, radius: number, y: number) {
   for (const body of dynamicBodies) {
     if (!body.active) continue
     if (y > body.maxY - 0.35) continue
+    if (y + 0.9 < body.minY) continue
     const hit =
       x + radius > body.minX && x - radius < body.maxX && z + radius > body.minZ && z - radius < body.maxZ
     if (!hit) continue

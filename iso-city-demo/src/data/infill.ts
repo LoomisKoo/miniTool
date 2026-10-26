@@ -9,8 +9,13 @@ import {
   mainStreet,
   plaza,
   plazaFountain,
+  roadRects,
   southCross,
   westAvenue,
+  river,
+  riverSegments,
+  ferrisWheel,
+  walkerRoutes,
   type BuildingDef,
   type BuildingStyle,
 } from './city'
@@ -57,13 +62,20 @@ function reservedRects(): Rect[] {
     rectOf(alleyMouth.x, alleyMouth.z, alleyMouth.w, alleyMouth.d, 2),
     rectOf(cedarLane.x, cedarLane.z, cedarLane.w, cedarLane.d, 2),
     // 空中连廊（CityScene / SkyBridges）下方的地块留空，别让新楼把桥穿掉
-    rectOf(47, -16, 30, 9, 2),
-    rectOf(30, 74, 30, 9, 2),
-    rectOf(-22, 82, 9, 28, 2),
+    rectOf(-6.5, -56.5, 49, 9, 2),
+    // 河面、河岸步道、码头、摩天轮都不许建楼
+    rectOf(river.x, river.z + 2, 320, river.d + 26, 2),
+    rectOf(ferrisWheel.x, ferrisWheel.z + 3, 42, 18, 2),
   ]
+  // 车行道本身也不可建设。“沿街布置”本来就会让楼退到路外，但地图两端
+  // 和路口的边界情况会漏：有几栋街屋正好压在主街和南横街上，车流从楼里
+  // 穿过去。这里把五条车行道显式列进禁区，杜绝这种情况。
+  for (const r of roadRects) {
+    list.push({ x0: r.x0 - 1.5, x1: r.x1 + 1.5, z0: r.z0 - 1.5, z1: r.z1 + 1.5 })
+  }
   for (const b of buildings) {
     // 可进入的建筑门前要留出通道，否则招牌和入口会被新楼堵死
-    list.push(rectOf(b.x, b.z, b.w, b.d, b.target ? 10 : 4))
+    list.push(rectOf(b.x, b.z, b.w, b.d, b.target ? 10 : 6))
   }
   return list
 }
@@ -121,18 +133,24 @@ export function generateInfill(): BuildingDef[] {
         const z = street.axis === 'z' ? t : out1
         const ww = street.axis === 'z' ? d : w
         const dd = street.axis === 'z' ? w : d
-        let lot = rectOf(x, z, ww, dd, 0.6)
+        // 退让时是真的把楼改窄：以前只缩小判定用的地块，楼还是原尺寸，
+        // 于是"没有重叠"的两栋楼在场景里只剩 1m 的缝。
+        // pad 要给足：街屋之间至少留 7m，加上阳台挑出也有 4m 以上。
+        let bw = dd
+        let lot = rectOf(x, z, ww, bw, 3.5)
         if (blocked.some((r) => overlaps(lot, r))) {
           // 主地块被占，退一步试试更窄的街屋
-          lot = rectOf(x, z, ww, Math.max(8, dd * 0.62), 0.6)
+          bw = Math.max(8, dd * 0.62)
+          lot = rectOf(x, z, ww, bw, 3.5)
           if (blocked.some((r) => overlaps(lot, r))) continue
         }
 
         const style = STYLES[Math.floor(rand() * STYLES.length)]
         // 越靠近城市中心越高，外围压成低矮的街墙
         const core = 1 - Math.min(1, Math.hypot(x, z) / 170)
-        const base = 12 + core * 26
-        const h = Math.round(base + rand() * (18 + core * 44))
+        // 整体拔高：真实街区的楼高远大于路宽，街道才有"峡谷"的包围感
+        const base = 16 + core * 34
+        const h = Math.round(base + rand() * (24 + core * 62))
 
         // 临街面：竖街看 x 方向，横街看 z 方向
         const facing =
@@ -150,7 +168,7 @@ export function generateInfill(): BuildingDef[] {
           x,
           z,
           w: ww,
-          d: dd,
+          d: bw,
           h,
           facing,
           style,
@@ -185,11 +203,12 @@ export function generateInfill(): BuildingDef[] {
         const z = horizontal ? side * (edge + d / 2) : t
         const ww = horizontal ? w : d
         const dd = horizontal ? d : w
-        const lot = rectOf(x, z, ww, dd, 0.5)
+        // 外圈同样留出 MIN_GAP：判定地块放大，楼本身不再缩水
+        const lot = rectOf(x, z, ww, dd, 3.5)
         if (blocked.some((r) => overlaps(lot, r))) continue
 
         const style = STYLES[Math.floor(rand() * STYLES.length)]
-        const h = 34 + Math.round(rand() * 58)
+        const h = 48 + Math.round(rand() * 92)
         // 外圈楼的临街面朝向城内
         const facing =
           horizontal
@@ -237,3 +256,93 @@ export const infillLamps: Array<[number, number]> = infill
     const nz = b.facing === 'south' ? 1 : b.facing === 'north' ? -1 : 0
     return [b.x + nx * (half + 2.1), b.z + nz * (half + 2.1)] as [number, number]
   })
+
+/** 手写地标 + 程序化外围街区的完整楼表。车流和碰撞都按这张表避让。 */
+export const allBuildings: BuildingDef[] = [...buildings, ...infill]
+
+/** 点位是否落在某栋楼的平面内（道具摆位用）。 */
+export function insideBuilding(x: number, z: number, pad = 0): boolean {
+  for (const b of allBuildings) {
+    if (x > b.x - b.w / 2 - pad && x < b.x + b.w / 2 + pad && z > b.z - b.d / 2 - pad && z < b.z + b.d / 2 + pad) return true
+  }
+  return false
+}
+
+// ---------------------------------------------------------------------------
+// 人行道
+// ---------------------------------------------------------------------------
+//
+// 行人路线原来是几条手写的长直线，其中两条正好从楼里穿过去（南岸塔楼、
+// 街角咖啡、东岸商场）。这里把每条线按"楼体 + 河面 + 喷泉 + 摩天轮"切成
+// 若干段可走的直线，行人只在真正空着的段落上来回走。
+
+/** 行人半宽：判定避让时按这条带宽算。 */
+const PED_HALF = 1.1
+/** 太短的残段没有意义（走两步就折返）。 */
+const MIN_WALK = 16
+
+type Interval = [number, number]
+
+const blockers: Rect[] = (() => {
+  const list: Rect[] = allBuildings.map((b) => rectOf(b.x, b.z, b.w, b.d, 1.2))
+  // 河面：只有桥/大道那几跨能走，其它段落一律截断
+  for (const [x0, x1] of riverSegments) {
+    list.push({ x0, x1, z0: river.z - river.d / 2 - 2, z1: river.z + river.d / 2 + 2 })
+  }
+  list.push(rectOf(plazaFountain.x, plazaFountain.z, plazaFountain.r * 2, plazaFountain.r * 2, 1.4))
+  list.push(rectOf(ferrisWheel.x, ferrisWheel.z, ferrisWheel.radius * 2, ferrisWheel.radius * 2, 2))
+  return list
+})()
+
+function freeSpans(axis: 'x' | 'z', offset: number, from: number, to: number): Interval[] {
+  const lo = Math.min(from, to)
+  const hi = Math.max(from, to)
+  const hits: Interval[] = []
+  for (const r of blockers) {
+    const a0 = axis === 'x' ? r.x0 : r.z0
+    const a1 = axis === 'x' ? r.x1 : r.z1
+    const o0 = axis === 'x' ? r.z0 : r.x0
+    const o1 = axis === 'x' ? r.z1 : r.x1
+    if (o1 <= offset - PED_HALF || o0 >= offset + PED_HALF) continue
+    if (a1 <= lo || a0 >= hi) continue
+    hits.push([Math.max(lo, a0), Math.min(hi, a1)])
+  }
+  hits.sort((p, q) => p[0] - q[0])
+  const out: Interval[] = []
+  let cursor = lo
+  for (const [h0, h1] of hits) {
+    if (h0 - cursor > 0.5) out.push([cursor, h0])
+    cursor = Math.max(cursor, h1)
+  }
+  if (hi - cursor > 0.5) out.push([cursor, hi])
+  return out.filter(([a, b]) => b - a >= MIN_WALK)
+}
+
+export type PedestrianRoute =
+  | { kind: 'line'; axis: 'x' | 'z'; offset: number; from: number; to: number; speed: number; dir: 1 | -1 }
+  | { kind: 'circle'; cx: number; cz: number; r: number; speed: number; dir: 1 | -1 }
+
+export const pedestrianRoutes: PedestrianRoute[] = (() => {
+  const out: PedestrianRoute[] = []
+  let flip = 1
+  for (const route of walkerRoutes) {
+    if (route.kind === 'circle') {
+      // 环形步道按圆周采样判定：广场那两圈要绕开喷泉，
+      // 用外接矩形判会把整圈都误杀（喷泉在圈里侧，本来就不挡路）。
+      let clash = false
+      for (let i = 0; i < 48 && !clash; i++) {
+        const a = (i / 48) * Math.PI * 2
+        const px = route.cx + Math.cos(a) * route.r
+        const pz = route.cz + Math.sin(a) * route.r
+        clash = blockers.some((r) => px > r.x0 && px < r.x1 && pz > r.z0 && pz < r.z1)
+      }
+      if (!clash) out.push(route)
+      continue
+    }
+    for (const [a, b] of freeSpans(route.axis, route.offset, route.from, route.to)) {
+      out.push({ ...route, from: a, to: b, dir: (flip > 0 ? 1 : -1) as 1 | -1 })
+      flip = -flip
+    }
+  }
+  return out
+})()
