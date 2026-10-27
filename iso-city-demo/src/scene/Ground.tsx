@@ -154,9 +154,16 @@ float groundWet(vec2 p) {
         twoScale
           ? `vec2 groundUvA = vGroundXZ / uTile;
   vec2 groundUvB = mat2(0.86, -0.51, 0.51, 0.86) * vGroundXZ / (uTile * 2.63);
-  vec4 sampledDiffuseColor = mix(texture2D(map, groundUvA), texture2D(map, groundUvB), 0.45);
-  diffuseColor *= sampledDiffuseColor;
   float viewDist = length(vViewPosition);
+  // 远处地面本来就被 uFlat 盖掉了（uFadeFar 之外完全不看贴图），
+  // 再采第二张、再算一遍噪声纯属白白吃带宽。detail 在 0.7·uFadeFar
+  // 开始收，到 uFadeFar 归零，交接处正好落在完全看不见细节的距离上。
+  float groundDetail = 1.0 - smoothstep(uFadeFar * 0.7, uFadeFar, viewDist);
+  vec4 sampledDiffuseColor = texture2D(map, groundUvA);
+  if (groundDetail > 0.002) {
+    sampledDiffuseColor = mix(sampledDiffuseColor, texture2D(map, groundUvB), 0.45 * groundDetail);
+  }
+  diffuseColor *= sampledDiffuseColor;
   diffuseColor.rgb = mix(diffuseColor.rgb, uFlat, smoothstep(uFadeNear, uFadeFar, viewDist));`
           : `vec4 sampledDiffuseColor = texture2D(map, vGroundXZ / uTile);
   diffuseColor *= sampledDiffuseColor;
@@ -169,9 +176,12 @@ float groundWet(vec2 p) {
   if (uWet > 0.001) {
     // 湿处只比干处稍微细腻一点：以前这里把粗糙度直接压到 0.07，
     // 地面变成一面镜子，整条街都在反光。街面是沥青/石材，不是水塘。
-    float wetSpot = groundWet(vGroundXZ);
+    // 噪声（两次 value noise，八次 sin）按距离收掉：远景的湿斑本来就
+    // 被 uFlat 抹平，继续算只是给每个远处的像素加一笔开销。
+    float wetDetail = 1.0 - smoothstep(uFadeFar * 0.7, uFadeFar, length(vViewPosition));
+    float wetSpot = wetDetail > 0.002 ? groundWet(vGroundXZ) * wetDetail : 0.0;
     roughnessFactor = mix(roughnessFactor, 0.5, wetSpot * uWet * 0.6);
-    roughnessFactor = mix(roughnessFactor, roughnessFactor * 0.8, uWet * 0.5);
+    roughnessFactor = mix(roughnessFactor, roughnessFactor * 0.8, uWet * 0.5 * wetDetail);
   }`,
       )
   }
