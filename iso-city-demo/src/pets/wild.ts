@@ -25,10 +25,11 @@ export type WildPet = {
   scale: number
   spot: WildSpot
   bucket: number
-  /** 已领养时才有：名字、主人、领养时间 */
+  /** 已领养时才有：名字、主人、领养时间、最后一次吃饱的时间 */
   nickname?: string | null
   owner?: { id: string; name: string; color: string } | null
   adoptedAt?: string | null
+  hungerAt?: string | null
 }
 
 /** 按物种表里的 spawn 权重抽：猫狗最常见，老虎、熊猫这种一小时里未必碰得到一只。 */

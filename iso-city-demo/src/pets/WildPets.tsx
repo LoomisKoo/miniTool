@@ -19,6 +19,7 @@ import { currentBucket, wildPool, type WildPet } from './wild'
 import { live } from './live'
 import { isBlinking, voxelMaterial, type VoxelPet } from './voxel/build'
 import { buildModels, partMatrices, petModel, petScale } from './voxel/runtime'
+import { HUNGRY_AT, hungerOf } from './hunger'
 import { insideRoad } from '../data/city'
 
 function PetInteractionTag() {
@@ -144,6 +145,8 @@ type Flock = {
   pets: WildPet[]
   batches: BreedBatch[]
   shadows: THREE.InstancedMesh
+  /** 每只宠物上次写进 instanceColor 的明度；-1 = 还没写过 */
+  dim: Float32Array
 }
 
 const keyOf = (pet: WildPet) => `${pet.species}/${pet.breed.id}`
@@ -183,7 +186,7 @@ function buildFlock(pets: WildPet[]): Flock {
   shadows.renderOrder = 1
   group.add(shadows)
 
-  return { group, pets, batches, shadows }
+  return { group, pets, batches, shadows, dim: new Float32Array(pets.length).fill(-1) }
 }
 
 /** 几何属于模型缓存（图鉴缩略图也在用），这里只释放实例 */
@@ -206,8 +209,12 @@ const _pos = new THREE.Vector3()
 const _scl = new THREE.Vector3()
 const _q = new THREE.Quaternion()
 const _yAxis = new THREE.Vector3(0, 1, 0)
+const _tint = new THREE.Color()
 const ZERO = new THREE.Matrix4().makeScale(0, 0, 0)
 const locals: THREE.Matrix4[] = []
+/** 饱腹度的重算节流：每秒一次。 */
+let hungerTick = -1e9
+let hungerNow = Date.now()
 
 /** 只在「走」的时段推进的漫游时间：停下时位置冻结，动画切成待机。 */
 function roamClock(t: number) {
@@ -219,6 +226,11 @@ function roamClock(t: number) {
 
 function animateFlock(flock: Flock, time: number) {
   const { pets, shadows } = flock
+  // 饱腹度每秒重算一次就够（它是小时级的慢变量），不必每帧 Date.parse 一遍。
+  if (time - hungerTick > 1) {
+    hungerTick = time
+    hungerNow = Date.now()
+  }
 
   if (live.length !== pets.length) {
     while (live.length < pets.length) {
@@ -237,6 +249,7 @@ function animateFlock(flock: Flock, time: number) {
         nickname: null,
         owner: null,
         adoptedAt: null,
+        hunger: 100,
       })
     }
     live.length = pets.length
@@ -253,7 +266,11 @@ function animateFlock(flock: Flock, time: number) {
 
       // 已领养宠物也会在城市里游荡，但活动范围收敛一些，
       // 这样主人和访客更容易在它的常驻街区再次找到它。
-      const roamScale = pet.owner ? 0.72 : 0.9
+      // 饿了再收一次：半径缩到 0.25，它就基本缩在常驻点不动了——
+      // 这是「主人不上线」最直接的可视信号，路过的所有人都看得见。
+      const hunger = pet.owner ? hungerOf(pet, hungerNow) : 100
+      const hungry = hunger < HUNGRY_AT
+      const roamScale = hungry ? 0.25 : pet.owner ? 0.72 : 0.9
       const pose = petPose(pet.id, pet.spot, clock.roam, roamScale)
       // 宠物不是刚体：玩家可以走到身边观察和互动，不应被宠物的躲避逻辑反向挤走。
       // 未领养宠物仍然保持自己的漫游轨迹，交互状态由 nearby 负责表达。
@@ -268,7 +285,8 @@ function animateFlock(flock: Flock, time: number) {
       let yaw = Math.atan2(heading.x, heading.z)
       // 被吓到时扭头往外跑
       if (shy) yaw = Math.atan2(away.x - walker.position.x, away.z - walker.position.z)
-      const walking = shy || clock.walking
+      // 饿的时候不切走路动作：半径只剩几十厘米，原地迈腿比站着更假。
+      const walking = shy || (clock.walking && !hungry)
       // 跑开时动作加快
       const animTime = (time + offset) * (shy ? 1.6 : 1)
 
@@ -287,6 +305,24 @@ function animateFlock(flock: Flock, time: number) {
           batch.blink.setMatrixAt(slot, blinking ? _out : ZERO)
         } else {
           batch.parts[k].setMatrixAt(slot, _out)
+        }
+      }
+
+      /* 毛色：饿的时候压暗。instanceColor 在 three 里是乘到顶点色上的，
+         所以只写一个灰度因子就行，不需要重做几何。
+         只在变化超过 1/64 时写一次：饱腹度是分钟级的慢变量，逐帧写
+         等于每帧上传一遍整条颜色缓冲。 */
+      const shade = pet.owner ? 0.6 + 0.4 * (hunger / 100) : 1
+      const rounded = Math.round(shade * 64) / 64
+      if (Math.abs(rounded - flock.dim[index]) > 1e-4) {
+        flock.dim[index] = rounded
+        for (const mesh of batch.parts) {
+          mesh.setColorAt(slot, _tint.setScalar(rounded))
+          if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
+        }
+        if (batch.blink) {
+          batch.blink.setColorAt(slot, _tint.setScalar(rounded))
+          if (batch.blink.instanceColor) batch.blink.instanceColor.needsUpdate = true
         }
       }
 
@@ -312,6 +348,7 @@ function animateFlock(flock: Flock, time: number) {
       info.nickname = pet.nickname ?? null
       info.owner = pet.owner ?? null
       info.adoptedAt = pet.adoptedAt ?? null
+      info.hunger = hunger
     }
     for (const mesh of batch.parts) mesh.instanceMatrix.needsUpdate = true
     if (batch.blink) batch.blink.instanceMatrix.needsUpdate = true
@@ -349,6 +386,7 @@ export function WildPets() {
       nickname: pet.nickname,
       owner: pet.owner,
       adoptedAt: pet.adoptedAt,
+      hungerAt: pet.hungerAt ?? null,
     }))
     return [...wild, ...kept]
   }, [bucket, adoptedPets])

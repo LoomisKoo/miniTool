@@ -2060,6 +2060,52 @@ kbd {
   font-weight: 600;
 }
 
+/* 饱腹度：一条横贯的细条 + 右侧文案。饿的时候整条变暖色，
+   和面板里其它的琥珀色提示同一套语言。 */
+.pet-hunger {
+  position: relative;
+  flex: 0 0 96px;
+  margin-left: auto;
+  padding-bottom: 13px;
+  text-align: right;
+}
+
+.pet-hunger::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(246, 241, 230, 0.12);
+}
+
+.pet-hunger > i {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 4px;
+  border-radius: 999px;
+  background: #7fbf9b;
+  transition: width 0.3s ease;
+}
+
+.pet-hunger > em {
+  font-size: 10px;
+  font-style: normal;
+  letter-spacing: 0.04em;
+  color: var(--ink-soft);
+}
+
+.pet-hunger.is-hungry > i {
+  background: #d8a05e;
+}
+
+.pet-hunger.is-hungry > em {
+  color: #d8a05e;
+}
+
 .pet-profile p {
   margin: 0;
   font-size: 11px;

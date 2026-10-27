@@ -7,6 +7,7 @@ import { breedOf, catalogBreedsOf, catalogKeyOf, RARITY_LABEL, RARITY_STARS, SPE
 import { petThumb } from '../catalog/thumb3d'
 import { voxelMaterial } from '../pets/voxel/build'
 import { partMatrices, petModel, petScale } from '../pets/voxel/runtime'
+import { HUNGRY_AT, hungerLabel, hungerOf } from '../pets/hunger'
 import type { FurnitureType, PetDetail, Post, SpaceDetail } from '../types'
 import { api } from '../api'
 import { cityShareUrl, copyText, mediaGradient, playSoundPlaceholder, relativeTime } from '../util'
@@ -1632,6 +1633,9 @@ function PetPanel({ id }: { id: string }) {
   const pet = detail.pet
   const breed = breedOf(pet.speciesId, pet.breedId)
   const title = pet.nickname || breed.name
+  // 饱腹度由「最后一次吃饱的时间」推导，不进数据库也不需要轮询。
+  const hunger = hungerOf(pet, Date.now())
+  const hungry = hunger < HUNGRY_AT
   return (
     <Modal label="宠物主页" title={title} subtitle={`${breed.name} · 主人 @${pet.owner.name}`} onClose={closePanel} wide>
       <div className="pet-profile">
@@ -1640,6 +1644,10 @@ function PetPanel({ id }: { id: string }) {
           <b>@{pet.owner.name}</b>
           <p>{relativeTime(pet.adoptedAt)}领养 · 给它留一句话，主人回来时会看到。</p>
         </div>
+        <span className={`pet-hunger${hungry ? ' is-hungry' : ''}`} title={`饱腹度 ${Math.round(hunger)}%`}>
+          <i style={{ width: `${Math.max(3, Math.round(hunger))}%` }} />
+          <em>{hungerLabel(hunger)}</em>
+        </span>
       </div>
       <PostComposer
         targetType="pet"

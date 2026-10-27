@@ -22,6 +22,8 @@ export type LivePet = {
   nickname: string | null
   owner: { id: string; name: string; color: string } | null
   adoptedAt: string | null
+  /** 饱腹度 0~100（按最后一次喂食时间推导）；野生恒为 100 */
+  hunger: number
 }
 
 export const live: LivePet[] = []

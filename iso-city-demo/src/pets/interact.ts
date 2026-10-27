@@ -10,6 +10,7 @@ import { useApp, type DialogChoice } from '../store'
 import { catalogKeyOf } from '../catalog/species'
 import type { Interactable } from '../scene/PlayerRig'
 import { live } from './live'
+import { HUNGRY_AT } from './hunger'
 import { insideRoad } from '../data/city'
 
 const REACH = 3.4
@@ -52,13 +53,18 @@ export function petInteractables(): Interactable[] {
   const key = catalogKeyOf(pet.speciesId, pet.breedId)
   const name = pet.nickname || pet.breed
   const owner = pet.owner
+  // 饿的宠物只用一句话传达：它是被遗忘了，不是出了故障。
+  // 访客看到的那句带点怂恿，主人看到的带点催促。
+  const hungry = Boolean(owner) && pet.hunger < HUNGRY_AT
 
   return [
     {
       id: `pet-${pet.id}`,
       label: name,
       hint: owner
-        ? `按 E 互动 · 主人 @${owner.name}`
+        ? hungry
+          ? `按 E 互动 · 它好像饿了`
+          : `按 E 互动 · 主人 @${owner.name}`
         : useApp.getState().pets.length > 0
           ? '按 E 互动'
           : '按 E 互动 · 可以领养',
@@ -79,11 +85,19 @@ export function petInteractables(): Interactable[] {
             useApp.getState().closeDialog()
             useApp.getState().openPanel({ type: 'pet', id: pet.id })
           }
+          const feed = async () => {
+            const ok = await useApp.getState().feedPet(pet.id)
+            if (ok) openHome()
+          }
           // 看主页对谁都开放：喂食只是「能不能写」的门槛，不是「能不能看」的门槛。
-          // 自己的宠物不显示喂食——主人留言本来就不需要喂，白扣一份口粮没有意义。
+          // 自己的宠物平时不显示喂食（留言不需要喂，白扣一份口粮没有意义）；
+          // 只有它饿的时候才把「喂它」摆出来——那时喂食才真的有作用。
           const choices: DialogChoice[] = own
             ? [
-                { label: '看它的主页', primary: true, onClick: openHome },
+                ...(hungry
+                  ? [{ label: '喂它', note: '消耗 1 份口粮', primary: true, onClick: feed }]
+                  : []),
+                { label: '看它的主页', primary: !hungry, onClick: openHome },
                 {
                   label: '给它改名',
                   onClick: () => {
@@ -98,11 +112,7 @@ export function petInteractables(): Interactable[] {
                   label: '喂它一顿',
                   note: '消耗 1 份口粮',
                   primary: true,
-                  onClick: async () => {
-                    const ok = await useApp.getState().feedPet(pet.id)
-                    if (!ok) return
-                    openHome()
-                  },
+                  onClick: feed,
                 },
                 { label: '看它的主页', onClick: openHome },
                 { label: '先不打扰它', onClick: () => useApp.getState().closeDialog() },
@@ -111,8 +121,17 @@ export function petInteractables(): Interactable[] {
             name,
             role: `主人 @${owner.name}`,
             lines: own
-              ? [...lines, '它是你的伙伴，在图鉴顶部随时能找到它。']
-              : [...lines, `它的主人是 @${owner.name}，平时由对方照顾。`],
+              ? [
+                  ...lines,
+                  hungry
+                    ? '它趴在常去的那个角落，没什么精神——你有一阵子没来看它了。'
+                    : '它是你的伙伴，在图鉴顶部随时能找到它。',
+                ]
+              : [
+                  ...lines,
+                  `它的主人是 @${owner.name}，平时由对方照顾。`,
+                  ...(hungry ? ['它好像已经等了很久，毛都暗下去了。'] : []),
+                ],
             x: pet.x,
             z: pet.z,
             owner: petOwner,
