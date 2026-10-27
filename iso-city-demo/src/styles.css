@@ -282,6 +282,37 @@ a {
   background: rgba(169, 99, 62, 0.08);
 }
 
+/* 面板渲染异常时的兜底卡片：替代整棵 React 树被卸载后的一片黑。 */
+.panel-crash {
+  position: fixed;
+  left: 50%;
+  bottom: 40px;
+  transform: translateX(-50%);
+  z-index: 90;
+  width: min(420px, calc(100vw - 32px));
+  padding: 18px 20px;
+  border: 1px solid rgba(246, 241, 230, 0.16);
+  border-radius: 10px;
+  background: rgba(22, 26, 28, 0.94);
+  color: var(--cream, #f6f1e6);
+  backdrop-filter: blur(10px);
+}
+
+.panel-crash b {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.panel-crash p {
+  margin: 0 0 12px;
+  font-size: 11px;
+  line-height: 1.6;
+  opacity: 0.7;
+  word-break: break-word;
+}
+
 .loading-block {
   display: flex;
   align-items: center;

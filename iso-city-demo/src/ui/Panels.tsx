@@ -1661,6 +1661,12 @@ function PetPanel({ id }: { id: string }) {
   const pet = detail.pet
   const breed = breedOf(pet.speciesId, pet.breedId)
   const title = pet.nickname || breed.name
+  // 主人可能为空：领养记录留着，但对应的访客数据不在了（旧库、演示数据）。
+  // 这里不能假设 owner 一定存在，否则一个 null 就会把整棵 React 树卸掉。
+  const owner = pet.owner ?? null
+  // 收藏字段是后加的：服务端没重启时会缺，缺了就当"还没收藏"渲染。
+  const favorite = detail.favorite ?? { favorited: false, count: 0 }
+  const notes = detail.notes ?? []
   // 饱腹度由「最后一次吃饱的时间」推导，不进数据库也不需要轮询。
   const hunger = hungerOf(pet, Date.now())
   const hungry = hunger < HUNGRY_AT
@@ -1668,17 +1674,22 @@ function PetPanel({ id }: { id: string }) {
   const me = user?.id
   const today = new Date().toDateString()
   const postedToday = Boolean(
-    me &&
-      detail.notes.some(
-        (note) => note.authorId === me && !note.parentId && new Date(note.createdAt).toDateString() === today,
-      ),
+    me && notes.some((note) => note.authorId === me && !note.parentId && new Date(note.createdAt).toDateString() === today),
   )
   return (
-    <Modal label="宠物主页" title={title} subtitle={`${breed.name} · 主人 @${pet.owner.name}`} onClose={closePanel} wide>
+    <Modal
+      label="宠物主页"
+      title={title}
+      subtitle={owner ? `${breed.name} · 主人 @${owner.name}` : `${breed.name} · 主人暂时不在`}
+      onClose={closePanel}
+      wide
+    >
       <div className="pet-profile">
-        <span className="avatar" style={{ background: pet.owner.color }}>{pet.owner.name.slice(0, 1)}</span>
+        <span className="avatar" style={{ background: owner?.color ?? '#4a4a4a' }}>
+          {(owner?.name ?? '?').slice(0, 1)}
+        </span>
         <div>
-          <b>@{pet.owner.name}</b>
+          <b>{owner ? `@${owner.name}` : '主人暂时不在'}</b>
           <p>{relativeTime(pet.adoptedAt)}领养 · 给它留一句话，主人回来时会看到。</p>
         </div>
         <span className={`pet-hunger${hungry ? ' is-hungry' : ''}`} title={`饱腹度 ${Math.round(hunger)}%`}>
@@ -1688,19 +1699,19 @@ function PetPanel({ id }: { id: string }) {
       </div>
       <div className="detail-strip">
         <div className="detail-meta">
-          <span className="pill soft">{detail.favorite.count} 人收藏</span>
-          <span className="pill soft">{detail.notes.length} 条留言</span>
+          <span className="pill soft">{favorite.count} 人收藏</span>
+          <span className="pill soft">{notes.length} 条留言</span>
         </div>
         <div className="detail-strip-actions">
           <button
-            className={`mini-btn ${detail.favorite.favorited ? 'on' : ''}`}
+            className={`mini-btn ${favorite.favorited ? 'on' : ''}`}
             onClick={() => {
               void toggleFavorite('pet', pet.id).then((result) => {
                 if (result) setDetail((prev) => (prev ? { ...prev, favorite: result } : prev))
               })
             }}
           >
-            {detail.favorite.favorited ? '★ 已收藏' : '☆ 收藏'}
+            {favorite.favorited ? '★ 已收藏' : '☆ 收藏'}
           </button>
         </div>
       </div>
@@ -1712,7 +1723,7 @@ function PetPanel({ id }: { id: string }) {
         locked={postedToday}
         onDone={load}
       />
-      <PostList posts={detail.notes} targetType="pet" targetId={pet.id} targetName={title} />
+      <PostList posts={notes} targetType="pet" targetId={pet.id} targetName={title} />
     </Modal>
   )
 }

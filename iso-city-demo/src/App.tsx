@@ -5,6 +5,7 @@ import { useApp } from './store'
 import { useGameInput } from './game/input'
 import { Hud } from './ui/Hud'
 import { Panels } from './ui/Panels'
+import { PanelBoundary } from './ui/PanelBoundary'
 import { Dialog } from './ui/Dialog'
 import { Intro } from './ui/Intro'
 import { Toast } from './ui/Toast'
@@ -13,6 +14,9 @@ import { music } from './audio/music'
 export default function App() {
   const screen = useApp((state) => state.screen)
   const booted = useApp((state) => state.booted)
+  // 换一个面板就重置兜底层：同一个面板反复失败也仍然能看到回退卡片。
+  const panel = useApp((state) => state.panel)
+  const panelKey = panel ? `${panel.type}:${'id' in panel ? panel.id : ''}` : 'none'
   const musicOn = useApp((state) => state.musicOn)
   const night = useApp((state) => state.night)
   const boot = useApp((state) => state.boot)
@@ -64,10 +68,12 @@ export default function App() {
 
       {screen === 'intro' && <Intro />}
       <Hud />
-      <Panels />
-      {/* 对话条：openDialog 早就写好了，但没有任何地方挂载它，
-          所以按 E 只会点亮 nearby，屏幕上什么都不会出现 */}
-      <Dialog />
+      {/* 面板与对话单独圈一层：它们最容易因为服务端少返回一个字段而抛错，
+          而 React 一旦抛错会卸载整棵树，连画布一起变成黑屏。 */}
+      <PanelBoundary resetKey={panelKey} onClose={() => useApp.getState().closePanel()}>
+        <Panels />
+        <Dialog />
+      </PanelBoundary>
       <Toast />
 
       {!booted && screen !== 'intro' && (
