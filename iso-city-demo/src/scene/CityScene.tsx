@@ -601,35 +601,52 @@ export function Environment({
 }
 
 /**
- * 片头期间冻结阴影贴图。
+ * 阴影贴图按预算刷新，而不是每帧重画。
  *
- * 欢迎页的相机在 96~100m 高空俯瞰整座城，所有会投影的几何都在阴影相机
- * 视锥里，2048² 的深度图每帧都要把整座城重画一遍——这是片头那几十毫秒
- * 一帧里最大的一块。而这时画面被 0.98 不透明度的欢迎页遮罩盖着，脚下
- * 那点阴影根本看不见。
+ * 主光是一盏覆盖 380m 的平行光，2048² 深度的整张图每帧都要重渲染一遍：
+ * 场景里会投影的东西（合批后的整片城区 + 车流 + 行人）全部落在阴影相机里。
+ * 但其中真正在动的只有车、行人和宠物，而它们投出的影子边缘本来就是软的
+ * （shadow-radius 2.2），落后一两帧完全看不出来。
  *
- * 进城的瞬间恢复自动更新；那一刻遮罩正在淡出、镜头也在飞，阴影刷新
- * 完全藏在转场里。
+ * 所以这里把 autoUpdate 关掉，改成按时间预算手动置 needsUpdate：
+ *   - 60fps 时阴影大约 11Hz 刷新，阴影 pass 的提交量直接降到 1/5；
+ *   - 帧时间本来就长的时候（15fps）每帧都刷，不会比原来更差；
+ *   - 进出片头各强制刷一次，避免带着上一套光照的旧阴影。
+ *
+ * 注意：autoUpdate 只在这一个地方改。以前片头那段和进城恢复各写一次，
+ * 现在两个 owner 都交给这里，行为不再依赖挂载顺序。
  */
-function IntroShadowPause() {
+const SHADOW_INTERVAL = 0.09
+
+function ShadowBudget() {
   const gl = useThree((state) => state.gl)
   const screen = useApp((state) => state.screen)
-  const frames = useRef(0)
+  const acc = useRef(0)
 
   useEffect(() => {
-    frames.current = 0
-    // 切回城市：立刻恢复，并强制刷新一帧，避免留下片头的旧阴影
-    if (screen !== 'intro') {
-      gl.shadowMap.autoUpdate = true
-      gl.shadowMap.needsUpdate = true
+    const map = gl.shadowMap
+    const before = map.autoUpdate
+    map.autoUpdate = false
+    map.needsUpdate = true
+    return () => {
+      map.autoUpdate = before
+      map.needsUpdate = true
     }
+  }, [gl])
+
+  useEffect(() => {
+    acc.current = 0
+    gl.shadowMap.needsUpdate = true
   }, [screen, gl])
 
-  useFrame(() => {
-    if (screen !== 'intro') return
-    frames.current += 1
-    // 头两帧要正常渲染，否则贴图里什么都没有
-    if (frames.current === 2) gl.shadowMap.autoUpdate = false
+  useFrame((_, rawDelta) => {
+    // 片头：欢迎页 0.98 不透明度的遮罩盖着，脚下的阴影根本看不见，
+    // 这段时间一次都不刷（那几十毫秒一帧的卡顿主要就是这块）。
+    if (screen === 'intro') return
+    acc.current += Math.min(rawDelta, 0.25)
+    if (acc.current < SHADOW_INTERVAL) return
+    acc.current = 0
+    gl.shadowMap.needsUpdate = true
   })
 
   return null
@@ -1119,7 +1136,7 @@ export function CityScene({ active = true }: { active?: boolean }) {
 
           <StaticMerge version={night ? 2 : 1} />
           <ScenePrewarm />
-          <IntroShadowPause />
+          <ShadowBudget />
           <WildPets />
           <QualityTuner />
           {import.meta.env.DEV && perf && <PerfMonitor />}
