@@ -303,6 +303,21 @@ export class JsonStore {
 
   async createPost(post) {
     return this.#write((d) => {
+      // 同一只宠物每天只收同一个人一条主留言：留言是"我来过"的凭证，
+      // 不是转发通道。回复不受限制（那是对话）。
+      if (post.targetType === 'pet' && !post.parentId) {
+        const today = new Date().toISOString().slice(0, 10)
+        const dup = d.posts.some(
+          (p) =>
+            p.targetType === 'pet' &&
+            p.targetId === post.targetId &&
+            p.authorId === post.authorId &&
+            !p.parentId &&
+            p.status !== 'deleted' &&
+            String(p.createdAt).slice(0, 10) === today,
+        )
+        if (dup) return { error: 'pet_daily_limit' }
+      }
       const row = {
         ...post,
         id: randomUUID(),

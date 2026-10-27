@@ -454,6 +454,19 @@ export class PgStore {
   }
 
   async createPost(post) {
+    // 同一只宠物每天只收同一个人一条主留言。放在 INSERT 之前、用同一条条件
+    // 语句判断，避免「先查后写」之间被另一个请求插空。
+    if (post.targetType === 'pet' && !post.parentId) {
+      const { rows } = await this.pool.query(
+        `SELECT 1 FROM posts
+         WHERE target_type='pet' AND target_id=$1 AND author_id=$2
+           AND parent_id IS NULL AND status <> 'deleted'
+           AND created_at >= date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
+         LIMIT 1`,
+        [post.targetId, post.authorId],
+      )
+      if (rows.length) return { error: 'pet_daily_limit' }
+    }
     const id = randomUUID()
     const { rows } = await this.pool.query(
       `INSERT INTO posts (id, target_type, target_id, author_id, parent_id, kind, body, media_kind, media_ref)

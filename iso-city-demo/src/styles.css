@@ -1752,6 +1752,16 @@ kbd {
   background: rgba(255, 255, 255, 0.5);
 }
 
+/* 今天已经留过一条：输入框整体换成一句说明，高度对齐 textarea 的最小高度，
+   避免面板上下跳一下。 */
+.composer-locked {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--ink-soft);
+  opacity: 0.75;
+}
+
 /* posts */
 
 .post-list {

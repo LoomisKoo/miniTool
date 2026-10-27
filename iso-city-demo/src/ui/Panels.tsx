@@ -167,6 +167,7 @@ function PostComposer({
   targetName,
   compact,
   parentId,
+  locked,
   onDone,
 }: {
   targetType: 'place' | 'space' | 'pet'
@@ -174,6 +175,8 @@ function PostComposer({
   targetName: string
   compact?: boolean
   parentId?: string | null
+  /** 今天已经留过一条（宠物每天一条）：直接把输入框换成说明，不再让玩家白写 */
+  locked?: boolean
   onDone?: () => void
 }) {
   const sendMessage = useApp((state) => state.sendMessage)
@@ -201,6 +204,15 @@ function PostComposer({
       setMediaRef(null)
       onDone?.()
     }
+  }
+
+  // 今天已经留过一条：输入框换成一句说明。放在早返回里，主表单保持原样。
+  if (locked) {
+    return (
+      <div className={`composer ${compact ? 'compact' : ''}`}>
+        <p className="composer-locked">今天已经给它留过一条了，明天再来看看它。</p>
+      </div>
+    )
   }
 
   return (
@@ -1622,6 +1634,7 @@ function CatalogPanelV2() {
 function PetPanel({ id }: { id: string }) {
   const closePanel = useApp((state) => state.closePanel)
   const toggleFavorite = useApp((state) => state.toggleFavorite)
+  const user = useApp((state) => state.user)
   const [detail, setDetail] = useState<PetDetail | null>(null)
   const [error, setError] = useState('')
 
@@ -1651,6 +1664,15 @@ function PetPanel({ id }: { id: string }) {
   // 饱腹度由「最后一次吃饱的时间」推导，不进数据库也不需要轮询。
   const hunger = hungerOf(pet, Date.now())
   const hungry = hunger < HUNGRY_AT
+  // 今天是否已经给它留过主留言（服务端也按同样规则拦一次）
+  const me = user?.id
+  const today = new Date().toDateString()
+  const postedToday = Boolean(
+    me &&
+      detail.notes.some(
+        (note) => note.authorId === me && !note.parentId && new Date(note.createdAt).toDateString() === today,
+      ),
+  )
   return (
     <Modal label="宠物主页" title={title} subtitle={`${breed.name} · 主人 @${pet.owner.name}`} onClose={closePanel} wide>
       <div className="pet-profile">
@@ -1686,6 +1708,8 @@ function PetPanel({ id }: { id: string }) {
         targetType="pet"
         targetId={pet.id}
         targetName={title}
+        // 一天一条：已经留过就把输入框换成说明，别让玩家写完才收到 429。
+        locked={postedToday}
         onDone={load}
       />
       <PostList posts={detail.notes} targetType="pet" targetId={pet.id} targetName={title} />

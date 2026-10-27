@@ -473,6 +473,9 @@ export function createApi({ store, authSecret, appUrl = '', storage = 'json', lo
         mediaKind: media.kind,
         mediaRef: media.ref,
       })
+      if (post?.error === 'pet_daily_limit') {
+        return json(429, { error: '同一只宠物每天只能留一条，明天再来吧', code: 'pet_daily_limit' })
+      }
       return json(201, { post })
     }
 
