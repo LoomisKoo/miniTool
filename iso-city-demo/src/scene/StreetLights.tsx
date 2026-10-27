@@ -31,6 +31,17 @@ const INTENSITY = 38
 /** 地面光斑的半径（米）：铺满整条街，两盏灯之间不留黑带。 */
 const POOL_R = 46
 
+/**
+ * 超过这个距离的灯头不再铺光斑 / 光锥。
+ *
+ * 一块光斑是 92m 见方的平面，几十盏灯的平面在屏幕上大面积重叠，片元着色器
+ * 还要逐像素算 pow/smoothstep —— 夜里真正贵的是这份填充，不是三角面。
+ * 但 150m 以外的光斑贡献已经只剩 bounce 项的百分之一（照度按 1/d² 掉），
+ * 零缩放之后既没有像素也没有可见变化。
+ */
+const POOL_CUT = 150
+const CONE_CUT = 120
+
 /* 距离相关的淡出必须逐像素算。
    光斑是一块 92m 见方的平面，只有四个顶点：以前在顶点着色器里算
    "到玩家的距离"，插值出来就是一条斜着横穿路面的线性渐变，那条明暗
@@ -118,6 +129,8 @@ export function StreetLights({ lamps, night }: { lamps: Array<[number, number]>;
   const assigned = useRef<number[]>(Array.from({ length: POOL }, () => -1))
   const timer = useRef(1)
   const on = useRef(night ? 1 : 0)
+  /** 每盏灯的光斑/光锥当前是否还在实例矩阵里（远处是零缩放）。 */
+  const shown = useRef<{ pool: boolean[]; cone: boolean[] }>({ pool: [], cone: [] })
 
   useEffect(() => {
     lights.current.forEach((light, i) => {
@@ -125,7 +138,7 @@ export function StreetLights({ lamps, night }: { lamps: Array<[number, number]>;
     })
   }, [targets])
 
-  const { pools, cones, poolMat, coneMat } = useMemo(() => {
+  const { pools, cones, poolMat, coneMat, base, hidden } = useMemo(() => {
     // LED 路灯：接近中性的白，只带一点点暖
     const color = new THREE.Color('#fff6ea')
     const poolMat = new THREE.ShaderMaterial({
@@ -176,24 +189,33 @@ export function StreetLights({ lamps, night }: { lamps: Array<[number, number]>;
     const q = new THREE.Quaternion()
     const s = new THREE.Vector3()
     const p = new THREE.Vector3()
-    lamps.forEach(([x, z], i) => {
+    const base = lamps.map(([x, z], i) => {
       seeds[i] = (Math.sin(i * 12.9898) * 43758.5453) % 1
       // 抬到路缘石（6cm）之上，否则人行道会把光斑挡掉
       p.set(x + HEAD_X, 0.075, z)
       s.set(POOL_R * 2, 1, POOL_R * 2)
-      pools.setMatrixAt(i, m.compose(p, q, s))
+      const pool = m.compose(p, q, s).clone()
       p.set(x + HEAD_X, 0, z)
       s.set(1, 1, 1)
-      cones.setMatrixAt(i, m.compose(p, q, s))
+      const cone = m.compose(p, q, s).clone()
+      return { pool, cone }
+    })
+    const hidden = m.compose(p.set(0, -100, 0), q, s.set(0, 0, 0))
+    base.forEach(({ pool, cone }, i) => {
+      pools.setMatrixAt(i, pool)
+      cones.setMatrixAt(i, cone)
     })
     poolGeo.setAttribute('aSeed', new THREE.InstancedBufferAttribute(seeds.map(Math.abs), 1))
+    // 每盏灯的光斑会随玩家移动在"有/无"之间切换，矩阵是逐帧可写的
+    pools.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
+    cones.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
     pools.frustumCulled = false
     cones.frustumCulled = false
     pools.renderOrder = 2
     cones.renderOrder = 3
     pools.userData.noGhost = true
     cones.userData.noGhost = true
-    return { pools, cones, poolMat, coneMat }
+    return { pools, cones, poolMat, coneMat, base, hidden }
   }, [lamps])
 
   useEffect(
@@ -220,6 +242,35 @@ export function StreetLights({ lamps, night }: { lamps: Array<[number, number]>;
       timer.current = 0
       const px = walker.position.x
       const pz = walker.position.z
+
+      // 远处的光斑/光锥零缩放：它们本来就在 150m 外只剩不到 1% 的贡献，
+      // 但每块 92m 见方的平面仍要过一遍片元着色器。只有开关状态变了才写矩阵。
+      const state = shown.current
+      if (state.pool.length !== base.length) {
+        state.pool = base.map(() => true)
+        state.cone = base.map(() => true)
+      }
+      let poolDirty = false
+      let coneDirty = false
+      for (let i = 0; i < base.length; i++) {
+        const [lx, lz] = lamps[i]
+        const d = Math.hypot(lx + HEAD_X - px, lz - pz)
+        const poolWanted = d < POOL_CUT
+        if (poolWanted !== state.pool[i]) {
+          state.pool[i] = poolWanted
+          pools.setMatrixAt(i, poolWanted ? base[i].pool : hidden)
+          poolDirty = true
+        }
+        const coneWanted = d < CONE_CUT
+        if (coneWanted !== state.cone[i]) {
+          state.cone[i] = coneWanted
+          cones.setMatrixAt(i, coneWanted ? base[i].cone : hidden)
+          coneDirty = true
+        }
+      }
+      if (poolDirty) pools.instanceMatrix.needsUpdate = true
+      if (coneDirty) cones.instanceMatrix.needsUpdate = true
+
       const order = lamps
         .map(([x, z], i) => ({ i, d: Math.hypot(x + HEAD_X - px, z - pz) }))
         .filter((e) => e.d < FAR)
