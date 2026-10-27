@@ -38,6 +38,7 @@ import { walker } from '../game/walker'
 import { StaticMerge, ScenePrewarm } from './StaticMerge'
 import { Stagger, buildQueueIdle } from './buildQueue'
 import { QualityTuner } from './QualityTuner'
+import { PerfMonitor } from './PerfMonitor'
 import { ImageBasedLighting } from './lighting'
 import { palettes } from './theme'
 
@@ -770,6 +771,8 @@ export function CityScene({ active = true }: { active?: boolean }) {
   // 一帧 75ms、三角面只有 32k、降 dpr 也没变快，需要分清是场景 pass、
   // 后处理 pass，还是根本不在 GPU 上。这个开关的对比结果能直接定论。
   const noFx = import.meta.env.DEV && new URLSearchParams(window.location.search).has('nofx')
+  // `?perf=1`：左下角挂一块临时读数（fps / draw call / 三角形 / 着色器变体数）
+  const perf = import.meta.env.DEV && new URLSearchParams(window.location.search).has('perf')
   const enterTarget = useApp((state) => state.enterTarget)
   const openPlace = useApp((state) => state.openPlace)
   const p = night ? palettes.night : palettes.dusk
@@ -1119,6 +1122,7 @@ export function CityScene({ active = true }: { active?: boolean }) {
           <IntroShadowPause />
           <WildPets />
           <QualityTuner />
+          {import.meta.env.DEV && perf && <PerfMonitor />}
 
           <PlayerRig
             colliders={[
