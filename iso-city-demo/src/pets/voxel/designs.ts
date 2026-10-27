@@ -429,6 +429,22 @@ const cat: VoxelDesign = {
       traits: { pattern: 'rosette', ears: 'small', frame: 'slender', fur: 0.3 },
       palette: { fur: '#d99a50', fur2: '#4a2c1e', fur3: '#8a5a34', belly: '#f3d7ad', muzzle: '#f3d7ad', paw: '#f3d7ad', eye: '#6f9a2a' },
     },
+    {
+      id: 'cat-korat',
+      name: '柯拉特猫',
+      weight: 1,
+      // 单色银蓝短毛：靠脸型和耳朵区分，不靠花纹
+      traits: { ears: 'large', face: 'wedge', frame: 'normal', tail: 'long', fur: 0.22 },
+      palette: { fur: '#8d949c', fur2: '#767d85', belly: '#9aa1a9', muzzle: '#9aa1a9', paw: '#8d949c', inner: '#b3a3a6', eye: '#6fb36a', nose: '#7d7a80' },
+    },
+    {
+      id: 'cat-sphynx',
+      name: '斯芬克斯猫',
+      weight: 1,
+      // 无毛：fur 几乎是 0，只剩一层贴身的粉皮
+      traits: { ears: 'large', face: 'wedge', frame: 'slender', tail: 'thin', fur: 0.02 },
+      palette: { fur: '#e6c8bd', fur2: '#d9b8ac', belly: '#f0d9cf', muzzle: '#f0d9cf', paw: '#e6c8bd', inner: '#d69a95', eye: '#8fb9c9', nose: '#c08a86' },
+    },
   ],
   build: (t) => {
     const pattern = str(t, 'pattern', 'plain')
@@ -946,6 +962,28 @@ const fox: VoxelDesign = {
       traits: { kind: 'fennec', fur: 0.62 },
       palette: { fur: '#ead6b6', ear: '#e4cca8', inner: '#e38c62', inner2: '#fbf4ea', belly: '#fbf3e6', tip: '#b8916c', stock: '#f3e6d0', paw: '#cfae8a', tailtip: '#d9bb94', eye: '#4e4038', nose: '#59453d' },
     },
+    {
+      id: 'fox-cross',
+      name: '十字狐',
+      weight: 1,
+      // 赤狐的黑化变种：背脊一条深色十字纹，四肢和腹部仍是深色
+      traits: { kind: 'red', fur: 0.78 },
+      palette: { fur: '#c9703f', ear: '#b45f34', tip: '#2e1f1c', inner: '#f0e2d4', belly: '#f2e6d8', stock: '#3a2a26', paw: '#33231f', tailtip: '#f7f2ea' },
+    },
+    {
+      id: 'fox-silver',
+      name: '银狐',
+      weight: 1,
+      traits: { kind: 'red', fur: 0.82 },
+      palette: { fur: '#4d4a52', ear: '#3f3c43', tip: '#1f1d22', inner: '#cfc9cd', belly: '#b8b3b9', stock: '#2a282e', paw: '#26242a', tailtip: '#f0eef2', eye: '#9fb3c4', nose: '#1a181c' },
+    },
+    {
+      id: 'fox-grey',
+      name: '灰狐',
+      weight: 1,
+      traits: { kind: 'red', fur: 0.58 },
+      palette: { fur: '#9a958f', ear: '#8b8680', tip: '#4a453f', inner: '#ece6dd', belly: '#efeae1', stock: '#4f4a44', paw: '#565049', tailtip: '#f6f2ea' },
+    },
   ],
   build: (t) => {
     const kind = str(t, 'kind', 'red')
@@ -1040,6 +1078,10 @@ const panda: VoxelDesign = {
   breeds: [
     { id: 'panda-classic', name: '大熊猫', weight: 3 },
     { id: 'panda-brown', name: '棕色熊猫', weight: 1, palette: { fur2: '#6b4a34', fur: '#efe4d6', muzzle: '#efe4d6' } },
+    // 秦岭亚种里真实出现过的色型；白化个体在保护区记录里也有。
+    { id: 'panda-grey', name: '灰白熊猫', weight: 1, palette: { fur: '#dfe0e2', fur2: '#4a4d55', muzzle: '#e8e9eb' } },
+    { id: 'panda-albino', name: '白化熊猫', weight: 1, palette: { fur: '#fbf9f5', fur2: '#e3dcd0', muzzle: '#fbf9f5', eye: '#c98b8b', shine: '#ffffff' } },
+    { id: 'panda-red', name: '红棕熊猫', weight: 1, palette: { fur: '#f0dcc0', fur2: '#8a4a2c', muzzle: '#f4e4cc' } },
   ],
   build: () => {
     // 熊和狗的区别全在「圆」：球一样的头、球一样的胖身子、几乎看不见的短粗腿、
@@ -1147,6 +1189,8 @@ const bunny: VoxelDesign = {
     { id: 'bunny-black', name: '黑兔', weight: 1, palette: { fur: '#3d3739', belly: '#efe9e2', muzzle: '#efe9e2', paw: '#efe9e2', eye: '#d9a91f', shine: '#fff4c8' } },
     { id: 'bunny-lop', name: '垂耳兔', weight: 2, traits: { ears: 'lop', fur: 0.7 }, palette: { fur: '#e8d3b4', belly: '#fbf6ee', muzzle: '#fbf6ee', paw: '#fbf6ee' } },
     { id: 'bunny-dutch', name: '荷兰兔', weight: 3, traits: { ears: 'up', pattern: 'dutch', fur: 0.62 }, palette: { fur: '#554b48', fur2: '#554b48', belly: '#f0e8dc', muzzle: '#f0e8dc', paw: '#f0e8dc', inner: '#bd8584', nose: '#a87578', eye: '#493c39' } },
+    { id: 'bunny-lion', name: '狮子兔', weight: 1, traits: { ears: 'up', fur: 1.0 }, palette: { fur: '#d9b184', fur2: '#c39a6c', belly: '#faf0e2', muzzle: '#faf0e2', paw: '#faf0e2' } },
+    { id: 'bunny-angora', name: '安哥拉兔', weight: 1, traits: { ears: 'up', fur: 1.08 }, palette: { fur: '#f2ece2', fur2: '#e6ded2', belly: '#fffdf9', muzzle: '#fffdf9', paw: '#f2ece2', inner: '#e5b9b3', eye: '#b3425c', shine: '#ffd8de' } },
   ],
   build: (t) => {
     const pattern = str(t, 'pattern', 'plain')
@@ -1245,6 +1289,27 @@ const squirrel: VoxelDesign = {
       weight: 2,
       traits: { tail: 'short', tufts: 0, pattern: 'chipmunk', build: 0.92 },
       palette: { fur: '#c07a40', fur2: '#3a2c26', belly: '#f6ead6', muzzle: '#f2e2c8', paw: '#8c6045', eye: '#16110f', nose: '#60433a' },
+    },
+    {
+      id: 'squirrel-black',
+      name: '黑松鼠',
+      weight: 1,
+      traits: { tail: 'plume', tufts: 0, pattern: 'plain' },
+      palette: { fur: '#3b3740', fur2: '#26232b', belly: '#5c5763', muzzle: '#5c5763', paw: '#26232b', eye: '#d9b41f', shine: '#fff6c8' },
+    },
+    {
+      id: 'squirrel-albino',
+      name: '白化松鼠',
+      weight: 1,
+      traits: { tail: 'curl', tufts: 0, pattern: 'plain' },
+      palette: { fur: '#f7f3ee', fur2: '#e4ded4', belly: '#ffffff', muzzle: '#ffffff', paw: '#efe9e0', eye: '#c05a6a', shine: '#ffd6de' },
+    },
+    {
+      id: 'squirrel-rock',
+      name: '岩松鼠',
+      weight: 2,
+      traits: { tail: 'short', tufts: 0, pattern: 'plain', build: 0.96 },
+      palette: { fur: '#a08a70', fur2: '#6f5c48', belly: '#e9dfd0', muzzle: '#e9dfd0', paw: '#7a6650' },
     },
   ],
   build: (t) => {
@@ -1407,6 +1472,34 @@ const pig: VoxelDesign = {
       traits: { snout: 'long', ears: 'prick', tusks: 1 },
       palette: { inner: '#a46d68', fur: '#675248', fur2: '#8a6b56', belly: '#c0a38a', muzzle: '#5a4540', paw: '#51453f', snout: '#4e3d38', nose: '#1e1716', eye: '#c69b55' },
     },
+    {
+      id: 'pig-black',
+      name: '黑猪',
+      weight: 1,
+      traits: { snout: 'disc', ears: 'flop' },
+      palette: { fur: '#4a4247', fur2: '#332d31', belly: '#5f575c', muzzle: '#5f575c', paw: '#3a3438', snout: '#3e373b', nose: '#201b1e', inner: '#6d5a62' },
+    },
+    {
+      id: 'pig-white',
+      name: '白猪',
+      weight: 2,
+      traits: { snout: 'disc', ears: 'flop' },
+      palette: { fur: '#f7f1ea', fur2: '#d9c8ba', belly: '#fffcf7', muzzle: '#fffcf7', paw: '#c8b3a4', snout: '#f4c3c3', nose: '#a06b74', inner: '#e9aeb4' },
+    },
+    {
+      id: 'pig-mini',
+      name: '小香猪',
+      weight: 2,
+      traits: { snout: 'disc', ears: 'prick' },
+      palette: { fur: '#3d373b', fur2: '#f0e6da', belly: '#f6eee2', muzzle: '#6b5f58', paw: '#3f393d', snout: '#c98f96', nose: '#2a2226', inner: '#8a6a6e' },
+    },
+    {
+      id: 'pig-boar-grey',
+      name: '灰野猪',
+      weight: 1,
+      traits: { snout: 'long', ears: 'prick', tusks: 1 },
+      palette: { fur: '#7b7a72', fur2: '#9c9a90', belly: '#b8b3a6', muzzle: '#6a675e', paw: '#5d5b53', snout: '#56534b', nose: '#1c1a18', eye: '#c9ae62' },
+    },
   ],
   build: (t) => {
     const headP = 2.5
@@ -1525,7 +1618,34 @@ const raccoon: VoxelDesign = {
     muzzle: '#f2f0ec',
     paw: '#2f2b31',
   },
-  breeds: [{ id: 'raccoon-grey', name: '浣熊', weight: 1 }],
+  breeds: [
+    { id: 'raccoon-grey', name: '浣熊', weight: 3 },
+    // 面罩和尾环都画在 fur2 上，所以变体改 fur2 就等于改"花纹颜色"。
+    {
+      id: 'raccoon-albino',
+      name: '白化浣熊',
+      weight: 1,
+      palette: { fur: '#f4f0ea', fur2: '#d6c6bb', ear: '#e8e1d8', belly: '#ffffff', muzzle: '#ffffff', paw: '#e2d8ce', eye: '#b9566a' },
+    },
+    {
+      id: 'raccoon-dark',
+      name: '黑化浣熊',
+      weight: 1,
+      palette: { fur: '#4a4750', fur2: '#211f24', ear: '#3d3a43', belly: '#6a666f', muzzle: '#7a767f', paw: '#211f24', eye: '#d9b41f', shine: '#fff6c8' },
+    },
+    {
+      id: 'raccoon-gold',
+      name: '金浣熊',
+      weight: 1,
+      palette: { fur: '#c9a266', fur2: '#4a3a28', ear: '#b8935a', belly: '#efdfc4', muzzle: '#f2e6d2', paw: '#4a3a28' },
+    },
+    {
+      id: 'raccoon-brown',
+      name: '棕浣熊',
+      weight: 2,
+      palette: { fur: '#8a6a52', fur2: '#33261e', ear: '#7a5c46', belly: '#ddcbb6', muzzle: '#e8d9c6', paw: '#33261e' },
+    },
+  ],
   build: () => {
     const headP = 2.8
     const headC: Vec3 = [0, 12.8, 1.6]
@@ -1637,6 +1757,35 @@ const sheep: VoxelDesign = {
       weight: 2,
       traits: { kind: 'goat' },
       palette: { fur: '#e2d8c6', fur2: '#6b6157', ear: '#cbbfa9', belly: '#f2ece0', muzzle: '#7a6f62', paw: '#4a4239' },
+    },
+    {
+      id: 'sheep-blacknose',
+      name: '黑鼻羊',
+      weight: 1,
+      // 瓦莱黑鼻羊：一身奶油色羊毛，脸和耳朵是纯黑的
+      traits: { kind: 'wool' },
+      palette: { fur: '#f2ece0', fur2: '#24222a', ear: '#24222a', belly: '#faf6ee', muzzle: '#2e2b34', paw: '#2a272f', inner: '#5c5560' },
+    },
+    {
+      id: 'sheep-merino',
+      name: '美利奴羊',
+      weight: 2,
+      traits: { kind: 'wool' },
+      palette: { fur: '#efe9db', fur2: '#8a7f74', ear: '#a3968a', belly: '#fbf7ef', muzzle: '#9b8f83', paw: '#5f574e' },
+    },
+    {
+      id: 'sheep-alpine',
+      name: '高山山羊',
+      weight: 1,
+      traits: { kind: 'goat' },
+      palette: { fur: '#f4f1ea', fur2: '#8e8880', ear: '#d8d2c8', belly: '#fbf9f4', muzzle: '#a09a92', paw: '#6e6861' },
+    },
+    {
+      id: 'sheep-brown-goat',
+      name: '棕山羊',
+      weight: 1,
+      traits: { kind: 'goat' },
+      palette: { fur: '#c6a181', fur2: '#6a503d', ear: '#b08b6c', belly: '#e4cdb2', muzzle: '#7a5f4a', paw: '#4e3d30' },
     },
   ],
   build: (t) => {
@@ -1783,7 +1932,34 @@ function hedgehogSpikes(cy: number, cz: number, rx: number, ry: number, rz: numb
 const hedgehog: VoxelDesign = {
   id: 'hedgehog',
   palette: { ...BASE_PALETTE, fur: '#ead5b8', fur2: '#4e3d30', tip: '#efe3cf', speck: '#9c8266', belly: '#f4e6d2', muzzle: '#f4e6d2', paw: '#7a6450', nose: '#1e1718' },
-  breeds: [{ id: 'hedgehog-brown', name: '刺猬', weight: 1 }],
+  breeds: [
+    { id: 'hedgehog-brown', name: '刺猬', weight: 1 },
+    // 刺猬只有刺色能变：壳底的 fur2、刺尖的 tip、深浅斑点的 speck。
+    {
+      id: 'hedgehog-albino',
+      name: '白化刺猬',
+      weight: 1,
+      palette: { fur: '#fdf8f0', fur2: '#d3c4b0', tip: '#ffffff', speck: '#eadfd0', belly: '#fdf8f0', muzzle: '#fdf8f0', paw: '#d8cbb8', nose: '#c98b8b', eye: '#a8455c' },
+    },
+    {
+      id: 'hedgehog-dark',
+      name: '黑刺猬',
+      weight: 1,
+      palette: { fur: '#6f665c', fur2: '#2b2622', tip: '#857a6c', speck: '#4a423a', belly: '#8a8076', muzzle: '#8a8076', paw: '#4e463e' },
+    },
+    {
+      id: 'hedgehog-ginger',
+      name: '橘刺猬',
+      weight: 1,
+      palette: { fur: '#f0dcc0', fur2: '#8a5a33', tip: '#e8c9a4', speck: '#b98a5f', belly: '#f6e8d4', muzzle: '#f6e8d4', paw: '#a8805c' },
+    },
+    {
+      id: 'hedgehog-grey',
+      name: '灰刺猬',
+      weight: 1,
+      palette: { fur: '#e8e3da', fur2: '#6f6a66', tip: '#c9c4bd', speck: '#9a948e', belly: '#f2eee8', muzzle: '#f2eee8', paw: '#8a847e' },
+    },
+  ],
   build: () => {
     const cy = 5.0
     const cz = -1.0
