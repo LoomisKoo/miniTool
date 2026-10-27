@@ -938,6 +938,7 @@ function FavoritesPanel() {
   const closePanel = useApp((state) => state.closePanel)
   const openPlace = useApp((state) => state.openPlace)
   const openSpace = useApp((state) => state.openSpace)
+  const openPanel = useApp((state) => state.openPanel)
 
   return (
     <Modal label="我的收藏" title="留着以后再去" onClose={closePanel} icon="favorites">
@@ -954,7 +955,7 @@ function FavoritesPanel() {
             <PanelGlyph name="favorites" />
           </span>
           <b>还没有收藏</b>
-          <p>在地点或空间面板里点一下 ☆，就会收进这里。</p>
+          <p>在地点、空间或宠物主页里点一下 ☆，就会收进这里。</p>
         </div>
       )}
       {!loading && !error && favorites.length > 0 && (
@@ -964,23 +965,36 @@ function FavoritesPanel() {
             <em>{favorites.length} 个</em>
           </div>
           <div className="favorite-list">
-            {favorites.map((favorite) => (
-              <button
-                key={`${favorite.targetType}-${favorite.targetId}`}
-                className="favorite-row"
-                onClick={() => {
-                  if (favorite.targetType === 'place') void openPlace(favorite.targetId)
-                  else void openSpace(favorite.targetId)
-                }}
-              >
-                <span className={`favorite-icon ${favorite.targetType}`}>
-                  <PanelGlyph name={favorite.targetType === 'place' ? 'place' : 'space'} />
-                </span>
-                <b>{favorite.name}</b>
-                <em>{favorite.targetType === 'place' ? '地点' : '空间'}</em>
-                <i aria-hidden="true">›</i>
-              </button>
-            ))}
+            {favorites.map((favorite) => {
+              // 宠物可能还没起名：名字回落到品种中文名，由客户端查表。
+              const name =
+                favorite.targetType === 'pet'
+                  ? favorite.name ||
+                    (favorite.speciesId && favorite.breedId
+                      ? breedOf(favorite.speciesId, favorite.breedId).name
+                      : '一只宠物')
+                  : favorite.name || '已失效的地点'
+              const label =
+                favorite.targetType === 'place' ? '地点' : favorite.targetType === 'space' ? '空间' : '宠物'
+              return (
+                <button
+                  key={`${favorite.targetType}-${favorite.targetId}`}
+                  className="favorite-row"
+                  onClick={() => {
+                    if (favorite.targetType === 'pet') openPanel({ type: 'pet', id: favorite.targetId })
+                    else if (favorite.targetType === 'place') void openPlace(favorite.targetId)
+                    else void openSpace(favorite.targetId)
+                  }}
+                >
+                  <span className={`favorite-icon ${favorite.targetType}`}>
+                    <PanelGlyph name={favorite.targetType === 'space' ? 'space' : 'place'} />
+                  </span>
+                  <b>{name}</b>
+                  <em>{label}</em>
+                  <i aria-hidden="true">›</i>
+                </button>
+              )
+            })}
           </div>
         </>
       )}
@@ -1607,6 +1621,7 @@ function CatalogPanelV2() {
 
 function PetPanel({ id }: { id: string }) {
   const closePanel = useApp((state) => state.closePanel)
+  const toggleFavorite = useApp((state) => state.toggleFavorite)
   const [detail, setDetail] = useState<PetDetail | null>(null)
   const [error, setError] = useState('')
 
@@ -1648,6 +1663,24 @@ function PetPanel({ id }: { id: string }) {
           <i style={{ width: `${Math.max(3, Math.round(hunger))}%` }} />
           <em>{hungerLabel(hunger)}</em>
         </span>
+      </div>
+      <div className="detail-strip">
+        <div className="detail-meta">
+          <span className="pill soft">{detail.favorite.count} 人收藏</span>
+          <span className="pill soft">{detail.notes.length} 条留言</span>
+        </div>
+        <div className="detail-strip-actions">
+          <button
+            className={`mini-btn ${detail.favorite.favorited ? 'on' : ''}`}
+            onClick={() => {
+              void toggleFavorite('pet', pet.id).then((result) => {
+                if (result) setDetail((prev) => (prev ? { ...prev, favorite: result } : prev))
+              })
+            }}
+          >
+            {detail.favorite.favorited ? '★ 已收藏' : '☆ 收藏'}
+          </button>
+        </div>
       </div>
       <PostComposer
         targetType="pet"

@@ -129,3 +129,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS pets_one_per_owner ON pets(owner_id);
 ALTER TABLE posts DROP CONSTRAINT IF EXISTS posts_target_type_check;
 ALTER TABLE posts ADD CONSTRAINT posts_target_type_check
   CHECK (target_type IN ('place', 'space', 'pet'));
+
+-- 宠物也能收藏：放宽 favorites.target_type
+ALTER TABLE favorites DROP CONSTRAINT IF EXISTS favorites_target_type_check;
+ALTER TABLE favorites ADD CONSTRAINT favorites_target_type_check
+  CHECK (target_type IN ('place', 'space', 'pet'));

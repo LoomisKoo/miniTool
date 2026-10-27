@@ -716,17 +716,22 @@ export class PgStore {
 
   async listFavorites(userId) {
     const { rows } = await this.pool.query(
-      `SELECT f.*, COALESCE(s.name, p.name, '已失效的地点') AS name
+      `SELECT f.*,
+              COALESCE(s.name, p.name, pt.nickname) AS name,
+              pt.species_id, pt.breed_id
        FROM favorites f
        LEFT JOIN spaces s ON f.target_type='space' AND s.id=f.target_id
        LEFT JOIN places p ON f.target_type='place' AND p.id=f.target_id
+       LEFT JOIN pets pt ON f.target_type='pet' AND pt.id=f.target_id
        WHERE f.user_id=$1 ORDER BY f.created_at DESC`,
       [userId],
     )
     return rows.map((r) => ({
       targetType: r.target_type,
       targetId: r.target_id,
-      name: r.name,
+      name: r.name || null,
+      speciesId: r.species_id || null,
+      breedId: r.breed_id || null,
       createdAt: r.created_at,
     }))
   }

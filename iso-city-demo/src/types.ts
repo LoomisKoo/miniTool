@@ -145,7 +145,11 @@ export type AdoptedPet = {
   hungerAt?: string | null
 }
 
-export type PetDetail = { pet: AdoptedPet; notes: Post[] }
+export type PetDetail = {
+  pet: AdoptedPet
+  notes: Post[]
+  favorite: { favorited: boolean; count: number }
+}
 
 export type AdoptPetInput = {
   id: string
@@ -156,9 +160,13 @@ export type AdoptPetInput = {
 }
 
 export type Favorite = {
-  targetType: 'place' | 'space'
+  targetType: 'place' | 'space' | 'pet'
   targetId: string
-  name: string
+  /** 地点/空间的名字；宠物是主人起的名字（没起名时为 null，由客户端查品种名） */
+  name: string | null
+  /** 宠物收藏才有：用来在客户端查中文品种名 */
+  speciesId?: string | null
+  breedId?: string | null
   createdAt: string
 }
 

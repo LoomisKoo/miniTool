@@ -122,7 +122,7 @@ export const api = {
       method: 'POST',
       body: { reason },
     }),
-  toggleFavorite: (targetType: 'place' | 'space', targetId: string) =>
+  toggleFavorite: (targetType: 'place' | 'space' | 'pet', targetId: string) =>
     request<{ favorited: boolean; count: number }>('/api/favorites', {
       method: 'POST',
       body: { targetType, targetId },

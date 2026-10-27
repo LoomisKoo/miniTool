@@ -409,8 +409,12 @@ export function createApi({ store, authSecret, appUrl = '', storage = 'json', lo
     if (petMatch && method === 'GET') {
       const pet = await store.getPet(petMatch[1])
       if (!pet) return json(404, { error: '宠物不存在' })
-      const notes = await store.listPosts('pet', pet.id, 20)
-      return json(200, { pet, notes })
+      const [notes, favorited, favoriteCount] = await Promise.all([
+        store.listPosts('pet', pet.id, 20),
+        user ? store.isFavorite(user.id, 'pet', pet.id) : false,
+        store.favoriteCount('pet', pet.id),
+      ])
+      return json(200, { pet, notes, favorite: { favorited, count: favoriteCount } })
     }
 
     // ---------- rations ----------
@@ -502,11 +506,14 @@ export function createApi({ store, authSecret, appUrl = '', storage = 'json', lo
       if (!user) return json(401, { error: '请先获得访客身份' })
       const targetType = String(req.body?.targetType || '')
       const targetId = String(req.body?.targetId || '')
-      if (!['place', 'space'].includes(targetType) || !ID.test(targetId)) {
+      if (!['place', 'space', 'pet'].includes(targetType) || !ID.test(targetId)) {
         return json(400, { error: '收藏目标不正确' })
       }
       const target = await requireTarget(targetType, targetId)
       if (!target) return json(404, { error: '目标不存在' })
+      if (targetType === 'space' && !target.isOpen && target.ownerId !== user.id) {
+        return json(403, { error: '这间空间暂未开放' })
+      }
       const result = await store.toggleFavorite(user.id, targetType, targetId)
       return json(200, result)
     }

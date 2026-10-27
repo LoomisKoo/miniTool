@@ -508,9 +508,16 @@ export class JsonStore {
         .filter((f) => f.userId === userId)
         .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
         .map((f) => {
-          const source = f.targetType === 'space' ? d.spaces : d.places
+          const source = f.targetType === 'space' ? d.spaces : f.targetType === 'pet' ? d.pets : d.places
           const target = source.find((x) => x.id === f.targetId)
-          return { ...f, name: target?.name || '已失效的地点' }
+          return {
+            ...f,
+            // 宠物可能还没起名（领养与改名是两个请求），品种名交给客户端查表，
+            // 服务端不重复维护一份中文名。
+            name: target?.name || target?.nickname || null,
+            speciesId: f.targetType === 'pet' ? target?.speciesId ?? null : undefined,
+            breedId: f.targetType === 'pet' ? target?.breedId ?? null : undefined,
+          }
         }),
     )
   }

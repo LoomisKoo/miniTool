@@ -134,7 +134,10 @@ type AppState = {
   }) => Promise<boolean>
   deletePost: (id: string) => Promise<void>
   reportPost: (id: string) => Promise<void>
-  toggleFavorite: (targetType: 'place' | 'space', targetId: string) => Promise<void>
+  toggleFavorite: (
+    targetType: 'place' | 'space' | 'pet',
+    targetId: string,
+  ) => Promise<{ favorited: boolean; count: number } | null>
   loadFavorites: () => Promise<void>
   claimSpace: (id: string) => Promise<void>
   releaseSpace: (id: string) => Promise<void>
@@ -622,9 +625,17 @@ export const useApp = create<AppState>((set, get) => ({
         }
         return {}
       })
-      get().showToast(result.favorited ? '已收藏这个地点。' : '已取消收藏。')
+      get().showToast(
+        result.favorited
+          ? targetType === 'pet'
+            ? '已把它收进收藏。'
+            : '已收藏这个地点。'
+          : '已取消收藏。',
+      )
+      return result
     } catch (error) {
       get().showToast(errorMessage(error))
+      return null
     }
   },
 
