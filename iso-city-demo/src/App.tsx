@@ -8,10 +8,13 @@ import { Panels } from './ui/Panels'
 import { Dialog } from './ui/Dialog'
 import { Intro } from './ui/Intro'
 import { Toast } from './ui/Toast'
+import { music } from './audio/music'
 
 export default function App() {
   const screen = useApp((state) => state.screen)
   const booted = useApp((state) => state.booted)
+  const musicOn = useApp((state) => state.musicOn)
+  const night = useApp((state) => state.night)
   const boot = useApp((state) => state.boot)
   // 城市和内景都常驻：切换只改可见性和帧循环，不卸载 Canvas。
   // 以前进一次楼要重建室内整套几何与材质，出来再重建一遍整座城，
@@ -38,6 +41,15 @@ export default function App() {
   useEffect(() => {
     if (!useApp.getState().booted) void boot()
   }, [boot])
+
+  // BGM 跟着昼夜换一套和弦：夜间小调+暗，黄昏大调+亮。
+  // start() 是幂等的，重复调用只会顺手 resume 一次被浏览器挂起的 AudioContext。
+  useEffect(() => {
+    if (screen === 'intro') return
+    // 先记静音状态再 start：否则第一次创建 AudioContext 会先淡到满音量再压回 0。
+    music.setMuted(!musicOn)
+    music.start(night ? 'night' : 'dusk')
+  }, [screen, night, musicOn])
 
   return (
     <div className={`app screen-${screen}`}>

@@ -11,7 +11,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { Html } from '@react-three/drei'
 import * as THREE from 'three'
-import { speciesOf } from '../catalog/species'
+import { breedOf, speciesOf } from '../catalog/species'
 import { walker } from '../game/walker'
 import { useApp } from '../store'
 import { petHeading, petPose } from './roam'
@@ -19,10 +19,12 @@ import { currentBucket, wildPool, type WildPet } from './wild'
 import { live } from './live'
 import { isBlinking, voxelMaterial, type VoxelPet } from './voxel/build'
 import { buildModels, partMatrices, petModel, petScale } from './voxel/runtime'
+import { insideRoad } from '../data/city'
 
 function PetInteractionTag() {
   const group = useRef<THREE.Group>(null)
   const label = useRef<HTMLSpanElement>(null)
+  const ownership = useRef<HTMLElement>(null)
   const nameTag = useRef<HTMLDivElement>(null)
   const hint = useRef<HTMLElement>(null)
 
@@ -35,20 +37,38 @@ function PetInteractionTag() {
       return
     }
     let best: (typeof live)[number] | null = null
-    let distance = 8.5
+    let bestDistance = Infinity
     for (const pet of live) {
+      // flock 刚切换或模型分批构建时，live 里可能暂时存在占位记录；
+      // 占位记录坐标是 0，不能拿来显示一个“看不见的宠物”提示。
+      if (!pet.breed) continue
+      // 领养宠物也可能来自服务端/演示数据，交互层再拦一次车道，
+      // 不让气泡出现在车辆会经过的路面上。
+      if (insideRoad(pet.x, pet.z, 0.8)) continue
+      // 已领养的宠物在更远处就显示名字：主人要能在街对面认出自己的伙伴。
+      const reach = pet.owner ? 16 : 8.5
       const d = Math.hypot(pet.x - walker.position.x, pet.z - walker.position.z)
-      if (d < distance) {
-        distance = d
+      if (d < reach && d < bestDistance) {
+        bestDistance = d
         best = pet
       }
     }
     node.visible = Boolean(best)
     if (!best) return
-    node.position.set(best.x, 1.65, best.z)
-    if (label.current) label.current.textContent = best.breed
+    // 昵称贴着宠物头顶：不同物种身高差一倍，用固定高度会让兔子头顶空一大截。
+    const top = speciesOf(best.speciesId).height * best.scale
+    node.position.set(best.x, top + 0.18, best.z)
+    // 领养之后显示的是它的名字；野生宠物只有品种名。
+    if (label.current) label.current.textContent = best.nickname || best.breed
+    if (ownership.current) {
+      ownership.current.textContent = best.owner ? '♥' : ''
+      ownership.current.setAttribute('aria-label', best.owner ? '已领养' : '')
+    }
     const active = useApp.getState().nearby?.id === `pet-${best.id}`
-    if (nameTag.current) nameTag.current.classList.toggle('is-active', active)
+    if (nameTag.current) {
+      nameTag.current.classList.toggle('is-active', active)
+      nameTag.current.classList.toggle('is-owned', Boolean(best.owner))
+    }
     if (hint.current) hint.current.style.opacity = active ? '1' : '0'
   })
 
@@ -56,6 +76,7 @@ function PetInteractionTag() {
     <group ref={group} visible={false}>
       <Html center position={[0, 0, 0]} style={{ pointerEvents: 'none' }} zIndexRange={[18, 0]}>
         <div ref={nameTag} className="pet-world-name">
+          <em ref={ownership} aria-hidden="true" />
           <span ref={label}>宠物</span>
         </div>
         <div className="pet-world-e">
@@ -201,7 +222,22 @@ function animateFlock(flock: Flock, time: number) {
 
   if (live.length !== pets.length) {
     while (live.length < pets.length) {
-      live.push({ id: '', speciesId: '', species: '', breedId: '', breed: '', x: 0, z: 0, y: 0, radius: 1.6 })
+      live.push({
+        id: '',
+        speciesId: '',
+        species: '',
+        breedId: '',
+        breed: '',
+        x: 0,
+        z: 0,
+        y: 0,
+        radius: 1.6,
+        scale: 1,
+        spot: { x: 0, z: 0, radius: 1.6 },
+        nickname: null,
+        owner: null,
+        adoptedAt: null,
+      })
     }
     live.length = pets.length
   }
@@ -215,11 +251,18 @@ function animateFlock(flock: Flock, time: number) {
       const offset = index * 7.3
       const clock = roamClock(time + offset)
 
-      const pose = petPose(pet.id, pet.spot, clock.roam, 0.9)
+      // 已领养宠物也会在城市里游荡，但活动范围收敛一些，
+      // 这样主人和访客更容易在它的常驻街区再次找到它。
+      const roamScale = pet.owner ? 0.72 : 0.9
+      const pose = petPose(pet.id, pet.spot, clock.roam, roamScale)
       // 宠物不是刚体：玩家可以走到身边观察和互动，不应被宠物的躲避逻辑反向挤走。
       // 未领养宠物仍然保持自己的漫游轨迹，交互状态由 nearby 负责表达。
-      const away = { x: pose.x, z: pose.z, shy: 0 }
-      const heading = petHeading(pet.id, pet.spot, clock.roam, 0.9)
+      // 漫游半径可能跨过路缘；一旦落到车道，先退回自己的安全点，
+      // 避免出现“提示在路中间，但模型被路面/车辆遮住”的错位。
+      const away = insideRoad(pose.x, pose.z, 0.45)
+        ? { x: pet.spot.x, z: pet.spot.z, shy: 0 }
+        : { x: pose.x, z: pose.z, shy: 0 }
+      const heading = petHeading(pet.id, pet.spot, clock.roam, roamScale)
       const shy = away.shy > 0.05
 
       let yaw = Math.atan2(heading.x, heading.z)
@@ -264,6 +307,11 @@ function animateFlock(flock: Flock, time: number) {
       info.z = away.z
       info.y = GROUND_Y
       info.radius = 1.6
+      info.scale = pet.scale
+      info.spot = pet.spot
+      info.nickname = pet.nickname ?? null
+      info.owner = pet.owner ?? null
+      info.adoptedAt = pet.adoptedAt ?? null
     }
     for (const mesh of batch.parts) mesh.instanceMatrix.needsUpdate = true
     if (batch.blink) batch.blink.instanceMatrix.needsUpdate = true
@@ -285,7 +333,25 @@ export function WildPets() {
     return () => window.clearInterval(id)
   }, [])
 
-  const pets = useMemo<WildPet[]>(() => wildPool(bucket), [bucket])
+  const adoptedPets = useApp((state) => state.pets)
+  const pets = useMemo<WildPet[]>(() => {
+    // 被领养的宠物从野生池里移出去，再作为「有主人的宠物」一直留在城里。
+    // 它的 id 里带着生成时的小时号，过了整点也不会被新一批野生宠物顶掉。
+    const taken = new Set(adoptedPets.map((pet) => pet.id))
+    const wild = wildPool(bucket).filter((pet) => !taken.has(pet.id))
+    const kept = adoptedPets.map<WildPet>((pet) => ({
+      id: pet.id,
+      species: pet.speciesId,
+      breed: breedOf(pet.speciesId, pet.breedId),
+      scale: pet.scale,
+      spot: pet.spot,
+      bucket: 0,
+      nickname: pet.nickname,
+      owner: pet.owner,
+      adoptedAt: pet.adoptedAt,
+    }))
+    return [...wild, ...kept]
+  }, [bucket, adoptedPets])
 
   // 先在后台把这一小时要用到的品种模型分批建好，再一次性放进场景
   useEffect(() => {

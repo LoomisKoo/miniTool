@@ -2,7 +2,10 @@ import { create } from 'zustand'
 import { api, ApiError, clearToken, getToken, setToken } from './api'
 import { restoreReturnSpot, saveReturnSpot, startCityFlyIn } from './game/walker'
 import { floorLabel, unitBuilding } from './data/units'
+import { music } from './audio/music'
 import type {
+  AdoptedPet,
+  AdoptPetInput,
   EditorDraft,
   Favorite,
   FurnitureItem,
@@ -17,6 +20,7 @@ import type {
 
 export type Panel =
   | { type: 'place'; id: string }
+  | { type: 'pet'; id: string }
   | { type: 'space'; id: string }
   | { type: 'elevator'; id: string }
   | { type: 'editor'; id: string }
@@ -25,6 +29,14 @@ export type Panel =
   | { type: 'about' }
 
 export type Screen = 'intro' | 'city' | 'interior'
+
+/** 对话里的一次选择（例如「带它回家」），点按后才执行。 */
+export type DialogChoice = {
+  label: string
+  note?: string
+  primary?: boolean
+  onClick: () => void | Promise<void>
+}
 
 /** NPC 对话：一句一句往下翻，翻完自动关闭。 */
 export type Dialog = {
@@ -35,6 +47,12 @@ export type Dialog = {
   /** 说话人的位置：走远了自动结束对话 */
   x?: number
   z?: number
+  /** 宠物主人信息：有值时在对话里显示主人条 */
+  owner?: { name: string; color: string; since: string | null }
+  /** 宠物面板：有值时显示口粮余量和「喂它 / 改名」 */
+  pet?: { id: string; own: boolean }
+  /** 最后一句出现的选项；有选项时按 E 不会再直接关闭对话 */
+  choices?: DialogChoice[]
 }
 
 type Hud = {
@@ -81,10 +99,16 @@ type AppState = {
   reportedIds: string[]
   /** 已记录的宠物，格式 `族/品种`。存在 localStorage，不依赖后端。 */
   seenPets: string[]
+  /** 已经被领养的宠物（服务端返回）；野生池会过滤掉这些 id。 */
+  pets: AdoptedPet[]
+  /** 剩余口粮。喂宠物用，每天补 3 份。 */
+  rations: number
   editor: EditorDraft | null
   selectedFurnitureId: string | null
   placingType: FurnitureType | null
   brushColor: string
+  /** 背景音乐开关。存在 localStorage，和音量无关——这里只有开/关。 */
+  musicOn: boolean
 
   boot: () => Promise<void>
   startExploring: () => void
@@ -101,7 +125,7 @@ type AppState = {
   setBuildingFloor: (floor: number) => void
   markVisited: (id: string) => Promise<void>
   sendMessage: (input: {
-    targetType: 'place' | 'space'
+    targetType: 'place' | 'space' | 'pet'
     targetId: string
     body: string
     parentId?: string | null
@@ -119,8 +143,16 @@ type AppState = {
   setNearby: (nearby: NearbyInfo | null) => void
   /** 记录一只观察过的宠物。重复调用无副作用。 */
   recordPet: (key: string) => void
+  /** 领养一只野生宠物。并发失败时提示主人名字并返回 null。 */
+  adoptPet: (input: AdoptPetInput) => Promise<AdoptedPet | null>
+  /** 喂一只宠物（消耗 1 份口粮），喂过之后才能给它留言。 */
+  feedPet: (id: string) => Promise<boolean>
+  renamePet: (id: string, name: string) => Promise<boolean>
+  /** 每天补 3 份口粮（上限 6），启动时调一次。 */
+  claimRations: () => Promise<void>
   setPointerLocked: (locked: boolean) => void
   toggleNight: () => void
+  toggleMusic: () => void
   setQuality: (quality: number) => void
   showToast: (message: string) => void
   openDialog: (dialog: Omit<Dialog, 'index'>) => void
@@ -231,6 +263,16 @@ function saveSeen(list: string[]) {
   }
 }
 
+const MUSIC_KEY = 'lumen-music-on'
+
+function loadMusicOn(): boolean {
+  try {
+    return window.localStorage.getItem(MUSIC_KEY) !== 'off'
+  } catch {
+    return true
+  }
+}
+
 export const useApp = create<AppState>((set, get) => ({
   booted: false,
   booting: false,
@@ -259,10 +301,13 @@ export const useApp = create<AppState>((set, get) => ({
   visitedSpaces: [],
   reportedIds: [],
   seenPets: loadSeen(),
+  pets: [],
+  rations: 0,
   editor: null,
   selectedFurnitureId: null,
   placingType: null,
   brushColor: '#8a7a63',
+  musicOn: loadMusicOn(),
 
   boot: async () => {
     if (get().booting) return
@@ -287,11 +332,14 @@ export const useApp = create<AppState>((set, get) => ({
       set({
         user,
         world,
+        pets: world.pets ?? [],
         booted: true,
         booting: false,
         bootError: null,
       })
       setMeta(DEFAULT_TITLE, DEFAULT_DESC)
+      // 登录后补发当天口粮：跨天才发，一天只发一次
+      void get().claimRations()
 
       const params = new URLSearchParams(window.location.search)
       const space = params.get('space')
@@ -316,7 +364,13 @@ export const useApp = create<AppState>((set, get) => ({
     }
   },
 
-  beginEnter: () => set({ entering: true }),
+  beginEnter: () => {
+    // 这里仍然是"进入城市"那次点击的同步调用栈，是浏览器允许启动音频的时机。
+    // 放到 startExploring 里就晚了 300ms，Safari 会判定为自动播放而拦掉。
+    music.setMuted(!get().musicOn)
+    music.start(get().night ? 'night' : 'dusk')
+    set({ entering: true })
+  },
 
   startExploring: () => {
     // 先记时间戳：镜头接下来会从片头的高空机位俯冲到主角身后
@@ -328,7 +382,7 @@ export const useApp = create<AppState>((set, get) => ({
   refreshWorld: async () => {
     try {
       const world = await api.world()
-      set({ world, user: world.user || get().user })
+      set({ world, user: world.user || get().user, pets: world.pets ?? [] })
     } catch {
       /* 保持当前内容，不打断游玩 */
     }
@@ -623,6 +677,16 @@ export const useApp = create<AppState>((set, get) => ({
     // 等暗幕盖满再切，卡顿发生在幕后；切完下一帧再揭开。
     behindCurtain(() => set({ night: !get().night }))
   },
+  toggleMusic: () => {
+    const on = !get().musicOn
+    set({ musicOn: on })
+    music.setMuted(!on)
+    try {
+      window.localStorage.setItem(MUSIC_KEY, on ? 'on' : 'off')
+    } catch {
+      /* 隐私模式下记不住，这一局仍然生效 */
+    }
+  },
   setQuality: (quality) => {
     if (get().quality === quality) return
     // 档位现在只改 AO 采样与 Bloom 强度，不会重建 composer / canvas，
@@ -643,6 +707,68 @@ export const useApp = create<AppState>((set, get) => ({
     set({ seenPets: next })
   },
 
+  adoptPet: async (input) => {
+    try {
+      const { pet } = await api.adoptPet(input)
+      set({ pets: [...get().pets.filter((item) => item.id !== pet.id), pet] })
+      get().recordPet(`${input.speciesId}/${input.breedId}`)
+      return pet
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 409) {
+        if (error.data.code === 'pet_limit') {
+          get().showToast('每位访客只能领养一只宠物')
+          return null
+        }
+        // 两个人同时点同一只：服务端只让一个成功，另一个人要知道它去了哪。
+        const ownerName = String(error.data.ownerName || '别人')
+        get().closeDialog()
+        get().showToast(`晚了一步，它刚被 @${ownerName} 带走了`)
+        void get().refreshWorld()
+        return null
+      }
+      get().showToast(errorMessage(error))
+      return null
+    }
+  },
+
+  feedPet: async (id) => {
+    if (get().rations < 1) {
+      get().showToast('口粮不够了，明天再来吧')
+      return false
+    }
+    try {
+      const { pet, rations } = await api.feedPet(id)
+      set({ rations, pets: get().pets.map((item) => (item.id === pet.id ? { ...item, ...pet } : item)) })
+      get().showToast(`喂了 ${pet.nickname || '它'} 一顿。`)
+      return true
+    } catch (error) {
+      get().showToast(errorMessage(error))
+      return false
+    }
+  },
+
+  renamePet: async (id, name) => {
+    try {
+      const { pet } = await api.renamePet(id, name)
+      set({ pets: get().pets.map((item) => (item.id === pet.id ? { ...item, ...pet } : item)) })
+      get().showToast(`从现在起它叫「${pet.nickname}」了。`)
+      return true
+    } catch (error) {
+      get().showToast(errorMessage(error))
+      return false
+    }
+  },
+
+  claimRations: async () => {
+    try {
+      const { rations, granted } = await api.claimRations()
+      set({ rations })
+      if (granted > 0) get().showToast(`领到 ${granted} 份口粮，可以去喂宠物了。`)
+    } catch {
+      /* 口粮是锦上添花，拿不到不打断进城的流程 */
+    }
+  },
+
   setPointerLocked: (pointerLocked) => set({ pointerLocked }),
 
   openDialog: (dialog) => {
@@ -652,8 +778,11 @@ export const useApp = create<AppState>((set, get) => ({
   nextDialog: () => {
     const d = get().dialog
     if (!d) return
-    if (d.index + 1 >= d.lines.length) set({ dialog: null })
-    else set({ dialog: { ...d, index: d.index + 1 } })
+    if (d.index + 1 >= d.lines.length) {
+      // 最后一句有选项时不能直接关掉：领养要由玩家明确选择。
+      if (d.choices?.length) return
+      set({ dialog: null })
+    } else set({ dialog: { ...d, index: d.index + 1 } })
   },
 
   closeDialog: () => set({ dialog: null }),

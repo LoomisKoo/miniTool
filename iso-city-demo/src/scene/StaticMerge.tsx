@@ -24,6 +24,7 @@ type Bucket = {
   renderOrder: number
   castShadow: boolean
   receiveShadow: boolean
+  lod: { landmark: boolean } | null
 }
 
 function isDynamic(node: THREE.Object3D) {
@@ -33,6 +34,17 @@ function isDynamic(node: THREE.Object3D) {
     current = current.parent
   }
   return false
+}
+
+function lodOf(node: THREE.Object3D): { landmark: boolean } | null {
+  let current: THREE.Object3D | null = node
+  while (current) {
+    if (current.userData.buildingDetailLod) {
+      return { landmark: Boolean(current.userData.landmark) }
+    }
+    current = current.parent
+  }
+  return null
 }
 
 const band = (value: number | undefined, step = 0.15) =>
@@ -204,9 +216,10 @@ function collectBucketsFrom(roots: THREE.Object3D[]): Bucket[] {
     const cell = spansChunks
       ? 'global'
       : `${Math.floor(center.x / CHUNK)}_${Math.floor(center.z / CHUNK)}`
+    const lod = lodOf(mesh)
     // 属性集合与是否索引必须一致，否则 mergeGeometries 会失败。
     const layout = `${geo.index ? 'i' : 'n'}_${Object.keys(geo.attributes).sort().join(',')}`
-    const key = `${cell}|${mesh.castShadow ? 1 : 0}|${layout}|${classified.key}`
+    const key = `${cell}|${mesh.castShadow ? 1 : 0}|${layout}|${classified.key}|lod${lod ? (lod.landmark ? 'landmark' : 'building') : 'none'}`
 
     const existing = buckets.get(key)
     if (existing) {
@@ -223,6 +236,7 @@ function collectBucketsFrom(roots: THREE.Object3D[]): Bucket[] {
       renderOrder: mesh.renderOrder,
       castShadow: mesh.castShadow,
       receiveShadow: mesh.receiveShadow,
+      lod,
     })
   }
 
@@ -264,6 +278,10 @@ function mergeOneBucket(job: MergeJob): void {
   mesh.receiveShadow = bucket.receiveShadow
   mesh.frustumCulled = true
   mesh.userData.merged = true
+  if (bucket.lod) {
+    mesh.userData.buildingDetailLod = true
+    mesh.userData.landmark = bucket.lod.landmark
+  }
   job.root.add(mesh)
 
   for (const original of bucket.meshes) {

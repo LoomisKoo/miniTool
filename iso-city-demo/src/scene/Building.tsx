@@ -441,25 +441,27 @@ function UnitBuildingExterior({ def }: Props) {
   return (
     <group position={[def.x, 0, def.z]}>
       <UnitShell building={source} body={def.body} palette={palette} />
-      {main && (
-        <group
-          position={[
-            main.side === 'w' ? -source.w / 2 - 0.05 : main.side === 'e' ? source.w / 2 + 0.05 : main.x,
-            0,
-            main.side === 'n' ? -source.d / 2 - 0.05 : main.side === 's' ? source.d / 2 + 0.05 : main.z,
-          ]}
-          rotation={[0, main.side === 'e' ? Math.PI / 2 : main.side === 'w' ? -Math.PI / 2 : main.side === 'n' ? Math.PI : 0, 0]}
-        >
-          <mesh position={[0, 3.75, 0.02]}>
-            <planeGeometry args={[4.6, 0.95]} />
-            <meshBasicMaterial map={signTexture} toneMapped={false} transparent opacity={0.96} />
-          </mesh>
-        </group>
-      )}
-      {night &&
-        entrances.map((e, i) => (
-          <GlowDisc key={i} position={[e.x, 0.62, e.z]} size={5.2} color="#ffd2a0" opacity={0.12} />
-        ))}
+      <group userData={{ buildingDetailLod: true, landmark: Boolean(def.landmark) }}>
+        {main && (
+          <group
+            position={[
+              main.side === 'w' ? -source.w / 2 - 0.05 : main.side === 'e' ? source.w / 2 + 0.05 : main.x,
+              0,
+              main.side === 'n' ? -source.d / 2 - 0.05 : main.side === 's' ? source.d / 2 + 0.05 : main.z,
+            ]}
+            rotation={[0, main.side === 'e' ? Math.PI / 2 : main.side === 'w' ? -Math.PI / 2 : main.side === 'n' ? Math.PI : 0, 0]}
+          >
+            <mesh position={[0, 3.75, 0.02]}>
+              <planeGeometry args={[4.6, 0.95]} />
+              <meshBasicMaterial map={signTexture} toneMapped={false} transparent opacity={0.96} />
+            </mesh>
+          </group>
+        )}
+        {night &&
+          entrances.map((e, i) => (
+            <GlowDisc key={i} position={[e.x, 0.62, e.z]} size={5.2} color="#ffd2a0" opacity={0.12} />
+          ))}
+      </group>
     </group>
   )
 }
@@ -753,30 +755,31 @@ function PlainBuilding({ def }: Props) {
         userData={{ noMerge: true }}
       />
 
-      {def.balconies && <Balconies def={def} width={bodyW} depth={bodyD} palette={palette} />}
+      <group userData={{ buildingDetailLod: true, landmark: Boolean(def.landmark) }}>
+        {def.balconies && <Balconies def={def} width={bodyW} depth={bodyD} palette={palette} />}
 
-      {/* 立面骨架：竖挺 / 壁柱 */}
-      <group position={[0, podium, 0]}>
-        <Skin
-          width={bodyW}
-          depth={bodyD}
-          height={bodyH}
-          chamfer={chamfer}
-          style={def.style}
-          palette={palette}
-          seed={seeded(def.id + '-skin')()}
-        />
-      </group>
+        {/* 立面骨架：竖挺 / 壁柱 */}
+        <group position={[0, podium, 0]}>
+          <Skin
+            width={bodyW}
+            depth={bodyD}
+            height={bodyH}
+            chamfer={chamfer}
+            style={def.style}
+            palette={palette}
+            seed={seeded(def.id + '-skin')()}
+          />
+        </group>
 
-      {/* 首层店面 */}
-      <group
-        position={[
-          faceBase + (side === 'east' ? offset : side === 'west' ? -offset : 0),
-          0,
-          faceBaseZ + (side === 'south' ? offset : side === 'north' ? -offset : 0),
-        ]}
-        rotation={[0, rotation, 0]}
-      >
+        {/* 首层店面 */}
+        <group
+          position={[
+            faceBase + (side === 'east' ? offset : side === 'west' ? -offset : 0),
+            0,
+            faceBaseZ + (side === 'south' ? offset : side === 'north' ? -offset : 0),
+          ]}
+          rotation={[0, rotation, 0]}
+        >
         <mesh position={[0, 2.0, 0]}>
           <boxGeometry args={[faceWidth, 3.6, 0.2]} />
           <meshStandardMaterial
@@ -867,61 +870,62 @@ function PlainBuilding({ def }: Props) {
             <GlowDisc position={[0, 0.62, 1.8]} size={6.4} color="#ffd2a0" opacity={0.13} />
           </>
         )}
-      </group>
-
-      <Plinth width={bodyW} depth={bodyD} palette={palette} />
-      <Cornice width={bodyW} depth={bodyD} y={def.h - 0.9} palette={palette} />
-
-      <Roof def={def} width={bodyW} depth={bodyD} top={def.h} palette={palette} />
-
-      {/* 顶部压边：跟着切角走，才不会在削角处露出一个方角 */}
-      <mesh position={[0, podium + bodyH - 0.08, 0]} geometry={cap}>
-        <meshStandardMaterial color={palette.trim} roughness={0.5} metalness={0.45} />
-      </mesh>
-
-      {/* 轮廓线只留给地标：普通楼体在移动时这条细亮线会闪成"漏光" */}
-      {outline && def.landmark && (
-        <lineSegments position={[0, podium, 0]} geometry={outline}>
-          <lineBasicMaterial
-            color={accent}
-            transparent
-            opacity={0.4}
-            toneMapped={false}
-          />
-        </lineSegments>
-      )}
-
-      {palette.key === 'night' && (
-        <group position={[0, def.h + 1.2, 0]}>
-          <mesh position={[bodyW * 0.36, 0, bodyD * 0.36]}>
-            <sphereGeometry args={[0.28, 10, 10]} />
-            <meshBasicMaterial color={accent} toneMapped={false} />
-          </mesh>
-          <mesh position={[bodyW * 0.36, 0, bodyD * 0.36]} rotation={[-Math.PI / 2, 0, 0]}>
-            <ringGeometry args={[0.5, 0.62, 20]} />
-            <meshBasicMaterial color={accent} transparent opacity={0.4} toneMapped={false} side={THREE.DoubleSide} />
-          </mesh>
         </group>
-      )}
 
-      {/* 屋顶一圈 AR 光环，俯瞰时勾勒出城市轮廓 */}
-      {palette.key === 'night' && (
-        <lineSegments position={[0, def.h + 0.35, 0]} geometry={roofLine}>
-          <lineBasicMaterial color={accent} transparent opacity={def.landmark ? 0.75 : 0.45} toneMapped={false} />
-        </lineSegments>
-      )}
+        <Plinth width={bodyW} depth={bodyD} palette={palette} />
+        <Cornice width={bodyW} depth={bodyD} y={def.h - 0.9} palette={palette} />
 
-      {/* 楼体竖向光缝（少量） */}
-      {def.landmark && (
-        <>
-          {[-1, 1].map((s) => (
-            <mesh key={s} position={[s * (bodyW / 2 + 0.06), podium + bodyH / 2, bodyD / 2 * 0.3]}>
-              <boxGeometry args={[0.05, bodyH * 0.72, 0.05]} />
-              <meshBasicMaterial color={accent} transparent opacity={0.5} toneMapped={false} />
+        <Roof def={def} width={bodyW} depth={bodyD} top={def.h} palette={palette} />
+
+        {/* 顶部压边：跟着切角走，才不会在削角处露出一个方角 */}
+        <mesh position={[0, podium + bodyH - 0.08, 0]} geometry={cap}>
+          <meshStandardMaterial color={palette.trim} roughness={0.5} metalness={0.45} />
+        </mesh>
+
+        {/* 轮廓线只留给地标：普通楼体在移动时这条细亮线会闪成"漏光" */}
+        {outline && def.landmark && (
+          <lineSegments position={[0, podium, 0]} geometry={outline}>
+            <lineBasicMaterial
+              color={accent}
+              transparent
+              opacity={0.4}
+              toneMapped={false}
+            />
+          </lineSegments>
+        )}
+
+        {palette.key === 'night' && (
+          <group position={[0, def.h + 1.2, 0]}>
+            <mesh position={[bodyW * 0.36, 0, bodyD * 0.36]}>
+              <sphereGeometry args={[0.28, 10, 10]} />
+              <meshBasicMaterial color={accent} toneMapped={false} />
             </mesh>
-          ))}
-        </>
-      )}
+            <mesh position={[bodyW * 0.36, 0, bodyD * 0.36]} rotation={[-Math.PI / 2, 0, 0]}>
+              <ringGeometry args={[0.5, 0.62, 20]} />
+              <meshBasicMaterial color={accent} transparent opacity={0.4} toneMapped={false} side={THREE.DoubleSide} />
+            </mesh>
+          </group>
+        )}
+
+        {/* 屋顶一圈 AR 光环，俯瞰时勾勒出城市轮廓 */}
+        {palette.key === 'night' && (
+          <lineSegments position={[0, def.h + 0.35, 0]} geometry={roofLine}>
+            <lineBasicMaterial color={accent} transparent opacity={def.landmark ? 0.75 : 0.45} toneMapped={false} />
+          </lineSegments>
+        )}
+
+        {/* 楼体竖向光缝（少量） */}
+        {def.landmark && (
+          <>
+            {[-1, 1].map((s) => (
+              <mesh key={s} position={[s * (bodyW / 2 + 0.06), podium + bodyH / 2, bodyD / 2 * 0.3]}>
+                <boxGeometry args={[0.05, bodyH * 0.72, 0.05]} />
+                <meshBasicMaterial color={accent} transparent opacity={0.5} toneMapped={false} />
+              </mesh>
+            ))}
+          </>
+        )}
+      </group>
     </group>
   )
 }
@@ -1132,17 +1136,23 @@ export function InfillBuilding({ def }: Props) {
             <RoofDeck width={p.tier.w} depth={p.tier.d} night={lightsOn} y={tierH + 0.22} />
             <group position={[0, tierH, 0]}>
               <Parapet width={p.tier.w} depth={p.tier.d} palette={palette} height={0.9} thickness={0.26} />
-              {isTop && <RoofGear seedKey={`${def.id}-gear`} width={p.tier.w} depth={p.tier.d} palette={palette} />}
+              {isTop && (
+                <group userData={{ buildingDetailLod: true, landmark: Boolean(def.landmark) }}>
+                  <RoofGear seedKey={`${def.id}-gear`} width={p.tier.w} depth={p.tier.d} palette={palette} />
+                </group>
+              )}
             </group>
-            <Skin
-              width={p.tier.w}
-              depth={p.tier.d}
-              height={tierH}
-              chamfer={p.chamfer}
-              style={def.style}
-              palette={palette}
-              seed={seeded(def.id + '-skin' + i)()}
-            />
+            <group userData={{ buildingDetailLod: true, landmark: Boolean(def.landmark) }}>
+              <Skin
+                width={p.tier.w}
+                depth={p.tier.d}
+                height={tierH}
+                chamfer={p.chamfer}
+                style={def.style}
+                palette={palette}
+                seed={seeded(def.id + '-skin' + i)()}
+              />
+            </group>
           </group>
         )
       })}
@@ -1150,7 +1160,11 @@ export function InfillBuilding({ def }: Props) {
       <Plinth width={def.w} depth={def.d} palette={palette} />
 
       {hasShop && (
-        <group position={[front.x, 0, front.z]} rotation={[0, rotation, 0]}>
+        <group
+          position={[front.x, 0, front.z]}
+          rotation={[0, rotation, 0]}
+          userData={{ buildingDetailLod: true, landmark: Boolean(def.landmark) }}
+        >
           {/* 店面推离墙面 0.2m：勒脚比墙面外凸 0.15m，贴太近会被它挡住 */}
           <mesh position={[0, 1.75, 0.2]}>
             <boxGeometry args={[shopW, 3.3, 0.14]} />

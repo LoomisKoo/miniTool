@@ -33,6 +33,8 @@ function mapUser(row) {
     tokenHash: row.token_hash,
     accountId: row.account_id,
     isNpc: row.is_npc,
+    rations: Number(row.rations || 0),
+    rationDay: row.ration_day || '',
     createdAt: row.created_at,
   }
 }
@@ -56,6 +58,21 @@ function mapSpace(row) {
     postCount: Number(row.post_count || 0),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+  }
+}
+
+function mapPet(row) {
+  if (!row) return null
+  return {
+    id: row.id,
+    speciesId: row.species_id,
+    breedId: row.breed_id,
+    scale: Number(row.scale),
+    spot: row.spot,
+    nickname: row.nickname,
+    owner: row.owner_name ? { id: row.owner_id, name: row.owner_name, color: row.owner_color } : null,
+    adoptedAt: row.adopted_at,
+    hungerAt: row.hunger_at || null,
   }
 }
 
@@ -466,6 +483,10 @@ export class PgStore {
       const { rows } = await this.pool.query('SELECT owner_id FROM spaces WHERE id=$1', [post.targetId])
       allowed = rows[0]?.owner_id === user.id
     }
+    if (!allowed && post.targetType === 'pet') {
+      const { rows } = await this.pool.query('SELECT owner_id FROM pets WHERE id=$1', [post.targetId])
+      allowed = rows[0]?.owner_id === user.id
+    }
     if (!allowed) return { error: 'forbidden' }
     await this.pool.query(`UPDATE posts SET status='deleted', deleted_at=now() WHERE id=$1`, [postId])
     return { ok: true }
@@ -484,6 +505,171 @@ export class PgStore {
     const hidden = rows[0].n >= 3
     if (hidden) await this.pool.query(`UPDATE posts SET status='hidden' WHERE id=$1`, [postId])
     return { ok: true, hidden }
+  }
+
+  // ---------- pets ----------
+
+  async listPets() {
+    const { rows } = await this.pool.query(
+      `SELECT p.*, u.name AS owner_name, u.color AS owner_color
+       FROM pets p JOIN users u ON u.id = p.owner_id
+       ORDER BY p.adopted_at`,
+    )
+    return rows.map(mapPet)
+  }
+
+  async adoptPet(pet, userId) {
+    const owned = await this.pool.query('SELECT id FROM pets WHERE owner_id=$1 LIMIT 1', [userId])
+    if (owned.rows[0]) return { error: 'limit' }
+    // 先插入（已存在则忽略），再带条件更新。两个人同时点同一只时，
+    // UPDATE 的行锁会让后者读到 owner_id 已非空，从而拿到 taken。
+    try {
+      await this.pool.query(
+        `INSERT INTO pets (id, species_id, breed_id, scale, spot, owner_id)
+         VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (id) DO NOTHING`,
+        [pet.id, pet.speciesId, pet.breedId, pet.scale, JSON.stringify(pet.spot), userId],
+      )
+    } catch (error) {
+      if (error?.code === '23505') return { error: 'limit' }
+      throw error
+    }
+    const { rows } = await this.pool.query(
+      `UPDATE pets SET owner_id=$2, adopted_at=now()
+       WHERE id=$1 AND (owner_id IS NULL OR owner_id=$2) RETURNING id`,
+      [pet.id, userId],
+    )
+    if (!rows[0]) {
+      const taken = await this.pool.query(
+        `SELECT u.name AS owner_name FROM pets p LEFT JOIN users u ON u.id=p.owner_id WHERE p.id=$1`,
+        [pet.id],
+      )
+      if (!taken.rows[0]) return { error: 'not_found' }
+      return { error: 'taken', ownerName: taken.rows[0].owner_name || '其他访客' }
+    }
+    const full = await this.pool.query(
+      `SELECT p.*, u.name AS owner_name, u.color AS owner_color
+       FROM pets p JOIN users u ON u.id=p.owner_id WHERE p.id=$1`,
+      [pet.id],
+    )
+    return { pet: mapPet(full.rows[0]) }
+  }
+
+  async getPet(id) {
+    const { rows } = await this.pool.query(
+      `SELECT p.*, u.name AS owner_name, u.color AS owner_color
+       FROM pets p JOIN users u ON u.id=p.owner_id WHERE p.id=$1`,
+      [id],
+    )
+    return mapPet(rows[0])
+  }
+
+  async listPetsByOwner(userId) {
+    const { rows } = await this.pool.query(
+      `SELECT p.*, u.name AS owner_name, u.color AS owner_color
+       FROM pets p JOIN users u ON u.id=p.owner_id
+       WHERE p.owner_id=$1 ORDER BY p.adopted_at`,
+      [userId],
+    )
+    return rows.map(mapPet)
+  }
+
+  /** 喂食：扣 1 份口粮，刷新「最后一次吃饱」时间。谁的宠物都可以喂。 */
+  async feedPet(petId, userId) {
+    const client = await this.pool.connect()
+    try {
+      await client.query('BEGIN')
+      const userRow = await client.query('SELECT rations FROM users WHERE id=$1 FOR UPDATE', [userId])
+      if (!userRow.rows[0]) {
+        await client.query('ROLLBACK')
+        return { error: 'no_user' }
+      }
+      const rations = Number(userRow.rows[0].rations || 0)
+      if (rations < 1) {
+        await client.query('ROLLBACK')
+        return { error: 'no_rations' }
+      }
+      const petRow = await client.query(
+        `UPDATE pets SET hunger_at=now(),
+           fed_by = CASE
+             WHEN fed_by @> to_jsonb($2::text) THEN fed_by
+             ELSE COALESCE(fed_by,'[]'::jsonb) || to_jsonb($2::text)
+           END
+         WHERE id=$1 AND owner_id IS NOT NULL RETURNING id`,
+        [petId, userId],
+      )
+      if (!petRow.rows[0]) {
+        await client.query('ROLLBACK')
+        return { error: 'not_found' }
+      }
+      await client.query('UPDATE users SET rations=$2 WHERE id=$1', [userId, rations - 1])
+      const full = await client.query(
+        `SELECT p.*, u.name AS owner_name, u.color AS owner_color
+         FROM pets p JOIN users u ON u.id=p.owner_id WHERE p.id=$1`,
+        [petId],
+      )
+      await client.query('COMMIT')
+      return { pet: mapPet(full.rows[0]), rations: rations - 1 }
+    } catch (error) {
+      await client.query('ROLLBACK')
+      throw error
+    } finally {
+      client.release()
+    }
+  }
+
+  async renamePet(petId, userId, nickname) {
+    const { rows } = await this.pool.query(
+      `UPDATE pets SET nickname=$3 WHERE id=$1 AND owner_id=$2 RETURNING id`,
+      [petId, userId, nickname],
+    )
+    if (!rows[0]) {
+      const pet = await this.getPet(petId)
+      return { error: pet ? 'forbidden' : 'not_found' }
+    }
+    return { pet: await this.getPet(petId) }
+  }
+
+  async hasFedPet(petId, userId) {
+    const { rows } = await this.pool.query(
+      `SELECT 1 FROM pets WHERE id=$1 AND fed_by @> to_jsonb($2::text) LIMIT 1`,
+      [petId, userId],
+    )
+    return !!rows[0]
+  }
+
+  /** 每天补 3 份口粮，上限 6 份。 */
+  async claimRations(userId) {
+    const today = new Date().toISOString().slice(0, 10)
+    const client = await this.pool.connect()
+    try {
+      await client.query('BEGIN')
+      const { rows } = await client.query(
+        'SELECT rations, ration_day FROM users WHERE id=$1 FOR UPDATE',
+        [userId],
+      )
+      if (!rows[0]) {
+        await client.query('ROLLBACK')
+        return { error: 'no_user' }
+      }
+      if (rows[0].ration_day === today) {
+        await client.query('COMMIT')
+        return { rations: Number(rows[0].rations || 0), granted: 0 }
+      }
+      const current = Number(rows[0].rations || 0)
+      const granted = Math.min(3, Math.max(0, 6 - current))
+      await client.query('UPDATE users SET rations=$2, ration_day=$3 WHERE id=$1', [
+        userId,
+        current + granted,
+        today,
+      ])
+      await client.query('COMMIT')
+      return { rations: current + granted, granted }
+    } catch (error) {
+      await client.query('ROLLBACK')
+      throw error
+    } finally {
+      client.release()
+    }
   }
 
   // ---------- favorites ----------

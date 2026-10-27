@@ -1,4 +1,4 @@
-import type { Favorite, PlaceDetail, Space, SpaceDetail, World } from './types'
+import type { AdoptedPet, AdoptPetInput, Favorite, PetDetail, PlaceDetail, Space, SpaceDetail, World } from './types'
 
 const BASE = String(import.meta.env.VITE_API_BASE || '').replace(/\/$/, '')
 const TOKEN_KEY = 'lumen.guest.token'
@@ -108,7 +108,7 @@ export const api = {
   visits: (id: string) =>
     request<{ visits: SpaceDetail['visits'] }>(`/api/spaces/${encodeURIComponent(id)}/visits`),
   createPost: (input: {
-    targetType: 'place' | 'space'
+    targetType: 'place' | 'space' | 'pet'
     targetId: string
     body: string
     parentId?: string | null
@@ -128,4 +128,16 @@ export const api = {
       body: { targetType, targetId },
     }),
   favorites: () => request<{ favorites: Favorite[] }>('/api/favorites'),
+  pets: () =>
+    request<{ mine: AdoptedPet | null; wildTaken: string[]; rations: number }>('/api/pets'),
+  adoptPet: (input: AdoptPetInput) =>
+    request<{ pet: AdoptedPet }>('/api/pets/adopt', { method: 'POST', body: input }),
+  feedPet: (id: string) =>
+    request<{ pet: AdoptedPet; rations: number }>('/api/pets/feed', { method: 'POST', body: { id } }),
+  renamePet: (id: string, name: string) =>
+    request<{ pet: AdoptedPet }>('/api/pets/rename', { method: 'POST', body: { id, name } }),
+  petDetail: (id: string) =>
+    request<PetDetail>(`/api/pets/${encodeURIComponent(id)}`),
+  claimRations: () =>
+    request<{ rations: number; granted: number }>('/api/rations/claim', { method: 'POST' }),
 }

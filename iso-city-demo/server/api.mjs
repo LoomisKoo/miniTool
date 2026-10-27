@@ -70,6 +70,33 @@ function validateLayout(input) {
   return { items }
 }
 
+/** 领养时客户端提交的宠物档案只做形状校验：野生池本来就是公开推导的。 */
+function validatePetRecord(input) {
+  if (!input || typeof input !== 'object') return null
+  const id = String(input.id || '')
+  const speciesId = String(input.speciesId || '')
+  const breedId = String(input.breedId || '')
+  if (!ID.test(id) || !/^[a-z]{1,24}$/.test(speciesId) || !/^[a-z0-9-]{1,32}$/i.test(breedId)) return null
+  const scale = Number(input.scale)
+  if (!Number.isFinite(scale) || scale < 0.5 || scale > 1.5) return null
+  const x = Number(input.spot?.x)
+  const z = Number(input.spot?.z)
+  const radius = Number(input.spot?.radius)
+  if (!Number.isFinite(x) || !Number.isFinite(z) || Math.abs(x) > 600 || Math.abs(z) > 600) return null
+  if (!Number.isFinite(radius) || radius < 0.4 || radius > 12) return null
+  return {
+    id,
+    speciesId,
+    breedId,
+    scale: Math.round(scale * 1000) / 1000,
+    spot: {
+      x: Math.round(x * 100) / 100,
+      z: Math.round(z * 100) / 100,
+      radius: Math.round(radius * 100) / 100,
+    },
+  }
+}
+
 function validateSpacePatch(body) {
   const patch = {}
   if (body.name !== undefined) {
@@ -150,6 +177,7 @@ export function createApi({ store, authSecret, appUrl = '', storage = 'json', lo
   async function requireTarget(type, id) {
     if (type === 'place') return store.getPlace(id)
     if (type === 'space') return store.getSpace(id)
+    if (type === 'pet') return store.getPet(id)
     return null
   }
 
@@ -199,9 +227,10 @@ export function createApi({ store, authSecret, appUrl = '', storage = 'json', lo
     // ---------- world ----------
 
     if (path === '/api/world' && method === 'GET') {
-      const [places, spaces, stats] = await Promise.all([
+      const [places, spaces, pets, stats] = await Promise.all([
         store.listPlaces(),
         store.listSpaces(),
+        store.listPets(),
         store.stats(),
       ])
       // 楼内户现在有近千间，完整 layout 会让首屏响应变成几 MB。
@@ -220,6 +249,7 @@ export function createApi({ store, authSecret, appUrl = '', storage = 'json', lo
       return json(200, {
         places,
         spaces: spaceSummaries,
+        pets,
         stats,
         user: publicUser(user),
         userClaimedSpaceId: claimedSpace?.id || null,
@@ -321,6 +351,78 @@ export function createApi({ store, authSecret, appUrl = '', storage = 'json', lo
       return json(200, { visits: await store.listVisits(space.id) })
     }
 
+    // ---------- pets ----------
+
+    if (path === '/api/pets' && method === 'GET') {
+      if (!user) return json(401, { error: '请先获得访客身份' })
+      const [mine, all] = await Promise.all([store.listPetsByOwner(user.id), store.listPets()])
+      // wildTaken 供客户端过滤野生池：今天已经被领走的 id
+      const today = new Date().toISOString().slice(0, 10)
+      const wildTaken = all
+        .filter((pet) => String(pet.adoptedAt || '').slice(0, 10) === today)
+        .map((pet) => pet.id)
+      return json(200, { mine: mine[0] || null, wildTaken, rations: user.rations ?? 0 })
+    }
+
+    if (path === '/api/pets/adopt' && method === 'POST') {
+      if (!user) return json(401, { error: '请先获得访客身份' })
+      if (!limit(`adopt:${user.id}`, 10, 60_000)) return json(429, { error: '操作太频繁，请稍后再试' })
+      const record = validatePetRecord(req.body)
+      if (!record) return json(400, { error: '宠物信息不完整' })
+      const result = await store.adoptPet(record, user.id)
+      if (result.error === 'not_found') return json(404, { error: '这只宠物已经不在城里了' })
+      if (result.error === 'limit') return json(409, { error: '每位访客只能领养一只宠物', code: 'pet_limit' })
+      if (result.error === 'taken') {
+        return json(409, {
+          error: `它刚被 @${result.ownerName} 带走了`,
+          ownerName: result.ownerName,
+        })
+      }
+      return json(201, { pet: result.pet })
+    }
+
+    if (path === '/api/pets/feed' && method === 'POST') {
+      if (!user) return json(401, { error: '请先获得访客身份' })
+      if (!limit(`feed:${user.id}`, 20, 60_000)) return json(429, { error: '喂得太频繁了，稍等一下' })
+      const petId = String(req.body?.id || '')
+      if (!ID.test(petId)) return json(400, { error: '宠物 id 不正确' })
+      const result = await store.feedPet(petId, user.id)
+      if (result.error === 'not_found') return json(404, { error: '宠物不存在' })
+      if (result.error === 'no_rations') return json(402, { error: '口粮不够了，明天再来吧' })
+      return json(200, { pet: result.pet, rations: result.rations })
+    }
+
+    if (path === '/api/pets/rename' && method === 'POST') {
+      if (!user) return json(401, { error: '请先获得访客身份' })
+      const petId = String(req.body?.id || '')
+      const nickname = clean(req.body?.name, 12)
+      if (!ID.test(petId)) return json(400, { error: '宠物 id 不正确' })
+      if (nickname.length < 1) return json(400, { error: '名字不能为空' })
+      if (!limit(`petname:${user.id}`, 6, 60_000)) return json(429, { error: '改名太频繁，请稍后再试' })
+      const result = await store.renamePet(petId, user.id, nickname)
+      if (result.error === 'not_found') return json(404, { error: '宠物不存在' })
+      if (result.error === 'forbidden') return json(403, { error: '只能给自己的宠物改名' })
+      return json(200, { pet: result.pet })
+    }
+
+    const petMatch = path.match(/^\/api\/pets\/([a-zA-Z0-9_-]+)$/)
+    if (petMatch && method === 'GET') {
+      const pet = await store.getPet(petMatch[1])
+      if (!pet) return json(404, { error: '宠物不存在' })
+      const notes = await store.listPosts('pet', pet.id, 20)
+      return json(200, { pet, notes })
+    }
+
+    // ---------- rations ----------
+
+    if (path === '/api/rations/claim' && method === 'POST') {
+      if (!user) return json(401, { error: '请先获得访客身份' })
+      if (!limit(`rations:${user.id}`, 6, 60_000)) return json(429, { error: '稍后再试' })
+      const result = await store.claimRations(user.id)
+      if (result.error === 'no_user') return json(401, { error: '访客身份已失效' })
+      return json(200, { rations: result.rations, granted: result.granted })
+    }
+
     // ---------- posts ----------
 
     if (path === '/api/posts' && method === 'POST') {
@@ -329,7 +431,7 @@ export function createApi({ store, authSecret, appUrl = '', storage = 'json', lo
       const body = req.body || {}
       const targetType = String(body.targetType || '')
       const targetId = String(body.targetId || '')
-      if (!['place', 'space'].includes(targetType) || !ID.test(targetId)) {
+      if (!['place', 'space', 'pet'].includes(targetType) || !ID.test(targetId)) {
         return json(400, { error: '留言目标不正确' })
       }
       const message = clean(body.body, MAX_BODY)
@@ -337,9 +439,17 @@ export function createApi({ store, authSecret, appUrl = '', storage = 'json', lo
       const media = validPostMedia(body.mediaKind, body.mediaRef)
       if (!media) return json(400, { error: '媒体附件不正确' })
       const target = await requireTarget(targetType, targetId)
-      if (!target) return json(404, { error: '地点不存在' })
+      if (!target) return json(404, { error: '目标不存在' })
       if (targetType === 'space' && !target.isOpen && target.ownerId !== user.id) {
         return json(403, { error: '这间空间暂未开放' })
+      }
+      // 宠物留言要先喂过它：留言是「照顾过它」的凭证；主人自己例外。
+      if (targetType === 'pet') {
+        const pet = await store.getPet(targetId)
+        const isOwner = pet?.owner?.id === user.id
+        if (!isOwner && !(await store.hasFedPet(targetId, user.id))) {
+          return json(403, { error: '先喂它一顿再留言吧' })
+        }
       }
       let parentId = null
       if (body.parentId) {

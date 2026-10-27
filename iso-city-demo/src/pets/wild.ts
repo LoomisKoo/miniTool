@@ -8,10 +8,12 @@
 import { allBuildings, pedestrianRoutes } from '../data/infill'
 import { CITY_BOUNDS, insideRoad } from '../data/city'
 import { hashString, mulberry } from '../catalog/random'
-import { SPECIES, speciesOf, type Breed } from '../catalog/species'
+import { SPECIES, WILD_SLOTS, speciesOf, type Breed } from '../catalog/species'
 
-export const WILD_SLOTS = 40
+export { WILD_SLOTS }
 export const WILD_HOUR = 3_600_000
+/** 每小时固定出现的耳廓狐数量，避免稀有品种长期刷不到。 */
+export const FENNEC_SLOTS = 3
 
 export type WildSpot = { x: number; z: number; radius: number }
 
@@ -23,6 +25,10 @@ export type WildPet = {
   scale: number
   spot: WildSpot
   bucket: number
+  /** 已领养时才有：名字、主人、领养时间 */
+  nickname?: string | null
+  owner?: { id: string; name: string; color: string } | null
+  adoptedAt?: string | null
 }
 
 /** 按物种表里的 spawn 权重抽：猫狗最常见，老虎、熊猫这种一小时里未必碰得到一只。 */
@@ -113,6 +119,30 @@ function collectSpots(): WildSpot[] {
 
 export const WILD_SPOTS: WildSpot[] = collectSpots()
 
+const fennec = () => speciesOf('fox').breeds.find((breed) => breed.id === 'fox-fennec') as Breed
+
+function makePet(
+  id: string,
+  bucket: number,
+  species: string,
+  breed: Breed,
+  spot: WildSpot,
+  rnd: () => number,
+): WildPet {
+  return {
+    id,
+    species,
+    breed,
+    scale: 0.92 + rnd() * 0.18,
+    spot: {
+      x: spot.x + (rnd() - 0.5) * 1.2,
+      z: spot.z + (rnd() - 0.5) * 1.2,
+      radius: Math.min(2.4, spot.radius),
+    },
+    bucket,
+  }
+}
+
 export function wildPool(bucket = Math.floor(Date.now() / WILD_HOUR)): WildPet[] {
   const spots = WILD_SPOTS.length ? WILD_SPOTS : [{ x: 0, z: 26, radius: 3 }]
   const rnd = mulberry(hashString(`wild-${bucket}`))
@@ -132,23 +162,18 @@ export function wildPool(bucket = Math.floor(Date.now() / WILD_HOUR)): WildPet[]
     return deck.pop() as WildSpot
   }
 
-  return Array.from({ length: WILD_SLOTS }, (_, i) => {
+  const wild = Array.from({ length: WILD_SLOTS - FENNEC_SLOTS }, (_, i) => {
     const spot = draw()
     const species = speciesFor(rnd())
     const breed = breedFor(speciesOf(species).breeds, rnd())
-    return {
-      id: `w-${bucket}-${i}`,
-      species,
-      breed,
-      scale: 0.92 + rnd() * 0.18,
-      spot: {
-        x: spot.x + (rnd() - 0.5) * 2.4,
-        z: spot.z + (rnd() - 0.5) * 2.4,
-        radius: spot.radius,
-      },
-      bucket,
-    }
+    return makePet(`w-${bucket}-${i}`, bucket, species, breed, spot, rnd)
   })
+
+  // 固定槽位：每个小时都能遇到几只耳廓狐，同时仍保留普通随机物种。
+  for (let i = 0; i < FENNEC_SLOTS; i++) {
+    wild.push(makePet(`w-${bucket}-fennec-${i}`, bucket, 'fox', fennec(), draw(), rnd))
+  }
+  return wild
 }
 
 export function currentBucket(now = Date.now()) {

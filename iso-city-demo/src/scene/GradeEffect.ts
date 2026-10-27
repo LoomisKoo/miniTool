@@ -20,8 +20,10 @@ uniform float uContrast;
 uniform float uSaturation;
 uniform float uPivot;
 uniform float uLift;
+uniform float uVibrance;
 uniform vec3 uShadowTint;
 uniform vec3 uHighlightTint;
+uniform vec3 uBalance;
 
 const vec3 LUM = vec3(0.2126, 0.7152, 0.0722);
 
@@ -33,8 +35,14 @@ vec3 tonemap( vec3 x ) {
 }
 
 void mainImage( const in vec4 inputColor, const in vec2 uv, out vec4 outputColor ) {
-  // 1. 曝光 + 曲线
-  vec3 c = tonemap( max( inputColor.rgb, 0.0 ) * uExposure );
+  // 1. 白平衡 + 曝光，都乘在线性空间。
+  //
+  //    白平衡必须在 tonemap 之前：它模拟的是「相机换色温」，三个通道按
+  //    比例缩放进曲线。放到后面（感知空间）再乘，就只是给成品贴一层色偏，
+  //    高光会一路被推到肩部、三通道一起饱和，末了还是同一种灰白。
+  //    1.0 是中性的，不改任何像素。
+  vec3 c = max( inputColor.rgb, 0.0 ) * uBalance;
+  c = tonemap( c * uExposure );
 
   // 2. 转到感知空间（gamma 2.2 近似 sRGB），后续调色都在这里做
   c = pow( c, vec3( 0.4545 ) );
@@ -55,11 +63,27 @@ void mainImage( const in vec4 inputColor, const in vec2 uv, out vec4 outputColor
   l = dot( c, LUM );
   c = mix( vec3( l ), c, uSaturation );
 
-  // 6. 抬黑：只在感知空间加一点点。这里加 0.05 约等于屏幕上 3 级灰，
+  // 6. 自然饱和（vibrance）：按色度反比加权。
+  //    全局饱和是「所有颜色一起加」，加多了灰墙、水泥、路面也跟着变艳，
+  //    画面就变成滤镜。vibrance 只补本来就低饱和的区域：
+  //    霓虹、车漆、招牌的色度已经接近 1，几乎不动；灰面被推起来，
+  //    整体观感是「干净地鲜艳」而不是「整体变浓」。
+  //    它也顺带补回 Bloom 造成的褪色：泛光把高光摊到邻域、再经 ACES
+  //    肩部压平成灰白，饱和度的损失正好由低色度这一侧补回来。
+  //    uVibrance = 0 时下面的 mix 系数恒为 1，不改变任何像素。
+  {
+    l = dot( c, LUM );
+    float hi = max( max( c.r, c.g ), c.b );
+    float lo = min( min( c.r, c.g ), c.b );
+    float chroma = clamp( ( hi - lo ) / max( hi, 0.0001 ), 0.0, 1.0 );
+    c = mix( vec3( l ), c, 1.0 + uVibrance * ( 1.0 - chroma ) );
+  }
+
+  // 7. 抬黑：只在感知空间加一点点。这里加 0.05 约等于屏幕上 3 级灰，
   //    不会让夜空变成灰底；真正让暗色物体可读的是上面"在感知空间拉对比"。
   c = c + vec3( 0.05, 0.062, 0.078 ) * uLift * ( 1.0 - c );
 
-  // 7. 回到线性，交给最终的色彩空间转换
+  // 8. 回到线性，交给最终的色彩空间转换
   c = pow( max( c, 0.0 ), vec3( 2.2 ) );
 
   outputColor = vec4( clamp( c, 0.0, 1.0 ), inputColor.a );
@@ -74,8 +98,13 @@ export class GradeEffect extends Effect {
     pivot = 0.42,
     // 感知空间的抬黑系数：0.12 大约把纯黑提到 2~3 级灰
     lift = 0.12,
+    vibrance = 0,
     shadow = [0.86, 0.96, 1.12] as [number, number, number],
     highlight = [1.07, 1.02, 0.96] as [number, number, number],
+    // 线性空间的白平衡：逐通道相乘，>1 的通道被提亮，整体偏该色。
+    // 中性是 [1,1,1]。这里的值是「成片色温」而不是相机补偿，所以
+    // 偏冷 = 蓝 > 1、红 < 1。
+    balance = [1, 1, 1] as [number, number, number],
   } = {}) {
     super('GradeEffect', fragment, {
       uniforms: new Map<string, Uniform>([
@@ -84,8 +113,10 @@ export class GradeEffect extends Effect {
         ['uSaturation', new Uniform(saturation)],
         ['uPivot', new Uniform(pivot)],
         ['uLift', new Uniform(lift)],
+        ['uVibrance', new Uniform(vibrance)],
         ['uShadowTint', new Uniform(new Vector3(...shadow))],
         ['uHighlightTint', new Uniform(new Vector3(...highlight))],
+        ['uBalance', new Uniform(new Vector3(...balance))],
       ]),
     })
   }

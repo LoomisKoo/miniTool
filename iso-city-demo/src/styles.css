@@ -948,10 +948,429 @@ kbd {
   color: rgba(246, 241, 230, 0.5);
 }
 
+.catalog-layout {
+  display: grid;
+  grid-template-columns: minmax(210px, 0.85fr) minmax(360px, 1.35fr);
+  gap: 18px;
+  min-height: 520px;
+}
+
+/* 图鉴顶部的「我的宠物」：即使它游荡到远处，也能从这里直接打开主页 */
+.catalog-owned {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.catalog-owned-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.catalog-owned-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 12px 7px 7px;
+  border: 1px solid rgba(242, 200, 107, 0.28);
+  border-radius: 999px;
+  background: rgba(48, 42, 30, 0.5);
+  color: var(--cream);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease;
+}
+
+.catalog-owned-item:hover {
+  border-color: rgba(242, 200, 107, 0.6);
+  background: rgba(60, 52, 36, 0.7);
+}
+
+.catalog-owned-item > span:last-child {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.catalog-owned-item b {
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.catalog-owned-item em {
+  font-style: normal;
+  font-size: 9px;
+  letter-spacing: 0.02em;
+  color: var(--ink-soft);
+}
+
+.catalog-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
+  gap: 14px 10px;
+  max-height: 62vh;
+  overflow: auto;
+  padding-right: 6px;
+}
+
+.catalog-list section {
+  display: contents;
+}
+
+.catalog-list-head {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0 4px 6px;
+  color: var(--cream);
+  font-size: 12px;
+}
+
+.catalog-list-head span {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+
+.catalog-list-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 76px;
+  padding: 8px;
+  margin: 2px 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.045);
+  color: var(--cream);
+  text-align: left;
+  cursor: pointer;
+}
+
+.catalog-list-item:hover,
+.catalog-list-item.selected {
+  border-color: rgba(246, 241, 230, 0.18);
+  background: rgba(255, 255, 255, 0.095);
+}
+
+.catalog-list-thumb {
+  display: grid;
+  place-items: center;
+  width: 62px;
+  height: 62px;
+  flex: 0 0 auto;
+  border-radius: 7px;
+  background-color: rgba(255, 255, 255, 0.05);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: contain;
+}
+
+.catalog-list-thumb i {
+  display: block;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+}
+
+.catalog-list-item > span:last-child {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.catalog-list-item b {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.catalog-list-item em {
+  color: rgba(246, 241, 230, 0.42);
+  font-size: 11px;
+  font-style: normal;
+}
+
+.catalog-list-item .catalog-item-rarity {
+  letter-spacing: 0.08em;
+}
+
+.catalog-detail {
+  min-width: 0;
+}
+
+.catalog-viewer {
+  position: relative;
+  height: 360px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  background: radial-gradient(circle at 50% 38%, #30404a 0%, #182126 68%);
+}
+
+.catalog-viewer canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.catalog-viewer-hint {
+  position: absolute;
+  right: 12px;
+  bottom: 10px;
+  color: rgba(246, 241, 230, 0.45);
+  font-size: 10px;
+  pointer-events: none;
+}
+
+.catalog-viewer-tools {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 2;
+  display: flex;
+  gap: 6px;
+}
+
+.catalog-motion-toggle {
+  padding: 7px 10px;
+  border: 1px solid rgba(246, 241, 230, 0.2);
+  border-radius: 999px;
+  background: rgba(18, 25, 29, 0.76);
+  color: var(--cream);
+  font-size: 11px;
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+}
+
+.catalog-motion-toggle:hover {
+  background: rgba(43, 57, 63, 0.9);
+}
+
+.catalog-color-popover {
+  position: absolute;
+  top: 38px;
+  right: 0;
+  width: 150px;
+  padding: 10px;
+  border: 1px solid rgba(246, 241, 230, 0.18);
+  border-radius: 10px;
+  background: rgba(18, 25, 29, 0.94);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(14px);
+}
+
+.catalog-color-popover > span {
+  display: block;
+  margin-bottom: 8px;
+  color: rgba(246, 241, 230, 0.65);
+  font-size: 10px;
+}
+
+.catalog-color-popover > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.catalog-color-popover button {
+  width: 22px;
+  height: 22px;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.catalog-color-popover button.selected {
+  border-color: var(--cream);
+  box-shadow: 0 0 0 2px rgba(246, 241, 230, 0.22);
+}
+
+.catalog-detail-copy {
+  padding: 18px 4px 0;
+}
+
+.catalog-detail-title {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.catalog-detail-title h3 {
+  margin: 5px 0 0;
+  font-size: 24px;
+  font-weight: 500;
+}
+
+.catalog-detail-title h3 strong {
+  font-size: 15px;
+  letter-spacing: 0.12em;
+  white-space: nowrap;
+}
+
+.catalog-detail-copy > p {
+  margin: 14px 0;
+  color: rgba(246, 241, 230, 0.72);
+  font-size: 13px;
+  line-height: 1.8;
+}
+
+.catalog-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.catalog-facts span {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 88px;
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 7px;
+  color: rgba(246, 241, 230, 0.62);
+  font-size: 11px;
+}
+
+.catalog-facts b {
+  color: rgba(246, 241, 230, 0.38);
+  font-size: 10px;
+  font-weight: 400;
+}
+
+.catalog-detail-copy .hint-line {
+  font-size: 11px;
+}
+
+@media (max-width: 720px) {
+  .catalog-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .catalog-list {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    max-height: 150px;
+    padding-bottom: 4px;
+  }
+
+  .catalog-list-head {
+    grid-column: 1 / -1;
+  }
+
+  .catalog-list-item {
+    display: block;
+    width: 100%;
+    min-height: 0;
+    padding: 4px;
+  }
+
+  .catalog-list-item > span:last-child {
+    padding: 4px 2px 2px;
+  }
+
+  .catalog-list-item b {
+    display: block;
+    text-align: center;
+  }
+
+  .catalog-list-item em {
+    display: none;
+  }
+
+  .catalog-list-thumb {
+    width: 62px;
+    height: 62px;
+  }
+
+  .catalog-viewer {
+    height: 300px;
+  }
+}
+
 .nearby > i {
   font-style: normal;
   margin-left: 6px;
   color: var(--accent-soft);
+}
+
+.pet-world-name {
+  display: flex;
+  align-items: center;
+  padding: 7px 12px;
+  border: 1px solid rgba(246, 241, 230, 0.18);
+  border-radius: 999px;
+  background: rgba(22, 28, 29, 0.84);
+  box-shadow: 0 8px 24px rgba(8, 12, 12, 0.26);
+  color: var(--cream);
+  white-space: nowrap;
+  backdrop-filter: blur(10px);
+}
+
+.pet-world-name.is-active {
+  border-color: rgba(246, 210, 132, 0.72);
+  background: rgba(54, 48, 34, 0.92);
+  box-shadow: 0 0 0 3px rgba(242, 200, 107, 0.12), 0 8px 24px rgba(8, 12, 12, 0.26);
+}
+
+.pet-world-name span {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+.pet-world-name em {
+  display: none;
+  margin-right: 5px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: rgba(176, 190, 185, 0.14);
+  color: rgba(246, 241, 230, 0.62);
+  font-size: 9px;
+  font-style: normal;
+  letter-spacing: 0.03em;
+}
+
+/* 有主人的宠物：名字胶囊带一点暖色，和野生宠物区分开（靠近时仍用 is-active） */
+.pet-world-name.is-owned:not(.is-active) {
+  border-color: rgba(242, 200, 107, 0.45);
+  background: rgba(48, 42, 30, 0.9);
+}
+
+.pet-world-name.is-owned em {
+  display: inline-block;
+  background: rgba(86, 190, 121, 0.18);
+  color: #9fe0ad;
+}
+
+.pet-world-e {
+  position: absolute;
+  /* 和昵称胶囊在同一条水平中线上，而不是压在右上角 */
+  top: 50%;
+  right: -26px;
+  transform: translateY(-50%);
+  transition: opacity 140ms ease;
+}
+
+.pet-world-e kbd {
+  min-width: auto;
+  height: 20px;
+  padding: 2px 6px;
+  /* 实心背景：世界是暗的，半透明描边样式在远处会糊掉 */
+  border-color: transparent;
+  background: var(--accent-soft);
+  color: #161c1d;
+  font-weight: 700;
+  transition: opacity 140ms ease;
 }
 
 .controls-hint {
@@ -1616,6 +2035,36 @@ kbd {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+/* 宠物主页：主人条 + 留言入口 */
+.pet-profile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  border: 1px solid rgba(246, 241, 230, 0.1);
+  border-radius: 12px;
+  background: rgba(28, 34, 36, 0.5);
+}
+
+.pet-profile > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.pet-profile b {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.pet-profile p {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--ink-soft);
 }
 
 .owner-row > div {
@@ -7882,7 +8331,108 @@ kbd {
   line-height: 1.6;
   animation: npc-line-in 220ms ease-out;
 }
+.npc-dialog-owner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 12px;
+  color: rgba(238, 243, 248, 0.68);
+  cursor: default;
+}
+.npc-dialog-owner .avatar {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: #10141c;
+  font-size: 10px;
+  font-weight: 700;
+}
+.npc-dialog-owner b {
+  color: #ffd9a6;
+  font-weight: 600;
+}
+.npc-dialog-owner em {
+  margin-left: auto;
+  font-style: normal;
+  font-size: 11px;
+  opacity: 0.55;
+}
+.npc-dialog-pet {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: rgba(238, 243, 248, 0.62);
+  cursor: default;
+}
+.npc-dialog-pet b {
+  color: #ffd9a6;
+  font-weight: 600;
+}
+.npc-dialog-pet-hint {
+  margin-left: auto;
+  font-size: 11px;
+  opacity: 0.7;
+}
+.npc-dialog-choices {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  cursor: default;
+}
+.npc-dialog-choices button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.06);
+  color: #eef3f8;
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease;
+}
+.npc-dialog-choices button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.4);
+}
+.npc-dialog-choices button.primary {
+  border-color: transparent;
+  background: #f2c86b;
+  color: #1c1a12;
+  font-weight: 600;
+}
+.npc-dialog-choices button.primary:hover:not(:disabled) {
+  background: #ffd98a;
+}
+.npc-dialog-choices button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.npc-dialog-choices button em {
+  font-style: normal;
+  font-size: 11px;
+  opacity: 0.6;
+}
+.npc-dialog-error {
+  font-size: 12px;
+  color: #ff9c8a;
+}
 .npc-dialog-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   margin-top: 10px;
   font-size: 12px;
   opacity: 0.55;

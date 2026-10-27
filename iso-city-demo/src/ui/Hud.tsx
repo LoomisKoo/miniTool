@@ -6,7 +6,11 @@ import { toggleFlight, toggleOverview, walker } from '../game/walker'
 
 const DIRS = ['北', '西北', '西', '西南', '南', '东南', '东', '东北']
 
-function Icon({ name }: { name: 'share' | 'heart' | 'info' | 'drone' | 'fly' | 'moon' | 'sun' | 'spark' | 'back' }) {
+function Icon({
+  name,
+}: {
+  name: 'share' | 'heart' | 'info' | 'drone' | 'fly' | 'moon' | 'sun' | 'spark' | 'back' | 'sound' | 'mute'
+}) {
   const paths: Record<string, ReactNode> = {
     share: (
       <>
@@ -57,6 +61,18 @@ function Icon({ name }: { name: 'share' | 'heart' | 'info' | 'drone' | 'fly' | '
         <path d="M14.4 6.6 9 12l5.4 5.4" />
       </>
     ),
+    sound: (
+      <>
+        <path d="M4.8 9.4h2.8l3.8-3.1v11.4l-3.8-3.1H4.8z" />
+        <path d="M15.4 9.3a3.9 3.9 0 0 1 0 5.4M17.8 7a7.3 7.3 0 0 1 0 10" />
+      </>
+    ),
+    mute: (
+      <>
+        <path d="M4.8 9.4h2.8l3.8-3.1v11.4l-3.8-3.1H4.8z" />
+        <path d="M15.6 9.8l4.2 4.2M19.8 9.8 15.6 14" />
+      </>
+    ),
   }
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -74,7 +90,10 @@ export function Hud() {
   const world = useApp((state) => state.world)
   const hud = useApp((state) => state.hud)
   const night = useApp((state) => state.night)
+  const musicOn = useApp((state) => state.musicOn)
+  const toggleMusic = useApp((state) => state.toggleMusic)
   const pointerLocked = useApp((state) => state.pointerLocked)
+  const nearby = useApp((state) => state.nearby)
   const spaceDetail = useApp((state) => state.spaceDetail)
   const editor = useApp((state) => state.editor)
   const exitCity = useApp((state) => state.exitCity)
@@ -190,6 +209,18 @@ export function Hud() {
           >
             <Icon name={night ? 'sun' : 'moon'} />
           </button>
+          <button
+            className={`hud-round ${musicOn ? 'on' : ''}`}
+            aria-pressed={musicOn}
+            onClick={() => {
+              toggleMusic()
+              showToast(musicOn ? '背景音乐已关闭' : '背景音乐已开启')
+            }}
+            title="背景音乐"
+            aria-label="切换背景音乐"
+          >
+            <Icon name={musicOn ? 'sound' : 'mute'} />
+          </button>
           <button className="hud-round" onClick={share} title="分享" aria-label="分享">
             <Icon name="share" />
           </button>
@@ -223,6 +254,16 @@ export function Hud() {
         </div>
       )}
 
+      {screen === 'city' && nearby && !panel && (
+        <button className="nearby" onClick={nearby.action} aria-label={`${nearby.label}：${nearby.hint}`}>
+          <kbd>E</kbd>
+          <span>
+            <b>{nearby.label}</b>
+            <em>{nearby.hint}</em>
+          </span>
+          <i>›</i>
+        </button>
+      )}
 
       <div className="hud-dock">
         {flying && (

@@ -327,9 +327,10 @@ const GradeEffectNode = wrapEffect(GradeEffect)
  *     重建期间拿旧尺寸缓冲合成，画面就是"两套图 + 模糊"。
  *   - 采样数从 24 降到 12，去噪从 8 降到 4。N8AO 有泊松去噪打底，
  *     12 次采样在半分辨率下已经看不出条带。
- *   - 画质档 0 直接降到 6 采样。
+ *   - 画质档 0 关闭 AO，只保留抗锯齿、Bloom 和调色。
  */
 function CheapAo({ night, quality }: { night: boolean; quality: number }) {
+  if (quality === 0) return null
   return (
     <N8AO
       aoRadius={1.1}
@@ -359,6 +360,13 @@ function Grade({ night }: { night: boolean }) {
         saturation: 1.06,
         pivot: 0.42,
         lift: 0.13,
+        // 夜间整体压冷一档：月光是冷光源，而冷色不该出现在中高亮度上
+        // （那是路灯的暖色地盘）。只动 4%，配合下面的冷暖分离，
+        // 让「夜」是一个色温而不是一个亮度。
+        balance: [0.98, 1.0, 1.045] as [number, number, number],
+        // 招牌、车灯、橱窗是低色度但高亮的，Bloom 会把它们摊成灰白；
+        // vibrance 正好补这一侧，比全局加饱和更不容易脏。
+        vibrance: 0.2,
         shadow: [0.85, 0.96, 1.14] as [number, number, number],
         highlight: [1.06, 1.01, 0.96] as [number, number, number],
       }
@@ -368,6 +376,10 @@ function Grade({ night }: { night: boolean }) {
         saturation: 1.05,
         pivot: 0.46,
         lift: 0.1,
+        // 白天要克制：日光的暖已经由太阳颜色给过了，这里只补 2%，
+        // 否则橙调的墙会在过曝区连成一片。
+        balance: [1.02, 1.0, 0.985] as [number, number, number],
+        vibrance: 0.1,
         shadow: [0.97, 1.0, 1.04] as [number, number, number],
         highlight: [1.04, 1.01, 0.97] as [number, number, number],
       }
@@ -623,6 +635,55 @@ function IntroShadowPause() {
 }
 
 /**
+ * 普通建筑的远景降级。
+ *
+ * 楼体主体的立面 shader 本身已经包含窗格和灯光，远处继续保留；
+ * 阳台、店面实体件、屋顶设备和轮廓光则在较远距离隐藏，避免每栋楼
+ * 都按近景细节绘制。每隔几帧更新一次即可，避免把距离判断变成新的
+ * 每帧 CPU 开销。
+ */
+function BuildingLodController() {
+  const scene = useThree((state) => state.scene)
+  const camera = useThree((state) => state.camera)
+  const frame = useRef(0)
+  const lodNodes = useRef<THREE.Object3D[]>([])
+  const cameraPosition = useMemo(() => new THREE.Vector3(), [])
+  const buildingPosition = useMemo(() => new THREE.Vector3(), [])
+
+  useFrame(() => {
+    frame.current += 1
+    if (frame.current % 4 !== 0) return
+
+    // 建筑会通过 Stagger 分批挂载，低频重新收集即可；不要每次更新
+    // 可见性时都 traverse 整个城市场景。
+    if (frame.current % 32 === 0) {
+      const next: THREE.Object3D[] = []
+      scene.traverse((object) => {
+        if (object.userData.buildingDetailLod) next.push(object)
+      })
+      lodNodes.current = next
+    }
+
+    camera.getWorldPosition(cameraPosition)
+    for (const object of lodNodes.current) {
+      const mesh = object as THREE.Mesh
+      if (object.userData.merged && mesh.geometry?.boundingSphere) {
+        buildingPosition.copy(mesh.geometry.boundingSphere.center)
+        object.localToWorld(buildingPosition)
+      } else {
+        object.getWorldPosition(buildingPosition)
+      }
+      const distance = cameraPosition.distanceTo(buildingPosition)
+      // 地标保留更远的轮廓细节，普通建筑在 75m 外只保留主体。
+      const limit = object.userData.landmark ? 130 : 75
+      object.visible = distance < limit
+    }
+  })
+
+  return null
+}
+
+/**
  * 延后几帧再从子节点里渲染。
  *
  * 用在 EffectComposer 上：它的十来个全屏 pass（SMAA、Bloom、N8AO、Grade…）
@@ -869,6 +930,7 @@ export function CityScene({ active = true }: { active?: boolean }) {
       >
         <Suspense fallback={null}>
           <ExposureSync value={p.exposure} />
+          <BuildingLodController />
           {/* 阴影相机固定在城区中心。
               原来它跟着玩家平移（每 16m 吸附一格），整片建筑的影子就会随
               人物走动一格一格地挪——看起来像"影子在跟着人动"，其实是阴影

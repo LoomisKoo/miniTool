@@ -8,8 +8,14 @@ CREATE TABLE IF NOT EXISTS users (
   token_hash TEXT UNIQUE,
   account_id TEXT,
   is_npc BOOLEAN NOT NULL DEFAULT false,
+  rations INT NOT NULL DEFAULT 3,
+  ration_day TEXT NOT NULL DEFAULT '',
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- 老库补列：新访客有 3 份口粮，每天再补 3 份（上限 6）
+ALTER TABLE users ADD COLUMN IF NOT EXISTS rations INT NOT NULL DEFAULT 3;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS ration_day TEXT NOT NULL DEFAULT '';
 
 CREATE INDEX IF NOT EXISTS users_account_idx ON users(account_id) WHERE account_id IS NOT NULL;
 
@@ -93,3 +99,33 @@ CREATE TABLE IF NOT EXISTS reports (
 );
 
 CREATE INDEX IF NOT EXISTS reports_post_idx ON reports(post_id);
+
+-- 宠物：野生宠物由客户端按小时推导，不落库；这里只存「已经被领养」的那些，
+-- 让它们过了整点也还留在城里，并且所有人都能看到主人是谁。
+CREATE TABLE IF NOT EXISTS pets (
+  id TEXT PRIMARY KEY,
+  species_id TEXT NOT NULL,
+  breed_id TEXT NOT NULL,
+  scale DOUBLE PRECISION NOT NULL DEFAULT 1,
+  spot JSONB NOT NULL DEFAULT '{"x":0,"z":0,"radius":2}',
+  nickname TEXT,
+  owner_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  adopted_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  -- 只存「最后一次吃饱的时间」，饱腹度由客户端按时间差算，不需要定时任务
+  hunger_at TIMESTAMPTZ,
+  -- 喂过它、因此拿到留言权限的人
+  fed_by JSONB NOT NULL DEFAULT '[]'
+);
+
+-- 老库补列
+ALTER TABLE pets ADD COLUMN IF NOT EXISTS hunger_at TIMESTAMPTZ;
+ALTER TABLE pets ADD COLUMN IF NOT EXISTS fed_by JSONB NOT NULL DEFAULT '[]';
+
+CREATE INDEX IF NOT EXISTS pets_owner_idx ON pets(owner_id);
+-- 一个用户同时只能领养一只宠物
+CREATE UNIQUE INDEX IF NOT EXISTS pets_one_per_owner ON pets(owner_id);
+
+-- 宠物也要能收到留言：放宽 posts.target_type
+ALTER TABLE posts DROP CONSTRAINT IF EXISTS posts_target_type_check;
+ALTER TABLE posts ADD CONSTRAINT posts_target_type_check
+  CHECK (target_type IN ('place', 'space', 'pet'));

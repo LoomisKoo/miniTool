@@ -49,6 +49,7 @@ function seedData() {
     favorites: [],
     visits: seededVisits.map((v) => ({ id: randomUUID(), ...v, note: null })),
     reports: [],
+    pets: [],
   }
 }
 
@@ -66,6 +67,13 @@ export class JsonStore {
     } catch {
       this.data = seedData()
       await this.#flush()
+    }
+    // 旧数据库没有 pets 字段：补一个空数组，不用走迁移脚本。
+    if (!Array.isArray(this.data.pets)) this.data.pets = []
+    // 老用户没有口粮字段：补上初始的 3 份
+    for (const u of this.data.users) {
+      if (typeof u.rations !== 'number') u.rations = 3
+      if (typeof u.rationDay !== 'string') u.rationDay = ''
     }
     await this.#ensureUnitSpaces()
     return this
@@ -136,6 +144,8 @@ export class JsonStore {
       tokenHash: null,
       accountId: null,
       isNpc: false,
+      rations: 3,
+      rationDay: '',
       createdAt: new Date().toISOString(),
     }
     await this.#write((d) => {
@@ -315,6 +325,10 @@ export class JsonStore {
         const s = d.spaces.find((x) => x.id === p.targetId)
         allowed = !!s && s.ownerId === user.id
       }
+      if (!allowed && p.targetType === 'pet') {
+        const pet = d.pets.find((x) => x.id === p.targetId)
+        allowed = !!pet && pet.ownerId === user.id
+      }
       if (!allowed) return { error: 'forbidden' }
       p.status = 'deleted'
       p.deletedAt = new Date().toISOString()
@@ -333,6 +347,126 @@ export class JsonStore {
       const count = d.reports.filter((r) => r.postId === postId).length
       if (count >= 3) p.status = 'hidden'
       return { ok: true, hidden: count >= 3 }
+    })
+  }
+
+  // ---------- pets ----------
+
+  #petView(d, pet) {
+    const owner = d.users.find((u) => u.id === pet.ownerId)
+    return {
+      id: pet.id,
+      speciesId: pet.speciesId,
+      breedId: pet.breedId,
+      scale: pet.scale,
+      spot: pet.spot,
+      nickname: pet.nickname ?? null,
+      owner: owner ? { id: owner.id, name: owner.name, color: owner.color } : null,
+      adoptedAt: pet.adoptedAt,
+      hungerAt: pet.hungerAt ?? null,
+    }
+  }
+
+  async listPets() {
+    return this.#read((d) =>
+      d.pets
+        .filter((pet) => pet.ownerId)
+        .sort((a, b) => String(a.adoptedAt).localeCompare(String(b.adoptedAt)))
+        .map((pet) => this.#petView(d, pet)),
+    )
+  }
+
+  async adoptPet(pet, userId) {
+    return this.#write((d) => {
+      const existing = d.pets.find((item) => item.id === pet.id)
+      if (existing) {
+        if (existing.ownerId && existing.ownerId !== userId) {
+          const owner = d.users.find((u) => u.id === existing.ownerId)
+          return { error: 'taken', ownerName: owner?.name || '其他访客' }
+        }
+        if (!existing.ownerId) {
+          existing.ownerId = userId
+          existing.adoptedAt = new Date().toISOString()
+        }
+        return { pet: this.#petView(d, existing) }
+      }
+      const owned = d.pets.find((item) => item.ownerId === userId)
+      if (owned) return { error: 'limit' }
+      const row = { ...pet, ownerId: userId, adoptedAt: new Date().toISOString() }
+      d.pets.push(row)
+      return { pet: this.#petView(d, row) }
+    })
+  }
+
+  async getPet(id) {
+    return this.#read((d) => {
+      const pet = d.pets.find((item) => item.id === id)
+      return pet ? this.#petView(d, pet) : null
+    })
+  }
+
+  async listPetsByOwner(userId) {
+    return this.#read((d) =>
+      d.pets
+        .filter((pet) => pet.ownerId === userId)
+        .sort((a, b) => String(a.adoptedAt).localeCompare(String(b.adoptedAt)))
+        .map((pet) => this.#petView(d, pet)),
+    )
+  }
+
+  /** 喂食：扣 1 份口粮，刷新「最后一次吃饱」时间。谁的宠物都可以喂。 */
+  async feedPet(petId, userId) {
+    return this.#write((d) => {
+      const pet = d.pets.find((item) => item.id === petId && item.ownerId)
+      if (!pet) return { error: 'not_found' }
+      const user = d.users.find((u) => u.id === userId)
+      if (!user) return { error: 'no_user' }
+      const rations = this.#rationsOf(user)
+      if (rations < 1) return { error: 'no_rations' }
+      user.rations = rations - 1
+      pet.hungerAt = new Date().toISOString()
+      pet.fedBy = Array.isArray(pet.fedBy) ? pet.fedBy : []
+      if (!pet.fedBy.includes(userId)) pet.fedBy.push(userId)
+      return { pet: this.#petView(d, pet), rations: user.rations }
+    })
+  }
+
+  async renamePet(petId, userId, nickname) {
+    return this.#write((d) => {
+      const pet = d.pets.find((item) => item.id === petId)
+      if (!pet) return { error: 'not_found' }
+      if (pet.ownerId !== userId) return { error: 'forbidden' }
+      pet.nickname = nickname
+      return { pet: this.#petView(d, pet) }
+    })
+  }
+
+  /** 喂过这只宠物的人才能留言 */
+  async hasFedPet(petId, userId) {
+    return this.#read((d) => {
+      const pet = d.pets.find((item) => item.id === petId)
+      return !!pet && Array.isArray(pet.fedBy) && pet.fedBy.includes(userId)
+    })
+  }
+
+  #rationsOf(user) {
+    // 老数据没有这个字段：视为已领过初始口粮
+    if (typeof user.rations !== 'number') user.rations = 3
+    return user.rations
+  }
+
+  /** 每天补 3 份口粮，上限 6 份。跨天判断用 UTC 日期。 */
+  async claimRations(userId) {
+    return this.#write((d) => {
+      const user = d.users.find((u) => u.id === userId)
+      if (!user) return { error: 'no_user' }
+      const today = new Date().toISOString().slice(0, 10)
+      const current = this.#rationsOf(user)
+      if (user.rationDay === today) return { rations: current, granted: 0 }
+      const granted = Math.min(3, Math.max(0, 6 - current))
+      user.rations = current + granted
+      user.rationDay = today
+      return { rations: user.rations, granted }
     })
   }
 

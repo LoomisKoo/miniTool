@@ -79,7 +79,7 @@ export type SpaceSummary = {
 
 export type Post = {
   id: string
-  targetType: 'place' | 'space'
+  targetType: 'place' | 'space' | 'pet'
   targetId: string
   authorId: string
   author: Owner
@@ -108,6 +108,8 @@ export type WorldStats = {
 export type World = {
   places: Place[]
   spaces: SpaceSummary[]
+  /** 已被领养、需要一直出现在城里的宠物 */
+  pets: AdoptedPet[]
   stats: WorldStats
   user: User | null
   userClaimedSpaceId: string | null
@@ -126,6 +128,31 @@ export type SpaceDetail = {
   favorite: { favorited: boolean; count: number }
   isOwner: boolean
   userClaimedSpaceId: string | null
+}
+
+/** 一只已经被领养的宠物：野生池按小时轮换，但领养记录会一直留在城里。 */
+export type AdoptedPet = {
+  id: string
+  speciesId: string
+  breedId: string
+  /** 个体大小抖动，和野生时一致 */
+  scale: number
+  spot: { x: number; z: number; radius: number }
+  nickname: string | null
+  owner: Owner
+  adoptedAt: string
+  /** 最后一次吃饱的时间；饱腹度按时间差算，不存数值 */
+  hungerAt?: string | null
+}
+
+export type PetDetail = { pet: AdoptedPet; notes: Post[] }
+
+export type AdoptPetInput = {
+  id: string
+  speciesId: string
+  breedId: string
+  scale: number
+  spot: { x: number; z: number; radius: number }
 }
 
 export type Favorite = {

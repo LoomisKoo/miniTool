@@ -15,6 +15,13 @@ export type LivePet = {
   y: number
   /** 交互半径：跟着体长走，狗比刺猬远一点才合理 */
   radius: number
+  /** 领养时需要把这些原始数据提交给服务端 */
+  scale: number
+  spot: { x: number; z: number; radius: number }
+  /** 已领养：主人和领养时间；野生为 null */
+  nickname: string | null
+  owner: { id: string; name: string; color: string } | null
+  adoptedAt: string | null
 }
 
 export const live: LivePet[] = []

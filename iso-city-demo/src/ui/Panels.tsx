@@ -1,8 +1,14 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Canvas, useFrame } from '@react-three/fiber'
+import { OrbitControls } from '@react-three/drei'
+import * as THREE from 'three'
 import { useApp } from '../store'
-import { RARITY_LABEL, SPECIES } from '../catalog/species'
+import { breedOf, catalogBreedsOf, catalogKeyOf, RARITY_LABEL, RARITY_STARS, SPECIES, type Breed, type Rarity } from '../catalog/species'
 import { petThumb } from '../catalog/thumb3d'
-import type { FurnitureType, Post, SpaceDetail } from '../types'
+import { voxelMaterial } from '../pets/voxel/build'
+import { partMatrices, petModel, petScale } from '../pets/voxel/runtime'
+import type { FurnitureType, PetDetail, Post, SpaceDetail } from '../types'
+import { api } from '../api'
 import { cityShareUrl, copyText, mediaGradient, playSoundPlaceholder, relativeTime } from '../util'
 import { FURNITURE_META } from '../indoor/Furniture'
 import { floorLabel, floorList, floorsOf, unitBuilding, unitsOf } from '../data/units'
@@ -162,7 +168,7 @@ function PostComposer({
   parentId,
   onDone,
 }: {
-  targetType: 'place' | 'space'
+  targetType: 'place' | 'space' | 'pet'
   targetId: string
   targetName: string
   compact?: boolean
@@ -207,7 +213,9 @@ function PostComposer({
             ? '回复一句…'
             : targetType === 'place'
               ? `在「${targetName}」留下一条公开留言…`
-              : `给「${targetName}」的访客留句话…`
+              : targetType === 'space'
+                ? `给「${targetName}」的访客留句话…`
+                : `给「${targetName}」留句话…`
         }
         onChange={(event) => setBody(event.target.value)}
         onKeyDown={(event) => {
@@ -284,7 +292,7 @@ function PostItem({
   replies,
 }: {
   post: Post
-  targetType: 'place' | 'space'
+  targetType: 'place' | 'space' | 'pet'
   targetId: string
   targetName: string
   replies: Post[]
@@ -407,7 +415,7 @@ function PostList({
   targetName,
 }: {
   posts: Post[]
-  targetType: 'place' | 'space'
+  targetType: 'place' | 'space' | 'pet'
   targetId: string
   targetName: string
 }) {
@@ -1151,7 +1159,18 @@ function ElevatorPanel({ id }: { id: string }) {
  * 缩略图是 3D 离屏渲染出来的，一张要一两次 draw。30 个品种一次全渲会在打开
  * 面板的瞬间顿一下，所以按帧切片：每帧最多 10ms，先出图先显示。
  */
-const RARITY_COLOR = { common: '#8ea0b5', uncommon: '#7fd1a8', rare: '#f2c86b' } as const
+const RARITY_COLOR: Record<Rarity, string> = {
+  common: '#8ea0b5',
+  uncommon: '#7fd1a8',
+  rare: '#f2c86b',
+  epic: '#b79bf0',
+  legendary: '#f28e6b',
+}
+
+/** 图鉴里的星数：直接看品种自己的稀有度，同一个物种里的不同品种会不一样 */
+const starsOf = (breed: Breed) => '★'.repeat(RARITY_STARS[breed.rarity])
+const hourText = (perHour: number) =>
+  perHour >= 1 ? `每小时约 ${perHour.toFixed(1)} 只` : `约 ${(1 / perHour).toFixed(1)} 小时 1 只`
 
 function useCatalogThumbs() {
   const [urls, setUrls] = useState<Record<string, string>>({})
@@ -1194,6 +1213,7 @@ function CatalogPanel() {
   const closePanel = useApp((state) => state.closePanel)
   const seen = useApp((state) => state.seenPets)
   const thumbs = useCatalogThumbs()
+  const [selectedKey, setSelectedKey] = useState<string | null>(null)
 
   const seenSet = useMemo(() => new Set(seen), [seen])
   const total = useMemo(() => SPECIES.reduce((sum, species) => sum + species.breeds.length, 0), [])
@@ -1201,6 +1221,16 @@ function CatalogPanel() {
     () => SPECIES.reduce((sum, species) => sum + species.breeds.filter((b) => seen.includes(`${species.id}/${b.id}`)).length, 0),
     [seen],
   )
+  const selected = useMemo(() => {
+    if (!selectedKey) return null
+    for (const species of SPECIES) {
+      const breed = catalogBreedsOf(species).find((item) => catalogKeyOf(species.id, item.id) === selectedKey)
+      if (breed) return { species, breed }
+    }
+    return null
+  }, [selectedKey])
+
+  const rarityColor = selected ? RARITY_COLOR[selected.breed.rarity] : ''
 
   return (
     <Modal
@@ -1210,6 +1240,52 @@ function CatalogPanel() {
       onClose={closePanel}
       wide
     >
+      {selected && (
+        <section
+          className="about-card"
+          style={{ marginBottom: 20, borderColor: `${rarityColor}55` }}
+        >
+          <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
+            <div
+              style={{
+                width: 96,
+                height: 96,
+                flex: '0 0 auto',
+                borderRadius: 12,
+                overflow: 'hidden',
+                background: 'rgba(255,255,255,0.045)',
+                display: 'grid',
+                placeItems: 'center',
+              }}
+            >
+              {thumbs[selectedKey!] ? (
+                <img
+                  src={thumbs[selectedKey!]}
+                  alt={selected.breed.name}
+                  style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                />
+              ) : (
+                <span style={{ width: '54%', height: '54%', borderRadius: '50%', background: selected.breed.swatch }} />
+              )}
+            </div>
+            <div style={{ minWidth: 0 }}>
+              <span className="card-label">{selected.species.name} · {selected.breed.name}</span>
+              <h3 style={{ margin: '4px 0 6px' }}>{selected.breed.name}</h3>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', fontSize: 11 }}>
+                <span style={{ color: rarityColor }}>
+                  {RARITY_LABEL[selected.breed.rarity]} {starsOf(selected.breed)}
+                </span>
+                <span style={{ color: '#8ea0b5' }}>{hourText(selected.breed.perHour)}</span>
+                <span style={{ color: '#8ea0b5' }}>出现时间：全天</span>
+              </div>
+            </div>
+          </div>
+          <p className="hint-line" style={{ margin: '12px 0 0' }}>{selected.species.description}</p>
+          <p className="hint-line" style={{ margin: '6px 0 0' }}>
+            {seenSet.has(selectedKey!) ? '你已经在城市里见过它。' : '还没有在城市里遇见它。'}
+          </p>
+        </section>
+      )}
       {SPECIES.map((species) => {
         const speciesFound = species.breeds.filter((b) => seenSet.has(`${species.id}/${b.id}`)).length
         return (
@@ -1238,7 +1314,20 @@ function CatalogPanel() {
                 const known = seenSet.has(key)
                 const url = thumbs[key]
                 return (
-                  <figure key={breed.id} style={{ margin: 0 }}>
+                  <figure
+                    key={breed.id}
+                    style={{ margin: 0, cursor: 'pointer' }}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`查看${breed.name}详情`}
+                    onClick={() => setSelectedKey(key)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault()
+                        setSelectedKey(key)
+                      }
+                    }}
+                  >
                     <div
                       style={{
                         aspectRatio: '1 / 1',
@@ -1258,7 +1347,7 @@ function CatalogPanel() {
                             width: '100%',
                             height: '100%',
                             objectFit: 'contain',
-                            // 没记录过的只降低饱和度：能看清是什么动物，名字保留为 ???
+                            // 没记录过的只降低饱和度：保留剪影和名称，鼓励玩家去城市里寻找。
                             filter: known ? 'none' : 'saturate(0.45) brightness(0.78)',
                           }}
                         />
@@ -1282,7 +1371,7 @@ function CatalogPanel() {
                         color: known ? '#e8eef5' : '#5c6b7c',
                       }}
                     >
-                      {known ? breed.name : '???'}
+                      {breed.name}
                     </figcaption>
                   </figure>
                 )
@@ -1295,15 +1384,284 @@ function CatalogPanel() {
   )
 }
 
+function CatalogPetScene({
+  model,
+  matrices,
+  scale,
+  playing,
+  material,
+}: {
+  model: ReturnType<typeof petModel>
+  matrices: THREE.Matrix4[]
+  scale: number
+  playing: boolean
+  material: THREE.MeshStandardMaterial
+}) {
+  const group = useRef<THREE.Group>(null)
+
+  useFrame((state) => {
+    if (!group.current) return
+    partMatrices(model, playing ? 'idle' : null, playing ? state.clock.elapsedTime : 0, matrices)
+    group.current.children.forEach((child, index) => {
+      child.matrix.copy(matrices[index])
+    })
+  })
+
+  return (
+    <group ref={group} scale={[scale, scale, scale]} position={[0, -0.42, 0]}>
+      {model.parts.map((part, index) => (
+        <mesh
+          key={part.name}
+          geometry={part.geometry}
+          material={material}
+          matrix={matrices[index]}
+          matrixAutoUpdate={false}
+          castShadow
+        />
+      ))}
+    </group>
+  )
+}
+
+function CatalogPetViewer({ speciesId, breedId }: { speciesId: string; breedId: string }) {
+  const model = useMemo(() => petModel(speciesId, breedId), [speciesId, breedId])
+  const matrices = useMemo(() => partMatrices(model, null, 0, []), [model])
+  const [playing, setPlaying] = useState(false)
+  const [colorOpen, setColorOpen] = useState(false)
+  const [color, setColor] = useState('#ffffff')
+  const material = useMemo(() => voxelMaterial().clone(), [])
+  const scale = petScale(speciesId, model) * 1.42
+  const colors = ['#ffffff', '#f2b36d', '#d98f76', '#9ba9bd', '#8c7c72', '#5b5964', '#d8c58f']
+
+  useEffect(() => () => material.dispose(), [material])
+  useEffect(() => {
+    material.color.set(color)
+  }, [color, material])
+
+  return (
+    <div className="catalog-viewer">
+      <div className="catalog-viewer-tools">
+        <button className="catalog-motion-toggle" onClick={() => setPlaying((value) => !value)}>
+          {playing ? '静止' : '动作'}
+        </button>
+        <button className="catalog-motion-toggle" onClick={() => setColorOpen((value) => !value)}>
+          颜色
+        </button>
+        {colorOpen && (
+          <div className="catalog-color-popover">
+            <span>选择外观颜色</span>
+            <div>
+              {colors.map((value) => (
+                <button
+                  key={value}
+                  className={color === value ? 'selected' : ''}
+                  style={{ background: value }}
+                  aria-label={`选择颜色 ${value}`}
+                  onClick={() => {
+                    setColor(value)
+                    setColorOpen(false)
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+      <Canvas camera={{ position: [2.5, 1.7, 3.1], fov: 38 }} dpr={[1, 1.5]}>
+        <color attach="background" args={['#182126']} />
+        <ambientLight intensity={1.8} />
+        <directionalLight position={[2, 4, 3]} intensity={3.2} color="#fff2dc" />
+        <directionalLight position={[-3, 2, 1]} intensity={1.1} color="#bcd8ff" />
+        <CatalogPetScene model={model} matrices={matrices} scale={scale} playing={playing} material={material} />
+        <OrbitControls enablePan={false} minDistance={1.5} maxDistance={4.5} target={[0, 0.15, 0]} />
+      </Canvas>
+      <span className="catalog-viewer-hint">拖动查看 · 滚轮缩放</span>
+    </div>
+  )
+}
+
+function CatalogPanelV2() {
+  const closePanel = useApp((state) => state.closePanel)
+  const seen = useApp((state) => state.seenPets)
+  const adopted = useApp((state) => state.pets)
+  const openPanel = useApp((state) => state.openPanel)
+  const thumbs = useCatalogThumbs()
+  const first = catalogKeyOf(SPECIES[0].id, catalogBreedsOf(SPECIES[0])[0].id)
+  const [selectedKey, setSelectedKey] = useState(first)
+  const seenSet = useMemo(() => new Set(seen), [seen])
+  const selected = useMemo(() => {
+    for (const species of SPECIES) {
+      const breed = catalogBreedsOf(species).find((item) => catalogKeyOf(species.id, item.id) === selectedKey)
+      if (breed) return { species, breed }
+    }
+    return null
+  }, [selectedKey])
+  const total = SPECIES.reduce((sum, species) => sum + catalogBreedsOf(species).length, 0)
+  const found = SPECIES.reduce(
+    (sum, species) => sum + catalogBreedsOf(species).filter((b) => seenSet.has(catalogKeyOf(species.id, b.id))).length,
+    0,
+  )
+
+  if (!selected) return null
+  const rarityColor = RARITY_COLOR[selected.breed.rarity]
+
+  return (
+    <Modal
+      label="图鉴"
+      title="宠物图鉴"
+      subtitle={`已记录 ${found} / ${total} · 点击左侧品种查看详情`}
+      onClose={closePanel}
+      wide
+    >
+      {adopted.length > 0 && (
+        <section className="catalog-owned">
+          <span className="card-label">我的宠物</span>
+          <div className="catalog-owned-row">
+            {adopted.map((pet) => (
+              <button
+                key={pet.id}
+                className="catalog-owned-item"
+                onClick={() => openPanel({ type: 'pet', id: pet.id })}
+              >
+                <span className="avatar" style={{ background: pet.owner.color }}>
+                  {(pet.nickname || breedOf(pet.speciesId, pet.breedId).name).slice(0, 1)}
+                </span>
+                <span>
+                  <b>{pet.nickname || breedOf(pet.speciesId, pet.breedId).name}</b>
+                  <em>{breedOf(pet.speciesId, pet.breedId).name} · 主页与留言</em>
+                </span>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+      <div className="catalog-layout">
+        <aside className="catalog-list">
+          {SPECIES.map((species) => (
+            <section key={species.id}>
+              <div className="catalog-list-head">
+                <b>{species.name}</b>
+              </div>
+              {catalogBreedsOf(species).map((breed) => {
+                const key = catalogKeyOf(species.id, breed.id)
+                const thumbKey = `${species.id}/${breed.id}`
+                const known = seenSet.has(key)
+                return (
+                  <button
+                    key={key}
+                    className={`catalog-list-item ${key === selectedKey ? 'selected' : ''}`}
+                    onClick={() => setSelectedKey(key)}
+                  >
+                    <span
+                      className="catalog-list-thumb"
+                      style={{ backgroundImage: thumbs[thumbKey] ? `url(${thumbs[thumbKey]})` : undefined }}
+                    >
+                      {!thumbs[thumbKey] && <i style={{ background: known ? breed.swatch : 'rgba(255,255,255,0.12)' }} />}
+                    </span>
+                    <span>
+                      <b>{breed.name}</b>
+                      <em className="catalog-item-rarity">
+                        <span style={{ color: RARITY_COLOR[breed.rarity] }}>{starsOf(breed)}</span>
+                      </em>
+                      <em>{known ? '已发现' : '未发现'}</em>
+                    </span>
+                  </button>
+                )
+              })}
+            </section>
+          ))}
+        </aside>
+
+        <section className="catalog-detail">
+          <CatalogPetViewer
+            key={selectedKey}
+            speciesId={selected.species.id}
+            breedId={selected.breed.id}
+          />
+          <div className="catalog-detail-copy">
+            <div className="catalog-detail-title">
+              <div>
+                <span className="card-label">{selected.species.name} · {selected.species.kind === 'wild' ? '野生' : '宠物'}</span>
+                <h3>
+                  {selected.breed.name}{' '}
+                  <strong style={{ color: rarityColor }}>{starsOf(selected.breed)}</strong>
+                </h3>
+              </div>
+            </div>
+            <p>{selected.breed.description}</p>
+            <div className="catalog-facts">
+              <span><b>稀有度</b>{RARITY_LABEL[selected.breed.rarity]}</span>
+              <span><b>出现频率</b>{hourText(selected.breed.perHour)}</span>
+              <span><b>出现时间</b>全天</span>
+            </div>
+            <p className="hint-line">
+              {seenSet.has(selectedKey) ? '你已经在城市里见过它。' : '还没有在城市里遇见它，去街上找找看吧。'}
+            </p>
+          </div>
+        </section>
+      </div>
+    </Modal>
+  )
+}
+
+function PetPanel({ id }: { id: string }) {
+  const closePanel = useApp((state) => state.closePanel)
+  const [detail, setDetail] = useState<PetDetail | null>(null)
+  const [error, setError] = useState('')
+
+  const load = () => {
+    setError('')
+    void api
+      .petDetail(id)
+      .then(setDetail)
+      .catch((reason) => setError(reason instanceof Error ? reason.message : '宠物信息暂时无法打开'))
+  }
+
+  useEffect(() => {
+    load()
+  }, [id])
+
+  if (!detail) {
+    return (
+      <Modal label="宠物留言" title={error || '正在打开宠物主页…'} onClose={closePanel}>
+        {error ? <p className="empty-note">请稍后再试。</p> : <div className="loading-block"><span className="spinner" />正在读取留言</div>}
+      </Modal>
+    )
+  }
+
+  const pet = detail.pet
+  const breed = breedOf(pet.speciesId, pet.breedId)
+  const title = pet.nickname || breed.name
+  return (
+    <Modal label="宠物主页" title={title} subtitle={`${breed.name} · 主人 @${pet.owner.name}`} onClose={closePanel} wide>
+      <div className="pet-profile">
+        <span className="avatar" style={{ background: pet.owner.color }}>{pet.owner.name.slice(0, 1)}</span>
+        <div>
+          <b>@{pet.owner.name}</b>
+          <p>{relativeTime(pet.adoptedAt)}领养 · 给它留一句话，主人回来时会看到。</p>
+        </div>
+      </div>
+      <PostComposer
+        targetType="pet"
+        targetId={pet.id}
+        targetName={title}
+        onDone={load}
+      />
+      <PostList posts={detail.notes} targetType="pet" targetId={pet.id} targetName={title} />
+    </Modal>
+  )
+}
+
 export function Panels() {
   const panel = useApp((state) => state.panel)
   const closePanel = useApp((state) => state.closePanel)
   if (!panel) return null
   if (panel.type === 'place') return <PlacePanel id={panel.id} />
+  if (panel.type === 'pet') return <PetPanel id={panel.id} />
   if (panel.type === 'space') return <SpacePanel id={panel.id} />
   if (panel.type === 'elevator') return <ElevatorPanel id={panel.id} />
   if (panel.type === 'favorites') return <FavoritesPanel />
-  if (panel.type === 'catalog') return <CatalogPanel />
+  if (panel.type === 'catalog') return <CatalogPanelV2 />
   if (panel.type === 'about') return <AboutPanel />
   if (panel.type === 'editor') return <EditorPanel />
   return (

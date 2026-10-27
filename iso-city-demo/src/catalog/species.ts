@@ -78,6 +78,14 @@ function rarityOf(perHour: number): Rarity {
 
 type Meta = Omit<Species, 'breeds' | 'rarity' | 'perHour'>
 
+/**
+ * 按小时固定刷出的品种（对应 pets/wild.ts 里的固定槽位）。
+ * 图鉴的「出现频率」必须把这部分算进去，否则稀有度会和实际遇到的数量对不上。
+ */
+const FIXED_PER_HOUR: Record<string, number> = {
+  'fox-fennec': 3,
+}
+
 const META: Meta[] = [
   {
     id: 'cat',
@@ -265,7 +273,8 @@ export const SPECIES: Species[] = (() => {
     const perHourSpecies = (meta.spawn / totalSpawn) * WILD_SLOTS
     const totalWeight = design.breeds.reduce((sum, b) => sum + (b.weight ?? 1), 0)
     const breeds: Breed[] = design.breeds.map((b) => {
-      const perHour = perHourSpecies * ((b.weight ?? 1) / totalWeight)
+      // 固定槽位的品种额外加上那一份，图鉴频率才和街上能遇到的只数一致
+      const perHour = perHourSpecies * ((b.weight ?? 1) / totalWeight) + (FIXED_PER_HOUR[b.id] ?? 0)
       return {
         id: b.id,
         name: CATALOG_META[b.id]?.name ?? b.name,
@@ -289,6 +298,12 @@ export const SPECIES: Species[] = (() => {
 const byId = new Map(SPECIES.map((s) => [s.id, s]))
 
 export const speciesOf = (id: string) => byId.get(id) ?? SPECIES[0]
+
+/** 按 id 取品种；存到服务端的领养记录只保留 id，渲染时在这里还原。 */
+export function breedOf(speciesId: string, breedId: string): Breed {
+  const species = speciesOf(speciesId)
+  return species.breeds.find((breed) => breed.id === breedId) ?? species.breeds[0]
+}
 
 export const BREED_COUNT = SPECIES.reduce((sum, s) => sum + s.breeds.length, 0)
 
