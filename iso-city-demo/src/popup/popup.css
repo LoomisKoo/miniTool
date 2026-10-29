@@ -118,12 +118,6 @@ body { overflow: hidden; background: #6e4630; }
 .pb-wall .pb-backside { filter: brightness(.62) saturate(1.05); }
 /* 墙的白色描边只保留在画框内（顶边和外侧已留边距），书脊边和底边不外溢成白线 */
 .pb-wall .cut { overflow: hidden; }
-/* 墙在书脊处用 2px 透明渐变和对面墙对接：既不越出书脊（越出会高过翻页纸透出来），
-   也不会在接壤处留一条抗锯齿的细线 */
-.pb-page.pb-left .pb-wall > .pb-front,
-.pb-page.pb-left .pb-wall .pb-flap .pb-front { mask-image: linear-gradient(to right, #000 calc(100% - 2px), transparent); }
-.pb-page.pb-right .pb-wall > .pb-front,
-.pb-page.pb-right .pb-wall .pb-flap .pb-front { mask-image: linear-gradient(to right, transparent, #000 2px); }
 .pb-front { position: relative; backface-visibility: hidden; }
 .pb-flap { position: absolute; inset: 0; transform-style: preserve-3d; }
 .pb-flap .pb-front { position: absolute; inset: 0; }

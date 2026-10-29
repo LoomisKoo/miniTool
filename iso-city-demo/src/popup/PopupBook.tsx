@@ -100,8 +100,9 @@ function Pop({ layer, beta, rank, wall, side, flapDeg = 0, wallH = 340, onMeasur
   const angle = -180 + stand
   const k = Math.sin(beta * DEG)
   // 越靠后的纸片折平后压在越上面，各留一层纸的厚度。
-  // 墙用统一高度，左右两面墙在书脊处严丝合缝
-  const z = wall ? 3 : 0.6 + rank * 0.3
+  // 墙只用极薄的一层抬离纸面：抬得越高，墙面整体越向翻页纸偏移，
+  // 翻页时墙顶就会从翻页纸边缘透出来（0.5px 的偏移肉眼不可见）
+  const z = wall ? 0.5 : 0.6 + rank * 0.3
   const bottom = PH - layer.y
 
   return (
@@ -168,14 +169,13 @@ function Page({ spread, side, wedge, style, sink = 0 }: { spread: Spread; side: 
   // 每张纸片按自己离书脊的距离算上限角；再保证前排不比后排更立（x 范围重叠时），
   // 前后两张纸都向前倒、前排更平，截面上两条线永不相交。
   const wallH = heights.wall ?? 340
-  // 墙顶（离书脊 T 处）不越过翻页纸；多算 45px 高度留出 3～4px 余量，
-  // 否则墙顶与翻页纸正好相切，抗锯齿会让纸边透出一条墙纸
-  const betaWall = standAngle(wedge, WALL_TAPER / (wallH + 45))
+  // 墙顶（离书脊 T 处）刚好落在翻页纸和本页的平分面上：三角折翼正好折到平分面，
+  // 不会折过头越过书脊穿进对面页
+  const betaWall = standAngle(wedge, WALL_TAPER / wallH)
   const wallStandDeg = betaWall
   const flapDeg = flapAngle(wedge, wallStandDeg, WALL_TAPER, wallH)
-  // 对面那片三角在书脊处比这片高 3px（书页纸面 + 墙层），两片按理想角折会交错；
-  // 少折 1.2° 让两片的书脊边刚好碰上，既不留缝也不互相穿过
-  const flapFold = wedge >= 179.9 ? 0 : clamp(flapDeg - 1.2, 0, 180)
+  // 精确折到平分面：两片三角的书脊边重合，既不分开也不互相穿过
+  const flapFold = wedge >= 179.9 ? 0 : flapDeg
   const span = (l: Layer) => [l.x - l.w / 2, l.x + l.w / 2]
   const back = [...order].reverse()
   const beta = new Map<number, number>()
@@ -215,10 +215,11 @@ function Page({ spread, side, wedge, style, sink = 0 }: { spread: Spread; side: 
         </div>
       )}
       {layers.map((l, i) => <Pop key={i} layer={l} beta={beta.get(i) ?? 0} rank={rank.get(i) ?? 0} onMeasure={measure(String(i))} />)}
-      {/* 墙在书脊处不再多伸 1px：多伸的那条会高过翻页纸，翻页时从书脊边缘透出来 */}
+      {/* 墙向书脊多伸 1px 与对面墙重叠，消除接壤处的抗锯齿细线；
+          两面墙始终共面，这 1px 只在同一平面内重叠，不会越出书脊 */}
       <Pop
         wall
-        layer={{ art: side === 'left' ? spread.wallLeft : spread.wallRight, x: PW / 2, y: WALL_Y, w: PW }}
+        layer={{ art: side === 'left' ? spread.wallLeft : spread.wallRight, x: PW / 2 + (side === 'left' ? 0.5 : -0.5), y: WALL_Y, w: PW + 1 }}
         beta={betaWall}
         side={side}
         wallH={wallH}
