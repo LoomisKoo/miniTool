@@ -168,8 +168,9 @@ function Page({ spread, side, wedge, style, sink = 0 }: { spread: Spread; side: 
   // 每张纸片按自己离书脊的距离算上限角；再保证前排不比后排更立（x 范围重叠时），
   // 前后两张纸都向前倒、前排更平，截面上两条线永不相交。
   const wallH = heights.wall ?? 340
-  // 墙顶（离书脊 T 处）不越过平分面；墙不后仰，否则会越界逼三角多折
-  const betaWall = standAngle(wedge, WALL_TAPER / wallH)
+  // 墙顶（离书脊 T 处）不越过翻页纸；多算 45px 高度留出 3～4px 余量，
+  // 否则墙顶与翻页纸正好相切，抗锯齿会让纸边透出一条墙纸
+  const betaWall = standAngle(wedge, WALL_TAPER / (wallH + 45))
   const wallStandDeg = betaWall
   const flapDeg = flapAngle(wedge, wallStandDeg, WALL_TAPER, wallH)
   // 对面那片三角在书脊处比这片高 3px（书页纸面 + 墙层），两片按理想角折会交错；
@@ -214,10 +215,10 @@ function Page({ spread, side, wedge, style, sink = 0 }: { spread: Spread; side: 
         </div>
       )}
       {layers.map((l, i) => <Pop key={i} layer={l} beta={beta.get(i) ?? 0} rank={rank.get(i) ?? 0} onMeasure={measure(String(i))} />)}
-      {/* 墙向书脊多伸 1px，与对面墙重叠，消除接缝处的抗锯齿细线 */}
+      {/* 墙在书脊处不再多伸 1px：多伸的那条会高过翻页纸，翻页时从书脊边缘透出来 */}
       <Pop
         wall
-        layer={{ art: side === 'left' ? spread.wallLeft : spread.wallRight, x: PW / 2 + (side === 'left' ? 0.5 : -0.5), y: WALL_Y, w: PW + 1 }}
+        layer={{ art: side === 'left' ? spread.wallLeft : spread.wallRight, x: PW / 2, y: WALL_Y, w: PW }}
         beta={betaWall}
         side={side}
         wallH={wallH}
