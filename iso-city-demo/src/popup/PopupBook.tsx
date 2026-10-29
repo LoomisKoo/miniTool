@@ -153,7 +153,7 @@ function Pop({ layer, beta, rank, wall, side, flapDeg = 0, wallH = 340, onMeasur
 }
 
 /** wedge：这一页和与它构成跨页的另一页之间的夹角（完全摊开 180°，合上 0°） */
-function Page({ spread, side, wedge, style }: { spread: Spread; side: 'left' | 'right'; wedge: number; style?: CSSProperties }) {
+function Page({ spread, side, wedge, style, sink = 0 }: { spread: Spread; side: 'left' | 'right'; wedge: number; style?: CSSProperties; sink?: number }) {
   const layers = side === 'left' ? spread.left : spread.right
   const [heights, setHeights] = useState<Record<string, number>>({})
   const measure = (key: string) => (h: number) => setHeights((m) => (m[key] === h ? m : { ...m, [key]: h }))
@@ -191,6 +191,19 @@ function Page({ spread, side, wedge, style }: { spread: Spread; side: 'left' | '
 
   return (
     <div className={`pb-page pb-${side}`} style={style}>
+      {/* 这一页要沉到翻页纸下面时，书脊处会出现一道 z 方向的落差；
+          沿脊边补一块纸色竖板把它封住，否则低角度看是一条黑缝 */}
+      {sink > 0.2 && (
+        <div
+          className="pb-skirt"
+          style={{
+            width: sink,
+            background: spread.page,
+            transformOrigin: side === 'left' ? '100% 50%' : '0 50%',
+            transform: `rotateY(${side === 'left' ? 90 : -90}deg)`,
+          }}
+        />
+      )}
       <div className="pb-paper" style={{ backgroundColor: spread.page }}>
         {spread.dots && <div className="pb-dots" style={{ '--dot': spread.dots } as CSSProperties} />}
       </div>
@@ -423,6 +436,7 @@ export default function PopupBook() {
             spread={A}
             side="left"
             wedge={wedgeFront}
+            sink={overL ? 0 : REST_Z - zL}
             style={{ visibility: t > 0.999 ? 'hidden' : undefined, transformOrigin: '100% 50%', transform: overL ? `translateZ(${REST_Z}px) rotateY(${overL}deg)` : `translateZ(${zL}px)` }}
           />
           <Page
@@ -430,6 +444,7 @@ export default function PopupBook() {
             spread={B}
             side="right"
             wedge={wedgeBack}
+            sink={overR ? 0 : REST_Z - zR}
             style={{ visibility: t < 0.001 ? 'hidden' : undefined, transformOrigin: '0 50%', transform: overR ? `translateZ(${REST_Z}px) rotateY(${-overR}deg)` : `translateZ(${zR}px)` }}
           />
 
