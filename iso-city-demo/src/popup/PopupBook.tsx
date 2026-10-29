@@ -69,7 +69,7 @@ function flapAngle(wedge: number, standDeg: number, T: number, H: number) {
   return clamp(g / DEG, 0, 180)
 }
 
-function Pop({ layer, beta, rank, wall, side, flapDeg = 0, flapShift = 0, wallH = 340, onMeasure }: {
+function Pop({ layer, beta, rank, wall, side, flapDeg = 0, wallH = 340, onMeasure }: {
   layer: Layer
   beta: number
   rank: number
@@ -77,8 +77,6 @@ function Pop({ layer, beta, rank, wall, side, flapDeg = 0, flapShift = 0, wallH 
   side?: 'left' | 'right'
   /** 背景墙靠书脊的三角折翼向内折的角度 */
   flapDeg?: number
-  /** 三角向书脊平移的距离，补偿纸面抬高造成的两片三角之间的缝 */
-  flapShift?: number
   wallH?: number
   onMeasure: (h: number) => void
 }) {
@@ -115,7 +113,7 @@ function Pop({ layer, beta, rank, wall, side, flapDeg = 0, flapShift = 0, wallH 
         />
       )}
       {!wall && <div className="pb-tab" style={{ left: layer.x - layer.w * 0.32, width: layer.w * 0.64, top: layer.y - 5, transform: `translateZ(${z - 0.15}px)` }} />}
-      <div className={`pb-pop ${wall ? 'pb-wall' : ''}`} style={{ left, width: layer.w, bottom, transform: `translateX(${side === 'left' ? -flapShift : flapShift}px) translateZ(${z}px) rotateX(${angle}deg)` }}>
+      <div className={`pb-pop ${wall ? 'pb-wall' : ''}`} style={{ left, width: layer.w, bottom, transform: `translateZ(${z}px) rotateX(${angle}deg)` }}>
         {wall && flapDeg < 0.3 ? (
           // 未折时整张渲染，避免两块裁剪拼接处露出斜线
           <Sheet art={layer.art} measureRef={ref} />
@@ -174,11 +172,9 @@ function Page({ spread, side, wedge, style }: { spread: Spread; side: 'left' | '
   const betaWall = standAngle(wedge, WALL_TAPER / wallH)
   const wallStandDeg = betaWall
   const flapDeg = flapAngle(wedge, wallStandDeg, WALL_TAPER, wallH)
-  // 墙离书脊转轴抬高 d（书页 1px + 墙 3px + 三角 0.3px），书脊端已越过平分面 d·cos(h)；
-  // 整面墙沿书页背离书脊平移 d·cot(h)，两面墙等于沿平分面同向平移，三角正好面贴面（留 0.2px 防闪烁）。
-  // 另补回墙为消缝多伸的 1px
-  const lift = 4 + (0.3 * flapDeg) / 180 + 0.2
-  const flapShift = wedge >= 179.9 ? 0 : Math.min(1, (180 - wedge) / 5) + Math.min(40, lift / Math.tan((wedge / 2) * DEG))
+  // 两片三角各绕自己的斜折痕折，折翼纸面抬高 4px 会让两条书脊边错开一点；
+  // 多折 0.5° 让两片互相叠住，书脊处不留缝
+  const flapFold = wedge >= 179.9 ? 0 : Math.min(180, flapDeg + 0.5)
   const span = (l: Layer) => [l.x - l.w / 2, l.x + l.w / 2]
   const back = [...order].reverse()
   const beta = new Map<number, number>()
@@ -212,8 +208,7 @@ function Page({ spread, side, wedge, style }: { spread: Spread; side: 'left' | '
         beta={betaWall}
         side={side}
         wallH={wallH}
-        flapDeg={flapDeg}
-        flapShift={flapShift}
+        flapDeg={flapFold}
         rank={order.length}
         onMeasure={measure('wall')}
       />
