@@ -172,9 +172,9 @@ function Page({ spread, side, wedge, style }: { spread: Spread; side: 'left' | '
   const betaWall = standAngle(wedge, WALL_TAPER / wallH)
   const wallStandDeg = betaWall
   const flapDeg = flapAngle(wedge, wallStandDeg, WALL_TAPER, wallH)
-  // 两片三角各绕自己的斜折痕折，折翼纸面抬高 4px 会让两条书脊边错开一点；
-  // 多折 0.5° 让两片互相叠住，书脊处不留缝
-  const flapFold = wedge >= 179.9 ? 0 : Math.min(180, flapDeg + 0.5)
+  // 对面那片三角在书脊处比这片高 3px（书页纸面 + 墙层），两片按理想角折会交错；
+  // 少折 1.2° 让两片的书脊边刚好碰上，既不留缝也不互相穿过
+  const flapFold = wedge >= 179.9 ? 0 : clamp(flapDeg - 1.2, 0, 180)
   const span = (l: Layer) => [l.x - l.w / 2, l.x + l.w / 2]
   const back = [...order].reverse()
   const beta = new Map<number, number>()
