@@ -122,14 +122,15 @@ function Pop({ layer, beta, rank, wall, side, flapDeg = 0, wallH = 340, onMeasur
           const w = layer.w
           const T = WALL_TAPER
           const L = side === 'left'
-          // 斜折痕：书脊处的折痕底端 → 离书脊 T 的墙顶
+          // 斜折痕：书脊底 → 离书脊 T 的墙顶
           const main: Poly = L
             ? [[0, '0'], [w - T, '0'], [w, '100%'], [0, '100%']]
             : [[T, '0'], [w, '0'], [w, '100%'], [0, '100%']]
-          // 三角跨过折痕 1px 压住主体，折痕处不露底色细线
+          // 折下去的三角必须和主体严丝合缝：两条边一条正好落在折痕上，
+          // 一条正好落在书脊边上（以前各留 1px 互相压盖，折起来后就成了错开的台阶）
           const tri: Poly = L
-            ? [[w - T - 1, '0'], [w, '0'], [w, '100%'], [w - 1, '100%']]
-            : [[0, '0'], [T + 1, '0'], [1, '100%'], [0, '100%']]
+            ? [[w - T, '0'], [w, '0'], [w, '100%']]
+            : [[0, '0'], [T, '0'], [0, '100%']]
           return (
             <>
               <Sheet art={layer.art} measureRef={ref} poly={main} w={w} />
