@@ -5,9 +5,26 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#9b6b4f" />
     <title>阿柚的月光邮差 · 立体绘本 Demo</title>
+    <style>
+      .to-studio {
+        position: fixed;
+        z-index: 9;
+        right: 22px;
+        bottom: 22px;
+        padding: 9px 18px;
+        border-radius: 999px;
+        color: #f3e3b8;
+        background: rgba(40, 24, 18, .78);
+        font: 13px/1 "PingFang SC", "Microsoft YaHei", sans-serif;
+        letter-spacing: .08em;
+        text-decoration: none;
+      }
+      .to-studio:hover { background: rgba(66, 40, 28, .9); }
+    </style>
   </head>
   <body>
     <div id="root"></div>
+    <a class="to-studio" href="./studio.html">做一本自己的立体书 ›</a>
     <script type="module">
       import React from 'react'
       import { createRoot } from 'react-dom/client'

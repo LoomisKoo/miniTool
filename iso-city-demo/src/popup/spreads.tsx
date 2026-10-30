@@ -15,6 +15,8 @@ export type Layer = {
   w: number
   flat?: boolean
   rot?: number
+  /** 对应的模板槽位 id：点书页上的纸片时用来找到右边的菜单项 */
+  id?: string
 }
 
 export type Spread = {
@@ -25,6 +27,11 @@ export type Spread = {
   dots?: string
   wallLeft: ReactNode
   wallRight: ReactNode
+  /** 左右背景墙各自对应的槽位 id（整张背景时两页指向同一个槽位） */
+  wallLeftId?: string
+  wallRightId?: string
+  /** 不能移除的槽位（背景、地面），选中时只给“换素材”，不给“关闭” */
+  locked?: string[]
   left: Layer[]
   right: Layer[]
 }

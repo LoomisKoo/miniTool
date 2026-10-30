@@ -41,7 +41,7 @@ body { overflow: hidden; background: #6e4630; }
 
 .pb-book {
   position: absolute;
-  left: 50%;
+  left: calc(50% + var(--pb-shift, 0px));
   top: 50%;
   width: 1000px;
   height: 560px;
@@ -50,10 +50,49 @@ body { overflow: hidden; background: #6e4630; }
   transition: transform .45s cubic-bezier(.2, .7, .2, 1);
 }
 
+/* 书脊的纸厚：一圈竖直纸边 + 底面，全部落在纸页平面以下，
+   纸页本身始终在同一个平面上，翻页不会改动它们的 z */
+.pb-slab { position: absolute; inset: 0; transform-style: preserve-3d; pointer-events: none; }
+.pb-slab-face {
+  position: absolute;
+  background-color: #efe3c9;
+  background-image: repeating-linear-gradient(
+    180deg,
+    rgba(255, 255, 255, .5) 0 1px,
+    rgba(176, 152, 112, .38) 1px 2px,
+    rgba(255, 255, 255, 0) 2px 3px
+  );
+  box-shadow: inset 0 0 0 1px rgba(120, 88, 48, .16);
+}
+.pb-slab-face.edge-bottom {
+  left: 0;
+  right: 0;
+  top: 100%;
+  height: var(--t, 24px);
+  transform-origin: 50% 0;
+  transform: rotateX(-90deg);
+}
+.pb-slab-face.edge-left {
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: var(--t, 24px);
+  transform-origin: 0 50%;
+  transform: rotateY(90deg);
+}
+.pb-slab-face.edge-right {
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: var(--t, 24px);
+  transform-origin: 100% 50%;
+  transform: rotateY(-90deg);
+}
 .pb-floor-shadow {
   position: absolute;
   inset: 0;
-  transform: translateZ(-18px) translate(16px, 26px);
+  /* 落到整本书后面：底部封面在 -THICK 附近，阴影要比它更靠后 */
+  transform: translateZ(-72px) translate(16px, 26px);
   border-radius: 24px;
   background: rgba(28, 10, 4, .6);
   filter: blur(22px);
@@ -61,17 +100,9 @@ body { overflow: hidden; background: #6e4630; }
 .pb-cover {
   position: absolute;
   inset: -12px -16px;
-  transform: translateZ(-14px);
   border-radius: 14px;
   background: linear-gradient(180deg, #4a5d9e, #34447c);
   box-shadow: inset 0 0 0 2px rgba(255, 255, 255, .08);
-}
-.pb-stack {
-  position: absolute;
-  inset: 0;
-  border-radius: 10px;
-  background: #efe2c2;
-  box-shadow: inset 0 0 0 1px rgba(120, 88, 48, .28);
 }
 
 .pb-page {
@@ -87,10 +118,6 @@ body { overflow: hidden; background: #6e4630; }
 .pb-page.pb-right { z-index: 1; }
 
 .pb-paper { position: absolute; inset: 0; overflow: hidden; }
-/* 沉到翻页纸下面的那页，脊边补一块纸色竖板，封住 z 方向的落差 */
-.pb-skirt { position: absolute; top: 0; height: 560px; }
-.pb-page.pb-right > .pb-skirt { left: 0; }
-.pb-page.pb-left > .pb-skirt { right: 0; }
 .pb-left .pb-paper { border-radius: 10px 2px 2px 10px; }
 .pb-right .pb-paper { border-radius: 2px 10px 10px 2px; }
 .pb-paper::after {
@@ -111,6 +138,79 @@ body { overflow: hidden; background: #6e4630; }
   background-position: 0 0, 18px 11px;
 }
 .pb-pop { position: absolute; transform-origin: 50% 100%; transform-style: preserve-3d; }
+/* 制作模式：纸片可以点，点了就描边并定位到右侧菜单 */
+.pb-book.is-pickable .pb-pop,
+.pb-book.is-pickable .pb-flat { cursor: pointer; }
+.pb-book.is-pickable .pb-wall { pointer-events: auto; }
+/* 选中描边：画在纸片自己的平面上，跟着纸片一起立起来/折下去 */
+.pb-pop.is-picked::after,
+.pb-flat.is-picked::after {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border: 2px dashed #ffd76a;
+  border-radius: 8px;
+  box-shadow: 0 0 0 2px rgba(60, 32, 10, .35), 0 0 16px 2px rgba(255, 215, 106, .55);
+  pointer-events: none;
+  transform: translateZ(.4px);
+}
+/* 选中纸片里的 0×0 角标：只用来量右上角的屏幕坐标 */
+.pb-pickdot {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+/* 清空后留下的白色虚线占位框：只是占住位置，仍然是可选的纸片 */
+.pb-empty {
+  width: 100%;
+  border: 2px dashed rgba(255, 255, 255, .8);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, .07);
+}
+/* 白色占位框只在制作模式里出现；收起面板就是阅读模式，空位不该留下任何痕迹 */
+.pb-book:not(.is-editing) .pb-empty,
+.pb-book:not(.is-editing) .pb-pickbar {
+  display: none;
+}
+/* 白色占位框和选中高亮是互斥的：选中时只留高亮那一圈虚线，
+   否则两个虚线框叠在一起；占位框只把边框和底色隐掉，尺寸不动（按钮定位还要用它） */
+.pb-pop.is-picked .pb-empty,
+.pb-flat.is-picked .pb-empty {
+  border-color: transparent;
+  background: transparent;
+}
+/* 选中纸片右上角的浮动按钮：以两枚按钮的中心为锚点，转视角/缩放时只跟着平移 */
+.pb-pickbar {
+  position: fixed;
+  z-index: 26;
+  display: flex;
+  gap: 5px;
+  transform: translate(-50%, -50%);
+  /* 缩放、旋转都以两枚按钮的中心为圆心 */
+  transform-origin: 50% 50%;
+}
+.pb-pickbtn {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: #3a2b1e;
+  background: #ffd76a;
+  box-shadow: 0 2px 8px rgba(20, 8, 2, .45), inset 0 0 0 1px rgba(120, 88, 48, .35);
+  font: 600 14px/1 "PingFang SC", sans-serif;
+  cursor: pointer;
+  transform-origin: 50% 50%;
+  transition: transform .14s ease, background .14s ease;
+}
+.pb-pickbtn:hover { transform: translateY(-1px) scale(1.06); background: #ffe49a; }
+.pb-pickbtn.is-clear { background: #f7f1e2; color: #8c2f1c; }
+.pb-pickbtn.is-clear:hover { background: #ffe1d8; }
 .pb-wall { pointer-events: none; }
 /* 墙的纸背比正面略小一圈，避免底边和书脊边露出米色细线 */
 .pb-wall > .pb-backside { clip-path: inset(0 3px 3px 3px); }
@@ -118,11 +218,14 @@ body { overflow: hidden; background: #6e4630; }
 .pb-wall .pb-backside { filter: brightness(.62) saturate(1.05); }
 /* 墙的白色描边只保留在画框内（顶边和外侧已留边距），书脊边和底边不外溢成白线 */
 .pb-wall .cut { overflow: hidden; }
+/* 上传的图片：写死宽高比，图片没解码完时墙高也是准的 */
+.pb-slot-img { display: block; width: 100%; height: auto; }
+.pb-wall-blank { width: 100%; aspect-ratio: 501 / 341; background: linear-gradient(180deg, #232a52, #3a3f74); }
 .pb-front { position: relative; backface-visibility: hidden; }
 .pb-flap { position: absolute; inset: 0; transform-style: preserve-3d; }
 .pb-flap .pb-front { position: absolute; inset: 0; }
-/* 折翼背面同样印着夜空，折起时只是略暗，不露出米色纸背 */
-.pb-flap .pb-backside { filter: brightness(.72) saturate(1.1); }
+/* 折翼背面同样印着夜空，折起来时和墙面几乎同色，看起来才是折过去而不是翻出另一块纸 */
+.pb-flap .pb-backside { filter: brightness(.9) saturate(1.04); }
 /* 纸片背面：同一剪影的素色纸背，镜像后和正面轮廓严丝合缝 */
 .pb-backside {
   position: absolute;
@@ -182,6 +285,8 @@ body { overflow: hidden; background: #6e4630; }
 
 .pb-leaf {
   position: absolute;
+  /* 共面时排序用：翻页纸永远压在被它盖住的那页之上 */
+  z-index: 3;
   left: 500px;
   top: 0;
   width: 500px;
@@ -203,7 +308,7 @@ body { overflow: hidden; background: #6e4630; }
   position: absolute;
   z-index: 5;
   left: 50%;
-  bottom: 22px;
+  bottom: var(--pb-foot, 22px);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -219,7 +324,7 @@ body { overflow: hidden; background: #6e4630; }
   letter-spacing: .08em;
   white-space: nowrap;
 }
-.pb-foot nav { display: flex; align-items: center; gap: 26px; }
+.pb-foot nav { display: flex; align-items: center; gap: 14px; }
 .pb-foot nav span { min-width: 80px; color: #fbecc8; font-size: 15px; text-align: center; }
 .pb-foot button {
   width: 46px;
@@ -233,6 +338,14 @@ body { overflow: hidden; background: #6e4630; }
   cursor: pointer;
   transition: transform .15s ease, background .15s ease;
 }
+/* 视角 / 复位：文字按钮，比翻页键窄一点 */
+.pb-foot button.pb-tool {
+  width: auto;
+  padding: 0 14px;
+  font-size: 14px;
+  letter-spacing: .06em;
+}
+.pb-foot button.pb-tool.is-on { color: #2f2418; background: #e8cf9a; }
 .pb-foot button:hover { background: rgba(70, 40, 28, .9); transform: translateY(-2px); }
 .pb-foot button:active { transform: scale(.94); }
 .pb-foot button:disabled { opacity: .35; cursor: default; transform: none; }
