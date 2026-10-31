@@ -1,0 +1,62 @@
+/**
+ * 容器层：整页底色、底部安全区、Chrome 61 基线回退。
+ * 由 main.tsx 引入，dev 与打包产物共用同一份，避免模板与样式两头漂移。
+ */
+
+/* 小红书容器：手机安全区 + 44px 自带导航栏（两段，不要合并） */
+:root {
+  --safe-t: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
+  --safe-b: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
+  --nav-h: 44px;
+  --xhs-nav: calc(var(--safe-t) + var(--nav-h));
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  overflow: hidden;
+  background: #2b1708;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  overscroll-behavior: none;
+}
+
+/* 底部翻页 / 复位 / 横屏 / 制作这一排避开手机底部安全区 */
+.pb-foot {
+  bottom: calc(var(--pb-foot, 22px) + var(--safe-b));
+}
+
+/* 宽屏面板从右上落下，要让开容器导航栏；窄屏是底部抽屉（top: auto），不要动 */
+@media (min-width: 901px) {
+  .ed-wrap {
+    top: calc(76px + var(--xhs-nav));
+  }
+}
+
+/* ——— Chrome 61 基线回退 ———
+   .no-flex-gap 由入口脚本行为检测后挂到 <html> 上：旧内核没有 Flex gap，
+   这里用单边 margin 兜住核心排版，新内核继续走 gap。 */
+.no-flex-gap .pb-foot > * + * { margin-top: 12px; }
+.no-flex-gap .pb-foot nav > * + * { margin-left: 10px; }
+.no-flex-gap .ed-cols > * + * { margin-left: 6px; }
+.no-flex-gap .ed-col > * + * { margin-top: 6px; }
+.no-flex-gap .ed-slot > * + * { margin-left: 5px; }
+.no-flex-gap .ed-h3-row > * + * { margin-left: 8px; }
+.no-flex-gap .ed-fx-top > * + * { margin-left: 8px; }
+.no-flex-gap .ed-picker footer > * + * { margin-left: 10px; }
+.no-flex-gap .ed-crop footer > * + * { margin-left: 10px; }
+.no-flex-gap .ed-crop header > * + * { margin-left: 10px; }
+.no-flex-gap .ed-crop-tools > * + * { margin-left: 12px; }
+
+/* aspect-ratio（Chrome 88+）：旧内核按固定高度给等价的盒子 */
+@supports not (aspect-ratio: 1 / 1) {
+  .ed-preset-thumb { height: 58px; }
+  .ed-preset-grid.is-wall .ed-preset-thumb { height: 44px; }
+  .pb-wall-blank { height: 68%; }
+  .ed-crop-box { height: 42vh; }
+}

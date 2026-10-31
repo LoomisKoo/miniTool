@@ -1,0 +1,23 @@
+{
+  "name": "liti-shuhua",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "立体书画 — 翻一页，纸片立起来，也能自己做一本",
+  "scripts": {
+    "dev": "vite",
+    "build:xhs": "node build-xhs.mjs",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.3",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.10"
+  }
+}

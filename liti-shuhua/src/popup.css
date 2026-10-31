@@ -1,0 +1,930 @@
+* { box-sizing: border-box; }
+html, body, #root { width: 100%; height: 100%; margin: 0; }
+body { overflow: hidden; background: #6e4630; }
+
+.pb-root {
+  position: fixed;
+  top: 0; right: 0; bottom: 0; left: 0;
+  overflow: hidden;
+  user-select: none;
+  font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
+  color: #fbeed2;
+  background:
+    radial-gradient(ellipse at 50% 42%, rgba(255, 214, 160, .22), transparent 62%),
+    radial-gradient(ellipse at 50% 120%, rgba(20, 8, 2, .55), transparent 60%),
+    repeating-linear-gradient(176deg, transparent 0 26px, rgba(50, 24, 10, .09) 27px 28px, transparent 29px 71px),
+    repeating-linear-gradient(176deg, transparent 0 9px, rgba(255, 220, 180, .035) 10px 11px, transparent 12px 23px),
+    linear-gradient(180deg, #8d5c3d, #6a422c);
+}
+
+.pb-stage {
+  position: absolute;
+  top: 0; right: 0; bottom: 0; left: 0;
+  perspective: 2400px;
+  perspective-origin: 50% 28%;
+  cursor: grab;
+  touch-action: none;
+}
+
+/* 横屏转向层：只做 2D 旋转，绝不参与 3D。
+   3D 俯视、翻页都在这层内部按“横向尺寸”算完，再整幅顺时针转 90°，
+   等于把手机横过来拿。把 rotateZ 塞进 .pb-book 的 3D 变换里会让俯角
+   变成侧倾，书页被压成窄条——那是之前角度不对的原因。 */
+.pb-turn {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 100%;
+  height: 100%;
+  transform: translate(-50%, -50%);
+  /* 宽高互换 + 90° 转向要一起走，否则先变宽再转动会跳一下。
+     transform-origin 在中点，所以转动是绕屏幕中心转，不是绕角落。 */
+  transition:
+    width .55s cubic-bezier(.32, .72, 0, 1),
+    height .55s cubic-bezier(.32, .72, 0, 1),
+    transform .55s cubic-bezier(.32, .72, 0, 1);
+}
+.pb-turn.is-landscape {
+  /* 宽高互换：内部按 100vh × 100vw 布局，转 90° 后正好铺满竖屏 */
+  width: 100vh;
+  height: 100vw;
+  transform: translate(-50%, -50%) rotate(90deg);
+}
+.pb-stage.is-flip, .pb-stage.is-turn { cursor: grabbing; }
+.pb-stage.is-turn .pb-book { transition: none; }
+
+.pb-book {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 1000px;
+  height: 560px;
+  margin: -280px 0 0 -500px;
+  transform-style: preserve-3d;
+  /* 抽屉开合、横竖屏切换都在挪书本：平移 + 缩放 + 视角走同一条曲线，
+     时长和 .pb-turn 的转向动画对齐，旋转和缩放才会同时收尾。 */
+  transition: transform .55s cubic-bezier(.32, .72, 0, 1);
+}
+
+/* 书脊的纸厚：一圈竖直纸边 + 底面，全部落在纸页平面以下，
+   纸页本身始终在同一个平面上，翻页不会改动它们的 z */
+.pb-slab { position: absolute; top: 0; right: 0; bottom: 0; left: 0; transform-style: preserve-3d; pointer-events: none; }
+.pb-slab-face {
+  position: absolute;
+  background-color: #efe3c9;
+  background-image: repeating-linear-gradient(
+    180deg,
+    rgba(255, 255, 255, .5) 0 1px,
+    rgba(176, 152, 112, .38) 1px 2px,
+    rgba(255, 255, 255, 0) 2px 3px
+  );
+  box-shadow: inset 0 0 0 1px rgba(120, 88, 48, .16);
+}
+.pb-slab-face.edge-bottom {
+  left: 0;
+  right: 0;
+  top: 100%;
+  height: var(--t, 24px);
+  transform-origin: 50% 0;
+  transform: rotateX(-90deg);
+}
+.pb-slab-face.edge-left {
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: var(--t, 24px);
+  transform-origin: 0 50%;
+  transform: rotateY(90deg);
+}
+.pb-slab-face.edge-right {
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: var(--t, 24px);
+  transform-origin: 100% 50%;
+  transform: rotateY(-90deg);
+}
+.pb-floor-shadow {
+  position: absolute;
+  top: 0; right: 0; bottom: 0; left: 0;
+  /* 落到整本书后面：底部封面在 -THICK 附近，阴影要比它更靠后 */
+  transform: translateZ(-72px) translate(16px, 26px);
+  border-radius: 24px;
+  background: rgba(28, 10, 4, .6);
+  filter: blur(22px);
+}
+.pb-cover {
+  position: absolute;
+  top: -12px; right: -16px; bottom: -12px; left: -16px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #4a5d9e, #34447c);
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, .08);
+}
+
+.pb-page {
+  position: absolute;
+  top: 0;
+  width: 500px;
+  height: 560px;
+  transform-style: preserve-3d;
+}
+.pb-page.pb-left { left: 0; }
+.pb-page.pb-right { left: 500px; }
+.pb-page.pb-left { z-index: 2; }
+.pb-page.pb-right { z-index: 1; }
+
+.pb-paper { position: absolute; top: 0; right: 0; bottom: 0; left: 0; overflow: hidden; }
+.pb-left .pb-paper { border-radius: 10px 2px 2px 10px; }
+.pb-right .pb-paper { border-radius: 2px 10px 10px 2px; }
+.pb-paper::after {
+  content: "";
+  position: absolute;
+  top: 0; right: 0; bottom: 0; left: 0;
+  opacity: .5;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 .09 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}
+.pb-dots {
+  position: absolute;
+  top: 0; right: 0; bottom: 0; left: 0;
+  opacity: .8;
+  background-image:
+    radial-gradient(circle, var(--dot) 0 1.3px, transparent 1.9px),
+    radial-gradient(circle, var(--dot) 0 .9px, transparent 1.4px);
+  background-size: 61px 47px, 37px 29px;
+  background-position: 0 0, 18px 11px;
+}
+.pb-pop { position: absolute; transform-origin: 50% 100%; transform-style: preserve-3d; }
+/* 制作模式：纸片可以点，点了就描边并定位到右侧菜单 */
+.pb-book.is-pickable .pb-pop,
+.pb-book.is-pickable .pb-flat { cursor: pointer; }
+.pb-book.is-pickable .pb-wall { pointer-events: auto; }
+/* 选中描边：画在纸片自己的平面上，跟着纸片一起立起来/折下去。
+   选中纸上不再有按钮，只靠这一圈粗边框说话 */
+.pb-pop.is-picked::after,
+.pb-flat.is-picked::after {
+  content: "";
+  position: absolute;
+  top: -6px; right: -6px; bottom: -6px; left: -6px;
+  border: 3px solid #ffd76a;
+  border-radius: 9px;
+  box-shadow:
+    0 0 0 2px rgba(60, 32, 10, .42),
+    0 0 18px 3px rgba(255, 215, 106, .6);
+  pointer-events: none;
+  transform: translateZ(.4px);
+}
+/* 清空后留下的白色虚线占位框：只是占住位置，仍然是可选的纸片 */
+.pb-empty {
+  width: 100%;
+  border: 2px dashed rgba(255, 255, 255, .8);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, .07);
+}
+/* 白色占位框只在制作模式里出现；收起面板就是阅读模式，空位不该留下任何痕迹 */
+.pb-book:not(.is-editing) .pb-empty {
+  display: none;
+}
+/* 白色占位框和选中高亮是互斥的：选中时只留高亮那一圈边框，
+   否则两个虚线框叠在一起；占位框只把边框和底色隐掉，尺寸不动（点选热区还要用它） */
+.pb-pop.is-picked .pb-empty,
+.pb-flat.is-picked .pb-empty {
+  border-color: transparent;
+  background: transparent;
+}
+.pb-wall { pointer-events: none; }
+/* 墙的纸背比正面略小一圈，避免底边和书脊边露出米色细线 */
+.pb-wall > .pb-backside { clip-path: inset(0 3px 3px 3px); }
+/* 背景墙两面都印着画面（背面略暗），往前倒时不露出大片米色纸背 */
+.pb-wall .pb-backside { filter: brightness(.62) saturate(1.05); }
+/* 墙的白色描边只保留在画框内（顶边和外侧已留边距），书脊边和底边不外溢成白线 */
+.pb-wall .cut { overflow: hidden; }
+/* 上传的图片：写死宽高比，图片没解码完时墙高也是准的 */
+.pb-slot-img { display: block; width: 100%; height: auto; }
+.pb-wall-blank { width: 100%; aspect-ratio: 501 / 341; background: linear-gradient(180deg, #232a52, #3a3f74); }
+.pb-front { position: relative; backface-visibility: hidden; }
+.pb-flap { position: absolute; top: 0; right: 0; bottom: 0; left: 0; transform-style: preserve-3d; }
+.pb-flap .pb-front { position: absolute; top: 0; right: 0; bottom: 0; left: 0; }
+/* 折翼背面同样印着夜空，折起来时和墙面几乎同色，看起来才是折过去而不是翻出另一块纸 */
+.pb-flap .pb-backside { filter: brightness(.9) saturate(1.04); }
+/* 纸片背面：同一剪影的素色纸背，镜像后和正面轮廓严丝合缝 */
+.pb-backside {
+  position: absolute;
+  top: 0; right: 0; bottom: 0; left: 0;
+  transform: rotateY(180deg) translateZ(1px);
+  backface-visibility: hidden;
+  filter: brightness(0) invert(.84) sepia(.4) saturate(1.3);
+}
+.pb-mirror { transform: scaleX(-1); }
+.pb-tab {
+  position: absolute;
+  height: 10px;
+  border-radius: 2px;
+  background: #ece0c2;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, .3), inset 0 -2px 0 rgba(120, 88, 48, .18);
+}
+.pb-cast {
+  position: absolute;
+  transform-origin: 50% 100%;
+  border-radius: 45% 45% 0 0;
+  background: linear-gradient(to top, rgba(8, 6, 28, .6), rgba(8, 6, 28, 0));
+  filter: blur(6px);
+}
+.pb-flat { position: absolute; }
+/* 地面纸片有固定框高：素材用 SVG 默认的 meet 在框内等比缩放并居中，
+   绝不会只按宽度放大后从书页下沿漏出去 */
+.pb-flat > .cut { width: 100%; height: 100%; }
+
+.cut { display: block; width: 100%; height: auto; overflow: visible; }
+.spin { transform-box: fill-box; transform-origin: center; animation: pb-spin 16s linear infinite; }
+@keyframes pb-spin { to { transform: rotate(360deg); } }
+.blink { animation: pb-blink 3s ease-in-out infinite; }
+@keyframes pb-blink { 0%, 100% { opacity: .15; } 50% { opacity: 1; } }
+.rise { animation: pb-rise 6s linear infinite; }
+@keyframes pb-rise { 0% { transform: translateY(40px); opacity: 0; } 15% { opacity: 1; } 85% { opacity: 1; } 100% { transform: translateY(-90px); opacity: 0; } }
+.flicker { transform-box: fill-box; transform-origin: 50% 100%; animation: pb-flicker .9s ease-in-out infinite alternate; }
+@keyframes pb-flicker { 0% { transform: scale(1, 1); } 50% { transform: scale(.94, 1.08); } 100% { transform: scale(1.04, .95); } }
+
+/* 会动贴纸用的几个小动作：都在 SVG 里跑，坐标系按 viewBox 算，
+   所以 transform-origin 可以直接写纸片自己的像素位置 */
+.sway { transform-box: view-box; transform-origin: 50% 100%; animation: pb-sway 3.2s ease-in-out infinite alternate; }
+@keyframes pb-sway { from { transform: rotate(-4deg); } to { transform: rotate(4deg); } }
+.bob { transform-box: view-box; animation: pb-bob 3.6s ease-in-out infinite alternate; }
+.petal { transform-box: fill-box; animation: pb-petal 5s linear infinite; }
+@keyframes pb-petal {
+  0% { transform: translate(0, -10px) rotate(0deg); opacity: 0; }
+  12% { opacity: .95; }
+  60% { transform: translate(14px, 90px) rotate(140deg); }
+  100% { transform: translate(-6px, 190px) rotate(300deg); opacity: 0; }
+}
+.beam { transform-box: view-box; animation: pb-beam 7s ease-in-out infinite; }
+@keyframes pb-beam {
+  0%, 100% { transform: rotate(-14deg); opacity: .25; }
+  50% { transform: rotate(14deg); opacity: .75; }
+}
+.glowpulse { transform-box: fill-box; animation: pb-glowpulse 2.6s ease-in-out infinite; }
+@keyframes pb-glowpulse { 0%, 100% { opacity: .4; } 50% { opacity: 1; } }
+@keyframes pb-bob { from { transform: translateY(-3px); } to { transform: translateY(4px); } }
+.glide { transform-box: view-box; animation: pb-glide 6s ease-in-out infinite alternate; }
+@keyframes pb-glide {
+  0% { transform: translate(-18px, 14px) rotate(-7deg); }
+  100% { transform: translate(22px, -12px) rotate(5deg); }
+}
+.wingL { transform-box: fill-box; transform-origin: 100% 50%; animation: pb-wing-l .42s ease-in-out infinite alternate; }
+.wingR { transform-box: fill-box; transform-origin: 0% 50%; animation: pb-wing-r .42s ease-in-out infinite alternate; }
+@keyframes pb-wing-l { from { transform: scaleX(1); } to { transform: scaleX(.42); } }
+@keyframes pb-wing-r { from { transform: scaleX(1); } to { transform: scaleX(.42); } }
+.glowpulse { animation: pb-glowpulse 2.8s ease-in-out infinite; }
+@keyframes pb-glowpulse { 0%, 100% { opacity: .45; } 50% { opacity: .95; } }
+/* 行星光环：虚线沿轨道走，比整圈自转看得出来 */
+.orbit { animation: pb-orbit 6s linear infinite; }
+@keyframes pb-orbit { to { stroke-dashoffset: -60; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .sway, .bob, .glide, .wingL, .wingR, .glowpulse, .orbit, .flicker, .blink, .rise, .spin { animation: none !important; }
+}
+
+.pb-card {
+  padding: 14px 18px 16px;
+  border-radius: 10px;
+  color: #2c2952;
+  background: #fbf5e6;
+  box-shadow: 0 4px 0 rgba(0, 0, 0, .18);
+  font: 15px/1.75 "Songti SC", "Noto Serif SC", serif;
+}
+.pb-card b { display: block; margin-bottom: 2px; color: #a8763e; font: 600 10px/1.6 Georgia, serif; letter-spacing: .25em; }
+
+.pb-hint { display: block; color: #f3e3b8; font-size: 15px; letter-spacing: .25em; text-align: center; opacity: .85; }
+.pb-dial { position: relative; }
+.pb-dial span {
+  position: absolute;
+  left: -86px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #f3e3b8;
+  font-size: 14px;
+  letter-spacing: .3em;
+}
+
+.pb-leaf {
+  position: absolute;
+  /* 共面时排序用：翻页纸永远压在被它盖住的那页之上 */
+  z-index: 3;
+  left: 500px;
+  top: 0;
+  width: 500px;
+  height: 560px;
+  transform-origin: 0 50%;
+  transform-style: preserve-3d;
+}
+.pb-face { position: absolute; top: 0; right: 0; bottom: 0; left: 0; transform-style: preserve-3d; }
+/* 正反两面各离纸心 1px，背面折平的剪纸离正面纸足够远，不会被深度排序闪穿 */
+.pb-face { transform: translateZ(1px); }
+.pb-face.back { transform: rotateY(180deg) translateZ(1px); }
+.pb-face .pb-paper,
+.pb-face .pb-flat,
+.pb-face .pb-tab,
+.pb-face .pb-cast { backface-visibility: hidden; }
+.pb-nopops > .pb-page > :not(.pb-paper):not(.pb-card) { visibility: hidden; }
+
+/* ===== 场景特效 =====
+   书本坐标：+Z = 从纸面立起（和贴纸一样）。
+   雨雪沿 −Z 落到纸面；Y 只表示落在地板哪一进深。 */
+.pb-fx3d,
+.fx-set {
+  position: absolute;
+  top: 0; right: 0; bottom: 0; left: 0;
+  transform-style: preserve-3d;
+  pointer-events: none;
+}
+.fx-p {
+  --op: calc(var(--op0, 1) * var(--fade, 1));
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 0;
+  height: 0;
+  /* 零尺寸 flex 容器把子元素居中溢出：替代 Chrome 104 才有的 translate: -50% -50%。
+     子元素保持 in-flow（relative），关键帧里的 transform 仍然作用在自己中心。 */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform-style: preserve-3d;
+}
+.fx-p > i {
+  position: relative;
+  display: block;
+  /* 父级是 width:0 的 flex 容器，子项默认 flex-shrink:1 会被压成 0 宽，
+     雪片/星星就只剩一条竖线；必须显式禁止收缩。 */
+  flex: none;
+  transform-origin: 50% 50%;
+  /* 不给每颗都开 will-change：几百个图层反而更卡 */
+}
+
+/* 从高处落到纸面，风偏只动 XY。
+   朝向 var(--face) 必须写在位移之后：先沿书本 −Z 落，再在原地转向镜头。
+   --bb / --bbv 由 FxLayer 按当前视角实时给：圆点整体对准镜头；条状只绕竖轴转，保持竖直。 */
+:where(.fx-p > i) { --face: var(--bb, rotateX(-50deg)); }
+@keyframes fx-fall {
+  0% { transform: translate3d(0, 0, var(--z0, 300px)) var(--face); opacity: 0; }
+  6% { opacity: var(--op, 1); }
+  33% { transform: translate3d(var(--m1x, 0px), var(--m1y, 0px), calc(var(--z0, 300px) * .67)) var(--face); }
+  66% { transform: translate3d(var(--m2x, 0px), var(--m2y, 0px), calc(var(--z0, 300px) * .34)) var(--face); }
+  92% { opacity: var(--op, 1); }
+  100% { transform: translate3d(var(--wx, 0px), var(--wy, 0px), 0) var(--face); opacity: 0; }
+}
+@keyframes fx-rise {
+  0% { transform: translate3d(0, 0, 8px) var(--face); opacity: 0; }
+  8% { opacity: var(--op, 1); }
+  33% { transform: translate3d(var(--m1x, 0px), var(--m1y, 0px), calc(var(--z0, 300px) * .33)) var(--face); }
+  66% { transform: translate3d(var(--m2x, 0px), var(--m2y, 0px), calc(var(--z0, 300px) * .66)) var(--face); }
+  90% { opacity: var(--op, 1); }
+  100% { transform: translate3d(var(--wx, 0px), var(--wy, 0px), var(--z0, 300px)) var(--face); opacity: 0; }
+}
+@keyframes fx-drift {
+  from { transform: translate3d(0, 0, -12px) var(--face); }
+  to { transform: translate3d(var(--wx, 0px), var(--wy, 0px), 16px) var(--face); }
+}
+/* 阵风：锚点整体晃，周期和下落错开 */
+.fx-p.is-gust { animation: fx-gust var(--gd, 5s) ease-in-out infinite alternate; animation-delay: var(--gdl, 0s); }
+@keyframes fx-gust {
+  from { translate: 0 0; }
+  to { translate: var(--gx, 0px) var(--gy, 0px); }
+}
+@keyframes fx-twinkle {
+  0%, 100% { opacity: calc(var(--op, 1) * .25); }
+  50% { opacity: var(--op, 1); }
+}
+@keyframes fx-tumble { from { rotate: 0deg; } to { rotate: 360deg; } }
+@keyframes fx-warmth {
+  0%, 100% { opacity: calc(var(--fade, 1) * .75); }
+  50% { opacity: var(--fade, 1); }
+}
+/* 烟花升空：前 30% 减速爬到炸点（带一点斜），到顶熄灭 */
+@keyframes fx-rocket {
+  0% { transform: translate3d(0, 0, 0) var(--face); opacity: 0; animation-timing-function: cubic-bezier(.3, .6, .5, 1); }
+  3% { opacity: var(--op, 1); }
+  30% { transform: translate3d(var(--lean, 0px), 0, var(--lift, 160px)) var(--face); opacity: var(--op, 1); }
+  32%, 100% { transform: translate3d(var(--lean, 0px), 0, var(--lift, 160px)) var(--face); opacity: 0; }
+}
+/* 炸开：32% 白热炸出 → 快速外扩 → 减速 → 被重力拉下去，尾段闪烁熄灭 */
+@keyframes fx-spark {
+  0%, 31% { transform: translate3d(0, 0, 0) var(--face) scale(.4); opacity: 0; }
+  32% {
+    transform: translate3d(0, 0, 0) var(--face) scale(1.4);
+    opacity: var(--op, 1);
+    background: #fff;
+    animation-timing-function: cubic-bezier(.1, .75, .3, 1);
+  }
+  48% {
+    transform: translate3d(var(--x1), var(--y1), var(--z1)) var(--face) scale(1);
+    background: hsl(var(--hue) 100% 82%);
+    animation-timing-function: cubic-bezier(.25, .5, .5, 1);
+  }
+  70% {
+    transform: translate3d(var(--x2), var(--y2), var(--z2)) var(--face) scale(.85);
+    opacity: var(--op, 1);
+    background: hsl(var(--hue) 100% 68%);
+    animation-timing-function: cubic-bezier(.4, 0, .8, .6);
+  }
+  84% { opacity: calc(var(--op, 1) * .8); }
+  88% { opacity: calc(var(--op, 1) * .25); }
+  91% { opacity: calc(var(--op, 1) * .7); }
+  95% { opacity: calc(var(--op, 1) * .15); }
+  100% {
+    transform: translate3d(var(--x3), var(--y3), var(--z3)) var(--face) scale(.5);
+    opacity: 0;
+    background: hsl(var(--hue) 90% 55%);
+  }
+}
+@keyframes fx-core {
+  0%, 31% { transform: var(--face) scale(.2); opacity: 0; }
+  32% { transform: var(--face) scale(1); opacity: 1; }
+  42%, 100% { transform: var(--face) scale(2.4); opacity: 0; }
+}
+/* 流星：在对准镜头的平面里沿 --ang 斜线划过，只占周期的一小段 */
+@keyframes fx-streak {
+  0% { transform: var(--face) rotate(var(--ang)) translateY(calc(var(--run) * -.5)) scaleY(.2); opacity: 0; }
+  1.5% { opacity: var(--op, 1); }
+  7% { opacity: var(--op, 1); }
+  10%, 100% { transform: var(--face) rotate(var(--ang)) translateY(calc(var(--run) * .5)) scaleY(1); opacity: 0; }
+}
+/* 闪电：一次放电 2~3 次回击（约 0.2 秒），不是慢慢长出来 */
+@keyframes fx-strike {
+  0%, 53% { opacity: 0; }
+  54.5% { opacity: var(--op, 1); }
+  56% { opacity: calc(var(--op, 1) * .22); }
+  57.5% { opacity: var(--op, 1); }
+  59% { opacity: calc(var(--op, 1) * .35); }
+  60.5% { opacity: calc(var(--op, 1) * .9); }
+  66%, 100% { opacity: 0; }
+}
+/* 描边从顶端往下劈开：pathLength=1，所以 dashoffset 1→0 就是「画出来」 */
+@keyframes fx-draw {
+  0%, 52.5% { stroke-dashoffset: 1; }
+  54.5%, 100% { stroke-dashoffset: 0; }
+}
+/* 天光：和闪电同心的整片天空，贴在背景墙前面 */
+@keyframes fx-sky {
+  0%, 53% { opacity: 0; }
+  54.5% { opacity: var(--lv, .5); }
+  56% { opacity: calc(var(--lv, .5) * .25); }
+  57.5% { opacity: var(--lv, .5); }
+  60% { opacity: calc(var(--lv, .5) * .45); }
+  68%, 100% { opacity: 0; }
+}
+
+/* 雪：小而软的光点，边缘化开 */
+.fx-snow {
+  border-radius: 50%;
+  background: radial-gradient(circle, #fff 0 32%, rgba(250, 252, 255, .7) 52%, rgba(240, 248, 255, 0) 72%);
+  animation: fx-fall var(--dur) linear infinite;
+  animation-delay: var(--delay);
+}
+/* 雨：发丝一样细，几乎透明 */
+.fx-rain {
+  --face: var(--bbv, rotateX(-90deg));
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(210, 235, 255, 0), rgba(225, 240, 255, .7));
+  animation: fx-fall var(--dur) linear infinite;
+  animation-delay: var(--delay);
+}
+.fx-firefly {
+  border-radius: 50%;
+  background: #fff6c8;
+  box-shadow: 0 0 4px 1px rgba(255, 214, 110, .9), 0 0 10px 3px rgba(255, 190, 80, .35);
+  animation: fx-drift var(--dur) ease-in-out infinite alternate, fx-twinkle var(--blink) ease-in-out infinite;
+  animation-delay: var(--delay);
+}
+.fx-leaf {
+  color: #8cb45f;
+  display: grid;
+  place-items: center;
+  animation: fx-fall var(--dur) linear infinite, fx-tumble calc(var(--dur) * .6) linear infinite;
+  animation-delay: var(--delay), var(--delay);
+}
+.fx-leaf svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  animation: fx-flutter calc(var(--dur) * .16) ease-in-out infinite alternate;
+  animation-delay: var(--delay);
+}
+@keyframes fx-flutter { from { scale: 1 1; } to { scale: .2 1; } }
+.fx-leaf.is-gold { color: #e3b055; }
+.fx-leaf.is-red { color: #d07055; }
+.fx-star {
+  display: grid;
+  place-items: center;
+  color: #fff3cc;
+  transform: var(--face);
+  /* 不用 drop-shadow：几百颗一起做形状模糊很吃 GPU */
+  animation: fx-twinkle var(--dur) ease-in-out infinite;
+  animation-delay: var(--delay);
+}
+.fx-star svg { display: block; width: 100%; height: 100%; }
+.fx-star.is-cool { color: #e2f0ff; }
+.fx-bubble {
+  border-radius: 50%;
+  border: 1px solid rgba(230, 250, 255, .6);
+  background: radial-gradient(circle at 30% 28%, rgba(255, 255, 255, .9) 0 12%, transparent 34%);
+  animation: fx-rise var(--dur) linear infinite;
+  animation-delay: var(--delay);
+}
+.fx-lantern {
+  display: grid;
+  place-items: center;
+  color: #ffc46a;
+  animation: fx-rise var(--dur) linear infinite;
+  animation-delay: var(--delay);
+}
+/* 发光全部用径向渐变画，不给这个元素加 filter：
+   filter 的滤镜区域是按元素盒子算的，光晕一旦伸到盒子外面（灯升到画面边缘时）
+   就会被裁出一条直边。渐变没有这个问题，而且比三层 drop-shadow 便宜。 */
+.fx-lantern::before {
+  content: "";
+  position: absolute;
+  /* 光晕比灯本体大一圈就够：太大一是叠起来发白，二是边角直接被裁成方的 */
+  top: -62%; right: -54%; bottom: -62%; left: -54%;
+  border-radius: 50%;
+  /* circle 必须写 closest-side：默认 farthest-corner 的半径按盒子的对角线算，
+     衰减没走完就已经越出窄边，光晕在左右会露一条直边。 */
+  background:
+    radial-gradient(circle closest-side, rgba(255, 238, 202, .5) 0 15%, rgba(255, 202, 126, .22) 40%, transparent 74%),
+    radial-gradient(circle closest-side, rgba(255, 176, 84, .12) 0 42%, rgba(255, 140, 50, .04) 68%, transparent 86%);
+  animation: fx-lantern-halo calc(var(--dur) * .3) ease-in-out infinite;
+  pointer-events: none;
+}
+/* 灯身自己也带一点内发光，看起来是纸里透出来的光，而不是贴在纸上的图 */
+.fx-lantern svg {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  filter: brightness(1.02) saturate(1.04);
+}
+/* 烛火一样的轻微呼吸，周期和上升错开，不会整片一起闪 */
+@keyframes fx-lantern-halo {
+  0%, 100% { opacity: .72; transform: scale(.96); }
+  50% { opacity: .92; transform: scale(1.03); }
+}
+/* 流星：细长尾巴 + 亮头，头在下端（运动方向） */
+.fx-meteor {
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0), rgba(200, 225, 255, .25) 55%, rgba(255, 252, 240, .95) 100%);
+  animation: fx-streak var(--dur) linear infinite;
+  animation-delay: var(--delay);
+}
+.fx-meteor::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 3px;
+  height: 3px;
+  margin-left: -1.5px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 4px 1px rgba(220, 235, 255, .95);
+}
+/* 烟花升空的亮头和尾迹 */
+.fx-rocket {
+  width: 3.4px;
+  height: 3.4px;
+  border-radius: 50%;
+  background: #fff4dc;
+  box-shadow: 0 0 5px 1.5px rgba(255, 210, 140, .9);
+  animation: fx-rocket var(--dur) linear infinite;
+  animation-delay: var(--delay);
+}
+.fx-rocket.is-tail { width: 2.4px; height: 2.4px; background: #ffc27a; box-shadow: 0 0 4px rgba(255, 170, 90, .7); }
+/* 火星：小亮点 + 同色光晕，残影更小更暗 */
+.fx-spark {
+  width: calc(2.6px * var(--s));
+  height: calc(2.6px * var(--s));
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 calc(3.4px * var(--s)) calc(1px * var(--s)) hsl(var(--hue) 100% 62% / .9);
+  animation: fx-spark var(--dur) linear infinite;
+  animation-delay: var(--delay);
+}
+.fx-spark.is-tail { box-shadow: 0 0 calc(2.4px * var(--s)) hsl(var(--hue) 100% 55% / .6); }
+.fx-core {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #fff 0 20%, hsl(var(--hue) 100% 80% / .6) 45%, transparent 70%);
+  animation: fx-core var(--dur) ease-out infinite;
+  animation-delay: var(--delay);
+}
+/* 闪电：整道电光立在背景墙前面的天空里，从高处劈向纸面 */
+.fx-bolt {
+  --face: var(--bbv, rotateX(-90deg));
+  transform: var(--face);
+  display: block;
+  /* 叠加混色：电光应该是「加」到背景上的光，而不是一张不透明的贴图 */
+  mix-blend-mode: screen;
+}
+.fx-bolt svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  /* 越靠近地面越淡：真实的闪电在近地平线处会被空气和云吃掉 */
+  -webkit-mask-image: linear-gradient(180deg, #000 0 58%, rgba(0, 0, 0, .35) 88%, transparent 100%);
+  mask-image: linear-gradient(180deg, #000 0 58%, rgba(0, 0, 0, .35) 88%, transparent 100%);
+  animation: fx-strike var(--dur) linear infinite;
+  animation-delay: var(--delay);
+}
+/* 四层：空气散射 → 光晕 → 蓝白中层 → 白热细芯 */
+.fx-bolt-scatter,
+.fx-bolt-aura,
+.fx-bolt-glow,
+.fx-bolt-core {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+/* 最外层不画「线」，只画被电离的空气：大范围、几乎均匀的一层蓝白光 */
+.fx-bolt-scatter { stroke: rgba(120, 165, 255, .16); filter: blur(22px); }
+.fx-bolt-aura { stroke: rgba(140, 180, 255, .34); filter: blur(9px); }
+.fx-bolt-glow { stroke: rgba(208, 232, 255, .8); filter: blur(2.4px); }
+.fx-bolt-core { stroke: #fbfdff; filter: blur(.4px); }
+.fx-bolt path {
+  stroke-dasharray: 1;
+  animation: fx-draw var(--dur) linear infinite;
+  animation-delay: var(--delay);
+}
+/* 天光：一整片做在天空平面上的泛光，不是书上的光斑 */
+.fx-skyflash {
+  display: block;
+  width: 900px;
+  height: 460px;
+  border-radius: 50%;
+  transform: var(--bbv, rotateX(-90deg));
+  background: radial-gradient(ellipse at 50% 46%, rgba(214, 235, 255, .82), rgba(126, 172, 238, .26) 42%, rgba(110, 150, 220, 0) 70%);
+  animation: fx-sky var(--dur) linear infinite;
+  animation-delay: var(--delay);
+}
+/* 散射光：闪电周围被照亮的空气，一团大而软的光，屏幕混色叠在背景上 */
+.fx-lighthalo {
+  display: block;
+  width: var(--w, 600px);
+  height: var(--h, 500px);
+  border-radius: 50%;
+  transform: var(--bbv, rotateX(-90deg));
+  background:
+    radial-gradient(ellipse at 50% 42%, rgba(226, 240, 255, .95), rgba(150, 190, 255, .34) 34%, rgba(110, 150, 235, 0) 68%);
+  filter: blur(26px);
+  mix-blend-mode: screen;
+  animation: fx-sky var(--dur) linear infinite;
+  animation-delay: var(--delay);
+}
+/* 地面被电光照亮：一摊贴地、边缘很软的亮斑 */
+.fx-lightpool {
+  display: block;
+  width: var(--w, 400px);
+  height: 190px;
+  border-radius: 50%;
+  transform: var(--bbv, rotateX(-90deg));
+  background: radial-gradient(ellipse at 50% 50%, rgba(210, 232, 255, .7), rgba(150, 185, 240, .22) 46%, transparent 72%);
+  filter: blur(12px);
+  mix-blend-mode: screen;
+  animation: fx-pool var(--dur) linear infinite;
+  animation-delay: var(--delay);
+}
+@keyframes fx-pool {
+  0%, 53% { opacity: 0; }
+  54.5% { opacity: var(--lv, .3); }
+  56.5% { opacity: calc(var(--lv, .3) * .2); }
+  58% { opacity: var(--lv, .3); }
+  61% { opacity: calc(var(--lv, .3) * .4); }
+  70%, 100% { opacity: 0; }
+}
+.fx-glowplane {
+  width: 1200px;
+  height: 700px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at 50% 70%, rgba(255, 210, 140, calc(var(--lv))), transparent 65%);
+  filter: blur(30px);
+  animation: fx-warmth 6s ease-in-out infinite;
+}
+
+/* 空白草稿页：只给一句提示，别让它看起来像加载失败 */
+.pb-draft {
+  position: absolute;
+  top: 0; right: 0; bottom: 0; left: 0;
+  display: grid;
+  place-content: center;
+  gap: 6px;
+  text-align: center;
+  color: rgba(255, 246, 226, .34);
+  pointer-events: none;
+  transform: translateZ(.2px);
+}
+.pb-draft b { font: 600 15px/1.4 "Songti SC", "Noto Serif SC", serif; letter-spacing: .16em; }
+.pb-draft span { font-size: 11px; letter-spacing: .06em; }
+
+@media (prefers-reduced-motion: reduce) {
+  .fx-p > i { animation: none !important; opacity: .7; }
+}
+
+.pb-foot {
+  position: absolute;
+  z-index: 5;
+  left: 50%;
+  bottom: var(--pb-foot, 22px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  transform: translateX(-50%);
+}
+/* 底部控制条不受弹层影响：始终存在，只是被 z 轴更高的 sheet 盖在上面 */
+.pb-foot nav { display: flex; align-items: center; gap: 10px; }
+.pb-foot button {
+  width: 46px;
+  height: 46px;
+  border: 0;
+  border-radius: 12px;
+  color: #fbecc8;
+  background: rgba(40, 24, 18, .78);
+  font-size: 26px;
+  line-height: 1;
+  white-space: nowrap;
+  flex: none;
+  cursor: pointer;
+  transition: transform .15s ease, background .15s ease;
+}
+/* 视角 / 复位：文字按钮，比翻页键窄一点 */
+.pb-foot button.pb-tool {
+  width: auto;
+  padding: 0 14px;
+  font-size: 14px;
+  letter-spacing: .06em;
+  /* 复位 / 制作是两个字，够宽，绝不允许折成两行 */
+  white-space: nowrap;
+  flex: none;
+}
+.pb-foot button.pb-tool.is-on { color: #2f2418; background: #e8cf9a; }
+/* 亮着的开关按钮悬停时不能被通用的 hover 底色盖掉 */
+.pb-foot button.pb-tool.is-on:hover { background: #f6e2b4; }
+/* 制作：进编辑态的主入口，比其它文字键更亮一点 */
+.pb-foot button.pb-edit {
+  color: #2f2418;
+  background: #f0dcb0;
+  font-weight: 600;
+}
+.pb-foot button.pb-edit:hover { background: #fbeac4; }
+.pb-foot button:hover { background: rgba(70, 40, 28, .9); transform: translateY(-2px); }
+.pb-foot button:active { transform: scale(.94); }
+.pb-foot button:disabled { opacity: .35; cursor: default; transform: none; }
+
+/* 翻页模块：左右箭头和页码共用一层底，读起来是一块控件而不是三个独立键。
+   放在通用按钮规则之后，同优先级下才能覆盖掉单键的尺寸和底色。 */
+.pb-pager {
+  display: flex;
+  align-items: stretch;
+  flex: none;
+  height: 46px;
+  overflow: hidden;
+  border-radius: 12px;
+  background: rgba(40, 24, 18, .78);
+  box-shadow: inset 0 0 0 .5px rgba(255, 226, 180, .14);
+}
+.pb-pager button {
+  width: 40px;
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+  color: #fbecc8;
+  background: transparent;
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background .15s ease;
+}
+/* 组内只换底色，不做位移：整块模块的形状要保持不变 */
+.pb-pager button:hover { background: rgba(92, 58, 40, .7); transform: none; }
+.pb-pager button:active { background: rgba(120, 76, 50, .8); transform: none; }
+.pb-pager button:disabled { opacity: .3; background: transparent; cursor: default; }
+/* 页码只留数字：当前页加粗，总页数是次要信息，两者都不会换行 */
+.pb-pager span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 54px;
+  padding: 0 2px;
+  color: rgba(251, 236, 200, .5);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  /* 和两侧箭头之间各有一条极淡的分隔线 */
+  box-shadow: inset 1px 0 0 rgba(255, 226, 180, .12), inset -1px 0 0 rgba(255, 226, 180, .12);
+}
+.pb-pager span b { margin-right: 1px; color: #fbecc8; font-size: 15px; font-weight: 600; }
+
+@media (max-width: 620px) {
+  /* 一排要放下翻页模块 + 复位 / 横屏 / 制作，窄屏必须收紧，否则换行或被挤出屏幕 */
+  .pb-foot nav { gap: 7px; }
+  .pb-foot button { width: 42px; height: 42px; font-size: 22px; }
+  .pb-foot button.pb-tool { padding: 0 9px; font-size: 12.5px; letter-spacing: 0; }
+  /* 翻页模块整体缩到和旁边按钮同高，组内只收窄箭头和页码 */
+  .pb-pager { height: 42px; }
+  .pb-pager button { width: 34px; height: 100%; font-size: 21px; }
+  .pb-pager span { min-width: 48px; font-size: 12px; }
+  .pb-pager span b { font-size: 14px; }
+}
+
+/* ===== 操作说明 =====
+   问号贴在右下角、不参与底部那一排，所以窄屏也不会挤到翻页键。
+   弹层走 fixed，不跟着书本缩放/转向，横屏时也正着读。 */
+.pb-help-btn {
+  position: absolute;
+  z-index: 6;
+  right: 14px;
+  bottom: calc(var(--pb-foot, 22px) + env(safe-area-inset-bottom, 0px));
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: rgba(251, 236, 200, .85);
+  background: rgba(40, 24, 18, .7);
+  box-shadow: inset 0 0 0 .5px rgba(255, 226, 180, .22);
+  font: inherit;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background .15s ease, color .15s ease;
+}
+.pb-help-btn:hover { color: #2f2418; background: #e8cf9a; }
+.pb-help-btn:active { transform: scale(.92); }
+
+.pb-help {
+  position: fixed;
+  z-index: 40;
+  top: 0; right: 0; bottom: 0; left: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(24, 12, 6, .62);
+  animation: pb-help-in .18s ease-out;
+}
+@keyframes pb-help-in { from { opacity: 0; } to { opacity: 1; } }
+.pb-help-card {
+  width: 100%;
+  max-width: 330px;
+  max-height: calc(100% - 24px);
+  overflow-y: auto;
+  padding: 22px 20px 18px;
+  border-radius: 18px;
+  color: #f6e8c9;
+  background: linear-gradient(180deg, #4a2f20, #38231a);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 226, 180, .14),
+    0 22px 48px rgba(0, 0, 0, .5);
+  animation: pb-help-pop .22s cubic-bezier(.32, .72, 0, 1);
+}
+@keyframes pb-help-pop { from { opacity: 0; transform: scale(.92); } to { opacity: 1; transform: scale(1); } }
+.pb-help-card h3 {
+  margin: 0 0 14px;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-align: center;
+}
+.pb-help-card ul { margin: 0; padding: 0; list-style: none; }
+.pb-help-card li {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 9px 0;
+  border-top: 1px solid rgba(255, 226, 180, .09);
+}
+.pb-help-card li:first-child { border-top: 0; padding-top: 0; }
+.pb-help-card li b {
+  flex: none;
+  width: 5.6em;
+  color: #f7d79a;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+.pb-help-card li span { font-size: 12.5px; line-height: 1.55; color: rgba(246, 232, 201, .72); }
+.pb-help-ok {
+  display: block;
+  width: 100%;
+  margin-top: 16px;
+  height: 42px;
+  border: 0;
+  border-radius: 12px;
+  color: #2f2418;
+  background: #f0dcb0;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: .08em;
+  cursor: pointer;
+}
+.pb-help-ok:hover { background: #fbeac4; }
+.pb-help-ok:active { transform: scale(.98); }
