@@ -1,0 +1,173 @@
+/* 抽卡特效：Canvas 粒子 + 光环 */
+(function (global) {
+  'use strict';
+
+  var cv = null, ctx = null, parts = [], raf = 0, running = false;
+
+  function ensure() {
+    if (cv) return;
+    cv = document.createElement('canvas');
+    cv.className = 'fx-canvas';
+    document.body.appendChild(cv);
+    ctx = cv.getContext('2d');
+    resize();
+    window.addEventListener('resize', resize);
+  }
+
+  function resize() {
+    if (!cv) return;
+    var dpr = Math.min(2, window.devicePixelRatio || 1);
+    cv.width = window.innerWidth * dpr;
+    cv.height = window.innerHeight * dpr;
+    cv.style.width = window.innerWidth + 'px';
+    cv.style.height = window.innerHeight + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  var GOLD = ['#fff3cf', '#f2dca0', '#d9b45c', '#c9a227', '#a8851c'];
+  var COOL = ['#e8f2ff', '#b9d4ef', '#8fb3d4', '#6d90b3', '#4a6b8c'];
+  var ROSE = ['#ffe3ea', '#f2b8c6', '#d98fa3', '#b96d84', '#8e4a60'];
+
+  function paletteFor(tier) {
+    if (tier >= 5) return ROSE;
+    if (tier >= 4) return GOLD;
+    if (tier >= 3) return COOL;
+    return GOLD;
+  }
+
+  /** 从屏幕中心炸开 */
+  function burst(tier, opts) {
+    ensure();
+    opts = opts || {};
+    var cx = opts.x != null ? opts.x : window.innerWidth / 2;
+    var cy = opts.y != null ? opts.y : window.innerHeight * 0.42;
+    var pal = paletteFor(tier || 1);
+    var n = opts.count || (tier >= 4 ? 90 : tier >= 3 ? 64 : 44);
+
+    // 光环
+    parts.push({
+      k: 'ring', x: cx, y: cy, r: 8, v: 9 + tier * 2.4,
+      life: 1, decay: 0.022, c: pal[1], lw: 2 + tier * 0.45,
+    });
+    if (tier >= 4) {
+      parts.push({
+        k: 'ring', x: cx, y: cy, r: 4, v: 5.5, delay: 9,
+        life: 1, decay: 0.016, c: pal[0], lw: 1.2,
+      });
+    }
+
+    for (var i = 0; i < n; i++) {
+      var a = Math.random() * Math.PI * 2;
+      var sp = 2.2 + Math.random() * (tier >= 4 ? 11 : 7);
+      var sq = Math.random() < 0.45;
+      parts.push({
+        k: sq ? 'sq' : 'dot',
+        x: cx, y: cy,
+        vx: Math.cos(a) * sp,
+        vy: Math.sin(a) * sp - 1.6,
+        g: 0.055 + Math.random() * 0.06,
+        size: 1.6 + Math.random() * (tier >= 4 ? 6 : 3.6),
+        rot: Math.random() * 6.28,
+        vr: (Math.random() - 0.5) * 0.28,
+        life: 1,
+        decay: 0.008 + Math.random() * 0.012,
+        c: pal[(Math.random() * pal.length) | 0],
+        trail: Math.random() < 0.35,
+      });
+    }
+    start();
+  }
+
+  /** 细碎流光（卡面入场用）*/
+  function sprinkle(n, tier) {
+    ensure();
+    var pal = paletteFor(tier || 1);
+    for (var i = 0; i < n; i++) {
+      var x = Math.random() * window.innerWidth;
+      var y = window.innerHeight * (0.16 + Math.random() * 0.5);
+      parts.push({
+        k: 'dot', x: x, y: y,
+        vx: (Math.random() - 0.5) * 0.7,
+        vy: -0.35 - Math.random() * 0.7,
+        g: 0.004,
+        size: 1 + Math.random() * 2.2,
+        rot: 0, vr: 0,
+        life: 1, decay: 0.007 + Math.random() * 0.01,
+        c: pal[(Math.random() * pal.length) | 0],
+        trail: false,
+      });
+    }
+    start();
+  }
+
+  function step() {
+    ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+    var alive = false;
+    for (var i = 0; i < parts.length; i++) {
+      var p = parts[i];
+      if (p.delay > 0) { p.delay--; alive = true; continue; }
+      if (p.k === 'ring') {
+        p.r += p.v;
+        p.v *= 0.955;
+        p.life -= p.decay;
+        if (p.life <= 0) continue;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, 6.2832);
+        ctx.strokeStyle = p.c;
+        ctx.globalAlpha = Math.max(0, p.life) * 0.7;
+        ctx.lineWidth = p.lw * p.life;
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+        alive = true;
+        continue;
+      }
+      p.vy += p.g;
+      p.vx *= 0.988;
+      p.vy *= 0.992;
+      p.x += p.vx;
+      p.y += p.vy;
+      p.rot += p.vr;
+      p.life -= p.decay;
+      if (p.life <= 0) continue;
+      alive = true;
+      ctx.globalAlpha = Math.max(0, p.life);
+      if (p.trail) {
+        ctx.strokeStyle = p.c;
+        ctx.lineWidth = p.size * 0.5;
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y);
+        ctx.lineTo(p.x - p.vx * 2.6, p.y - p.vy * 2.6);
+        ctx.stroke();
+      }
+      if (p.k === 'sq') {
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.rot);
+        ctx.fillStyle = p.c;
+        ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.62);
+        ctx.restore();
+      } else {
+        ctx.fillStyle = p.c;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size * 0.55, 0, 6.2832);
+        ctx.fill();
+      }
+    }
+    ctx.globalAlpha = 1;
+    parts = parts.filter(function (p) { return p.life > 0 || p.delay > 0; });
+    if (alive && parts.length) {
+      raf = requestAnimationFrame(step);
+    } else {
+      running = false;
+      ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+    }
+  }
+
+  function start() {
+    if (running) return;
+    running = true;
+    raf = requestAnimationFrame(step);
+  }
+
+  global.FX = { burst: burst, sprinkle: sprinkle };
+})(window);

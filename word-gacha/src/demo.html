@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>字母样式演示</title>
+<style>
+  body { margin: 0; padding: 18px 14px 40px; background: #0d0b09; color: #f2e9d8; font: 13px/1.5 "PingFang SC", sans-serif; }
+  h2 { font-size: 15px; margin: 26px 0 4px; color: #ffd98a; }
+  .sub { font-size: 11px; color: rgba(242,233,216,.5); margin-bottom: 10px; }
+  .row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,.06); }
+  .lab { flex: 0 0 120px; font-size: 12px; }
+  .lab b { display: block; font-size: 13px; color: #fff; }
+  .lab span { color: rgba(242,233,216,.55); font-size: 11px; }
+  .tiles { display: flex; flex-wrap: wrap; gap: 4px; }
+  .cell { display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 10px; color: rgba(242,233,216,.5); }
+  .tile { display: block; filter: drop-shadow(0 3px 4px rgba(0,0,0,.5)); }
+  .tile.lv5, .tile.mythic { animation: glow 2.2s ease-in-out infinite; }
+  @keyframes glow { 50% { filter: drop-shadow(0 3px 4px rgba(0,0,0,.5)) drop-shadow(0 0 8px #ffe08a); } }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script src="glyphs.js"></script>
+<script src="words.js"></script>
+<script src="card.js"></script>
+<script>
+(function () {
+  var C = window.Card, out = '';
+  function tiles(word, lvs, size, mythic) {
+    return '<div class="tiles">' + word.split('').map(function (ch, i) {
+      return C.typeTileSVG(ch, lvs[i] || lvs[0], size, { mythic: mythic });
+    }).join('') + '</div>';
+  }
+  function row(title, note, html) {
+    out += '<div class="row"><div class="lab"><b>' + title + '</b><span>' + note + '</span></div>' + html + '</div>';
+  }
+
+  out += '<h2>一、攻击类型 × 字母等级</h2><div class="sub">颜色 / 底形 / 字体 = 类型；背景越复杂 = 等级越高、效果越强</div>';
+  [['shield', '护盾', 'A E I O U', 'A'], ['blast', '爆破', 'B P R G', 'B'], ['frost', '冰控', 'C F S T', 'S'],
+   ['pierce', '穿透', 'D K M N V W X Z', 'K'], ['swift', '疾射', 'H J L Q Y', 'L']].forEach(function (t) {
+    var h = '<div class="tiles">';
+    for (var lv = 1; lv <= 5; lv++) h += '<div class="cell">' + C.typeTileSVG(t[3], lv, 50) + 'Lv' + lv + '</div>';
+    row(t[1], t[2], h + '</div>');
+  });
+
+  out += '<h2>二、刚抽到的卡</h2><div class="sub">卡片等级 = 稀有度，所有字母等级 = 卡片等级</div>';
+  [['CAT', 1, 'C 常本', '卡片 Lv1 · 字母全 Lv1'],
+   ['BREEZE', 2, 'SR 藏本', '卡片 Lv2 · 字母全 Lv2'],
+   ['GLIMMER', 3, 'SSR 稀见', '卡片 Lv3 · 字母全 Lv3'],
+   ['LUMINOUS', 4, 'UR 秘典', '卡片 Lv4 · 字母全 Lv4'],
+   ['LAMBENT', 5, 'LR 孤本', '卡片 Lv5 · 字母全 Lv5']].forEach(function (r) {
+    row(r[2], r[3], tiles(r[0], [r[1]], 40));
+  });
+  row('超稀有', '极少数词 · 哥特体 + 彩虹', tiles('HIRAETH', [5], 40, true));
+
+  out += '<h2>三、同一张卡的养成过程</h2><div class="sub">升级卡片只提高字母上限，字母要单独升级</div>';
+  [['刚抽到', '卡片 Lv1 · 上限 1', [1, 1, 1, 1, 1]],
+   ['卡片升到 Lv3', '字母未升级，仍是 Lv1', [1, 1, 1, 1, 1]],
+   ['升级部分字母', '卡片 Lv3 · 字母 3/1/2/3/1', [3, 1, 2, 3, 1]],
+   ['卡片升到 Lv5', '字母 5/3/4/5/2', [5, 3, 4, 5, 2]],
+   ['全部练满', '卡片 Lv5 · 字母全 Lv5', [5, 5, 5, 5, 5]]].forEach(function (r) {
+    row(r[0], r[1], tiles('BROOK', r[2], 44));
+  });
+
+  document.getElementById('app').innerHTML = out;
+})();
+</script>
+</body>
+</html>
