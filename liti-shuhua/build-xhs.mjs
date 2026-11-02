@@ -17,9 +17,12 @@ import { execSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const OUT = path.join(__dirname, 'dist', 'xiaohongshu')
+// FX=off 打无特效版，输出单独一套，别覆盖正常包
+const FX_OFF = /^(off|0|false)$/i.test(process.env.FX ?? '')
+const SUFFIX = FX_OFF ? '-nofx' : ''
+const OUT = path.join(__dirname, 'dist', 'xiaohongshu' + SUFFIX)
 const RAW = path.join(__dirname, 'dist-xhs')
-const ZIP = path.join(__dirname, 'dist', 'xiaohongshu-liti-shuhua.zip')
+const ZIP = path.join(__dirname, 'dist', 'xiaohongshu-liti-shuhua' + SUFFIX + '.zip')
 const AUDIT = path.resolve(__dirname, '..', 'xiaohongshu', 'minitool-zip-builder', 'scripts', 'audit_artifact.mjs')
 const MAX = 10 * 1024 * 1024
 
@@ -66,5 +69,5 @@ const detail = fs.readdirSync(OUT)
   .map((f) => `${f} ${(fs.statSync(path.join(OUT, f)).size / 1024).toFixed(1)}KB`)
   .join(', ')
 console.log(`\n✓ 产物 ${OUT} → ${detail}`)
-console.log(`${zipSize <= MAX ? '✓' : '✗'} zip ${(zipSize / 1024 / 1024).toFixed(2)}MB → dist/xiaohongshu-liti-shuhua.zip`)
+console.log(`${zipSize <= MAX ? '✓' : '✗'} zip ${(zipSize / 1024 / 1024).toFixed(2)}MB → ${path.basename(ZIP)}`)
 if (zipSize > MAX) throw new Error('超过小红书 10MB 上限')

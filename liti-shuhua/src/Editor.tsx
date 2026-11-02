@@ -2,6 +2,7 @@ import { Fragment, useEffect, useRef, useState, type CSSProperties, type Pointer
 import { bake, bakeHalves, clampCrop, frame, FIT, loadImage, MAX_ZOOM, MIN_ZOOM, type Crop } from './crop'
 import { bakeSize, templates, type Slot, type Template } from './templates'
 import { presetsFor, wallPresets } from './presets'
+import observeSize from './observeSize'
 import { effectDefs, fxFull, MAX_FX, type EffectId, type Fx, type FxLevel } from './effects'
 import type { Asset, Assets } from './build'
 import './editor.css'

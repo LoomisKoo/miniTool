@@ -44,7 +44,36 @@ const makePage = (tplId = templates[0].id): PageState => {
   return { key: uid('p'), tplId: tpl.id, assets: seed(tpl), fx: tpl.fx ? [...tpl.fx] : [] }
 }
 
-const INITIAL: PageState[] = [makePage('moon-town'), makePage('halloween')]
+/**
+ * 默认两页。宣传录屏可以用 ?pages=moon-town,undersea,forest-camp,neon 直接铺出多页，
+ * 省得一条条点「制作」换主题；不带参数时行为和原来完全一致。
+ */
+function initialPages(): PageState[] {
+  const qs = new URLSearchParams(window.location.search)
+  const q = qs.get('pages')
+  const base = !q ? [makePage('moon-town'), makePage('halloween')] : (() => {
+    const ids = q.split(',').map((s) => s.trim()).filter((id) => templates.some((t) => t.id === id))
+    return (ids.length ? ids : ['moon-town']).map(makePage)
+  })()
+  // photos=组1;组2：每组是这一页要预置的图片地址。宣传片用这条直接铺好
+  // “用户早就上传过的照片”，录制时不需要点开制作面板。
+  const groups = qs.get('photos')?.split(';').map((g) => g.split(',').map((s) => s.trim()).filter(Boolean)) ?? []
+  groups.forEach((list, i) => {
+    const page = base[i]
+    if (!page || !list.length) return
+    // 只换中间两层的贴纸，后景/近景留着内置剪纸，照片和纸片混在一起才有拼贴感
+    const slots = tplOf(page.tplId).slots.filter((s) => s.kind === 'subject' &&
+      ['left-1', 'left-3', 'right-1', 'right-3'].includes(s.id))
+    slots.forEach((s, k) => {
+      const src = list[k % list.length]
+      // 演示照片统一 640×800，给个 4:5 让它按竖构图立起来，别被槽位的横向比例压扁
+      if (src) page.assets[s.id] = { kind: 'img', src, aspect: 4 / 5 }
+    })
+  })
+  return base
+}
+
+const INITIAL: PageState[] = initialPages()
 
 export default function PopupApp() {
   const [pages, setPages] = useState<PageState[]>(INITIAL)
@@ -84,7 +113,18 @@ export default function PopupApp() {
     [pages],
   )
   const names = useMemo(() => pages.map((p) => tplOf(p.tplId).name), [pages])
-  const pageFx = useMemo(() => pages.map((p) => p.fx ?? []), [pages])
+  const pageFx = useMemo(() => {
+    // 构建时 FX=off 打一版完全没有场景特效的包，用来确认卡顿是不是特效层引起的
+    if (FX_OFF) return pages.map(() => [])
+    // 宣传片用 ?fxboost=1 让每页的特效都更明显（默认文案页的特效只有 1 级，拍出来几乎看不见）
+    const boost = new URLSearchParams(location.search).has('fxboost')
+    const list = pages.map((p) => p.fx ?? [])
+    if (!boost) return list
+    return list.map((fx) => {
+      const up = fx.map((f) => ({ ...f, level: Math.min(f.id === 'firework' ? 2 : 3, f.level + 1) as 1 | 2 | 3 }))
+      return up.some((f) => f.id === 'star') ? up : [...up, { id: 'star' as const, level: 1 as const }]
+    })
+  }, [pages])
 
   /** 改当前页 */
   const edit = useCallback((fn: (p: PageState) => PageState) => {

@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactElement } from 'react'
+import { memo, type CSSProperties, type ReactElement } from 'react'
 import type { EffectId, Fx } from './effects'
 
 /**
@@ -33,6 +33,12 @@ const COUNT: Record<EffectId, [number, number, number]> = {
 
 /** 一页里同时开好几个特效时，按总元素数摊薄，避免几百个图层一起动 */
 const ELEMENT_BUDGET = 300
+/** 手机 WebView 上几百个合成层会把主线程和光栅一起拖垮，窄屏/触摸设备直接砍掉一半 */
+const budget = () => {
+  if (typeof window === 'undefined') return ELEMENT_BUDGET
+  const small = window.innerWidth < 560 || window.matchMedia?.('(pointer: coarse)').matches
+  return small ? ELEMENT_BUDGET * 0.55 : ELEMENT_BUDGET
+}
 /** 每种特效实际会生成多少个 DOM 元素（烟花要算火星 × 残影） */
 const ELEMENTS: Record<EffectId, (lv: number) => number> = {
   snow: (lv) => COUNT.snow[lv - 1],
@@ -494,21 +500,19 @@ function glow(level: number): ReactElement {
 
 const RISING = new Set<EffectId>(['bubble', 'lantern'])
 
-export default function FxLayer({ fx, fade = 1, rx = 50, rz = 0 }: { fx: Fx[]; fade?: number; rx?: number; rz?: number }) {
-  if (!fx.length || fade <= 0.001) return null
-  // 跟着视角实时对准镜头；写在关键帧位移之后，所以下落方向仍然是书本的 −Z
+/**
+ * 粒子本身只跟「放什么特效」有关，和视角/淡入淡出无关。
+ * 单独 memo 掉：翻页时 fade 每帧都在变，若整个特效树跟着重渲染，
+ * 一页几百个节点每帧重新 diff，就是手机上「翻页手感发涩」的主因。
+ * 视角（--bb）、淡入（--fade）都走 CSS 变量，由外层容器继承下来，不必重建节点。
+ */
+const Particles = memo(function Particles({ fx }: { fx: Fx[] }) {
   // 只有会产元素的特效才占预算
   const heavy = fx.filter((f) => f.id !== 'glow' && f.id !== 'lightning')
   const want = heavy.reduce((sum, f) => sum + ELEMENTS[f.id](f.level), 0)
-  const q = heavy.length > 1 ? Math.min(1, ELEMENT_BUDGET / Math.max(want, 1)) : 1
-  const face = {
-    '--bb': `rotateZ(${-rz}deg) rotateX(${-rx}deg)`,
-    '--bbv': `rotateZ(${-rz}deg) rotateX(-90deg)`,
-    // 不能用容器 opacity 做淡入淡出（会压平 3D），只能乘到每颗粒子的透明度上
-    '--fade': Number(fade.toFixed(3)),
-  }
+  const q = heavy.length > 1 ? Math.min(1, budget() / Math.max(want, 1)) : 1
   return (
-    <div className="pb-fx3d" aria-hidden="true" style={vars(face)}>
+    <>
       {fx.map((f) => (
         <div key={f.id} className="fx-set">
           {f.id === 'firework'
@@ -528,6 +532,17 @@ export default function FxLayer({ fx, fade = 1, rx = 50, rz = 0 }: { fx: Fx[]; f
                       : falling(f.id, field(f.id, f.level, q))}
         </div>
       ))}
+    </>
+  )
+})
+
+export default function FxLayer({ fx, fade = 1, busy = false }: { fx: Fx[]; fade?: number; busy?: boolean }) {
+  if (!fx.length || fade <= 0.001) return null
+  // 不能用容器 opacity 做淡入淡出（会压平 3D），只能乘到每颗粒子的透明度上
+  const face = { '--fade': Number(fade.toFixed(3)) }
+  return (
+    <div className={`pb-fx3d ${busy ? 'is-busy' : ''}`} aria-hidden="true" style={vars(face)}>
+      <Particles fx={fx} />
     </div>
   )
 }

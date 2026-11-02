@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type PointerEvent, type ReactNode, type Ref, type WheelEvent } from 'react'
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type PointerEvent, type ReactNode, type Ref, type WheelEvent } from 'react'
 import { DiecutDefs } from './art'
 import FxLayer from './fx'
 import type { Fx } from './effects'
-import { observeSize } from './observeSize'
+import observeSize from './observeSize'
 import { spreads, type Layer, type Spread } from './spreads'
 
 const PW = 500
@@ -14,7 +14,14 @@ const PAGE_Z = 4.6
 // 沉量随贴合度 |cos θ| 动态变化：贴得越平沉得越多，竖直时为 0。
 const PAGE_GAP = 1
 // 默认正对书本，左右书页保持同一水平线；旋转只在用户拖动空白处后发生。
-const DEFAULT_VIEW = { rx: 50, rz: 0, zoom: 1 }
+const qv = (k: string, d: number) => {
+  const raw = new URLSearchParams(location.search).get(k)
+  if (raw === null) return d
+  const v = Number(raw)
+  return Number.isFinite(v) ? v : d
+}
+// rx 可以用 ?rx=12 覆盖，用来给宣传片挑机位；不传就是产品里的默认视角
+const DEFAULT_VIEW = { rx: qv('rx', 50), rz: qv('rz', 0), zoom: qv('zoom', 1) }
 /** 打开制作面板时的镜头：正对书本（和默认视角同一个 rx，不侧转），只略微缩小让出面板 */
 const STUDIO_VIEW = { ...DEFAULT_VIEW, zoom: 0.94 }
 /** 横屏显示：整本书顺时针转 90°，镜头本身不变，所以观感和竖屏一致 */
@@ -189,7 +196,7 @@ function Pop({ layer, beta, rank, wall, side, flapDeg = 0, wallH = 340, slotId, 
 }
 
 /** wedge：这一页和与它构成跨页的另一页之间的夹角（完全摊开 180°，合上 0°） */
-function Page({ spread, side, wedge, capTan, pickedSlot, style }: {
+function PageBase({ spread, side, wedge, capTan, pickedSlot, style }: {
   spread: Spread
   side: 'left' | 'right'
   wedge: number
@@ -289,6 +296,16 @@ function Page({ spread, side, wedge, capTan, pickedSlot, style }: {
   )
 }
 
+/**
+ * 纸页是纯展示：只有跨页内容/夹角/压角变了才需要重画。
+ * 没有 memo 的话，父组件任何一次重渲染（点按钮、切横屏、翻页动画）都会把
+ * 几页 SVG 贴图连同纸片重新 diff 一遍，手机上这部分开销肉眼可见。
+ */
+const Page = memo(PageBase)
+
+// 翻页纸两面共用：写对象字面量的话每次父渲染都是新引用，memo 直接失效
+const FACE_POS: CSSProperties = { left: 0 }
+
 type Gesture = {
   mode: 'flip' | 'turn'
   x: number
@@ -335,6 +352,44 @@ export default function PopupBook({ book = spreads, overlay, reserve = 0, pageIn
   const [scale, setScale] = useState(1)
   // 制作模式锁了手势翻页；阅读模式在书页上拖就能翻
   const [view, setView] = useState(DEFAULT_VIEW)
+  // 拖拽转视角时绕开 React：直接写 CSS 变量，松手才回写 state。
+  // 之前每次 pointermove 都 setView，整本书（连同上百个特效节点）每帧重渲染，
+  // 手机上就是「手指跟丢 + 点击迟半拍」。
+  const viewLive = useRef(DEFAULT_VIEW)
+  const bookRef = useRef<HTMLDivElement>(null)
+  const fxRef = useRef<HTMLDivElement>(null)
+  // 每次渲染更新一份「书在屏幕上的摆放」，拖拽时不用等重渲染就能拼出 transform
+  const tfRef = useRef({ s: 1, y: 0 })
+  /**
+   * 注意别用 CSS 变量传视角：自定义属性是继承的，写在 .pb-book 上会让整本书
+   * （几页 SVG + 所有纸片）每帧重算样式，比 React 重渲染还慢。这里直接拼
+   * transform 字符串写到一个元素上，只失效这一个节点。
+   */
+  const bookTf = useCallback((rx: number, rz: number) => {
+    const { s, y } = tfRef.current
+    return `translate3d(var(--pb-shift, 0px), ${y}px, 0) scale3d(${s}, ${s}, ${s}) rotateX(${rx}deg) rotateZ(${rz}deg)`
+  }, [])
+  /**
+   * 粒子的朝向变量是「继承属性」：改一次，上百颗粒子全都要重算样式
+   * （实测 6x 降频下 40 次写入 ≈ 900ms 主线程，这就是手机上拖不动的原因）。
+   * 但旋转过程中朝向差个几度肉眼根本看不出来，所以按角度量化：转过 8° 才写一次，
+   * 松手时再补一次精确值。
+   */
+  const bbApplied = useRef({ rx: 999, rz: 999 })
+  const paintView = useCallback((rx: number, rz: number, force = false) => {
+    const el = bookRef.current
+    if (el) el.style.transform = bookTf(rx, rz)
+    const last = bbApplied.current
+    if (!force && Math.abs(rx - last.rx) + Math.abs(rz - last.rz) < 8) return
+    bbApplied.current = { rx, rz }
+    // 变量只挂在特效容器上，失效范围就是那几十上百颗粒子，别提升到书本根节点
+    fxRef.current?.style.setProperty('--bb', `rotateZ(${-rz}deg) rotateX(${-rx}deg)`)
+  }, [bookTf])
+  // state 是唯一真相：复位、URL 机位、进退制作模式都会走这里，DOM 变量跟着同步
+  useEffect(() => {
+    viewLive.current = view
+    paintView(view.rx, view.rz, true)
+  }, [view, paintView])
   // 横屏显示：把整本书在屏幕平面上转 90°，只是方向变了，书本本身、翻页几何都不动
   const [landscape, setLandscape] = useState(false)
   const [mode, setMode] = useState<Gesture['mode'] | null>(null)
@@ -533,7 +588,7 @@ export default function PopupBook({ book = spreads, overlay, reserve = 0, pageIn
 
   /** 把屏幕上的拖动投影到书本自身的左右方向，书转了任意角度都能顺着书页拖。 */
   const alongBook = (dx: number, dy: number) => {
-    const r = ((view.rz + (landscape ? LANDSCAPE_DEG : 0)) * Math.PI) / 180
+    const r = ((viewLive.current.rz + (landscape ? LANDSCAPE_DEG : 0)) * Math.PI) / 180
     return dx * Math.cos(r) + dy * Math.sin(r)
   }
 
@@ -570,8 +625,12 @@ export default function PopupBook({ book = spreads, overlay, reserve = 0, pageIn
     if (Math.hypot(dx, dy) > 5) g.moved = true
     if (!g.moved) return
     if (g.mode === 'turn') {
-      // 系数调小一点，触摸拖动 100px 大约转 20°，不至于一碰就飞
-      setView((v) => ({ ...v, rz: g.rz - dx * 0.22, rx: clamp(g.rx - dy * 0.18, 4, 82) }))
+      // 系数调小一点，触摸拖动 100px 大约转 20°，不至于一碰就飞。
+      // 只写 DOM，不动 state：这个分支每个 pointermove 都会走，重建整棵树太贵。
+      const rx = clamp(g.rx - dy * 0.18, 4, 82)
+      const rz = g.rz - dx * 0.22
+      viewLive.current = { ...viewLive.current, rx, rz }
+      paintView(rx, rz)
       return
     }
     const p = alongBook(dx, dy)
@@ -600,6 +659,11 @@ export default function PopupBook({ book = spreads, overlay, reserve = 0, pageIn
     setMode(null)
     if (!g) return
     if (g.mode === 'turn') {
+      // 松手才把拖出来的角度回写给 state：中间过程只写 DOM，松手一次重渲染
+      const lv = viewLive.current
+      // 松手补齐粒子的朝向（拖拽中间是限流的）
+      paintView(lv.rx, lv.rz, true)
+      if (lv.rx !== view.rx || lv.rz !== view.rz) setView((v) => ({ ...v, rx: lv.rx, rz: lv.rz }))
       // 只点了一下（没拖动）且落在纸片上时，选中它并定位到右侧菜单
       if (!g.moved && g.pick) onPickSlot?.(g.pick)
       return
@@ -633,7 +697,16 @@ export default function PopupBook({ book = spreads, overlay, reserve = 0, pageIn
   }
   const A = book[a]
   const B = book[Math.min(a + 1, n - 1)] ?? A
+  // 翻页这 600ms 里把粒子动画暂停：一页上百颗粒子在 3D 树里跑动画，
+  // 每帧都要主线程重算样式（实测占翻页耗时的 50%+），而冻结半秒肉眼看不出来。
+  // 首尾各留 6% 不摘：这时候淡入淡出本来就没多少不透明度，省得粒子「啪」一下消失。
+  // 边缘掀角（edgePull）全程都要摘。
+  const busy = (t > 0.06 && t < 0.94) || edgePull !== 0
+  // 淡入淡出量化成 10 档：--fade 是继承属性，写一次要让所有粒子重算样式
+  const fadeA = Math.round((1 - t) * 10) / 10
+  const fadeB = Math.round(t * 10) / 10
   const s = scale * view.zoom
+  tfRef.current = { s, y: landscape ? landY : 80 * scale - lift }
   const overL = Math.max(0, edgePull) * 180
   const overR = Math.max(0, -edgePull) * 180
   // 同一跨页的两页共用同一个夹角，两面墙的折翼才能镜像对齐。
@@ -672,8 +745,9 @@ export default function PopupBook({ book = spreads, overlay, reserve = 0, pageIn
           onDoubleClick={(e) => !(e.target as Element).closest('.pb-book') && setView(DEFAULT_VIEW)}
         >
           <div
+            ref={bookRef}
             className={`pb-book ${onPickSlot ? 'is-pickable' : ''} ${locked ? 'is-editing' : ''}`}
-            style={{ transform: `translate3d(var(--pb-shift, 0px), ${landscape ? landY : 80 * scale - lift}px, 0) scale3d(${s}, ${s}, ${s}) rotateX(${view.rx}deg) rotateZ(${view.rz}deg)` }}
+            style={{ transform: bookTf(view.rx, view.rz) }}
           >
           <div className="pb-floor-shadow" />
           {/* 书的厚度：只是纸页平面下方的一圈纸边，不参与翻页 */}
@@ -712,17 +786,20 @@ export default function PopupBook({ book = spreads, overlay, reserve = 0, pageIn
                 翻到位时背面正好就是新跨页的左半，和进位后的摊开态接得上；
                 若背面仍画当前页，最后一页会停在「左趴右立」。 */}
             <div className={`pb-face ${t < 0.999 ? '' : 'pb-nopops'}`}>
-              <Page key={`lf${a}`} spread={A} side="right" wedge={wedgeFront} pickedSlot={pickedSlot} style={{ left: 0 }} />
+              <Page key={`lf${a}`} spread={A} side="right" wedge={wedgeFront} pickedSlot={pickedSlot} style={FACE_POS} />
             </div>
             <div className={`pb-face back ${t > 0.001 ? '' : 'pb-nopops'}`}>
-              <Page key={`lb${a}`} spread={B} side="left" wedge={wedgeBack} pickedSlot={pickedSlot} style={{ left: 0 }} />
+              <Page key={`lb${a}`} spread={B} side="left" wedge={wedgeBack} pickedSlot={pickedSlot} style={FACE_POS} />
             </div>
           </div>
 
           {/* 场景特效：书盒子里的三维粒子，运动走书本坐标（+Y 朝地板） */}
           {/* 特效跟着页走：翻页时当前页淡出、下一页淡入 */}
-          <FxLayer key={`fx${a}`} fx={pageFx[a] ?? []} fade={1 - t} rx={view.rx} rz={view.rz} />
-          {t > 0.001 && <FxLayer key={`fx${a + 1}`} fx={pageFx[a + 1] ?? []} fade={t} rx={view.rx} rz={view.rz} />}
+          {/* --bb 只挂在这一层：粒子朝向镜头，但不用污染书本根节点 */}
+          <div className="pb-fxwrap" ref={fxRef}>
+            <FxLayer key={`fx${a}`} fx={pageFx[a] ?? []} fade={fadeA} busy={busy} />
+            {t > 0.001 && <FxLayer key={`fx${a + 1}`} fx={pageFx[a + 1] ?? []} fade={fadeB} busy={busy} />}
+          </div>
           </div>
         </div>
       </div>

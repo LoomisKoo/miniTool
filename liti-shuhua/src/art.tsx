@@ -2,10 +2,30 @@ import { useId, type ReactNode } from 'react'
 
 const useGid = (prefix: string) => `${prefix}${useId().replace(/:/g, '')}`
 
+/** 是否启用 SVG 剪纸滤镜。
+ *  Chromium（Chrome / Edge / Cursor 内置 / 小红书 Android WebView）有滤镜缓存，开。
+ *  WebKit（Safari / iOS WKWebView / 小红书 iOS 容器）翻页时 CPU 重算滤镜，关。
+ *  用 vendor + chrome 判断引擎，不靠完整 UA（容器经常改 UA）。 */
+export const diecutOk = (() => {
+  let cached: boolean | null = null
+  return () => {
+    if (cached !== null) return cached
+    if (typeof window === 'undefined') return (cached = true)
+    if ('chrome' in window) return (cached = true)
+    // Apple 系 WebKit（Safari、所有 iOS 应用内 WKWebView）
+    if (navigator.vendor === 'Apple Computer, Inc.') return (cached = false)
+    const ua = navigator.userAgent
+    if (/Chrome|Chromium|CriOS|Edg\//.test(ua)) return (cached = true)
+    if (/iPhone|iPad|iPod/i.test(ua)) return (cached = false)
+    return (cached = true)
+  }
+})()
+
 export function DiecutDefs() {
   return (
     <svg width="0" height="0" style={{ position: 'absolute' }} aria-hidden="true">
       <defs>
+        {/* 不要 feTurbulence：WebKit 上每次栅格化都要重算噪声，翻页卡 300ms */}
         <filter id="diecut" x="-12%" y="-12%" width="124%" height="124%" colorInterpolationFilters="sRGB">
           <feMorphology in="SourceAlpha" operator="dilate" radius="5" result="grow" />
           <feFlood floodColor="#fbf3df" />
@@ -14,28 +34,24 @@ export function DiecutDefs() {
             <feMergeNode in="edge" />
             <feMergeNode in="SourceGraphic" />
           </feMerge>
-          <feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" seed="4" result="noise" />
-          <feColorMatrix in="noise" type="saturate" values="0" result="gray" />
-          <feComponentTransfer in="gray" result="paper">
-            <feFuncR type="linear" slope=".32" intercept=".8" />
-            <feFuncG type="linear" slope=".32" intercept=".8" />
-            <feFuncB type="linear" slope=".32" intercept=".8" />
-            <feFuncA type="linear" slope="0" intercept="1" />
+          <feComponentTransfer in="cut">
+            <feFuncR type="linear" slope=".97" />
+            <feFuncG type="linear" slope=".955" />
+            <feFuncB type="linear" slope=".93" />
           </feComponentTransfer>
-          <feBlend in="cut" in2="paper" mode="multiply" result="tex" />
-          <feComposite in="tex" in2="cut" operator="in" />
         </filter>
       </defs>
     </svg>
   )
 }
 
-/** live 里的内容画在滤镜外：会动的小元素不必每帧重算整张纸的描边和纸纹。 */
+/** live 里的内容画在滤镜外：会动的小元素不必每帧重算整张纸的描边。 */
 function Cut({ w, h, children, live }: { w: number; h: number; children: ReactNode; live?: ReactNode }) {
   const pad = 8
+  const die = diecutOk()
   return (
     <svg className="cut" viewBox={`${-pad} ${-pad} ${w + pad * 2} ${h + pad}`}>
-      <g filter="url(#diecut)">{children}</g>
+      <g filter={die ? 'url(#diecut)' : undefined}>{children}</g>
       {live}
     </svg>
   )
@@ -108,6 +124,7 @@ export function Wall({ edge, side, from, to, seed = 1, children, live }: {
   const gid = useGid('wall')
   const cid = useGid('clip')
   const d = edgePath(edge, side, seed)
+  const die = diecutOk()
   return (
     <svg className="cut" viewBox={side === 'left' ? '-8 -8 488 338' : '0 -8 488 338'}>
       <defs>
@@ -117,7 +134,7 @@ export function Wall({ edge, side, from, to, seed = 1, children, live }: {
         </linearGradient>
         <clipPath id={cid}><path d={d} /></clipPath>
       </defs>
-      <g filter="url(#diecut)">
+      <g filter={die ? 'url(#diecut)' : undefined}>
         <path d={d} fill={`url(#${gid})`} />
         <g clipPath={`url(#${cid})`}>{children}</g>
       </g>

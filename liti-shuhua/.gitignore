@@ -2,3 +2,6 @@ node_modules/
 dist-xhs/
 .DS_Store
 *.log
+
+.reel-tmp-*/
+scripts/_*.mjs

@@ -1,4 +1,6 @@
 * { box-sizing: border-box; }
+/* 按钮/输入框默认会退回 Arial（没有中文字形，中文就成了方块），统一跟着外层字体走 */
+button, input, select, textarea { font-family: inherit; }
 html, body, #root { width: 100%; height: 100%; margin: 0; }
 body { overflow: hidden; background: #6e4630; }
 
@@ -7,7 +9,7 @@ body { overflow: hidden; background: #6e4630; }
   top: 0; right: 0; bottom: 0; left: 0;
   overflow: hidden;
   user-select: none;
-  font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-family: system-ui, -apple-system, "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif;
   color: #fbeed2;
   background:
     radial-gradient(ellipse at 50% 42%, rgba(255, 214, 160, .22), transparent 62%),
@@ -109,9 +111,16 @@ body { overflow: hidden; background: #6e4630; }
   top: 0; right: 0; bottom: 0; left: 0;
   /* 落到整本书后面：底部封面在 -THICK 附近，阴影要比它更靠后 */
   transform: translateZ(-72px) translate(16px, 26px);
-  border-radius: 24px;
-  background: rgba(28, 10, 4, .6);
-  filter: blur(22px);
+  /* 用径向渐变画柔边，代替原来的 filter: blur(22px)。
+     模糊滤镜的滤镜区域覆盖整张 1000×560 的盒子，书一转动就要整块重算，
+     翻页时直接掉到 40 多帧；渐变是一次光栅的位图，转动只做合成。 */
+  background: radial-gradient(
+    62% 70% at 50% 52%,
+    rgba(28, 10, 4, .62) 0%,
+    rgba(28, 10, 4, .5) 45%,
+    rgba(28, 10, 4, .26) 72%,
+    rgba(28, 10, 4, 0) 100%
+  );
 }
 .pb-cover {
   position: absolute;
@@ -199,7 +208,17 @@ body { overflow: hidden; background: #6e4630; }
 /* 墙的白色描边只保留在画框内（顶边和外侧已留边距），书脊边和底边不外溢成白线 */
 .pb-wall .cut { overflow: hidden; }
 /* 上传的图片：写死宽高比，图片没解码完时墙高也是准的 */
-.pb-slot-img { display: block; width: 100%; height: auto; }
+.pb-slot-img { display: block; width: 100%; height: auto; object-fit: cover; }
+/* 贴纸层的照片印成相片纸：一圈白边 + 极细暗边，落在纸页上才像贴上去的照片 */
+.pb-slot-img.is-print {
+  box-sizing: border-box;
+  padding: 4px;
+  background: #fdfaf1;
+  border-radius: 1px;
+  box-shadow:
+    0 0 0 .5px rgba(40, 24, 12, .22),
+    0 3px 6px rgba(30, 14, 4, .22);
+}
 .pb-wall-blank { width: 100%; aspect-ratio: 501 / 341; background: linear-gradient(180deg, #232a52, #3a3f74); }
 .pb-front { position: relative; backface-visibility: hidden; }
 .pb-flap { position: absolute; top: 0; right: 0; bottom: 0; left: 0; transform-style: preserve-3d; }
@@ -330,12 +349,22 @@ body { overflow: hidden; background: #6e4630; }
    书本坐标：+Z = 从纸面立起（和贴纸一样）。
    雨雪沿 −Z 落到纸面；Y 只表示落在地板哪一进深。 */
 .pb-fx3d,
+.pb-fxwrap,
 .fx-set {
   position: absolute;
   top: 0; right: 0; bottom: 0; left: 0;
   transform-style: preserve-3d;
   pointer-events: none;
 }
+/* 翻页中先把粒子摘掉：书页每帧变换时，整棵 3D 子树都要重算样式，
+   一页上百颗粒子会把这部分成本翻三倍（实测 470ms → 1130ms）。
+   只是从渲染树里摘掉，翻页一停立刻挂回来，每页停留时特效照常播。 */
+.pb-fx3d.is-busy { display: none; }
+/* 新内核用 content-visibility：跳过渲染但不脱离布局，切回来不会触发 reflow */
+@supports (content-visibility: hidden) {
+  .pb-fx3d.is-busy { display: block; content-visibility: hidden; }
+}
+
 .fx-p {
   --op: calc(var(--op0, 1) * var(--fade, 1));
   position: absolute;
@@ -361,28 +390,34 @@ body { overflow: hidden; background: #6e4630; }
 }
 
 /* 从高处落到纸面，风偏只动 XY。
-   朝向 var(--face) 必须写在位移之后：先沿书本 −Z 落，再在原地转向镜头。
+   朝向 var(--face) 写在这里的 transform 上（静态）；位移动画走 translate 独立属性 ——
+   CSS 独立变换属性的顺序固定是 translate → rotate → scale → transform，
+   等价于原来的 `translate3d(...) var(--face)`，但关键帧里不再出现 var(--face)，
+   动画才有机会交给合成线程，而不是每帧回主线程重算样式。
    --bb / --bbv 由 FxLayer 按当前视角实时给：圆点整体对准镜头；条状只绕竖轴转，保持竖直。 */
-:where(.fx-p > i) { --face: var(--bb, rotateX(-50deg)); }
+:where(.fx-p > i) {
+  --face: var(--bb, rotateX(-50deg));
+  transform: var(--face);
+}
 @keyframes fx-fall {
-  0% { transform: translate3d(0, 0, var(--z0, 300px)) var(--face); opacity: 0; }
+  0% { translate: 0 0 var(--z0, 300px); opacity: 0; }
   6% { opacity: var(--op, 1); }
-  33% { transform: translate3d(var(--m1x, 0px), var(--m1y, 0px), calc(var(--z0, 300px) * .67)) var(--face); }
-  66% { transform: translate3d(var(--m2x, 0px), var(--m2y, 0px), calc(var(--z0, 300px) * .34)) var(--face); }
+  33% { translate: var(--m1x, 0px) var(--m1y, 0px) calc(var(--z0, 300px) * .67); }
+  66% { translate: var(--m2x, 0px) var(--m2y, 0px) calc(var(--z0, 300px) * .34); }
   92% { opacity: var(--op, 1); }
-  100% { transform: translate3d(var(--wx, 0px), var(--wy, 0px), 0) var(--face); opacity: 0; }
+  100% { translate: var(--wx, 0px) var(--wy, 0px) 0; opacity: 0; }
 }
 @keyframes fx-rise {
-  0% { transform: translate3d(0, 0, 8px) var(--face); opacity: 0; }
+  0% { translate: 0 0 8px; opacity: 0; }
   8% { opacity: var(--op, 1); }
-  33% { transform: translate3d(var(--m1x, 0px), var(--m1y, 0px), calc(var(--z0, 300px) * .33)) var(--face); }
-  66% { transform: translate3d(var(--m2x, 0px), var(--m2y, 0px), calc(var(--z0, 300px) * .66)) var(--face); }
+  33% { translate: var(--m1x, 0px) var(--m1y, 0px) calc(var(--z0, 300px) * .33); }
+  66% { translate: var(--m2x, 0px) var(--m2y, 0px) calc(var(--z0, 300px) * .66); }
   90% { opacity: var(--op, 1); }
-  100% { transform: translate3d(var(--wx, 0px), var(--wy, 0px), var(--z0, 300px)) var(--face); opacity: 0; }
+  100% { translate: var(--wx, 0px) var(--wy, 0px) var(--z0, 300px); opacity: 0; }
 }
 @keyframes fx-drift {
-  from { transform: translate3d(0, 0, -12px) var(--face); }
-  to { transform: translate3d(var(--wx, 0px), var(--wy, 0px), 16px) var(--face); }
+  from { translate: 0 0 -12px; }
+  to { translate: var(--wx, 0px) var(--wy, 0px) 16px; }
 }
 /* 阵风：锚点整体晃，周期和下落错开 */
 .fx-p.is-gust { animation: fx-gust var(--gd, 5s) ease-in-out infinite alternate; animation-delay: var(--gdl, 0s); }
@@ -928,3 +963,18 @@ body { overflow: hidden; background: #6e4630; }
 }
 .pb-help-ok:hover { background: #fbeac4; }
 .pb-help-ok:active { transform: scale(.98); }
+
+
+/* Safari / iOS WebKit：CSS filter 在 3D transform 下每帧重算，翻页直接卡死。
+   剪纸滤镜已在 JS 里关掉；这里把纸背/投影的 filter 换成静态近似。 */
+html.ua-webkit .pb-backside {
+  filter: none;
+  background: #e6d7b4;
+}
+html.ua-webkit .pb-backside .pb-mirror { visibility: hidden; }
+html.ua-webkit .pb-wall .pb-backside,
+html.ua-webkit .pb-flap .pb-backside {
+  filter: none;
+  background: #2a3158;
+}
+html.ua-webkit .pb-cast { filter: none; opacity: .55; }

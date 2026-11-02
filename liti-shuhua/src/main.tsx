@@ -9,6 +9,15 @@ import PopupApp from './PopupApp'
 import './popup.css'
 import './xhs-base.css'
 
+// 小红书 iOS = WKWebView（WebKit）；Android = Chrome WebView（Chromium）
+;(() => {
+  const webkit = !('chrome' in window) && (
+    navigator.vendor === 'Apple Computer, Inc.' ||
+    /iPhone|iPad|iPod/i.test(navigator.userAgent)
+  )
+  if (webkit) document.documentElement.classList.add('ua-webkit')
+})()
+
 /**
  * Chrome 61 基线没有 Flex 版 gap（只能识别 Grid gap），而 @supports / CSS.supports
  * 只验证语法、证明不了 Flex 布局真的生效，所以这里按规范做一次行为检测：

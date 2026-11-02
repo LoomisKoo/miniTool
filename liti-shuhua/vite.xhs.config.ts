@@ -15,6 +15,8 @@ export default defineConfig({
   // React 产物里残留 process.env.NODE_ENV → 容器里直接 ReferenceError → 黑屏
   define: {
     'process.env.NODE_ENV': JSON.stringify('production'),
+    // 排查卡顿用：FX=off 打一版完全没有场景特效的包（FX=0 也可以）
+    FX_OFF: JSON.stringify(/^(off|0|false)$/i.test(process.env.FX ?? '')),
   },
   build: {
     outDir: 'dist-xhs',
