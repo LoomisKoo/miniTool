@@ -13,7 +13,7 @@ import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ALL = ['xiaohongshu', 'douyin', 'kuaishou'];
-const TOOL = 'word-gacha';
+const TOOL = 'word-card-tale';
 const MAX_BYTES = 10 * 1024 * 1024; // 小红书上限
 const VIEWPORT =
   'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover';

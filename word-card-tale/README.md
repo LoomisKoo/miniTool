@@ -21,7 +21,7 @@ node build.mjs xiaohongshu  # 只打小红书
 node ../xiaohongshu/minitool-zip-builder/scripts/audit_artifact.mjs dist/xiaohongshu
 ```
 
-产物：`dist/{平台}-word-gacha.zip`（当前 ≈150KB）
+产物：`dist/{平台}-word-card-tale.zip`（当前 ≈150KB）
 
 ## 玩法
 

@@ -472,15 +472,6 @@ body {
   font: 500 12px/1 "PingFang SC", sans-serif; letter-spacing: .05em;
 }
 .sheet-head button:active, .qback:active { transform: scale(.95); }
-.quiz-top { align-items: center; }
-.quiz-top .qback {
-  position: absolute; right: 0; top: -7px; margin: 0; order: 0;
-  width: 36px; height: 36px; padding: 0; border-radius: 50%;
-  border-color: rgba(255, 210, 120, .42);
-  background: radial-gradient(circle at 35% 25%, rgba(255,220,150,.2), rgba(255,255,255,.04));
-  color: #ffe0a0; font: 300 25px/1 Georgia, serif;
-  box-shadow: 0 4px 14px -8px rgba(255,190,90,.9), inset 0 0 0 1px rgba(255,255,255,.08);
-}
 .sheet-body { flex: 1; overflow-y: auto; padding: 13px 16px 40px; -webkit-overflow-scrolling: touch; }
 
 .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 13px; }
@@ -646,11 +637,10 @@ body {
   visibility: hidden;
 }
 .quiz.open { transform: translateX(0); visibility: visible; transition-delay: 0s; }
-.quiz-top {
-  position: relative; display: flex; justify-content: center;
-  font-size: 10px; letter-spacing: .3em;
-  color: rgba(242, 233, 216, .45);
-  margin-bottom: 24px;
+.quiz-top.sheet-head {
+  position: relative; margin: -4px -6px 18px;
+  padding: 8px 6px 12px;
+  letter-spacing: .2em;
 }
 .quiz-word {
   font: 400 32px/1.1 Georgia, serif;
@@ -4479,10 +4469,11 @@ body { background: var(--ui-bg); color: var(--ui-text); }
 .sx-stage { flex: 1; width: 100vw; height: 100%; border-radius: 0; box-shadow: none; background: #0a0b12; }
 .sx-top {
   position: absolute; left: 0; right: 0; top: 0; z-index: 3;
-  display: flex; align-items: center; justify-content: space-between;
+  display: flex; align-items: flex-start; justify-content: space-between;
   padding: calc(8px + env(safe-area-inset-top, 0px)) 12px 6px;
   pointer-events: none;
 }
+.sx-top .sx-level { align-self: center; margin-top: 2px; }
 .sx-btn {
   pointer-events: auto;
   width: 34px; height: 34px; border: none; border-radius: 10px;
@@ -4502,47 +4493,136 @@ body { background: var(--ui-bg); color: var(--ui-text); }
 }
 .sx-bottom {
   position: absolute; left: 0; right: 0; bottom: 0; z-index: 3;
-  height: calc(64px + env(safe-area-inset-bottom, 0px));
-  padding: 0 14px calc(10px + env(safe-area-inset-bottom, 0px));
+  height: calc(88px + env(safe-area-inset-bottom, 0px));
+  padding: 0 16px calc(14px + env(safe-area-inset-bottom, 0px));
   display: flex; align-items: flex-end; justify-content: flex-end;
   pointer-events: none;
 }
+/* 右上：喇叭在上、暂停在下（竖排） */
+.sx-right {
+  display: flex; flex-direction: column; gap: 8px; align-items: center;
+  pointer-events: none;
+}
+.sx-right .sx-btn { pointer-events: auto; }
+/* 暂停浮层（勿与按钮共用类名） */
+.sx-pause-ov {
+  position: absolute; inset: 0; z-index: 5; display: none;
+  place-items: center;
+  background: radial-gradient(80% 60% at 50% 45%, rgba(24,16,40,.72), rgba(6,4,12,.88));
+  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+}
+.sx-pause-ov.on { display: grid; animation: sxPauseIn .18s ease-out; }
+@keyframes sxPauseIn { from { opacity: 0; } to { opacity: 1; } }
+.sxp-card {
+  width: 218px; padding: 24px 20px 18px; text-align: center;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 220, 160, .22);
+  background: linear-gradient(180deg, rgba(52,40,78,.92), rgba(16,11,26,.95));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.14), 0 18px 40px -12px rgba(0,0,0,.8);
+}
+.sxp-card b {
+  display: block; font: 900 21px/1 "Songti SC", Georgia, serif;
+  letter-spacing: .34em; text-indent: .34em; color: #ffe9c4;
+  text-shadow: 0 0 18px rgba(255,190,90,.45);
+}
+.sxp-card p { margin: 10px 0 20px; font-size: 11.5px; letter-spacing: .06em; color: rgba(255,243,220,.5); }
+.sxp-go {
+  display: block; width: 100%; height: 44px; margin-bottom: 9px;
+  border: 1px solid rgba(255,226,172,.55); border-radius: 13px;
+  background: linear-gradient(180deg, #ffe8bd 0%, #ffc46b 55%, #e0952f 100%);
+  color: #2b1c07; font: 800 14px/1 "PingFang SC", sans-serif; letter-spacing: .22em; text-indent: .22em;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.7), 0 10px 22px -12px rgba(255,180,80,.9);
+}
+.sxp-out {
+  width: 100%; height: 36px; border: 1px solid rgba(255,255,255,.12); border-radius: 13px;
+  background: rgba(255,255,255,.05); color: rgba(255,243,220,.6);
+  font: 600 12px/1 "PingFang SC", sans-serif; letter-spacing: .14em; text-indent: .14em;
+}
+.sxp-go:active, .sxp-out:active { transform: scale(.97); }
+
+/* 大招按钮：经典圆形必杀钮 · 外圈充能环 */
 .sx-bomb {
   --c: 0%;
   pointer-events: auto; position: relative;
-  width: 66px; height: 66px; border: none; border-radius: 50%; padding: 0;
-  background: radial-gradient(circle at 50% 40%, #3a2a5e 0%, #1a1230 70%, #0e0a1c 100%);
-  box-shadow: 0 0 0 1.5px rgba(255, 255, 255, .14), 0 8px 20px rgba(0, 0, 0, .45), inset 0 1px 0 rgba(255, 255, 255, .15);
-  color: rgba(255, 255, 255, .45);
-  display: flex; align-items: center; justify-content: center;
-  transition: color .3s, box-shadow .3s;
+  width: 74px; height: 74px; border: none; border-radius: 50%; padding: 0;
+  background:
+    radial-gradient(circle at 50% 32%, #4a356e 0%, #1c1232 58%, #0a0614 100%);
+  box-shadow:
+    0 0 0 2px rgba(255, 210, 120, .18),
+    0 10px 24px -6px rgba(0, 0, 0, .75),
+    inset 0 2px 0 rgba(255, 255, 255, .16),
+    inset 0 -10px 18px rgba(0, 0, 0, .45);
+  color: rgba(255, 230, 170, .55);
+  display: grid; place-items: center;
+  transition: color .25s, background .3s, box-shadow .3s, transform .15s;
 }
-/* 充能环：conic 渐变按 --c 填充 */
+.sx-bomb-glow {
+  position: absolute; inset: 8px; border-radius: 50%; pointer-events: none;
+  background: radial-gradient(circle at 50% 40%, rgba(255, 180, 80, .0), transparent 70%);
+  transition: background .3s;
+}
 .sx-bomb-ring {
-  position: absolute; inset: -4px; border-radius: 50%; pointer-events: none;
-  background: conic-gradient(#ffd36b var(--c), rgba(255, 255, 255, .1) 0);
-  -webkit-mask: radial-gradient(circle, transparent 33px, #000 34px);
-          mask: radial-gradient(circle, transparent 33px, #000 34px);
+  position: absolute; inset: -5px; border-radius: 50%; pointer-events: none;
+  background: conic-gradient(from -90deg,
+    #ffe08a 0%, #ffb347 var(--c), rgba(255, 255, 255, .1) var(--c), rgba(255, 255, 255, .1) 100%);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3.5px), #000 calc(100% - 3.4px));
+          mask: radial-gradient(farthest-side, transparent calc(100% - 3.5px), #000 calc(100% - 3.4px));
+  filter: drop-shadow(0 0 4px rgba(255, 180, 60, .35));
 }
-.sx-bomb svg { width: 26px; height: 26px; position: relative; z-index: 1; margin-top: -8px; }
+.sx-bomb svg {
+  width: 26px; height: 26px; position: relative; z-index: 1;
+  margin-top: -10px;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .5));
+}
+.sx-bomb-lab {
+  position: absolute; left: 0; right: 0; bottom: 14px; z-index: 1;
+  font: 800 9px/1 "PingFang SC", sans-serif; letter-spacing: .12em;
+  text-align: center; color: inherit; pointer-events: none;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .6);
+}
 .sx-bomb span {
-  position: absolute; bottom: 9px; left: 50%; transform: translateX(-50%); z-index: 1;
-  display: flex; gap: 4px;
+  position: absolute; top: 9px; left: 50%; transform: translateX(-50%); z-index: 1;
+  display: flex; gap: 3px;
 }
-.sx-bomb span i { width: 6px; height: 6px; border-radius: 50%; background: rgba(255, 255, 255, .18); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .25); }
-.sx-bomb span i.on { background: #ffd36b; box-shadow: 0 0 6px #ffb347; }
+.sx-bomb span i {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: rgba(255, 255, 255, .16);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .2);
+  transition: background .2s, box-shadow .2s, transform .2s;
+}
+.sx-bomb span i.on {
+  background: #ffd36b;
+  box-shadow: 0 0 6px rgba(255, 190, 80, .95);
+  transform: scale(1.1);
+}
 .sx-bomb.ready {
-  color: #fff6d8;
-  background: radial-gradient(circle at 50% 35%, #ffcf6b 0%, #ff8a3d 45%, #b2341c 100%);
-  box-shadow: 0 0 0 2px rgba(255, 230, 160, .7), 0 0 22px rgba(255, 160, 60, .65), inset 0 2px 0 rgba(255, 255, 255, .4);
-  animation: sxBombPulse 1.6s ease-in-out infinite;
+  color: #fff8e6;
+  background: radial-gradient(circle at 50% 28%, #ffe29a 0%, #ff9a3a 42%, #c23018 78%, #6a1008 100%);
+  box-shadow:
+    0 0 0 2px rgba(255, 236, 180, .7),
+    0 0 28px rgba(255, 140, 40, .7),
+    0 10px 22px -6px rgba(0, 0, 0, .55),
+    inset 0 2px 0 rgba(255, 255, 255, .55),
+    inset 0 -8px 16px rgba(120, 20, 0, .35);
+  animation: sxBombPulse 1.5s ease-in-out infinite;
 }
-.sx-bomb.ready svg { filter: drop-shadow(0 0 4px rgba(255, 255, 255, .8)); }
-@keyframes sxBombPulse { 50% { box-shadow: 0 0 0 3px rgba(255, 230, 160, .9), 0 0 32px rgba(255, 160, 60, .85), inset 0 2px 0 rgba(255, 255, 255, .4); } }
-.sx-bomb:active { transform: scale(.92); }
+.sx-bomb.ready .sx-bomb-glow {
+  background: radial-gradient(circle at 50% 40%, rgba(255, 240, 180, .45), transparent 68%);
+}
+.sx-bomb.ready .sx-bomb-ring {
+  background: conic-gradient(from -90deg, #fff 0%, #ffe08a var(--c), rgba(255,255,255,.35) var(--c));
+  filter: drop-shadow(0 0 6px rgba(255, 220, 120, .8));
+}
+.sx-bomb.ready svg { filter: drop-shadow(0 1px 3px rgba(80, 20, 0, .5)); }
+@keyframes sxBombPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.045); }
+}
+.sx-bomb:active { transform: scale(.92); animation: none; }
 .sx-bomb:disabled { cursor: default; }
+.sx-bomb:disabled:not(.ready) { opacity: .92; }
 .sx-stage .btoast {
-  top: calc(96px + env(safe-area-inset-top, 0px));
+  top: calc(132px + env(safe-area-inset-top, 0px));
   border-radius: 999px;
   background: rgba(10, 8, 18, .72);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .14);
@@ -4779,8 +4859,9 @@ body { background: var(--ui-bg); color: var(--ui-text); }
 
 /* ── 熟练度组件 ── */
 .xpw { position: relative; padding: 12px 14px; border-radius: 14px; background: rgba(255,255,255,.05); box-shadow: inset 0 0 0 1px rgba(255,255,255,.07); }
-.xpw-top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 9px; }
-.xpw-top b { font: 700 14px/1 "PingFang SC", sans-serif; color: #fff3dc; }
+.xpw-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 9px; }
+.xpw-top b { display: inline-flex; align-items: center; gap: 5px; font: 700 14px/1 "PingFang SC", sans-serif; color: #fff3dc; }
+.xpw-top .dp-q { width: 16px; height: 16px; font: 800 10px/16px "Helvetica Neue", Arial, sans-serif; }
 .xpw-num { font: 700 14px/1 Georgia, serif; color: #9ff0c4; display: inline-block; }
 .xpw.full .xpw-num { color: #ffd98a; font-family: "PingFang SC", sans-serif; font-size: 13px; }
 .xpw-num.bump { animation: xpNum .6s cubic-bezier(.3,1.6,.5,1); }
@@ -5421,10 +5502,12 @@ body { background: var(--ui-bg); color: var(--ui-text); }
 .dstrip b.dim { opacity: .35; }
 .dstrip span { display: block; margin-top: 3px; font-size: 11px; color: rgba(242,233,216,.5); white-space: nowrap; }
 .dxp { display: flex; align-items: center; gap: 10px; margin: 9px 4px 0; }
-.dxp b { flex: 0 0 auto; font: 600 12px/1 "PingFang SC", sans-serif; color: #9ff0c4; }
+.dxp b { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 4px; font: 600 12px/1 "PingFang SC", sans-serif; color: #9ff0c4; }
+.dxp .dp-q { margin-left: 0; width: 15px; height: 15px; font: 800 10px/15px "Helvetica Neue", Arial, sans-serif; color: #9ff0c4; background: rgba(159,240,196,.12); box-shadow: inset 0 0 0 1px rgba(159,240,196,.4); }
 .dxp .xpw-bar { flex: 1; height: 6px; }
 .dxp span { flex: 0 0 auto; font: 600 12px/1 Georgia, serif; color: rgba(242,233,216,.6); }
 .dxp.full b { color: #ffd98a; }
+.dxp.full .dp-q { color: #ffd98a; background: rgba(255,214,110,.14); box-shadow: inset 0 0 0 1px rgba(255,214,110,.4); }
 .dxp.full .xpw-bar i { background: linear-gradient(90deg, #e0a830, #ffe08a); }
 .detail-actions { margin-bottom: 10px; }
 .detail-actions .btn { height: 38px; }
@@ -5439,21 +5522,28 @@ body { background: var(--ui-bg); color: var(--ui-text); }
 .entry { padding-bottom: 6px; }
 .exlist { gap: 8px; }
 .dfoot { margin: 8px 0 0; font-size: 11px; }
-.detail .sheet-body { padding-top: 8px; }
-.detail .sheet-body { padding-bottom: 132px; }
-.detail-card { padding-bottom: 7px; }
-.detail-actions { gap: 10px; margin: 2px 0 12px; }
-.detail-actions { position: fixed; left: 18px; right: 18px; bottom: calc(10px + env(safe-area-inset-bottom, 0px)); z-index: 20; padding: 10px 0;
-  margin: 0; background: linear-gradient(180deg, transparent, rgba(23,17,46,.94) 22%, rgba(23,17,46,.98)); }
-.detail-actions .btn { flex: 1; height: 40px; border: 0; border-radius: 12px; font: 800 14px/1 "PingFang SC", sans-serif; letter-spacing: .06em;
+#detail .sheet-body { padding-top: 8px; padding-bottom: 28px; min-height: 0; }
+#detail .detail-card { padding-bottom: 7px; }
+#detail .entry-wrap { padding-bottom: 8px; }
+#detail .dfoot { margin: 12px 0 4px; }
+#detail .detail-actions {
+  flex: 0 0 auto; position: relative; z-index: 2;
+  display: flex; gap: 10px; margin: 0;
+  padding: 12px 18px calc(14px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid rgba(255,214,120,.12);
+  background: linear-gradient(180deg, rgba(23,17,46,.92), rgba(23,17,46,.98));
+}
+#detail .detail-actions .btn {
+  flex: 1; height: 40px; border: 0; border-radius: 12px;
+  font: 800 14px/1 "PingFang SC", sans-serif; letter-spacing: .06em;
   color: #ffe6a8; background: linear-gradient(180deg, rgba(255,230,168,.16), rgba(255,230,168,.06));
-  box-shadow: inset 0 0 0 1px rgba(255,214,120,.38), inset 0 1px 0 rgba(255,255,255,.12); }
-.detail.unowned .detail-actions { display: none; }
-.detail.unowned .sheet-body { padding-bottom: 28px; }
-.detail-actions .btn.primary { color: #1a1309; background: linear-gradient(180deg, #ffe9a6, #e0aa32 62%, #c08a1e);
+  box-shadow: inset 0 0 0 1px rgba(255,214,120,.38), inset 0 1px 0 rgba(255,255,255,.12);
+}
+#detail.unowned .detail-actions { display: none; }
+#detail .detail-actions .btn.primary { color: #1a1309; background: linear-gradient(180deg, #ffe9a6, #e0aa32 62%, #c08a1e);
   box-shadow: inset 0 1px 0 rgba(255,255,255,.65), 0 3px 0 #7a5410, 0 6px 14px -4px rgba(224,170,50,.55); }
-.detail-actions .btn:active { transform: translateY(2px); }
-.detail-actions .btn.primary:active { box-shadow: inset 0 1px 0 rgba(255,255,255,.65), 0 1px 0 #7a5410; }
+#detail .detail-actions .btn:active { transform: translateY(2px); }
+#detail .detail-actions .btn.primary:active { box-shadow: inset 0 1px 0 rgba(255,255,255,.65), 0 1px 0 #7a5410; }
 /* 详情：战力构成 + 武器名称 */
 .detail-build { padding: 9px; border-radius: 14px; border: 1px solid rgba(255,214,120,.16);
   background: linear-gradient(180deg, rgba(33,26,42,.92), rgba(19,15,25,.92)); }

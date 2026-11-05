@@ -182,6 +182,8 @@
     stopLoop();
     if (root) root.classList.remove('open');
     if (document.body) document.body.classList.remove('in-battle');
+    var ov = el('battlePauseOver');
+    if (ov) ov.classList.remove('on');
     resumeHangar();
     setPanel('select');
   }
@@ -562,6 +564,8 @@
     var KD = global.Card && global.Card.KINDS && global.Card.KINDS[card.kind];
     state.banner = { t: 2.4, text: '主武器 · ' + kindLabel(card.kind), sub: (KD && KD.tip) || '' };
     setPanel('play');
+    var pov = el('battlePauseOver');
+    if (pov) pov.classList.remove('on');
     resize();
     state.player.x = W / 2;
     state.player.y = H - hudBot - 60;
@@ -598,15 +602,27 @@
   function regionPlace() {
     return (state.region && state.region.place) || '漫游';
   }
+  /* 全局难度档：地区和关内进度一起算，1 = 第一个地区第一关。
+     （原来只按「地区内第几关」算，换地区后进度清零；need 又在上限处截断，
+      于是后期根本没有变难，全靠玩家自己变强） */
+  function diffTier() {
+    var need = (state.region && state.region.need) || 0;
+    return clamp(1 + 0.7 * (state.stage || 0) + Math.min(need, 300) / 45, 1, 9);
+  }
+  // 弹幕密度倍率：新手关只有六成，后期最高 1.2 倍
+  function bScale() { return clamp(0.5 + 0.08 * diffTier(), 0.55, 1.2); }
+  // 按难度缩放弹数，至少 1 发
+  function bCount(n) { return Math.max(1, Math.round(n * bScale())); }
+
   function levelMul() {
     var need = (state.region && state.region.need) || 0;
-    // 地区难度只做温和加成（原来 need/60 到后期接近 ×2.8，导致关卡体验两极）
-    return (1 + 0.15 * (state.level - 1)) * (1 + Math.min(need, 100) / 300);
+    // 地区加成上限放宽到 need 300，后期才能真正变硬
+    return (1 + 0.15 * (state.level - 1)) * (1 + Math.min(need, 300) / 450);
   }
   // 精英 / 首领血量按关卡和地区渐进：前期宽松，后期增加但不让高战力被反向拖慢
   function bossMul() {
     var need = (state.region && state.region.need) || 0;
-    return (1 + 0.11 * (state.level - 1)) * (1 + Math.min(need, 180) / 900);
+    return (1 + 0.11 * (state.level - 1)) * (1 + Math.min(need, 300) / 700);
   }
   // 逆平衡：卡牌越强（阶级 / 武器等级 / 字母等级），敌人同步变硬变密，避免顶级卡一路平推
   function cardPowerMul() {
@@ -675,7 +691,7 @@
       spawnForm(f[(Math.random() * f.length) | 0]);
     }
   }
-  function shotSpd() { return (1 + 0.05 * (state.level - 1)) * (1 + (cardPowerMul() - 1) * 0.2) * (0.86 + 0.16 * powerProg()); }
+  function shotSpd() { return (1 + 0.045 * (diffTier() - 1)) * (1 + (cardPowerMul() - 1) * 0.2) * (0.86 + 0.16 * powerProg()); }
   // 局内火力进度 0..1：P1 = 0，满火力（含进化）= 1
   function powerProg() {
     var c = state.card;
@@ -688,7 +704,8 @@
   function fireRate() {
     var c = state.card, pw = powerProg();
     var guard = (c.kind === 'shield' || c.sub === 'shield') ? 1.08 : 0.88;
-    var ramp = state.phase === 'boss' ? 1 : clamp(0.4 + state.t / 30, 0.4, 1);
+    // 首领开火频率也吃全局难度：第一关只有六成，后期最多 1.2 倍
+    var ramp = state.phase === 'boss' ? clamp(0.5 + 0.1 * diffTier(), 0.5, 1.2) : clamp(0.4 + state.t / 30, 0.4, 1);
     return (0.5 + 0.5 * pw) * guard * ramp * (state.awaken > 0 ? 1.1 : 1) * clamp(0.85 + 0.08 * dpsRatio(), 0.85, 1.25);
   }
   function spriteName(id) {
@@ -763,9 +780,12 @@
     if (wv) wv.innerHTML = '<em>' + regionPlace() + '</em><b>' + (state.stage + 1) + '<i>/5</i></b><span>' + (state.theme.title || '') + '</span>';
     var bb = el('battleBomb');
     if (bb) {
+      var nm = ULT_NAME[state.card.kind] || '大招';
       var ic = bb.querySelector('svg');
       if (ic && ic._k !== state.card.kind) { ic._k = state.card.kind; ic.innerHTML = ULT_ICON[state.card.kind] || ULT_ICON.blast; }
-      bb.setAttribute('aria-label', ULT_NAME[state.card.kind] || '大招');
+      bb.setAttribute('aria-label', nm);
+      var lab = el('battleBombLab');
+      if (lab && lab.textContent !== nm) lab.textContent = nm;
       bb.classList.toggle('ready', state.bombs > 0);
       var dots = '';
       for (var i = 0; i < 3; i++) dots += '<i class="' + (i < state.bombs ? 'on' : '') + '"></i>';
@@ -805,8 +825,14 @@
     el('battleQuit').onclick = exitToHome;
     var snd = el('battleSound');
     if (snd) snd.onclick = function (e) { e.stopPropagation(); Sfx.play('tap'); Sfx.toggle(); renderHud(); };
+    var pb = el('battlePause'), rs = el('battleResume'), q2 = el('battleQuit2');
+    if (pb) pb.onclick = function (e) { e.stopPropagation(); setPaused(true); };
+    if (rs) rs.onclick = function (e) { e.stopPropagation(); setPaused(false); };
+    if (q2) q2.onclick = function (e) { e.stopPropagation(); exitToHome(); };
     window.addEventListener('keydown', function (e) {
       if (!state || !running) return;
+      if (e.code === 'Escape' || e.code === 'KeyP') { setPaused(!state.paused); e.preventDefault(); return; }
+      if (state.paused) return;
       if (e.code === 'Space') { useBomb(); e.preventDefault(); return; }
       state.keys[e.code] = 1;
     });
@@ -913,7 +939,12 @@
     // 每个地区的前 4 关首领各分到不同的战斗风格，第 5 关地标首领是三阶段混合型
     var rid = state.regionId || '', rh = 0;
     for (var i = 0; i < rid.length; i++) rh = (rh * 31 + rid.charCodeAt(i)) % 997;
-    e.arch = e.landmark ? 'landmark' : BOSS_ARCH[(state.stage + rh) % BOSS_ARCH.length];
+    // 第一关固定冲锋型（招式最直观、弹幕最少），第二关在冲锋 / 弹跳之间轮换，
+    // 第三关起才轮到狙击 / 花弹 / 召唤这些弹幕型
+    e.arch = e.landmark ? 'landmark'
+      : state.stage === 0 ? 'charger'
+        : state.stage === 1 ? (rh % 2 ? 'charger' : 'bouncer')
+          : BOSS_ARCH[(state.stage + rh) % BOSS_ARCH.length];
     e.st = 'idle'; e.stT = 1.2; e.vis = 1; e.tele = [];
     toastInGame('首领 · ' + e.name + ' · ' + BOSS_ARCH_NM[e.arch]);
     Sfx.play('boss');
@@ -975,7 +1006,7 @@
           e.x += Math.sin(e.t * 1.3) * 22 * dt;
           e.stay -= dt;
           if (e.cd <= 0) {
-            e.cd = 1.5 / (1 + 0.06 * state.level);
+            e.cd = 1.5 / (1 + 0.06 * (diffTier() - 1));
             var a0 = aim(e);
             for (var k = -1; k <= 1; k++) eshot(e.x, e.y + 10, a0 + k * 0.22, 140, 'rice');
           }
@@ -1039,11 +1070,11 @@
     return false;
   }
   function bossRing(e, n, sp, type, off, extra) {
-    n = Math.min(n, state.stage === 0 ? 8 : state.stage === 1 ? 11 : n);
+    n = Math.min(bCount(n), 24);
     for (var i = 0; i < n; i++) eshot(e.x, e.y, (off || 0) + i * Math.PI * 2 / n, sp, type, extra);
   }
   function bossFan(e, ang, n, gap, sp, type, extra) {
-    n = Math.min(n, state.stage === 0 ? 3 : state.stage === 1 ? 4 : n);
+    n = bCount(n);
     for (var i = 0; i < n; i++) eshot(e.x, e.y + 16, ang + (i - (n - 1) / 2) * gap, sp, type, extra);
   }
   function bossTele(e, ang, len, dur, w) {
@@ -1104,7 +1135,7 @@
       } else if (e.st === 'dash') {
         e.dropT -= dt;
         if (e.dropT <= 0) {
-          e.dropT = 0.07;
+          e.dropT = 0.07 / bScale();
           eshot(e.x, e.y, Math.PI, 50 + ph * 15, 'orb');
           eshot(e.x, e.y, 0, 50 + ph * 15, 'orb');
         }
@@ -1131,9 +1162,9 @@
         }
       } else if (e.st === 'aim') {
         if (e.stT <= 0) {
-          var n2 = [1, 3, 5][ph - 1];
+          var n2 = bCount([1, 3, 5][ph - 1]), per = bCount(9);
           for (var k2 = 0; k2 < n2; k2++) {
-            for (var s = 0; s < 9; s++) eshot(e.x, e.y + 10, e.la + (k2 - (n2 - 1) / 2) * 0.32, 200 + s * 22, 'rice');
+            for (var s = 0; s < per; s++) eshot(e.x, e.y + 10, e.la + (k2 - (n2 - 1) / 2) * 0.32, 200 + s * 22, 'rice');
           }
           Sfx.play('eshoot');
           e.st = 'out'; e.stT = 0.9;
@@ -1154,8 +1185,8 @@
       if (ph === 1 || ph === 3) {
         // 螺旋转 2.2 秒、歇 1 秒，不再是一刻不停的弹流
         if (e.cd <= 0 && mt % 3.2 < 2.2) {
-          e.cd = ph === 1 ? 0.12 : 0.1;
-          var dir = Math.floor(mt / 3) % 2 ? -1 : 1, arms = ph === 1 ? 2 : 4;
+          e.cd = Math.max(0.1, (ph === 1 ? 0.12 : 0.1) / bScale());
+          var dir = Math.floor(mt / 3) % 2 ? -1 : 1, arms = ph === 1 ? 2 : Math.max(2, Math.min(4, bCount(4)));
           e.spin += 0.23 * dir;
           for (var a = 0; a < arms; a++) eshot(e.x, e.y, e.spin + a * Math.PI * 2 / arms, 110, 'orb');
         }
@@ -1175,11 +1206,11 @@
     summoner: function (e, dt, ph, mt, hy, p) {
       var side = clamp(Math.sin(mt * 0.45) * 1.7, -1, 1);
       bossSeek(e, W / 2 + side * W * 0.3, hy + Math.cos(mt * 0.9) * 18, 170, dt);
-      if (e.stT <= 0) { e.stT = [6, 5, 4.2][ph - 1]; bossSummon(e, ph + 2); }
+      if (e.stT <= 0) { e.stT = [6, 5, 4.2][ph - 1]; bossSummon(e, Math.max(1, bCount(ph + 2))); }
       if (e.cd <= 0) {
-        e.cd = [1.9, 1.6, 1.3][ph - 1];
-        var a0 = aim(e), n = ph + 1;
-        for (var k = 0; k < n; k++) eshot(e.x, e.y + 16, a0 + (k - (n - 1) / 2) * 0.45, 70, 'big', { split: 1.1, sn: 6 + ph * 2, ssp: 105 });
+        e.cd = [1.9, 1.6, 1.3][ph - 1] / bScale();
+        var a0 = aim(e), n = bCount(ph + 1);
+        for (var k = 0; k < n; k++) eshot(e.x, e.y + 16, a0 + (k - (n - 1) / 2) * 0.45, 70, 'big', { split: 1.1, sn: bCount(6 + ph * 2), ssp: 105 });
       }
       if (ph >= 3 && e.cd2 <= 0) {
         e.cd2 = 0.35;
@@ -1203,10 +1234,11 @@
         ringPulse(e.x, e.y, '#ff4f6d', 6, 50, 0.25, 2);
       }
       if (e.cd <= 0) {
-        e.cd = [1.4, 1.15, 0.9][ph - 1];
-        var a1 = aim(e);
-        eshot(e.x, e.y, a1 - 0.45, 150, 'big', { bounce: 2 });
-        eshot(e.x, e.y, a1 + 0.45, 150, 'big', { bounce: 2 });
+        e.cd = [1.4, 1.15, 0.9][ph - 1] / bScale();
+        var a1 = aim(e), nb = bCount(2);
+        for (var bi = 0; bi < nb; bi++) {
+          eshot(e.x, e.y, a1 + (bi - (nb - 1) / 2) * 0.5, 150, 'big', { bounce: 2 });
+        }
       }
     },
 
@@ -1226,7 +1258,8 @@
         if (e.cd <= 0) {
           e.cd = 2.9;
           var gx = clamp(p.x + rnd(-70, 70), 60, W - 60), gw = 96, gy = hudTop + 40;
-          for (var x = 10; x < W; x += 26) if (Math.abs(x - gx) > gw / 2) eshot(x, gy, Math.PI / 2, 95, 'rice');
+          var step = 26 / bScale();
+          for (var x = 10; x < W; x += step) if (Math.abs(x - gx) > gw / 2) eshot(x, gy, Math.PI / 2, 95, 'rice');
           Sfx.play('eshoot');
         }
         if (e.cd2 <= 0) { e.cd2 = 2.1; bossFan(e, aim(e), 4, 0.18, 150, 'rice'); }
@@ -2165,6 +2198,27 @@
 
   function exitToHome() {    close();
     if (api && api.onExit) api.onExit();
+  }
+
+  /* ── 暂停 ─────────────────────────────────────── */
+  // 只冻结逻辑，不中断渲染：画面停在最后一帧，浮层盖在上面
+  function setPaused(on) {
+    if (!state || state.ended) return;
+    on = !!on;
+    if (state.paused === on) return;
+    state.paused = on;
+    if (on) {
+      state.drag = null;
+      state.keys = {};
+      if (state.player) state.player.bank = 0;
+      Sfx.play('tap');
+      Sfx.music(null);
+    } else {
+      Sfx.play('tap');
+      Sfx.music(state.phase === 'boss' ? 'boss' : 'stage');
+    }
+    var ov = el('battlePauseOver');
+    if (ov) ov.classList.toggle('on', on);
   }
 
   /* ── 主循环 ───────────────────────────────────── */
@@ -6113,6 +6167,31 @@
     var n = spellLen(), gap = 3, tw = Math.min(20, (W - 132) / n - gap);
     var total = n * (tw + gap) - gap, sx = W / 2 - total / 2, ink = state.card.ink;
     hudPanel(sx - 8, sy - 5, total + 16, tw + 14, 9);
+    // 觉醒：整块拼词面板当作进度条，从左往右随剩余时间退去
+    var ak = 0;
+    if (state.awaken > 0) {
+      ak = clamp(state.awaken / (state.awakenMax || 8), 0, 1);
+      var pw2 = (total + 16) * ak, px1 = sx - 8, py1 = sy - 5, ph1 = tw + 14;
+      ctx.save();
+      roundRect(px1, py1, total + 16, ph1, 9); ctx.clip();
+      var ag = ctx.createLinearGradient(px1, 0, px1 + Math.max(4, pw2), 0);
+      ag.addColorStop(0, hexA(ink, 0.16));
+      ag.addColorStop(0.72, hexA(ink, 0.3));
+      ag.addColorStop(1, hexA(ink, 0.5));
+      ctx.fillStyle = ag;
+      ctx.fillRect(px1, py1, pw2, ph1);
+      // 前沿亮线 + 内侧光晕
+      if (pw2 > 3) {
+        ctx.fillStyle = hexA(ink, 0.75 + Math.sin(tGlobal * 9) * 0.25);
+        ctx.fillRect(px1 + pw2 - 1.6, py1 + 1, 1.6, ph1 - 2);
+        softGlow(px1 + pw2 - 1, py1 + ph1 / 2, 12, ink, 0.32);
+      }
+      ctx.restore();
+      // 面板边框随觉醒呼吸
+      ctx.strokeStyle = hexA(ink, 0.45 + Math.sin(tGlobal * 7) * 0.3);
+      ctx.lineWidth = 1.2;
+      roundRect(sx - 8, sy - 5, total + 16, tw + 14, 9); ctx.stroke();
+    }
     for (var i = 0; i < n; i++) {
       var xx = sx + i * (tw + gap), done = i < state.spell, next = i === state.spell;
       roundRect(xx, sy, tw, tw + 4, 4);
@@ -6133,14 +6212,6 @@
         ctx.fillText(spellChar(i), xx + tw / 2, sy + (tw + 4) / 2 + 0.5);
       }
     }
-    if (state.awaken > 0) {
-      var ak = clamp(state.awaken / (state.awakenMax || 8), 0, 1);
-      ctx.fillStyle = 'rgba(255,255,255,.1)';
-      roundRect(sx, sy + tw + 10, total, 3, 1.5); ctx.fill();
-      ctx.fillStyle = ink;
-      roundRect(sx, sy + tw + 10, total * ak, 3, 1.5); ctx.fill();
-      hudText('觉醒', W / 2, sy + tw + 20, '800 10px "PingFang SC", sans-serif', ink, 'center');
-    }
     if (state.spellFlash > 0) {
       ctx.globalAlpha = state.spellFlash / 0.3;
       ctx.strokeStyle = ink;
@@ -6149,44 +6220,36 @@
       ctx.globalAlpha = 1;
     }
 
-    // 左下状态面板：生命 / 护盾 · 火力槽 · 武器徽章
-    var c = state.card, maxP = c.fx.maxP, pw0 = Math.max(150, 20 + (MAX_HP + state.shield) * 19), ph0 = 58, px0 = x0, py0 = H - hudBot - ph0 + 52;
-    hudPanel(px0, py0, pw0, ph0, 12);
-    for (var h = 0; h < MAX_HP; h++) drawHeart(px0 + 14 + h * 19, py0 + 13, h < state.hp);
-    for (var s2 = 0; s2 < state.shield; s2++) drawShieldIcon(px0 + 14 + (MAX_HP + s2) * 19, py0 + 13);
-    // 火力槽：闪电图标 + 胶囊格，锁定格为暗色虚格
-    var fy = py0 + 30;
-    ctx.save();
-    ctx.translate(px0 + 13, fy + 4);
-    ctx.fillStyle = '#ffb347';
-    ctx.beginPath(); ctx.moveTo(1, -6); ctx.lineTo(-4, 1); ctx.lineTo(0, 1); ctx.lineTo(-1, 6); ctx.lineTo(4, -1); ctx.lineTo(0, -1); ctx.closePath(); ctx.fill();
-    ctx.restore();
-    var awk = state.awaken > 0;
-    for (var k = 0; k < maxP; k++) {
-      var on = k < state.power, kx = px0 + 22 + k * 15;
-      roundRect(kx, fy, 12, 8, 3);
-      if (on) {
-        var pgk = ctx.createLinearGradient(0, fy, 0, fy + 8);
-        pgk.addColorStop(0, awk ? '#fff3c0' : '#ffd27a'); pgk.addColorStop(1, awk ? '#ffb020' : '#ff7a2f');
-        ctx.fillStyle = pgk; ctx.fill();
-      } else {
-        ctx.fillStyle = 'rgba(255,255,255,.12)'; ctx.fill();
-      }
+    // 左下状态：无底板，生命心形浮在上、火力条贴底下 —— 和大招钮区分开
+    var c = state.card, maxP = c.fx.maxP, awk = state.awaken > 0;
+    var px0 = x0 + 4, py0 = H - hudBot + 18;
+    // 生命 / 护盾
+    for (var h = 0; h < MAX_HP; h++) drawHeart(px0 + 10 + h * 18, py0, h < state.hp);
+    for (var s2 = 0; s2 < state.shield; s2++) drawShieldIcon(px0 + 10 + (MAX_HP + s2) * 18, py0);
+    // 火力：细长能量条 + 分段
+    var barW = Math.max(72, maxP * 14 + 8), bx = px0 + 2, by = py0 + 14;
+    roundRect(bx, by, barW, 10, 5);
+    ctx.fillStyle = 'rgba(8, 6, 16, .55)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255, 210, 120, .22)';
+    ctx.lineWidth = 1;
+    roundRect(bx, by, barW, 10, 5); ctx.stroke();
+    var fillW = Math.max(0, (barW - 4) * Math.min(1, state.power / Math.max(1, maxP)));
+    if (fillW > 0) {
+      roundRect(bx + 2, by + 2, fillW, 6, 3);
+      var pg = ctx.createLinearGradient(bx, by, bx + barW, by);
+      if (awk) { pg.addColorStop(0, '#fff3c0'); pg.addColorStop(1, '#ffb020'); }
+      else { pg.addColorStop(0, '#ffd27a'); pg.addColorStop(0.55, '#ff9a3c'); pg.addColorStop(1, '#ff6a2f'); }
+      ctx.fillStyle = pg; ctx.fill();
     }
-    hudText(awk ? '觉醒' : c.fx.tag, px0 + 22 + maxP * 15 + 2, fy + 4, '900 9px "PingFang SC", sans-serif', awk ? '#ffe08a' : rankColor(0));
-    // 武器徽章：色点 + 名称 + 等级
-    var wy = py0 + 47, wx = px0 + 10;
-    function chip(kind, lvTxt) {
-      var kc = kindColor(kind);
-      ctx.fillStyle = kc;
-      ctx.beginPath(); ctx.arc(wx + 3, wy, 3, 0, Math.PI * 2); ctx.fill();
-      hudText(kindLabel(kind), wx + 9, wy, '700 10px "PingFang SC", sans-serif', '#f3ecff');
-      var tw2 = ctx.measureText(kindLabel(kind)).width;
-      hudText(lvTxt, wx + 12 + tw2, wy, '800 9px "SF Mono", Menlo, monospace', kc);
-      wx += 18 + tw2 + ctx.measureText(lvTxt).width;
+    // 分段刻度
+    ctx.fillStyle = 'rgba(0,0,0,.35)';
+    for (var k = 1; k < maxP; k++) {
+      var tx = bx + 2 + (barW - 4) * k / maxP;
+      ctx.fillRect(tx - 0.5, by + 2, 1, 6);
     }
-    chip(c.kind, '主');
-    if (c.sub) chip(c.sub, '副');
+    hudText(awk ? '觉醒' : (c.fx.tag || '火力'), bx + barW + 8, by + 5,
+      '800 10px "PingFang SC", sans-serif', awk ? '#ffe08a' : 'rgba(255,243,220,.55)');
   }
   function drawShieldIcon(x, y) {
     ctx.save();

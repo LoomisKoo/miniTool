@@ -367,11 +367,22 @@
   // 抽词稀有度权重：档位总权重固定，档位内均分，
   // 这样词多的档位不会被稀释，UR 依然真的是孤本。
   var WORD_TIER_W = { 1: 480, 2: 280, 3: 160, 4: 66, 5: 16 };
+  /* 新手好运：前 18 抽（约 6 组）把高稀有度权重逐步放大，之后回到正常概率。
+     新用户开局连抽 N 卡第一眼就没有惊喜，这里让他先吃到几张好卡。 */
+  var LUCK_DRAWS = 18;
+  function luckMul(t) {
+    if (t <= 1) return 1;
+    var n = state.draws || 0;
+    if (n >= LUCK_DRAWS) return 1;
+    var k = 1 - n / LUCK_DRAWS;                                  // 1 → 0
+    var extra = { 2: 1.6, 3: 1.2, 4: 0.8, 5: 0.6 }[t] || 0;
+    return 1 + extra * k;
+  }
   function pickWeighted(pool) {
     var cnt = {}, tot = 0, i;
     for (i = 0; i < pool.length; i++) { var t = pool[i].tier || 1; cnt[t] = (cnt[t] || 0) + 1; }
     var per = {};
-    for (var k in cnt) per[k] = (WORD_TIER_W[k] || 1) / cnt[k];
+    for (var k in cnt) per[k] = (WORD_TIER_W[k] || 1) * luckMul(+k) / cnt[k];
     for (i = 0; i < pool.length; i++) tot += per[pool[i].tier || 1];
     var r = Math.random() * tot;
     for (i = 0; i < pool.length; i++) {
@@ -380,10 +391,18 @@
     }
     return pool[pool.length - 1];
   }
-  function drawWord(exclude) {
+  function drawWord(exclude, minTier) {
     var pool = drawThemeWords().filter(function (w) {
       return state.recent.indexOf(w.w) < 0 && (!exclude || exclude.indexOf(w.w) < 0);
     });
+    if (minTier) {
+      var hi = pool.filter(function (w) { return (w.tier || 1) >= minTier; });
+      if (hi.length) {
+        // 优先没拥有过的，别让新手保底落在重复卡上
+        var fresh = hi.filter(function (w) { return !state.owned[w.w]; });
+        pool = fresh.length ? fresh : hi;
+      }
+    }
     if (!pool.length) pool = poolWords();
     return pickWeighted(pool);
   }
@@ -474,6 +493,16 @@
       var hid = Math.random() < HIDDEN_RATE;
       picks.push({ w: w, lv: hid ? 5 : weightedTier(), hid: hid, th: state.drawTheme });
       names.push(w.w);
+    }
+    // 新手保底：前两组里至少出现一张 SR 及以上，别让开局的六张全是 N 卡
+    if (state.draws < n * 2) {
+      var best = 0;
+      for (var j = 0; j < picks.length; j++) best = Math.max(best, picks[j].w.tier || 1);
+      if (best < 3) {
+        var top = drawWord(names, 3), last = picks[n - 1];
+        picks[n - 1] = { w: top, lv: Math.max(last.lv, 3), hid: last.hid, th: last.th };
+        names[n - 1] = top.w;
+      }
     }
     return picks;
   }
@@ -1503,17 +1532,24 @@
   /* ── 我的：图鉴 / 战绩 / 成就 ─────────────────── */
   var curPane = 'book';
 
-  /* ── 个人称号：综合掌握数、连续天数与正确率 ─────────── */
+  /* ── 个人称号：综合掌握数、连续天数 ─────────────────
+     词库约 1900 词，阶梯拉到掌握 1000 才封顶；徽记材质仍只有 t0~t7，
+     更高称号复用最高两档视觉，但名字与等级继续往上走。 */
   var TITLES = [
     { nm: '未开卷', owned: 0 },
     { nm: '初读词册', owned: 1 },
-    { nm: '行脚书吏', mastered: 3 },
-    { nm: '街区采词人', mastered: 8, streak: 3 },
-    { nm: '城镇词匠', mastered: 15, streak: 5 },
-    { nm: '港口藏书家', mastered: 25, streak: 7 },
-    { nm: '跨洲词使', mastered: 40, streak: 10 },
-    { nm: '世界词志编修', mastered: 60, streak: 14 },
+    { nm: '行脚书吏', mastered: 8 },
+    { nm: '街区采词人', mastered: 20, streak: 3 },
+    { nm: '城镇词匠', mastered: 45, streak: 5 },
+    { nm: '港口藏书家', mastered: 80, streak: 7 },
+    { nm: '跨洲词使', mastered: 140, streak: 10 },
+    { nm: '世界词志编修', mastered: 220, streak: 14 },
+    { nm: '词海巡使者', mastered: 350, streak: 21 },
+    { nm: '典籍守门人', mastered: 500, streak: 30 },
+    { nm: '万词总纂', mastered: 750, streak: 45 },
+    { nm: '词宙造物主', mastered: 1000, streak: 60 },
   ];
+  function titleVisual(i) { return Math.min(i, 7); }
   function titleStat() {
     var owned = 0, mastered = 0;
     for (var k in state.owned) {
@@ -1545,21 +1581,22 @@
     '<path d="M4 17.5 3 7l5 4 4-6.5 4 6.5 5-4-1 10.5Z"/><path d="M4.5 20.5h15"/>',
   ];
   function titleEmblem(i, extra) {
-    return '<span class="tm t' + i + (extra ? ' ' + extra : '') + '"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">' +
-      TITLE_ICONS[i] + '</svg></span>';
+    var v = titleVisual(i);
+    return '<span class="tm t' + v + (extra ? ' ' + extra : '') + '"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">' +
+      TITLE_ICONS[v] + '</svg></span>';
   }
   function renderTitle() {
     var n = document.querySelector('.pf-name');
     if (!n) return;
-    var t = titleInfo();
+    var t = titleInfo(), v = titleVisual(t.idx);
     n.textContent = t.cur;
-    n.className = 'pf-name t' + t.idx;
+    n.className = 'pf-name t' + v;
     var rk = $('pfRank');
     if (rk) rk.textContent = t.idx + 1;
     var em = $('pfEmblem');
     if (em) em.outerHTML = titleEmblem(t.idx).replace('<span class="tm', '<span id="pfEmblem" class="tm');
     var av = $('pfAvatar');
-    if (av) av.className = 'pf-avatar t' + t.idx;
+    if (av) av.className = 'pf-avatar t' + v;
     renderMineActs();
   }
   function renderMineActs() {
@@ -1574,12 +1611,12 @@
     }
   }
   function renderTitleSheet(box) {
-    var t = titleInfo(), s = t.stat;
-    var html = '<div class="tt-hero t' + t.idx + '">' + titleEmblem(t.idx, 'lg') +
-      '<div class="tt-hero-t"><b class="t' + t.idx + '">' + t.cur + '</b><span>已解锁 ' + (t.idx + 1) + ' / ' + TITLES.length + ' 个称号</span></div></div>' +
+    var t = titleInfo(), s = t.stat, hv = titleVisual(t.idx);
+    var html = '<div class="tt-hero t' + hv + '">' + titleEmblem(t.idx, 'lg') +
+      '<div class="tt-hero-t"><b class="t' + hv + '">' + t.cur + '</b><span>已解锁 ' + (t.idx + 1) + ' / ' + TITLES.length + ' 个称号</span></div></div>' +
       '<div class="tt-list">';
     TITLES.forEach(function (ti, i) {
-      var on = i <= t.idx, conds = [];
+      var on = i <= t.idx, conds = [], v = titleVisual(i);
       if (ti.owned) conds.push(['收录', s.owned, ti.owned, '张']);
       if (ti.mastered) conds.push(['掌握', s.mastered, ti.mastered, '词']);
       if (ti.streak) conds.push(['连续', s.streak, ti.streak, '天']);
@@ -1587,12 +1624,12 @@
         var ok = c[1] >= c[2];
         return '<span class="' + (ok ? 'ok' : '') + '">' + c[0] + ' ' + (on ? c[2] : Math.min(c[1], c[2]) + '/' + c[2]) + ' ' + c[3] + '</span>';
       }).join('') : '<span class="ok">初始称号</span>';
-      html += '<div class="tt t' + i + (on ? ' on' : '') + (i === t.idx ? ' cur' : '') + '">' + titleEmblem(i) +
+      html += '<div class="tt t' + v + (on ? ' on' : '') + (i === t.idx ? ' cur' : '') + '">' + titleEmblem(i) +
         '<div class="tt-main"><div class="tt-top"><b>' + ti.nm + '</b><i>Lv.' + (i + 1) + '</i>' +
         (i === t.idx ? '<em>当前</em>' : '') + '</div><div class="tt-cond">' + ch + '</div></div>' +
         '<span class="tt-st">' + (on ? '✓' : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="5.5" y="10.5" width="13" height="9.5" rx="2"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"/></svg>') + '</span></div>';
     });
-    box.innerHTML = html + '</div><p class="tt-foot">收录 / 掌握 / 连续打卡同时达标即可晋升</p>';
+    box.innerHTML = html + '</div><p class="tt-foot">收录 / 掌握 / 连续打卡同时达标即可晋升 · 顶级需掌握 1000 词</p>';
   }
 
   function renderMine() {
@@ -2173,6 +2210,8 @@
     $('detailMeta').innerHTML = powerInfo(w) + xpMini(w0);
     var helpBtn = $('detailMeta').querySelector('[data-pow-help]');
     if (helpBtn) helpBtn.onclick = function () { powerHelp(w); };
+    var stageBtn = $('detailMeta').querySelector('[data-stage-help]');
+    if (stageBtn) stageBtn.onclick = function (e) { e.stopPropagation(); stageHelp(); };
     if (owned) renderUpgrade(w0);
     else {
       var oldLv = $('detailLv');
@@ -2798,7 +2837,7 @@
       return '<span class="' + (st >= i ? 'on' : '') + '">' + t + '</span>';
     }).join('');
     return '<div class="xpw' + (full ? ' full' : '') + '">' +
-      '<div class="xpw-top"><b>熟练度</b><span class="xpw-num">' +
+      '<div class="xpw-top"><b>熟练度<button class="dp-q" data-stage-help type="button" aria-label="熟练阶说明">?</button></b><span class="xpw-num">' +
         (full ? '已满 · 字母可升到满级' : xp + ' / ' + (xpNeedOf(w) || top) + ' XP') + '</span></div>' +
       '<div class="xpw-bar"><i style="width:' + pct.toFixed(1) + '%"></i><em style="left:' + mark.toFixed(1) + '%"></em></div>' +
       '<div class="xpw-steps">' + steps + '</div>' +
@@ -2809,9 +2848,32 @@
   function xpMini(w) {
     var xp = xpOf(w), st = stageOf(w), top = XP_STAGE_GATE[2], full = st >= 2;
     var pct = Math.min(100, xp / top * 100), mark = XP_STAGE_GATE[1] / top * 100;
-    return '<div class="dxp' + (full ? ' full' : '') + '"><b>熟练 ' + (st + 1) + ' 阶</b>' +
+    return '<div class="dxp' + (full ? ' full' : '') + '"><b>熟练 ' + (st + 1) + ' 阶<button class="dp-q" data-stage-help type="button" aria-label="熟练阶说明">?</button></b>' +
       '<div class="xpw-bar"><i style="width:' + pct.toFixed(1) + '%"></i><em style="left:' + mark.toFixed(1) + '%"></em></div>' +
       '<span>' + (full ? '已满' : xp + '/' + (xpNeedOf(w) || top)) + '</span></div>';
+  }
+  function stageHelp() {
+    var dlg = mk('div', 'pw-dlg');
+    dlg.innerHTML = '<div class="pw-box">' +
+      '<h3>熟练阶是什么？</h3>' +
+      '<p>练这个词会攒熟练度 XP，攒够就升阶。升阶后才能把字母升到更高等级。</p>' +
+      '<ul>' +
+        '<li><b>1 阶</b>：起步，字母最高升到 Lv3</li>' +
+        '<li><b>2 阶</b>：解锁字母升到 Lv4（需 45 XP）</li>' +
+        '<li><b>3 阶</b>：解锁字母升到 Lv5 / 满级（需 100 XP）</li>' +
+      '</ul>' +
+      '<p><b>怎么获得</b></p>' +
+      '<ul>' +
+        '<li>抽卡拼对 <b>+15</b>（零失误 <b>+22</b>）</li>' +
+        '<li>默写正确 <b>+10</b></li>' +
+        '<li>漫游拼满单词 <b>+8</b> · 通关 <b>+12</b></li>' +
+      '</ul>' +
+      '<p class="pw-note">每个词每天前 5 次全额，第 6～10 次减半，超过不再涨。</p>' +
+      '<button class="pw-ok">知道了</button></div>';
+    dlg.addEventListener('click', function (e) {
+      if (e.target === dlg || e.target.classList.contains('pw-ok')) dlg.remove();
+    });
+    document.body.appendChild(dlg);
   }
   // 熟练度增长动画：进度条推进 + 浮出 +N
   function bumpXp(box, w, gain) {
@@ -2909,6 +2971,8 @@
       renderWrite();
     };
     $('wPeek').onclick = peekAnswer;
+    var stHelp = body.querySelector('[data-stage-help]');
+    if (stHelp) stHelp.onclick = function (e) { e.stopPropagation(); stageHelp(); };
     renderPeekState();
   }
 

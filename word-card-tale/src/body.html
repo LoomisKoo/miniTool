@@ -1,12 +1,3 @@
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>词卡物语</title>
-<link rel="stylesheet" href="style.css?v=bm4xu">
-</head>
-<body>
 <div id="app">
   <!-- 机库预览：整屏底层，画当前出战卡的满火力弹幕（必须在滚动容器之外，否则会被 overflow 裁掉） -->
   <div class="exp-bg" id="expBg">
@@ -82,7 +73,7 @@
             <span class="ps-ico"><svg viewBox="0 0 24 24"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/></svg></span>
             <span class="ps-txt"><b id="mineMastered">0</b><em>已掌握</em></span>
           </button>
-          <button class="pf-stat st-fire" data-stat-title="连续打卡" data-stat-text="点击这里完成今日打卡并查看说明。每天最多计算一次，中断一天从 1 重新算。连续天数也是升级称号的条件。">
+          <button class="pf-stat st-fire" data-stat-title="连续打卡" data-stat-text="点击这里完成今日打卡并查看说明。每天最多计算一次，中断一天会从 1 重新算。连续天数也是升级称号的条件。">
             <span class="ps-ico"><svg viewBox="0 0 24 24"><path d="M12 3c.6 3.2 4.8 5.4 4.8 10a4.8 4.8 0 0 1-9.6 0c0-2 1-3.3 2-4.3.2 1.6 1 2.6 2 2.9C10.6 9 11 6 12 3z"/></svg></span>
             <span class="ps-txt"><b id="mineStreak">0</b><em>连续打卡</em></span>
           </button>
@@ -172,11 +163,28 @@
       <div class="sx-top">
         <button class="sx-btn" id="battleQuit" aria-label="返回"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
         <span class="sx-level" id="battleWave">1-5</span>
-        <button class="sx-btn sx-snd" id="battleSound" aria-label="音效"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor" fill-opacity=".25"/><path class="snd-w" d="M15.5 9a4.5 4.5 0 0 1 0 6M18 6.5a8 8 0 0 1 0 11"/><path class="snd-x" d="M16 9.5l5 5M21 9.5l-5 5"/></svg></button>
+        <div class="sx-right">
+          <button class="sx-btn sx-snd" id="battleSound" aria-label="音效"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor" fill-opacity=".25"/><path class="snd-w" d="M15.5 9a4.5 4.5 0 0 1 0 6M18 6.5a8 8 0 0 1 0 11"/><path class="snd-x" d="M16 9.5l5 5M21 9.5l-5 5"/></svg></button>
+          <button class="sx-btn" id="battlePause" aria-label="暂停"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect x="7" y="5" width="3.4" height="14" rx="1.4"/><rect x="13.6" y="5" width="3.4" height="14" rx="1.4"/></svg></button>
+        </div>
       </div>
       <div class="btoast" id="battleToast"></div>
+      <div class="sx-pause-ov" id="battlePauseOver">
+        <div class="sxp-card">
+          <b>暂 停</b>
+          <p id="battlePauseSub">喘口气，进度不会丢</p>
+          <button class="sxp-go" id="battleResume">继 续</button>
+          <button class="sxp-out" id="battleQuit2">退出本关</button>
+        </div>
+      </div>
       <div class="sx-bottom">
-        <button class="sx-bomb" id="battleBomb"><i class="sx-bomb-ring"></i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></svg><span id="battleBombDots"></span></button>
+        <button class="sx-bomb" id="battleBomb" type="button" aria-label="大招">
+          <i class="sx-bomb-ring"></i>
+          <i class="sx-bomb-glow"></i>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></svg>
+          <b class="sx-bomb-lab" id="battleBombLab">大招</b>
+          <span id="battleBombDots"></span>
+        </button>
       </div>
     </div>
   </div>
@@ -251,13 +259,13 @@
   <div class="sheet-body">
     <div class="detail-card" id="detailCard"></div>
     <div class="meta-list" id="detailMeta"></div>
-    <div class="detail-actions" id="detailActions"></div>
     <div class="entry-wrap" id="detailEntry"></div>
   </div>
+  <div class="detail-actions" id="detailActions"></div>
 </div>
 
 <div class="quiz" id="quiz">
-  <div class="quiz-top"><button class="qback" id="qBack" aria-label="关闭">×</button><span id="qKind">默 写</span><span id="qProg"></span></div>
+  <div class="quiz-top sheet-head"><span id="qKind">默 写</span><span id="qProg"></span><button class="qback" id="qBack" aria-label="返回">‹ 返回</button></div>
   <div class="quiz-body" id="qBody"></div>
   <div class="quiz-foot" id="qFoot"></div>
 </div>
@@ -284,16 +292,3 @@
     <p class="ap-desc" id="apDesc"></p>
   </div>
 </div>
-
-<script src="glyphs.js?v=bm4xu"></script>
-<script src="words.js?v=bm4xu"></script>
-<script src="words-bulk.js?v=bm4xu"></script>
-<script src="card.js?v=bm4xu"></script>
-<script src="fx.js?v=bm4xu"></script>
-<script src="sfx.js?v=bm4xu"></script>
-<script src="stages.js?v=bm4xu"></script>
-<script src="battle.js?v=bm4xu"></script>
-<script src="capture.js?v=bm4xu"></script>
-<script src="app.js?v=bm4xu"></script>
-</body>
-</html>
