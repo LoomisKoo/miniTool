@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 打包「抽词成册」— 小红书 / 抖音 / 快手（离线 zip，禁 CDN / 禁内联 script）
+ * 打包「词卡物语」— 小红书 / 抖音 / 快手（离线 zip，禁 CDN / 禁内联 script）
  * 用法:
  *   node build.mjs                  # 三个平台全打
  *   node build.mjs xiaohongshu      # 只打小红书
@@ -24,13 +24,45 @@ const style = fs.readFileSync(path.join(__dirname, 'src/style.css'), 'utf8');
 const body = fs.readFileSync(path.join(__dirname, 'src/body.html'), 'utf8');
 const glyphs = fs.readFileSync(path.join(__dirname, 'src/glyphs.js'), 'utf8');
 const words = fs.readFileSync(path.join(__dirname, 'src/words.js'), 'utf8');
+const wordsBulk = fs.readFileSync(path.join(__dirname, 'src/words-bulk.js'), 'utf8');
 const card = fs.readFileSync(path.join(__dirname, 'src/card.js'), 'utf8');
 const fx = fs.readFileSync(path.join(__dirname, 'src/fx.js'), 'utf8');
+const sfx = fs.readFileSync(path.join(__dirname, 'src/sfx.js'), 'utf8');
+const stages = fs.readFileSync(path.join(__dirname, 'src/stages.js'), 'utf8');
 const battle = fs.readFileSync(path.join(__dirname, 'src/battle.js'), 'utf8');
+const capture = fs.readFileSync(path.join(__dirname, 'src/capture.js'), 'utf8');
 const app = fs.readFileSync(path.join(__dirname, 'src/app.js'), 'utf8');
 
 // 所有 JS 合并成单文件 app.js
-const bundle = [glyphs, words, card, fx, battle, app].join('\n\n');
+const bundle = [glyphs, words, wordsBulk, card, fx, sfx, stages, battle, capture, app].join('\n\n');
+
+// 小红书容器顶部自带约 44px 导航栏，且会覆盖页面顶部的交互区域。
+// 其他平台保持原来的布局；小红书产物在这里追加平台专属适配，避免污染通用源码预览。
+const XHS_CHROME_CSS = `
+/* ── 小红书容器顶部导航栏适配 ── */
+:root {
+  --safe-t: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
+  --safe-b: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
+  --nav-h: 44px;
+  --xhs-nav: calc(var(--safe-t) + var(--nav-h));
+}
+.screen {
+  padding-top: calc(14px + var(--xhs-nav));
+}
+.sheet:not(#mineSheet) .sheet-head,
+#mineSheet.achievement-page .sheet-head {
+  padding-top: calc(16px + var(--xhs-nav));
+}
+.quiz {
+  padding-top: calc(20px + var(--xhs-nav));
+}
+.capw {
+  padding-top: calc(14px + var(--xhs-nav));
+}
+.sx-top {
+  padding-top: calc(8px + var(--xhs-nav));
+}
+`;
 
 function assertOffline(text) {
   if (/(?:src|href)=["']https?:\/\//i.test(text)) throw new Error('产物含外链资源');
@@ -58,7 +90,8 @@ function buildOne(platformId) {
   fs.rmSync(outDir, { recursive: true, force: true });
   fs.mkdirSync(path.join(outDir, 'assets'), { recursive: true });
 
-  const ver = crypto.createHash('md5').update(style + bundle).digest('hex').slice(0, 8);
+  const outputStyle = platformId === 'xiaohongshu' ? style + XHS_CHROME_CSS : style;
+  const ver = crypto.createHash('md5').update(outputStyle + bundle).digest('hex').slice(0, 8);
   const html = `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -77,11 +110,11 @@ ${body}
 </html>
 `;
 
-  assertOffline(html + style + bundle);
+  assertOffline(html + outputStyle + bundle);
   if (platformId === 'xiaohongshu') assertXhs(html, bundle);
 
   fs.writeFileSync(path.join(outDir, 'index.html'), html);
-  fs.writeFileSync(path.join(outDir, 'style.css'), style);
+  fs.writeFileSync(path.join(outDir, 'style.css'), outputStyle);
   fs.writeFileSync(path.join(outDir, 'app.js'), bundle);
 
   const iconSrc = path.join(__dirname, 'assets/icon.jpg');

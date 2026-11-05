@@ -1,4 +1,4 @@
-/* 抽词成册 · 交互 */
+/* 词卡物语 · 交互 */
 (function () {
   'use strict';
 
@@ -7,6 +7,9 @@
   var TIERS = window.TIERS;
   var Card = window.Card;
   var FX = window.FX;
+  var Capture = window.Capture;
+  var Sfx = window.Sfx || { play: function () {}, recent: function () { return false; } };
+  function sfx(n, a) { try { Sfx.play(n, a); } catch (e) {} }
 
   var BY_WORD = {};
   for (var i = 0; i < WORDS.length; i++) BY_WORD[WORDS[i].w] = WORDS[i];
@@ -14,46 +17,178 @@
   var $ = function (id) { return document.getElementById(id); };
   var stage = $('stage');
   var KEY = 'wordcodex.v3';
-  var DEV_MODE = true;     // 开发预览开关：开启后不读写本地状态、不限次数，每次刷新都是新局
-  var FREE_PER_DAY = 6;   // 每日免费拆封（每次 3 张 = 18 词）
-  var BATTLE_PER_DAY = 3; // 每日免费远征
-  var BONUS_CAP = 6;      // 默写最多再换几次
-  var DUP_INK = { 1: 6, 2: 10, 3: 20, 4: 40, 5: 80 }; // 重复卡转墨水
+  var DEV_MODE = false;
+  var FREE_PER_DAY = 3;   // 每日免费 3 组（每组 3 张 = 9 个新词）
+  var BATTLE_PER_DAY = 3; // 每日免费漫游
+  var BONUS_CAP = 10;     // 任务 / 漫游掉落 / 成长点兑换额外抽卡的每日上限
+  var INK_PER_DRAW = 60;  // 成长点兑换一组抽卡
+  var INK_SWAP_CAP = 3;   // 每日成长点兑换上限
+  var CHECKIN_REWARD = 5; // 每日首次签到奖励
+  var DROP_RATE = 0.35;   // 漫游胜利掉落抽卡券的几率（Boss 关必掉）
+  var DUP_INK = { 1: 6, 2: 10, 3: 20, 4: 40, 5: 80 }; // 重复卡转成长点
   var WRITE_INK = 3;                                  // 每次默写正确
+
+  /* ── 世界漫游地区：真实地点 + 当地食物作为关卡敌人 ─────
+     bg: 战场底色；bosses: 5 关的首领（食物/地标）；
+     need: 解锁需要的已通晓词数（0 = 一开始就能去）。 */
+  var REGIONS = [
+    { id: 'london', nm: '雾港', place: '伦敦', sub: '晨雾里的早餐铺', need: 0,
+      bg: ['#2b333f', '#161c24', '#080a0d'], c1: '#e3bb78',
+      bosses: ['焦糖贝果', '炸鱼薯条', '黄油司康', '伯爵茶壶', '黑布丁'], foods: ['贝果', '炸鱼薯条', '司康'] },
+    { id: 'nyc', nm: '霓虹城', place: '纽约', sub: '深夜的街角餐车', need: 4,
+      bg: ['#2a1d3e', '#161025', '#07050c'], c1: '#ff7ab8',
+      bosses: ['芝士热狗', '纽约贝果', '厚切披萨', '椒盐脆饼', '芝士蛋糕'], foods: ['热狗', '贝果', '披萨'] },
+    { id: 'tokyo', nm: '樱汀', place: '东京', sub: '电车旁的小食堂', need: 10,
+      bg: ['#2f2436', '#191322', '#090610'], c1: '#ffb3c8',
+      bosses: ['酱油饭团', '豚骨拉面', '玉子烧', '章鱼烧', '抹茶大福'], foods: ['饭团', '拉面', '章鱼烧'] },
+    { id: 'paris', nm: '酒红巷', place: '巴黎', sub: '塞纳河左岸的面包房', need: 18,
+      bg: ['#32201f', '#1d1113', '#0a0506'], c1: '#e6a86a',
+      bosses: ['可颂', '法棍', '马卡龙', '洋葱汤', '焦糖布丁'], foods: ['可颂', '法棍', '马卡龙'] },
+    { id: 'singapore', nm: '香料港', place: '新加坡', sub: '熟食中心的烟火气', need: 28,
+      bg: ['#1e2f2b', '#101c1a', '#050a09'], c1: '#e8be6a',
+      bosses: ['咖椰吐司', '海南鸡饭', '辣椒螃蟹', '沙爹串', '叻沙'], foods: ['吐司', '鸡饭', '叻沙'] },
+    { id: 'istanbul', nm: '金角湾', place: '伊斯坦布尔', sub: '香料市集的清晨', need: 40,
+      bg: ['#2d2620', '#1a1512', '#080605'], c1: '#e2b25f',
+      bosses: ['芝麻圆面包', '土耳其软糖', '烤肉卷', '石榴汁', '果仁蜜饼'], foods: ['圆面包', '软糖', '蜜饼'] },
+    { id: 'seoul', nm: '夜灯街', place: '首尔', sub: '帐篷摊的深夜热气', need: 54,
+      bg: ['#262b3d', '#141827', '#06080e'], c1: '#ff9ec4',
+      bosses: ['辣炒年糕', '紫菜包饭', '糖饼', '炸鸡啤酒', '南山塔'], foods: ['年糕', '包饭', '炸鸡'] },
+    { id: 'bangkok', nm: '河岸市', place: '曼谷', sub: '湄南河上的长尾船', need: 70,
+      bg: ['#2f2a1c', '#1a150d', '#080604'], c1: '#f0c860',
+      bosses: ['泰式炒面', '冬阴功', '嘟嘟车', '芒果糯米饭', '郑王庙'], foods: ['炒面', '冬阴功', '芒果饭'] },
+    { id: 'mexico', nm: '万灵城', place: '墨西哥城', sub: '亡灵节的烛光市集', need: 88,
+      bg: ['#33202c', '#1c1018', '#08040a'], c1: '#ff9a4d',
+      bosses: ['塔可', '吉事果', '仙人掌', '糖骷髅', '独立天使'], foods: ['塔可', '吉事果', '糖骷髅'] },
+    { id: 'cairo', nm: '沙金市', place: '开罗', sub: '金字塔下的香料摊', need: 108,
+      bg: ['#33291c', '#1c1610', '#0a0806'], c1: '#e8c880',
+      bosses: ['炸豆丸', '库莎丽', '椰枣', '神灯', '金字塔'], foods: ['豆丸', '库莎丽', '椰枣'] },
+    { id: 'lisbon', nm: '瓷砖巷', place: '里斯本', sub: '升降机旁的老蛋挞店', need: 120,
+      bg: ['#1f2a33', '#111a20', '#060a0d'], c1: '#f0b968',
+      bosses: ['葡式蛋挞', '沙丁鱼罐头', '樱桃酒', '28 路电车', '贝伦塔'], foods: ['蛋挞', '沙丁鱼', '樱桃酒'] },
+    { id: 'rome', nm: '石板城', place: '罗马', sub: '喷泉边的冰淇淋车', need: 132,
+      bg: ['#33261e', '#1c1410', '#090605'], c1: '#e8c07a',
+      bosses: ['意式冰淇淋', '浓缩咖啡', '帕尼尼', '小摩托', '斗兽场'], foods: ['冰淇淋', '咖啡', '帕尼尼'] },
+    { id: 'hongkong', nm: '霓虹巷', place: '香港', sub: '茶餐厅的午市人潮', need: 144,
+      bg: ['#2a1f2e', '#17101c', '#07050a'], c1: '#ffb066',
+      bosses: ['菠萝包', '云吞面', '丝袜奶茶', '叮叮车', '天坛大佛'], foods: ['菠萝包', '云吞面', '奶茶'] },
+    { id: 'rio', nm: '海风城', place: '里约', sub: '海滩边的果摊与球场', need: 156,
+      bg: ['#1e2f2a', '#101c18', '#050a08'], c1: '#7edc9a',
+      bosses: ['巴西莓碗', '巴西烤肉', '椰子', '足球', '基督像'], foods: ['莓碗', '烤肉', '椰子'] },
+    { id: 'mumbai', nm: '香料城', place: '孟买', sub: '突突车流里的茶摊', need: 168,
+      bg: ['#33291c', '#1c1610', '#0a0806'], c1: '#f0b050',
+      bosses: ['咖喱角', '印度烤饼', '玛莎拉茶', '三轮车', '印度门'], foods: ['咖喱角', '烤饼', '奶茶'] },
+    { id: 'moscow', nm: '雪原城', place: '莫斯科', sub: '红场边的热汤摊', need: 180,
+      bg: ['#242c3a', '#131a24', '#05080d'], c1: '#9fc4ff',
+      bosses: ['罗宋汤', '布林薄饼', '俄式饺子', '套娃', '圣瓦西里'], foods: ['罗宋汤', '薄饼', '饺子'] },
+    { id: 'sydney', nm: '帆港', place: '悉尼', sub: '海港边的肉派小店', need: 192,
+      bg: ['#1c2a36', '#0f1822', '#05090d'], c1: '#8fd0ff',
+      bosses: ['澳式肉派', '拉明顿蛋糕', '回旋镖', '袋鼠', '悉尼歌剧院'], foods: ['肉派', '蛋糕', '回旋镖'] },
+    { id: 'barcelona', nm: '彩瓷城', place: '巴塞罗那', sub: '兰布拉大道的夜市', need: 204,
+      bg: ['#33221a', '#1c120e', '#0a0605'], c1: '#ffb35c',
+      bosses: ['海鲜饭', '西班牙火腿', '折扇', '吉他', '圣家堂'], foods: ['海鲜饭', '火腿', '折扇'] },
+    { id: 'amsterdam', nm: '运河镇', place: '阿姆斯特丹', sub: '单车穿过的运河桥', need: 216,
+      bg: ['#1f2a30', '#10181c', '#05080a'], c1: '#ffcf6a',
+      bosses: ['焦糖华夫饼', '奶酪', '木鞋', '自行车', '风车'], foods: ['华夫饼', '奶酪', '木鞋'] },
+    { id: 'berlin', nm: '灰墙城', place: '柏林', sub: '啤酒花园的周末', need: 228,
+      bg: ['#24262c', '#141519', '#06070a'], c1: '#ffd36b',
+      bosses: ['椒盐卷饼', '咖喱香肠', '啤酒杯', '红绿灯小人', '勃兰登堡门'], foods: ['卷饼', '香肠', '啤酒'] },
+    { id: 'athens', nm: '白石城', place: '雅典', sub: '卫城脚下的橄榄园', need: 240,
+      bg: ['#2a2a24', '#171712', '#080806'], c1: '#9fd0ff',
+      bosses: ['希腊卷饼', '橄榄', '猫头鹰', '双耳陶罐', '帕特农神庙'], foods: ['卷饼', '橄榄', '陶罐'] },
+    { id: 'marrakech', nm: '赤红城', place: '马拉喀什', sub: '香料集市的薄荷茶', need: 252,
+      bg: ['#3a2218', '#20120c', '#0c0604'], c1: '#ff9a5c',
+      bosses: ['塔吉锅', '薄荷茶', '古斯米', '摩洛哥灯', '库图比亚清真寺'], foods: ['塔吉锅', '薄荷茶', '古斯米'] },
+    { id: 'hanoi', nm: '湖心城', place: '河内', sub: '还剑湖畔的河粉摊', need: 264,
+      bg: ['#1e2a22', '#101812', '#050a06'], c1: '#f2c94c',
+      bosses: ['越南河粉', '越南法包', '滴滤咖啡', '越南斗笠', '龟塔'], foods: ['河粉', '法包', '咖啡'] },
+    { id: 'beijing', nm: '红墙城', place: '北京', sub: '胡同口的糖葫芦', need: 276,
+      bg: ['#2e1c1c', '#1a0f10', '#0a0506'], c1: '#ffcc55',
+      bosses: ['北京烤鸭', '糖葫芦', '包子', '风筝', '天坛'], foods: ['烤鸭', '糖葫芦', '包子'] },
+    { id: 'toronto', nm: '枫叶城', place: '多伦多', sub: '湖边的枫糖早餐', need: 288,
+      bg: ['#2a1e1e', '#171010', '#080505'], c1: '#ff6b5c',
+      bosses: ['枫糖松饼', '肉汁奶酪薯条', '甜甜圈', '枫叶', '加拿大国家电视塔'], foods: ['松饼', '薯条', '甜甜圈'] },
+    { id: 'capetown', nm: '岬角城', place: '开普敦', sub: '桌山下的企鹅海滩', need: 300,
+      bg: ['#1c2a2a', '#0f1818', '#050a0a'], c1: '#7edcc8',
+      bosses: ['南非肉干', '南非博士茶', '帝王花', '企鹅', '桌山'], foods: ['肉干', '红茶', '帝王花'] },
+    { id: 'buenosaires', nm: '探戈港', place: '布宜诺斯艾利斯', sub: '街角的探戈与马黛茶', need: 312,
+      bg: ['#26203a', '#141024', '#07050e'], c1: '#9fc4ff',
+      bosses: ['阿根廷馅饼', '阿法乔饼', '马黛茶', '班多钮手风琴', '方尖碑'], foods: ['馅饼', '甜饼', '马黛茶'] },
+    { id: 'cusco', nm: '云巅城', place: '库斯科', sub: '安第斯山的玉米集市', need: 324,
+      bg: ['#25301f', '#141c10', '#070a05'], c1: '#b9e28c',
+      bosses: ['酸橘汁腌鱼', '玉米', '排箫', '羊驼', '马丘比丘'], foods: ['腌鱼', '玉米', '排箫'] },
+    { id: 'sanfrancisco', nm: '雾湾城', place: '旧金山', sub: '码头边的酸面包', need: 336,
+      bg: ['#26262e', '#15151a', '#07070a'], c1: '#ff8a5c',
+      bosses: ['酸面包', '幸运饼干', '面包碗浓汤', '叮当车', '金门大桥'], foods: ['酸面包', '饼干', '浓汤'] },
+    { id: 'honolulu', nm: '浪花岛', place: '檀香山', sub: '海滩边的彩虹刨冰', need: 348,
+      bg: ['#16302e', '#0c1c1a', '#040a09'], c1: '#5fe6d0',
+      bosses: ['波奇饭', '彩虹刨冰', '菠萝', '冲浪板', '钻石头山'], foods: ['波奇饭', '刨冰', '菠萝'] },
+  ];
+  function regionById(id) {
+    for (var i = 0; i < REGIONS.length; i++) if (REGIONS[i].id === id) return REGIONS[i];
+    return REGIONS[0];
+  }
+  // 地区解锁：通关上一个地区的第 5 关
+  function regionUnlocked(r) {
+    var i = REGIONS.indexOf(r);
+    if (i <= 0) return true;
+    var prev = state.stages && state.stages[REGIONS[i - 1].id];
+    return !!prev && prev.c >= 5;
+  }
   var state = {
     owned: {}, draws: 0, recent: [], ink: DEV_MODE ? 300 : 0,
-    day: null, streak: 0, lastDay: '', records: [],
+    drawTheme: 'all',
+    day: null, streak: 0, lastDay: '', records: [], shards: {}, achSeen: {},
+    stats: { battles: 0, wins: 0, kills: 0, stars: 0 }, achInit: false,
+    region: '',
     quota: { d: '', used: 0, bonus: 0, battleUsed: 0, battleBonus: 0 },
   };
   var busy = false;
   var bookFilter = 'got';
   var bookSort = 'tier';
+  var bookTag = '';          // 图鉴分类，'' = 全部分类
+  var bookQuery = '';        // 图鉴关键字搜索
+  var CODEX_PAGE = 40;       // 每次渲染的卡片数
+  var codexShown = CODEX_PAGE;
+  var codexRendered = 0;     // 已经塞进 DOM 的卡片数，用于增量追加
+  var codexTotal = 0;        // 当前筛选下的总卡数
+  var GRID_GAP = 12;         // 与 CSS 的 column-gap 保持一致
+  var codexObs = null;       // 底部哨兵的 IntersectionObserver
   var deckEl = null;
   var deckWords = [];
   var activeIdx = 0;
 
   /* ── 存储 ─────────────────────────────────────── */
+  // 地址带 ?reset 时从零开始（开发调试用）
+  // 小红书原生存储是异步的：getStorage({key}) → Promise<{data}>；本地 localStorage 同步兜底，两边都写
+  function nativeStore() {
+    var m = window.xhs && window.xhs.miniTool;
+    return m && typeof m.getStorage === 'function' && typeof m.setStorage === 'function' ? m : null;
+  }
   function sget() {
-    if (DEV_MODE) return null;
-    try {
-      if (window.xhs && window.xhs.miniTool && window.xhs.miniTool.getStorage) {
-        return window.xhs.miniTool.getStorage(KEY);
-      }
-    } catch (e) {}
+    if (/[?&]reset\b/.test(location.search)) return null;
     try { return localStorage.getItem(KEY); } catch (e) { return null; }
   }
-  function sset(str) {
-    if (DEV_MODE) return;
+  function sgetNative() {
+    var m = nativeStore();
+    if (!m || /[?&]reset\b/.test(location.search)) return Promise.resolve(null);
     try {
-      if (window.xhs && window.xhs.miniTool && window.xhs.miniTool.setStorage) {
-        window.xhs.miniTool.setStorage(KEY, str);
-        return;
-      }
-    } catch (e) {}
-    try { localStorage.setItem(KEY, str); } catch (e) {}
+      return Promise.resolve(m.getStorage({ key: KEY })).then(function (res) {
+        var d = res && res.data !== undefined ? res.data : res;
+        return typeof d === 'string' ? d : d ? JSON.stringify(d) : null;
+      }).catch(function () { return null; });
+    } catch (e) { return Promise.resolve(null); }
   }
-  function load() {
-    var raw = sget();
+  function sset(str) {
+    try { localStorage.setItem(KEY, str); } catch (e) {}
+    var m = nativeStore();
+    if (!m) return;
+    try {
+      var p = m.setStorage({ key: KEY, data: str });
+      if (p && p.catch) p.catch(function () {});
+    } catch (e) {}
+  }
+  function load(raw) {
+    if (raw === undefined) raw = sget();
     if (!raw) return;
     try {
       var o = JSON.parse(raw);
@@ -66,7 +201,22 @@
       state.lastDay = o.lastDay || '';
       state.quota = o.quota || state.quota;
       state.ink = o.ink || 0;
+      state.drawTheme = o.drawTheme || 'all';
       state.records = o.records || [];
+      state.shards = o.shards || {};
+      state.achSeen = o.achSeen && typeof o.achSeen === 'object' ? o.achSeen : {};
+      state.achInit = !!o.achInit;
+      state.stats = o.stats || state.stats;
+      if (!o.stats && state.records.length) {
+        state.records.forEach(function (r) {
+          state.stats.battles++;
+          state.stats.kills += r.kills || 0;
+          if (r.win) { state.stats.wins++; state.stats.stars += r.stars || 0; }
+        });
+      }
+      state.region = o.region || '';
+      state.stages = o.stages || {};
+      state.codex = o.codex || {};
     } catch (e) {}
   }
   function save() {
@@ -74,6 +224,9 @@
       owned: state.owned, draws: state.draws, recent: state.recent,
       day: state.day, streak: state.streak, lastDay: state.lastDay,
       quota: state.quota, ink: state.ink, records: state.records,
+      drawTheme: state.drawTheme,
+      shards: state.shards, achSeen: state.achSeen, achInit: state.achInit, stats: state.stats,
+      region: state.region, stages: state.stages, codex: state.codex,
     }));
   }
 
@@ -95,16 +248,10 @@
     return Math.max(0, FREE_PER_DAY + state.quota.bonus - state.quota.used);
   }
   function battleQuotaLeft() {
-    if (DEV_MODE) return 999;
-    var t = todayStr();
-    if (state.quota.d !== t) state.quota = { d: t, used: 0, bonus: 0, battleUsed: 0, battleBonus: 0 };
-    return Math.max(0, BATTLE_PER_DAY + (state.quota.battleBonus || 0) - (state.quota.battleUsed || 0));
+    return Infinity;
   }
   function battleQuotaUse() {
-    if (DEV_MODE) return;
-    state.quota.battleUsed = (state.quota.battleUsed || 0) + 1;
-    save();
-    renderBattleQuota();
+    // 漫游不再限制每日次数，保留接口兼容旧存档。
   }
   function grantBattleBonus() {
     var t = todayStr();
@@ -123,7 +270,7 @@
   }
   function grantBonus() {
     var t = todayStr();
-    if (state.quota.d !== t) state.quota = { d: t, used: 0, bonus: 0 };
+    if (state.quota.d !== t) state.quota = { d: t, used: 0, bonus: 0, battleUsed: 0, battleBonus: 0 };
     if (state.quota.bonus >= BONUS_CAP) return false;
     state.quota.bonus++;
     save();
@@ -134,27 +281,52 @@
     var n = quotaLeft();
     var el = $('drawQuota');
     if (el) el.textContent = DEV_MODE ? '∞' : n;
-    var btn = $('btnDraw');
-    if (btn && !busy) {
-      btn.textContent = n > 0 ? '拆 封' : '今日已尽';
-      btn.disabled = n <= 0;
-    }
+    renderDrawBtn();
     updateDailyBrief();
+  }
+  // 今日次数用完时隐藏「再来一组」按钮
+  function renderDrawBtn() {
+    var btn = $('btnDraw');
+    if (!btn || busy) return;
+    var total = FREE_PER_DAY + (state.quota.bonus || 0);
+    var used = Math.min(state.quota.used || 0, total);
+    var ok = quotaLeft() > 0;
+    btn.style.display = '';
+    btn.textContent = ok ? '再 来 一 组（' + used + '/' + total + '）' : '今天抽完了（' + total + '/' + total + '）';
+    btn.disabled = !ok;
   }
   function renderBattleQuota() {
     var el = $('expQuota');
-    if (el) el.textContent = DEV_MODE ? '∞' : battleQuotaLeft();
+    if (el) el.textContent = '不限';
   }
   function updateDailyBrief() {
     var el = $('dailyBrief');
     if (!el) return;
-    var day = state.day;
-    var total = day && day.picks ? day.picks.length : 0;
-    var done = 0;
-    if (day && day.picks) day.picks.forEach(function (p) { if (p.done) done++; });
-    el.textContent = total
-      ? '今日 ' + done + ' / ' + total + '　·　连续 ' + (state.streak || 1) + ' 天'
-      : '今日 0 / 6　·　连续 ' + (state.streak || 1) + ' 天';
+    var g = (state.day && state.day.g) || { spell: 0, review: 0, battle: 0 };
+    var claimed = (state.day && state.day.claimed) || {};
+    var done = 0, ready = 0, pills = '';
+    for (var i = 0; i < DAILY_TASKS.length; i++) {
+      var t = DAILY_TASKS[i];
+      var cur = Math.min(g[t.id] || 0, t.need);
+      var ok = cur >= t.need;
+      var rd = ok && !claimed[t.id];
+      if (ok) done++;
+      if (rd) ready++;
+      pills += '<span class="tc-pill' + (ok ? ' ok' : '') + (rd ? ' ready' : '') + '">' +
+        '<span class="tc-ico" style="--p:' + Math.round(cur / t.need * 100) + '">' + taskIco(t.ico) + '</span>' +
+        '<span class="tc-lab">' + t.short + '<b>' + (ok ? '✓' : cur + '/' + t.need) + '</b></span></span>';
+    }
+    el.textContent = done + '/' + DAILY_TASKS.length;
+    var list = $('dailyPills');
+    if (list) list.innerHTML = pills;
+    var all = done >= DAILY_TASKS.length && !ready;
+    var row = $('btnDaily');
+    if (row) {
+      row.classList.toggle('done', all);
+      row.classList.toggle('has-ready', ready > 0);
+    }
+    var r = row && row.querySelector('.tc-go');
+    if (r) r.textContent = ready ? '领取 ' + ready + ' ›' : all ? '已完成' : '去完成 ›';
   }
 
   /* ── 抽卡 ─────────────────────────────────────── */
@@ -174,13 +346,122 @@
     return 1;
   }
 
-  // 单词等概率抽取，不再区分稀有度
+  // 单词等概率抽取；超长单词（10 个字母以上）不进卡池，卡面放不下也难记
+  var MAX_WORD_LEN = 10;
+  var DRAW_THEMES = {
+    all: { nm: '万象', short: '万象', sub: '全部词卡', tags: null },
+    wild: { nm: '自然奇境', short: '自然', sub: '草木 · 天象 · 生灵', tags: ['nature', 'sky', 'beast'] },
+    life: { nm: '人间烟火', short: '烟火', sub: '居所 · 人物 · 饮馔', tags: ['place', 'people', 'food', 'object'] },
+    mind: { nm: '心智工坊', short: '心智', sub: '学术 · 机巧 · 动静', tags: ['study', 'tech', 'motion'] },
+    mood: { nm: '光影心绪', short: '光影', sub: '光影 · 声籁 · 时序', tags: ['light', 'feeling', 'sound', 'time'] }
+  };
+  var DRAW_THEME_ICONS = {
+    all: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6L5.6 18.4"/></svg>',
+    wild: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20c-4-2.2-6-5.1-6-8.7C6 7.5 8.2 5 11 4c.2 2.3 1.1 3.8 2.4 4.8C14 6.2 15.8 4.8 18 4c.2 4.2-1.1 7-3.4 8.5"/></svg>',
+    life: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10.5h16M6 10.5v8h12v-8M8 10V6.5h8V10M10 14h4M12 3v3.5"/></svg>',
+    mind: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.2 15.8a5.7 5.7 0 1 1 7.6 0c-.8.7-1.2 1.4-1.4 2.2H9.6c-.2-.8-.6-1.5-1.4-2.2ZM10 21h4M10 18h4M12 2v1.5M4.9 4.9 6 6M19.1 4.9 18 6"/></svg>',
+    mood: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5 14.2 9l5.8.4-4.5 3.7 1.4 5.6L12 15.6l-4.9 3.1 1.4-5.6L4 9.4 9.8 9 12 3.5Z"/></svg>'
+  };
+  function drawThemeWords() {
+    var theme = DRAW_THEMES[state.drawTheme] || DRAW_THEMES.all;
+    return WORDS.filter(function (w) {
+      return w.w.length <= MAX_WORD_LEN && (!theme.tags || theme.tags.indexOf(w.tag) >= 0);
+    });
+  }
+  function poolWords() {
+    return drawThemeWords();
+  }
+  // 抽词稀有度权重：档位总权重固定，档位内均分，
+  // 这样词多的档位不会被稀释，UR 依然真的是孤本。
+  var WORD_TIER_W = { 1: 480, 2: 280, 3: 160, 4: 66, 5: 16 };
+  function pickWeighted(pool) {
+    var cnt = {}, tot = 0, i;
+    for (i = 0; i < pool.length; i++) { var t = pool[i].tier || 1; cnt[t] = (cnt[t] || 0) + 1; }
+    var per = {};
+    for (var k in cnt) per[k] = (WORD_TIER_W[k] || 1) / cnt[k];
+    for (i = 0; i < pool.length; i++) tot += per[pool[i].tier || 1];
+    var r = Math.random() * tot;
+    for (i = 0; i < pool.length; i++) {
+      r -= per[pool[i].tier || 1];
+      if (r <= 0) return pool[i];
+    }
+    return pool[pool.length - 1];
+  }
   function drawWord(exclude) {
-    var pool = WORDS.filter(function (w) {
+    var pool = drawThemeWords().filter(function (w) {
       return state.recent.indexOf(w.w) < 0 && (!exclude || exclude.indexOf(w.w) < 0);
     });
-    if (!pool.length) pool = WORDS.slice();
-    return pool[Math.floor(Math.random() * pool.length)];
+    if (!pool.length) pool = poolWords();
+    return pickWeighted(pool);
+  }
+  function renderDrawThemes() {
+    var box = $('drawThemes');
+    if (!box) return;
+    var html = '';
+    Object.keys(DRAW_THEMES).forEach(function (id) {
+      var t = DRAW_THEMES[id], B = Card.BACK_THEMES[id] || Card.BACK_THEMES.all;
+      html += '<button type="button" class="draw-theme' + (state.drawTheme === id ? ' on' : '') +
+        '" data-theme="' + id + '" aria-label="' + t.nm + '" style="--th:' + B.foil + ';--th-rgb:' + B.rgb + '">' +
+        DRAW_THEME_ICONS[id] + '<b>' + t.short + '</b></button>';
+    });
+    box.innerHTML = html;
+    var desc = $('drawThemeDesc');
+    if (desc) {
+      var active = DRAW_THEMES[state.drawTheme] || DRAW_THEMES.all;
+      desc.innerHTML = '<b>' + active.nm + '</b><span>' + active.sub + '</span>';
+    }
+    box.querySelectorAll('[data-theme]').forEach(function (btn) {
+      btn.onclick = function () {
+        var id = btn.getAttribute('data-theme');
+        if (id === state.drawTheme || busy) return;
+        state.drawTheme = id;
+        save();
+        renderDrawThemes();
+        sfx('theme', id);
+        reskinPile();
+      };
+    });
+  }
+
+  // 切换卡池：还没翻开的牌按新主题重抽单词（稀有度不变），并翻面换上新牌背
+  function reskinPile() {
+    if (!pileWrap) return;
+    var pile = stage.querySelector('.pile');
+    var items = pile ? pile.querySelectorAll('.pile-card') : [];
+    var idx = [];
+    pileWrap.states.forEach(function (s, i) { if (s === 'back' && items[i]) idx.push(i); });
+    if (!idx.length) return;
+    var keep = pileWrap.picks.map(function (p, i) { return idx.indexOf(i) < 0 ? p.w.w : null; }).filter(Boolean);
+    idx.forEach(function (i) {
+      var w = drawWord(keep);
+      keep.push(w.w);
+      pileWrap.picks[i].w = w;
+      pileWrap.picks[i].th = state.drawTheme;
+    });
+    busy = true;
+    pile.classList.add('reskin');
+    var B = Card.BACK_THEMES[state.drawTheme] || Card.BACK_THEMES.all;
+    idx.forEach(function (i, k) {
+      var item = items[i];
+      item.style.setProperty('--i', k);
+      item.style.setProperty('--bk-glow', B.foil);
+      item.classList.remove('rs-in');
+      item.classList.add('rs-out');
+      setTimeout(function () {
+        var old = item.querySelector('.card');
+        var node = Card.renderBack(pileWrap.picks[i].lv, state.drawTheme);
+        node.style.transform = old ? old.style.transform : '';
+        if (old) item.replaceChild(node, old); else item.appendChild(node);
+        item.classList.remove('rs-out');
+        item.classList.add('rs-in');
+        sfx('flick', k);
+      }, 200 + k * 60);
+    });
+    setTimeout(function () {
+      pile.classList.remove('reskin');
+      for (var j = 0; j < items.length; j++) items[j].classList.remove('rs-in');
+      busy = false;
+    }, 200 + idx.length * 60 + 440);
   }
 
   function rollBatch(n) {
@@ -188,13 +469,13 @@
     for (var i = 0; i < n; i++) {
       var w = drawWord(names);
       var hid = Math.random() < HIDDEN_RATE;
-      picks.push({ w: w, lv: hid ? 5 : weightedTier(), hid: hid });
+      picks.push({ w: w, lv: hid ? 5 : weightedTier(), hid: hid, th: state.drawTheme });
       names.push(w.w);
     }
     return picks;
   }
 
-  // 返回本次重复转化的墨水数
+  // 返回本次重复转化的成长点数
   function collect(p) {
     var w = p.w, o = state.owned[w.w];
     state.draws++;
@@ -220,14 +501,14 @@
   }
   function rec(w) { return state.owned[w.w] || { m: 0, at: 0 }; }
 
-  /* ── 卡片等级 / 字母等级 / 墨水 ─────────────────── */
+  /* ── 卡片等级 / 字母等级 / 成长点 ───────────────── */
   function cardLvOf(w) { var o = state.owned[w.w]; return o ? (o.cl || 1) : 0; }
   function capOf(w) { var o = state.owned[w.w]; return o && o.hid ? 6 : 5; }
   // 带卡片等级的展示对象，供渲染 / 战斗使用
   function viewOf(w) {
     var o = state.owned[w.w];
     if (!o) return w;
-    return Object.assign({}, w, { tier: Math.min(5, o.cl || 1), lvl: o.cl || 1, hid: !!o.hid });
+    return Object.assign({}, w, { lvl: o.cl || 1, cardLv: o.cl || 1, hid: !!o.hid });
   }
   function levelsOf(w) {
     var o = state.owned[w.w];
@@ -235,37 +516,39 @@
     if (!o.lv || o.lv.length !== w.w.length) o.lv = w.w.split('').map(function () { return o.cl || 1; });
     return o.lv;
   }
-  function upgradeCost(lv) { return 5 * lv; }
-  function cardUpgradeCost(cl) { return 25 * cl; }
+  /* 养成只有一个动作：花成长点升级字母。
+     卡片等级 = 所有字母的最低等级（自动提升）；
+     熟练度只卡高等级：升到 Lv4 需 2 阶，升到 Lv5 及以上需 3 阶 */
+  function upgradeCost(lv) { return 8 * lv; }
+  function stageNeedFor(lv) { return lv >= 5 ? 2 : lv >= 4 ? 1 : 0; }
   function upgradeLetter(w, i) {
-    var lv = levelsOf(w);
+    var lv = levelsOf(w), o = state.owned[w.w];
     if (!lv) return false;
-    if (lv[i] >= cardLvOf(w)) { toast('字母已达卡片等级，先升级卡片'); return false; }
+    if (lv[i] >= capOf(w)) { toast('已满级'); sfx('deny'); return false; }
+    var sn = stageNeedFor(lv[i] + 1);
+    if (stageOf(w) < sn) {
+      toast('升到 Lv' + (lv[i] + 1) + ' 需要熟练度 ' + (sn + 1) + ' 阶（还差 ' + (XP_STAGE_GATE[sn] - xpOf(w)) + ' XP）');
+      sfx('deny');
+      return false;
+    }
     var cost = upgradeCost(lv[i]);
-    if (state.ink < cost) { toast('墨水不足，需要 ' + cost); return false; }
-    state.ink -= cost;
+    if (!DEV_MODE && state.ink < cost) { toast('成长点不足，需要 ' + cost); sfx('deny'); return false; }
+    if (!DEV_MODE) state.ink -= cost;
     lv[i]++;
+    sfx('upgrade', lv[i]);
+    var minLv = Math.min.apply(null, lv);
+    var cardUp = minLv > (o.cl || 1);
+    if (cardUp) o.cl = minLv;
     save();
+    checkAchievementUnlocks();
     refreshCounts();
-    toast(w.w.charAt(i).toUpperCase() + ' 升至 Lv ' + lv[i]);
-    return true;
-  }
-  function canUpgradeCard(w) {
-    var cl = cardLvOf(w);
-    return cl < capOf(w) && levelsOf(w).every(function (x) { return x >= cl; });
-  }
-  function upgradeCard(w) {
-    var o = state.owned[w.w];
-    if (!o) return false;
-    if (o.cl >= capOf(w)) { toast('已达最高等级'); return false; }
-    if (!canUpgradeCard(w)) { toast('所有字母升到 Lv ' + o.cl + ' 才能升级卡片'); return false; }
-    var cost = cardUpgradeCost(o.cl);
-    if (state.ink < cost) { toast('墨水不足，需要 ' + cost); return false; }
-    state.ink -= cost;
-    o.cl++;
-    save();
-    refreshCounts();
-    toast('卡片升至 Lv ' + o.cl + '！');
+    if (cardUp) {
+      toast('卡片升至 ' + (o.hid ? 'EX' : TIERS[Math.min(5, o.cl)].code) + ' · Lv ' + o.cl + '！');
+      if (window.FX && FX.sprinkle) FX.sprinkle(30, Math.min(5, o.cl));
+    } else {
+      toast(w.w.charAt(i).toUpperCase() + ' 升至 Lv ' + lv[i] + '　·　卡片升级还差 ' +
+        lv.filter(function (x) { return x <= minLv; }).length + ' 个字母');
+    }
     return true;
   }
 
@@ -275,12 +558,14 @@
       owned++;
       if (BY_WORD[k] && starsOf(BY_WORD[k]) >= 3) mastered++;
     }
-    var map = { drawOwned: owned, drawInk: state.ink, mineOwned: owned,
-      mineMastered: mastered, mineInk: state.ink, drawStreak: state.streak || 1 };
+    var map = { mineOwned: owned,
+      mineMastered: mastered, mineInk: state.ink,
+      mineStreak: state.streak || 1 };
     for (var id in map) {
       var el = $(id);
-      if (el) el.textContent = map[id];
+      if (el) el.textContent = DEV_MODE && id === 'mineInk' ? '∞' : map[id];
     }
+    if (typeof renderTitle === 'function') renderTitle();
   }
 
   /* ── 基础 UI ──────────────────────────────────── */
@@ -290,6 +575,33 @@
     t.classList.add('show');
     clearTimeout(t._tm);
     t._tm = setTimeout(function () { t.classList.remove('show'); }, 1700);
+  }
+  var replaceDrawDialog = false;
+  function askReplaceDraw() {
+    if (replaceDrawDialog) return;
+    replaceDrawDialog = true;
+    var left = 0;
+    if (pileWrap) left = pileWrap.states.filter(function (s) { return s === 'back'; }).length;
+    var ov = mk('div', 'stat-dialog');
+    ov.innerHTML = '<div class="stat-dialog-card">' +
+      '<h3>换一组会失去当前组</h3>' +
+      '<section class="stat-dialog-explain"><p>' +
+        (left ? '这一组还有 <b>' + left + '</b> 张卡没翻开。' : '这一组还没抽完。') +
+        '换一组等于直接放弃它们。' +
+      '</p></section>' +
+      '<div class="draw-confirm-actions"><button class="btn draw-confirm-no">取消</button><button class="btn danger draw-confirm-yes">确定</button></div>' +
+      '</div>';
+    document.body.appendChild(ov);
+    function close() {
+      replaceDrawDialog = false;
+      ov.classList.add('out');
+      setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 190);
+    }
+    ov.querySelector('.draw-confirm-no').onclick = close;
+    ov.querySelector('.draw-confirm-yes').onclick = function () {
+      close();
+      draw(false, true);
+    };
   }
   function buzz(p) {
     try { if (navigator.vibrate) navigator.vibrate(p); } catch (e) {}
@@ -301,53 +613,240 @@
   }
 
   /* ── 抽卡流程 ─────────────────────────────────── */
-  function draw() {
+  // 进入抽卡页直接翻出 3 张，不再有"卡包 → 拆封"这一步
+  // silent = true 时（首次进入/刷新）不播光效，直接摆牌
+  function draw(silent, replace) {
     if (busy) return;
+    if (!replace && pileWrap && pileWrap.states.some(function (s) { return s === 'back'; })) {
+      askReplaceDraw();
+      return;
+    }
+    // 抽新卡前清理可能残留的拼写层，避免旧模块在换牌时短暂闪现。
+    var quiz = $('quiz');
+    if (quiz) quiz.classList.remove('open');
+    curWrite = null;
+    var cap = document.querySelector('.capw');
+    if (cap && !(window.Capture && Capture.isBusy())) {
+      cap.classList.remove('open', 'closing', 'dim', 'leave', 'fleeing', 'lit', 'tease-cap');
+    }
     if (quotaLeft() <= 0) {
-      toast('今日 ' + (FREE_PER_DAY + BONUS_CAP) + ' 次已用完，答题可换次数');
+      toast('今日抽卡已用完 · 完成每日任务或漫游胜利可获得更多');
       return;
     }
     quotaUse();
     busy = true;
+    if (!silent) sfx('shuffle');
     var btn = $('btnDraw');
     btn.disabled = true;
-    btn.textContent = '拆 封 中';
+    btn.textContent = '翻 开 中';
 
     var picks = rollBatch(3);
-    var dupInk = 0;
-    picks = picks.map(function (p) { dupInk += collect(p); return viewOf(p.w); });
     save();
     refreshCounts();
 
-    stage.innerHTML = '';
-    var pack = mk('div', 'pack');
-    pack.innerHTML = '<div class="seal">抽</div><div class="cap">轻 触 拆 封</div>';
-    stage.appendChild(pack);
-    $('hint').textContent = '拆封中…';
+    var best = picks.reduce(function (a, b) {
+      return ((b.hid ? 6 : b.lv) > (a.hid ? 6 : a.lv)) ? b : a;
+    }, picks[0]);
+    var bLv = best.hid ? 6 : best.lv;
 
-    requestAnimationFrame(function () { pack.classList.add('shake'); });
+    if (silent) {
+      showPile(picks, bLv, false);
+      return;
+    }
+    // 旧牌先整组收走，看起来是"把这副牌甩掉、再发一副新的"
+    sweepPile(function () {
+      // 再来一组不提前用特效暴露本组卡片等级，等级只在翻卡时展示。
+      showPile(picks, bLv, true);
+    });
+  }
+
+  // 旧牌收走：逐张向外甩出去并淡掉
+  function sweepPile(done) {
+    var pile = stage.querySelector('.pile');
+    if (!pile) { pileWrap = null; done(); return; }
+    pileWrap = null;
+    pile.classList.add('sweep');
+    var cards = pile.querySelectorAll('.pile-card');
+    for (var i = 0; i < cards.length; i++) {
+      cards[i].style.setProperty('--i', i);
+      cards[i].classList.add('sweeping');
+    }
     setTimeout(function () {
-      pack.classList.add('burst');
-      var r = pack.getBoundingClientRect();
-      var best = picks.reduce(function (a, b) { return (b.hid ? 6 : b.tier) > (a.hid ? 6 : a.tier) ? b : a; }, picks[0]);
-      var bLv = best.hid ? 6 : best.tier;
-      FX.burst(bLv, {
-        x: r.left + r.width / 2, y: r.top + r.height / 2,
-        count: best.hid ? 200 : best.tier >= 5 ? 150 : best.tier >= 4 ? 116 : best.tier >= 3 ? 76 : 46,
-      });
-      packFlash(best.tier, best.hid);
+      stage.innerHTML = '';
+      done();
+    }, 340);
+  }
+
+  function autoDraw() {
+    if (busy || pileWrap) return;
+    if (quotaLeft() <= 0) {
+      $('hint').textContent = '今日次数已用完 · 做每日任务换次数';
+      return;
+    }
+    draw(true);
+  }
+
+  // 拆封后：三张卡并排，点一张就放大翻面去拼
+  var pileWrap = null;
+
+  function showPile(picks, bLv, deal) {
+    pileWrap = { picks: picks, bLv: bLv, states: picks.map(function () { return 'back'; }) };
+    renderPile(deal);
+    busy = false;
+    renderDrawBtn();
+  }
+
+  function pileScale() {
+    var vw = Math.min(430, window.innerWidth || 390);
+    // 三张略微叠压：单张能大一圈
+    return Math.max(0.26, Math.min(0.46, (vw - 40) / (2.56 * Card.CARD_W)));
+  }
+
+  function renderPile(deal) {
+    if (!pileWrap) return;
+    stage.innerHTML = '';
+    var kh = pileScale();
+    var pile = mk('div', 'pile' + (deal ? ' dealing' : ''));
+    pileWrap.picks.forEach(function (p, i) {
+      var st = pileWrap.states[i];
+      var item = mk('div', 'pile-card ' + (st === 'blank' ? 'blank' : st) + (deal ? ' deal' : ''));
+      item.style.setProperty('--i', i);
+      var cw = Math.round(Card.CARD_W * kh);
+      item.style.width = cw + 'px';
+      item.style.height = Math.round(Card.CARD_H * kh) + 'px';
+      item.style.marginLeft = i ? -Math.round(cw * 0.22) + 'px' : '0';
+      if (st === 'blank') {
+        var BT = Card.BACK_THEMES[p.th] || Card.BACK_THEMES.all;
+        var sn = (state.shards && state.shards[p.w.w]) || 1;
+        item.style.setProperty('--th', BT.foil);
+        item.style.setProperty('--th-rgb', BT.rgb);
+        if (pileWrap.fresh === i) { item.classList.add('burn'); pileWrap.fresh = -1; }
+        item.innerHTML =
+          '<span class="bk-glyph">' + p.w.w.charAt(0).toUpperCase() + '</span>' +
+          '<span class="bk-tag">FRAGMENT</span>' +
+          '<span class="bk-seal"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5 14 9.2l7 .8-5.4 4.4 1.8 6.9L12 17.5l-5.4 3.8 1.8-6.9L3 10l7-.8z"/></svg></span>' +
+          '<em>' + p.w.w + '</em>' +
+          '<span class="bk-rule"></span>' +
+          '<i>遗落残页' + (sn > 1 ? ' · ×' + sn : '') + '</i>' +
+          '<span class="bk-ember"></span>';
+      } else {
+        var node;
+        if (st === 'front') {
+          node = Card.render(Object.assign({}, p.w, { lvl: p.lv, hid: !!p.hid }),
+            { mastery: 0, levels: p.w.w.split('').map(function () { return p.lv; }) });
+        } else {
+          node = Card.renderBack(p.lv, p.th);
+        }
+        node.style.transform = 'scale(' + kh.toFixed(3) + ')';
+        item.appendChild(node);
+        if (st === 'back') item.onclick = function () { openPile(i); };
+      }
+      pile.appendChild(item);
+    });
+    stage.appendChild(pile);
+    if (deal) {
+      pileWrap.picks.forEach(function (_, di) { setTimeout(function () { sfx('deal', di); }, 40 + di * 90); });
       setTimeout(function () {
-        showDeck(picks);
-        if (dupInk) toast('重复卡已转化 · 墨水 +' + dupInk);
-        busy = false;
-        renderQuota();
-        buzz(best.tier >= 4 ? [16, 40, 16, 40, 30] : 12);
-      }, 360);
-    }, 620);
+        if (!pile.parentNode) return;
+        pile.classList.remove('dealing');
+        var cs = pile.querySelectorAll('.deal');
+        for (var i = 0; i < cs.length; i++) cs[i].classList.remove('deal');
+      }, 760);
+    }
+    var left = pileWrap.states.filter(function (s) { return s === 'back'; }).length;
+    var noQuota = quotaLeft() <= 0;
+    $('hint').textContent = left
+      ? '还剩 ' + left + ' 张 · 点一张直接翻开'
+      : (noQuota ? '今日抽卡次数已用完 · 去漫游继续攒词灵' : '');
+    renderDrawBtn();
+  }
+
+  function openPile(i) {
+    if (!pileWrap || pileWrap.states[i] !== 'back') return;
+    // 上一张的弹层还在退场时不能再开，否则旧的关闭回调会把新弹层一起关掉
+    if (busy || (window.Capture && Capture.isBusy())) return;
+    var nodes = stage.querySelectorAll('.pile-card');
+    var item = nodes[i];
+    // 用未旋转的真实尺寸做共享元素基准，旋转只作为初始角度带上
+    var rect = null;
+    if (item) {
+      var b = item.getBoundingClientRect();
+      var w = item.offsetWidth, h = item.offsetHeight;
+      rect = { left: b.left + b.width / 2 - w / 2, top: b.top + b.height / 2 - h / 2, width: w, height: h };
+    }
+    // 共享元素：带上这张卡在扇形里的旋转角，飞出去时不会突然摆正
+    var deg = i === 0 ? -4 : i === 2 ? 4 : 0;
+    var pick = pileWrap.picks[i];
+    var bLv = pileWrap.bLv;
+    busy = true;
+    $('hint').textContent = '收服词灵…';
+    // 原卡先隐形，避免"两张卡同时在"的穿帮
+    if (item) item.classList.add('lifted');
+
+    // 结算瞬间就把这一格换成正面/残页，不等动画
+    function applyResult(res) {
+      if (!pileWrap) return;
+      var dupInk = 0, gainXp = 0;
+      if (res.ok) {
+        dupInk = collect(res.pick);
+        pileWrap.states[i] = 'front';
+        if (res.quality === 'perfect') state.ink += 5;
+        // 熟练度：拼写成功才推动成长，收益受每日递减限制
+        gainXp = addXp(pick.w, res.quality === 'perfect' ? XP_PER_PERFECT : XP_PER_COPY);
+        addDaily('spell');
+        if (reviewDue(pick.w)) addDaily('review');
+      } else {
+        // 主动放弃不产出残页，直接放回卡池；超时/失败才留下残页线索
+        if (res.quality !== 'abandoned') addShard(res.pick.w);
+        pileWrap.states[i] = 'blank';
+        pileWrap.fresh = i;
+      }
+      save();
+      checkAchievementUnlocks();
+      refreshCounts();
+      renderQuota();
+      renderPile();
+      if (dupInk) toast('重复卡已转化 · 成长点 +' + dupInk);
+      else if (res.ok) {
+        var msg = [];
+        if (res.quality === 'perfect') msg.push('完美收服');
+        if (gainXp > 0) msg.push('熟练度 +' + gainXp);
+        else msg.push('今日收益已满 · 练习照常记录');
+        toast(msg.join(' · '));
+      }
+    }
+
+    try {
+      Capture.run(pick, {
+        rect: rect,
+        rot: deg,
+        onSettle: applyResult,
+        onDone: function (res) {
+          busy = false;
+          renderQuota();
+          if (item) item.classList.remove('lifted');
+          buzz(bLv >= 4 ? [16, 40, 16, 40, 30] : 12);
+        }
+      });
+    } catch (e) {
+      busy = false;
+      if (item) item.classList.remove('lifted');
+      renderPile();
+    }
+  }
+
+  function hintText(t) { var h = $('hint'); if (h) h.textContent = t; }
+  function hintMsg(t) { hintText(t); }
+
+  // 残页：逃走的词灵留下的线索
+  function addShard(w) {
+    state.shards = state.shards || {};
+    state.shards[w.w] = (state.shards[w.w] || 0) + 1;
   }
 
   function packFlash(tier, hid) {
     var lv = hid ? 6 : tier;
+    sfx('reveal', lv);
     var col = hid ? '#ffb3d0' : TIERS[tier].color;
     // 暗场：等级越高压得越沉，让光效跳出来
     var veil = mk('div', 'fx-veil');
@@ -434,6 +933,8 @@
     flip.classList.add('flipped');
     var w = flip._word;
     var lv = w.hid ? 6 : w.tier;
+    sfx('flip', 420);
+    if (lv < 5) sfx('reveal', lv);
     var r = flip.getBoundingClientRect();
     FX.burst(lv, {
       x: r.left + r.width / 2, y: r.top + r.height * 0.4,
@@ -513,6 +1014,7 @@
 
   function switchTab(name) {
     if (!SCREENS[name]) return;
+    if (curTab !== name) sfx('tab');
     curTab = name;
     for (var k in SCREENS) {
       var s = $(SCREENS[k]);
@@ -523,64 +1025,25 @@
       tabs[i].classList.toggle('on', tabs[i].getAttribute('data-tab') === name);
     }
     if (name === 'expedition') renderExpedition();
+    else pauseHangarPreview();
     if (name === 'mine') renderMine();
-    if (name === 'draw') { refreshCounts(); renderQuota(); updateDailyBrief(); }
+    if (name === 'draw') { refreshCounts(); renderQuota(); updateDailyBrief(); autoDraw(); }
   }
 
-  /* ── 远征页 ───────────────────────────────────── */
-  var expKind = 'all';
-  var expSortMode = 'lv';
+  /* ── 漫游页 ───────────────────────────────────── */
   var expPick = null;
   var expRenderToken = 0;
-  // 分类按卡片等级，不再按所谓"卡片类型"（一张卡本来就有多种字母弹种）
-  var EXP_KINDS = [
-    ['all', '全部'], ['low', 'Lv1-2'], ['mid', 'Lv3-4'], ['high', 'Lv5'], ['ex', 'EX']
-  ];
+  var expKinds = [];   // 出战选卡的属性筛选，最多 2 个
 
-  function shotKindOf(w) {
-    if (Card.dominantKind) return Card.dominantKind(w);
-    var p = String(w.pos || '').toLowerCase();
-    if (p.indexOf('adv') === 0) return 'shield';
-    if (p.indexOf('adj') === 0) return 'frost';
-    if (p.indexOf('v') === 0) return 'pierce';
-    return 'blast';
-  }
-
-  function renderExpTabs() {
-    var box = $('expTabs');
-    if (!box) return;
-    box.innerHTML = '';
-    EXP_KINDS.forEach(function (k) {
-      var b = mk('button', expKind === k[0] ? 'on' : '');
-      b.type = 'button';
-      b.textContent = k[1];
-      b.onclick = function () { expKind = k[0]; renderExpedition(); };
-      box.appendChild(b);
-    });
-  }
-
+  // 等级优先，同级按最近获得
   function expPool() {
     var list = [];
     for (var i = 0; i < WORDS.length; i++) {
       if (state.owned[WORDS[i].w]) list.push(viewOf(WORDS[i]));
     }
-    if (expSortMode === 'new') {
-      list.sort(function (a, b) { return (rec(b).at || 0) - (rec(a).at || 0); });
-    } else {
-      list.sort(function (a, b) {
-        return (b.lvl || 1) - (a.lvl || 1) || (rec(b).at || 0) - (rec(a).at || 0);
-      });
-    }
-    if (expKind !== 'all') {
-      list = list.filter(function (w) {
-        var lv = w.lvl || 1;
-        if (expKind === 'ex') return !!w.hid;
-        if (expKind === 'high') return !w.hid && lv >= 5;
-        if (expKind === 'mid') return lv === 3 || lv === 4;
-        if (expKind === 'low') return lv <= 2;
-        return true;
-      });
-    }
+    list.sort(function (a, b) {
+      return (b.hid ? 1 : 0) - (a.hid ? 1 : 0) || (b.lvl || 1) - (a.lvl || 1) || (rec(b).at || 0) - (rec(a).at || 0);
+    });
     return list;
   }
 
@@ -592,7 +1055,8 @@
     box.style.height = Math.round(Card.CARD_H * scale) + 'px';
     // 圆角跟着缩放走，否则和外框对不上会被切掉
     box.style.borderRadius = Math.max(3, Math.round(16 * scale)) + 'px';
-    var inner = Card.render(w, { mastery: starsOf(w), levels: levelsOf(w) });
+    // 缩到 220 以下用紧凑版：关键数据（等级 / 稀有度 / 武器 / 单词）放大
+    var inner = Card.render(w, { mastery: starsOf(w), levels: levelsOf(w), compact: width < 220, lite: true });
     inner.classList.add('cthumb-in');
     inner.style.transform = 'scale(' + scale + ')';
     box.appendChild(inner);
@@ -610,90 +1074,329 @@
     }
     if (battleQuotaLeft() <= 0) {
       btn.disabled = true;
-      info.textContent = '今日远征次数已用完，默写可换次数';
+      info.textContent = '今日漫游次数已用完，默写可换次数';
       return;
     }
     btn.disabled = false;
-    info.innerHTML = '已选 <b>' + w.w + '</b>　·　' +
-      (w.hid ? 'EX 隐藏款' : 'Lv' + (w.lvl || 1)) +
-      '　·　' + (w.w.length) + ' 字母';
+    var wk = Card.weaponKinds ? Card.weaponKinds(w, levelsOf(w)) : null;
+    var chip = function (tag, k) {
+      return '<i class="ep-chip" style="--c:' + Card.KINDS[k].c + '"><em>' + tag + '</em>' + Card.KINDS[k].nm + '</i>';
+    };
+    info.innerHTML = '<b class="ep-word">' + w.w + '</b>' +
+      (wk ? '<span class="ep-chips">' + chip('主', wk.main) + (wk.sub ? chip('副', wk.sub) : '') + '</span>' : '');
   }
 
+  function renderRegionStrip() {
+    var strip = $('regionStrip');
+    if (!strip) {
+      strip = mk('div', 'region-strip');
+      strip.id = 'regionStrip';
+      var map = $('expMap');
+      if (!map) return;
+      map.insertBefore(strip, map.firstChild);
+    }
+    if (!state.region) state.region = REGIONS[0].id;
+    strip.innerHTML = '';
+    REGIONS.forEach(function (r) {
+      var open = regionUnlocked(r);
+      var on = state.region === r.id;
+      var b = mk('button', 'region' + (on ? ' on' : '') + (open ? '' : ' lock'));
+      b.innerHTML = '<b>' + r.nm + '</b><span>' + (open ? r.place : '🔒 未解锁') + '</span>';
+      b.onclick = function () {
+        if (!open) {
+          var prev = REGIONS[REGIONS.indexOf(r) - 1];
+          toast('先通关「' + prev.place + '」的第 5 关，才能前往 ' + r.place);
+          sfx('deny');
+          return;
+        }
+        if (state.region !== r.id) { expStage = Math.min(4, stageProg(r.id).c); sfx('unlock'); }
+        state.region = r.id;
+        save();
+        renderRegionStrip();
+        renderExpedition();
+      };
+      strip.appendChild(b);
+    });
+    // 地区变多后，自动把当前地区滚进可视区
+    var cur = strip.querySelector('.region.on');
+    if (cur && strip.scrollTo) {
+      try {
+        strip.scrollTo({
+          left: Math.max(0, cur.offsetLeft - strip.clientWidth / 2 + cur.offsetWidth / 2),
+          behavior: 'smooth',
+        });
+      } catch (e) { strip.scrollLeft = Math.max(0, cur.offsetLeft - 80); }
+    }
+  }
+
+  /* ── 关卡路线：每个地区 5 关，通关解锁下一关 ─────── */
+  var expStage = -1;
+  var STAGE_REC = ['N', 'R', 'SR', 'SSR', 'UR'];
+  function stageProg(rid) {
+    state.stages = state.stages || {};
+    return state.stages[rid] || (state.stages[rid] = { c: 0, s: [0, 0, 0, 0, 0] });
+  }
+  function starStr(n) {
+    var s = '';
+    for (var i = 0; i < 3; i++) s += i < n ? '★' : '☆';
+    return s;
+  }
+  function renderStageMap() {
+    var strip = $('regionStrip');
+    if (!strip || !window.StageArt) return;
+    var wrap = $('stageMap');
+    if (!wrap) {
+      wrap = mk('div', 'stage-map');
+      wrap.id = 'stageMap';
+      strip.parentNode.insertBefore(wrap, strip.nextSibling);
+    }
+    var here = regionById(state.region || REGIONS[0].id);
+    var pg = stageProg(here.id);
+    if (expStage < 0 || expStage > pg.c) expStage = Math.min(4, pg.c);
+    var html = '<div class="sm-path">';
+    for (var i = 0; i < 5; i++) {
+      var open = i <= pg.c, done = i < pg.c;
+      html += '<button class="sm-node' + (i === expStage ? ' on' : '') + (open ? '' : ' lock') +
+        (done ? ' done' : '') + (i === 4 ? ' boss' : '') + '" data-i="' + i + '">' +
+        '<b>' + (open ? (i + 1) : '🔒') + '</b><em>' + (done ? starStr(pg.s[i] || 0) : '') + '</em></button>';
+      if (i < 4) html += '<i class="sm-line' + (done ? ' done' : '') + '"></i>';
+    }
+    html += '</div><div class="sm-info"></div>';
+    wrap.innerHTML = html;
+    var nodes = wrap.querySelectorAll('.sm-node');
+    for (var k = 0; k < nodes.length; k++) {
+      nodes[k].onclick = function () {
+        var n = +this.getAttribute('data-i');
+        if (n > pg.c) { toast('先通关第 ' + pg.c + ' 关'); return; }
+        expStage = n;
+        renderStageMap();
+      };
+    }
+    // 关卡卡片只留三样：关名、推荐品阶 + 图鉴进度、四个敌人头像（点头像看名字）
+    var th = StageArt.theme(here.id, expStage);
+    var info = wrap.querySelector('.sm-info');
+    var list = [[th.drone, '小怪'], [th.shooter, '射手'], [th.elite, '精英'], [th.boss, '首领']];
+    var cx = state.codex || {};
+    var gotN = list.filter(function (f) { return cx[f[0]]; }).length;
+    info.innerHTML = '<div class="si-head"><b>' + th.title + '</b>' +
+      '<span class="si-rec">' + STAGE_REC[expStage] + '+</span>' +
+      '<span class="si-codex">图鉴 ' + gotN + '/4</span></div><div class="si-foes"></div>';
+    var foes = info.querySelector('.si-foes');
+    list.forEach(function (f) {
+      var got = !!cx[f[0]];
+      var d = mk('button', 'si-foe' + (f[1] === '首领' ? ' boss' : '') + (got ? ' got' : ' miss'));
+      d.type = 'button';
+      var c = document.createElement('canvas');
+      c.width = c.height = 32;
+      var g2 = c.getContext('2d');
+      g2.imageSmoothingEnabled = false;
+      StageArt.draw(g2, f[0], 16, 16, 32);
+      d.appendChild(c);
+      var role = mk('i', '');
+      role.textContent = f[1];
+      d.appendChild(role);
+      d.onclick = function () { openMonsterDetail(f[0], true); };
+      foes.appendChild(d);
+    });
+  }
+
+  // 漫游页只放地图 + 当前出战卡；换卡在弹出的列表里选
   function renderExpedition() {
-    if (!$('expList')) return;
-    var token = ++expRenderToken;
-    renderExpTabs();
+    if (!$('expMap')) return;
+    renderRegionStrip();
+    renderStageMap();
     renderBattleQuota();
+    renderExpPick();
+    requestAnimationFrame(layoutStage);
+  }
 
+  function renderExpPick() {
     var pool = expPool();
-    var box = $('expList');
-    box.innerHTML = '';
-    $('expCount').textContent = pool.length + ' 张可选';
-
-    var sortBtn = $('expSort');
-    sortBtn.textContent = expSortMode === 'lv' ? '等级优先' : '最近获得';
-    sortBtn.onclick = function () {
-      expSortMode = expSortMode === 'lv' ? 'new' : 'lv';
-      renderExpedition();
-    };
-
+    var slot = $('expPickCard');
+    var btn = $('expPickBtn');
+    slot.innerHTML = '';
     if (!pool.length) {
       expPick = null;
-      box.innerHTML =
-        '<div class="exp-empty">' +
-          '<p>' + (Object.keys(state.owned).length ? '这个等级还没有词卡' : '还没有词卡') + '</p>' +
-          '<span>先去抽卡，再来远征</span>' +
-          '<button class="btn" id="expGoDraw">去抽卡</button>' +
-        '</div>';
-      var go = $('expGoDraw');
-      if (go) go.onclick = function () { switchTab('draw'); };
+      slot.innerHTML = '<span class="exp-pick-empty">?</span>';
+      btn.onclick = function () { switchTab('draw'); };
       syncExpDock(null);
+      $('expPickInfo').textContent = '还没有词卡，先去抽卡';
+      renderShipPreview(null);
       return;
     }
-
     var found = null;
     for (var i = 0; i < pool.length; i++) if (pool[i].w === expPick) found = pool[i];
     if (!found) { found = pool[0]; expPick = found.w; }
+    slot.appendChild(cardThumb(found, 64));
+    btn.onclick = openExpSheet;
+    syncExpDock(found);
+    renderShipPreview(found);
+  }
 
-    var width = Math.min(112, Math.floor((Math.min(430, window.innerWidth) - 36 - 20) / 3));
+  // 离开漫游页：停止预览并隐藏整屏图层，避免和其它页面叠在一起
+  function pauseHangarPreview() {
+    var bg = $('expBg');
+    if (bg) bg.classList.remove('on');
+    var cv = $('expShip');
+    if (cv && cv._raf) { cancelAnimationFrame(cv._raf); cv._raf = null; }
+  }
+
+  // 漫游页中间的机库：展示当前卡满火力形态并持续开火
+  function renderShipPreview(card) {
+    var cv = $('expShip');
+    if (!cv || !window.Battle || !Battle.preview) return;
+    var bg = $('expBg');
+    if (bg) bg.classList.add('on');
+    var tag = $('expShipTag');
+    if (!card) {
+      if (cv._raf) { cancelAnimationFrame(cv._raf); cv._raf = null; }
+      cv._lastCard = null;
+      var g = cv.getContext('2d');
+      if (g) g.clearRect(0, 0, cv.width, cv.height);
+      if (tag) tag.innerHTML = '';
+      return;
+    }
+    var lv = levelsOf(card);
+    var pv = Battle.preview(cv, card, lv, { bottom: stageGap() });
+    // 战斗是覆盖层，进战斗时会暂停这台预览；退出时按这份参数接回去
+    cv._lastCard = card; cv._lastLv = lv; cv._lastOpts = { bottom: stageGap() };
+    layoutStage();
+    // dock 高度在字体/布局稳定后才准，下一帧补测一次
+    requestAnimationFrame(layoutStage);
+    if (tag) tag.innerHTML = '<span>满火力</span><b>' + powerPips(pv) + '</b><span>觉醒</span><span>双层护盾</span>';
+  }
+
+  // 火力格：卡片等级决定格数
+  function powerPips(pv) {    return pv && pv.maxP ? new Array(pv.maxP + 1).join('▮') : '';
+  }
+
+  // 按底部 dock 实际高度给飞机留出舞台：不算布局高度，只加滚动内边距
+  function dockH() {
+    var d = document.querySelector('#screenExpedition .exp-dock');
+    return d ? d.offsetHeight : 150;
+  }
+  // dock 顶到屏幕底的距离（含底部导航栏）；飞机和标签都在全屏 fixed 图层里，按视口底部定位
+  function dockTopGap() {
+    var d = document.querySelector('#screenExpedition .exp-dock');
+    if (!d) return dockH();
+    var r = d.getBoundingClientRect();
+    return r.height ? Math.max(0, window.innerHeight - r.top) : dockH();
+  }
+  // 飞机中心距 dock 顶 120px（矮屏 96px）：护盾下沿约留 70px；标签在 dock 上方 14px
+  function shipLift() { return (window.innerHeight || 800) < 720 ? 96 : 120; }
+  function stageGap() { return dockTopGap() + shipLift(); }
+  function layoutStage() {
+    if (curTab !== 'expedition') return;
+    var h = dockH(), gap = dockTopGap(), lift = shipLift();
+    var map = $('expMap');
+    if (map) map.style.paddingBottom = (h + lift + 80) + 'px';   // 内容卷到飞机上方，不挤压地图高度
+    var tag = $('expShipTag');
+    if (tag) tag.style.bottom = (gap + 14) + 'px';
+    var cv = $('expShip');
+    if (cv && cv._setBottom) cv._setBottom(gap + lift);
+  }
+
+  window.addEventListener('resize', function () { layoutStage(); });
+
+  function expKindsOf(w) {
+    var wk = Card.weaponKinds ? Card.weaponKinds(w, levelsOf(w)) : { main: Card.dominantKind(w), sub: null };
+    return [wk.main, wk.sub].filter(Boolean);
+  }
+  // 顶部属性筛选：选 1 个 = 主/副武器含该属性；选 2 个 = 主副正好是这对组合
+  function renderExpFilter() {
+    var box = $('expFilter');
+    if (!box) return;
+    box.innerHTML = '';
+    var all = mk('button', 'chip' + (expKinds.length ? '' : ' on'));
+    all.textContent = '全部';
+    all.onclick = function () { sfx('tap'); expKinds = []; openExpSheet(true); };
+    box.appendChild(all);
+    Object.keys(Card.KINDS).forEach(function (k) {
+      var K = Card.KINDS[k], on = expKinds.indexOf(k) >= 0;
+      var b = mk('button', 'chip ek' + (on ? ' on' : ''));
+      b.style.setProperty('--k', K.c);
+      b.innerHTML = '<i></i>' + K.nm;
+      b.onclick = function () {
+        sfx('tap');
+        var i = expKinds.indexOf(k);
+        if (i >= 0) expKinds.splice(i, 1);
+        else {
+          if (expKinds.length >= 2) { expKinds.shift(); toast('最多同时筛选 2 种属性'); }
+          expKinds.push(k);
+        }
+        openExpSheet(true);
+      };
+      box.appendChild(b);
+    });
+  }
+  function openExpSheet(refilter) {
+    var pool = expPool().filter(function (w) {
+      if (!expKinds.length) return true;
+      var ks = expKindsOf(w);
+      return expKinds.every(function (k) { return ks.indexOf(k) >= 0; });
+    });
+    var box = $('expList');
+    var token = ++expRenderToken;
+    box.innerHTML = '';
+    renderExpFilter();
+    $('expCount').textContent = pool.length + ' 张';
+    if (!pool.length) box.innerHTML = '<div class="exp-empty">没有符合这个组合的词卡</div>';
+    var width = Math.floor((Math.min(430, window.innerWidth) - 36 - 10) / 2);
     var idx = 0;
     (function chunk() {
       if (token !== expRenderToken) return;
-      var end = Math.min(pool.length, idx + 24);
-      for (; idx < end; idx++) box.appendChild(buildExpCard(pool[idx], width, box));
+      var end = Math.min(pool.length, idx + 12);
+      for (; idx < end; idx++) {
+        try { box.appendChild(buildExpCard(pool[idx], width)); } catch (e) { if (window.console) console.error(e); }
+      }
       if (idx < pool.length) requestAnimationFrame(chunk);
     })();
-    syncExpDock(found);
+    if (refilter === true) return;
+    $('expSheet').classList.add('open');
+    sfx('sheet');
+  }
+  function closeExpSheet() {
+    expRenderToken++;
+    $('expSheet').classList.remove('open');
+    sfx('sheetClose');
   }
 
-  function buildExpCard(w, width, box) {
+  function buildExpCard(w, width) {
     var item = mk('button', 'exp-card' + (w.w === expPick ? ' on' : ''));
     item.type = 'button';
-    var thumb = cardThumb(w, width);
-    item.appendChild(thumb);
-
-    // 只保留等级标记，预览不再堆属性
-    var lv = mk('span', 'exp-lv' + (w.hid ? ' hid' : ''));
-    lv.textContent = w.hid ? 'EX' : 'Lv' + (w.lvl || 1);
-    thumb.appendChild(lv);
-
-    var nm = mk('span', 'exp-nm');
-    nm.textContent = w.w;
-    item.appendChild(nm);
-
+    item.appendChild(cardThumb(w, width));
+    var tag = mk('div', 'exp-kinds');
+    tag.innerHTML = expKindsOf(w).map(function (k, i) {
+      return '<span style="color:' + Card.KINDS[k].c + '">' + (i ? '副 ' : '主 ') + Card.KINDS[k].nm + '</span>';
+    }).join('');
+    item.appendChild(tag);
     item.onclick = function () {
       expPick = w.w;
-      var all = box.querySelectorAll('.exp-card');
-      for (var ai = 0; ai < all.length; ai++) all[ai].classList.remove('on');
-      item.classList.add('on');
-      syncExpDock(w);
+      closeExpSheet();
+      renderExpPick();
     };
     return item;
   }
 
   function battleApi() {
     return {
+      region: regionById(state.region || REGIONS[0].id),
+      stage: Math.max(0, expStage),
+      codexHas: function (id) { return !!(state.codex && state.codex[id]); },
       getOwned: function () { return state.owned; },
+      // 战斗中拼满单词：每日最多 10 次计入熟练度
+      onWordSpelled: function (w) {
+        var t = todayStr();
+        if (state.quota.d !== t) state.quota = { d: t, used: 0, bonus: 0, battleUsed: 0, battleBonus: 0 };
+        var q = state.quota.bsp || 0;
+        if (q >= 10) return 0;
+        var card = BY_WORD[w && w.w ? w.w : w];
+        if (!card) return 0;
+        state.quota.bsp = q + 1;
+        var g = addXp(card, 8);
+        save();
+        return g;
+      },
       levelsOf: levelsOf,
       viewOf: viewOf,
       starsOf: starsOf,
@@ -702,13 +1405,16 @@
         var o = recWrite(w);
         o.wr++;
         o.m = starsOf(w);
+        addXp(w, XP_PER_WRITE);
         save();
         refreshCounts();
-        rewardWrite();
+        rewardWrite(XP_PER_WRITE);
+        addDaily('spell');
+        if (reviewDue(w)) addDaily('review');
       },
       onStart: function () {
         if (battleQuotaLeft() <= 0) {
-          toast('今日远征次数已用完，默写可换次数');
+          toast('今日漫游次数已用完，默写可换次数');
           return false;
         }
         battleQuotaUse();
@@ -724,12 +1430,42 @@
         state.quota.battleBonus = (state.quota.battleBonus || 0) + n;
         var ink = (info && info.ink) || 0;
         state.ink += ink;
+        if (info && info.win && info.region != null) {
+          var pg0 = stageProg(info.region), before = pg0.s[4] || 0;
+          var pg = pg0, si = info.stage || 0;
+          pg.s[si] = Math.max(pg.s[si] || 0, info.stars || 1);
+          if (pg.c <= si) { pg.c = Math.min(5, si + 1); expStage = Math.min(4, pg.c); }
+          if (!before && (pg.s[4] || 0) > 0) Sfx.play('unlock');
+        }
+        // 怪物图鉴：新收录每种 +10 成长点
+        var codexNew = 0;
+        state.codex = state.codex || {};
+        ((info && info.codex) || []).forEach(function (id) {
+          if (!state.codex[id]) { codexNew++; ink += 10; state.ink += 10; }
+          state.codex[id] = (state.codex[id] || 0) + 1;
+        });
+        var winXp = 0;
+        if (info && info.win && BY_WORD[info.word]) winXp = addXp(BY_WORD[info.word], 12);
+        state.stats = state.stats || { battles: 0, wins: 0, kills: 0, stars: 0 };
+        state.stats.battles++;
+        state.stats.kills += (info && info.kills) || 0;
+        if (info && info.win) {
+          state.stats.wins++;
+          state.stats.stars += info.stars || 0;
+        }
         if (info) pushRecord(info);
+        addDaily('battle');
+        var drop = false;
+        if (info && info.win) {
+          addDaily('win');
+          if ((info.stage === 4 || Math.random() < DROP_RATE) && grantBonus()) drop = true;
+        }
         save();
+        checkAchievementUnlocks();
         renderBattleQuota();
         refreshCounts();
         if (curTab === 'mine') renderMine();
-        toast('远征奖励 · 墨水 +' + ink + (n ? ' · 远征 +' + n : ''));
+        toast('漫游奖励 · 成长点 +' + ink + (drop ? ' · 抽卡券 +1' : '') + (codexNew ? ' · 新图鉴 ×' + codexNew : '') + (winXp ? ' · 熟练度 +' + winXp : '') + (n ? ' · 漫游 +' + n : ''));
       },
     };
   }
@@ -738,8 +1474,9 @@
     if (!expPick) { toast('先选择一张词卡'); return; }
     var w = BY_WORD[expPick];
     if (!w) { toast('词卡不存在'); return; }
-    if (battleQuotaLeft() <= 0) { toast('今日远征次数已用完，默写可换次数'); return; }
-    if (!window.Battle || !window.Battle.start) { toast('远征模块未加载'); return; }
+    if (battleQuotaLeft() <= 0) { toast('今日漫游次数已用完，默写可换次数'); return; }
+    if (!window.Battle || !window.Battle.start) { toast('漫游模块未加载'); return; }
+    sfx('start');
     window.Battle.start([viewOf(w)], battleApi());
   }
 
@@ -754,6 +1491,8 @@
       strong: info.strong || 0,
       ink: info.ink || 0,
       grade: info.grade || '',
+      stageName: info.stageName || '',
+      stars: info.stars || 0,
     });
     if (state.records.length > 30) state.records.length = 30;
   }
@@ -761,29 +1500,175 @@
   /* ── 我的：图鉴 / 战绩 / 成就 ─────────────────── */
   var curPane = 'book';
 
+  /* ── 个人称号：综合掌握数、连续天数与正确率 ─────────── */
+  var TITLES = [
+    { nm: '未开卷', owned: 0 },
+    { nm: '初读词册', owned: 1 },
+    { nm: '行脚书吏', mastered: 3 },
+    { nm: '街区采词人', mastered: 8, streak: 3 },
+    { nm: '城镇词匠', mastered: 15, streak: 5 },
+    { nm: '港口藏书家', mastered: 25, streak: 7 },
+    { nm: '跨洲词使', mastered: 40, streak: 10 },
+    { nm: '世界词志编修', mastered: 60, streak: 14 },
+  ];
+  function titleStat() {
+    var owned = 0, mastered = 0;
+    for (var k in state.owned) {
+      owned++;
+      if (BY_WORD[k] && starsOf(BY_WORD[k]) >= 3) mastered++;
+    }
+    return { owned: owned, mastered: mastered, streak: state.streak || 1 };
+  }
+  function titleInfo() {
+    var s = titleStat();
+    var cur = TITLES[0], idx = 0;
+    for (var i = 0; i < TITLES.length; i++) {
+      var t = TITLES[i];
+      if ((t.owned || 0) <= s.owned && (t.mastered || 0) <= s.mastered && (t.streak || 0) <= s.streak) {
+        cur = t; idx = i;
+      }
+    }
+    return { cur: cur.nm, idx: idx, stat: s };
+  }
+  // 称号徽记：图标随称号变化，边框材质由 CSS .t0~.t7 逐级升级
+  var TITLE_ICONS = [
+    '<path d="M6.5 4H18v14H7.5A2 2 0 0 0 5.5 20V5a1 1 0 0 1 1-1Z"/><path d="M5.5 20a2 2 0 0 1 2-2H18v3H7.5a2 2 0 0 1-2-1Z"/>',
+    '<path d="M3 5.5c3-1 6-.8 9 1.2 3-2 6-2.2 9-1.2V19c-3-1-6-.8-9 1.2-3-2-6-2.2-9-1.2Z"/><path d="M12 6.7v13.5"/>',
+    '<path d="M19.5 3.5C13 4.5 8.6 8.8 7 15.5L5 20l4.3-2.2c6.6-1.8 10.6-6.2 10.2-14.3Z"/><path d="M7.5 16.5l6-6"/>',
+    '<path d="M9 4h6M12 2v2"/><path d="M8 7h8l-1.2 11H9.2Z"/><path d="M10 21h4M12 10.5v4"/>',
+    '<path d="M10.5 3.5h7l2.5 3-2.5 1.5h-7Z"/><path d="M13 8l-8.5 10.5 2 2L15 10"/>',
+    '<circle cx="12" cy="5" r="2"/><path d="M12 7v14M8 10.5h8"/><path d="M4 13.5c0 4.2 3.6 7.5 8 7.5s8-3.3 8-7.5"/>',
+    '<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c3 3 3 14 0 17M12 3.5c-3 3-3 14 0 17"/>',
+    '<path d="M4 17.5 3 7l5 4 4-6.5 4 6.5 5-4-1 10.5Z"/><path d="M4.5 20.5h15"/>',
+  ];
+  function titleEmblem(i, extra) {
+    return '<span class="tm t' + i + (extra ? ' ' + extra : '') + '"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">' +
+      TITLE_ICONS[i] + '</svg></span>';
+  }
+  function renderTitle() {
+    var n = document.querySelector('.pf-name');
+    if (!n) return;
+    var t = titleInfo();
+    n.textContent = t.cur;
+    n.className = 'pf-name t' + t.idx;
+    var rk = $('pfRank');
+    if (rk) rk.textContent = t.idx + 1;
+    var em = $('pfEmblem');
+    if (em) em.outerHTML = titleEmblem(t.idx).replace('<span class="tm', '<span id="pfEmblem" class="tm');
+    var av = $('pfAvatar');
+    if (av) av.className = 'pf-avatar t' + t.idx;
+    renderMineActs();
+  }
+  function renderMineActs() {
+    var rs = $('mineRecSub'), as = $('mineAchSub');
+    if (rs) {
+      var list = state.records || [], wins = list.filter(function (r) { return r.win; }).length;
+      rs.textContent = list.length ? list.length + ' 场 · 胜率 ' + Math.round(wins / list.length * 100) + '%' : '暂无记录';
+    }
+    if (as) {
+      var al = achievementList(), got = al.filter(function (a) { return a.cur >= a.max; }).length;
+      as.textContent = got + ' / ' + al.length;
+    }
+  }
+  function renderTitleSheet(box) {
+    var t = titleInfo(), s = t.stat;
+    var html = '<div class="tt-hero t' + t.idx + '">' + titleEmblem(t.idx, 'lg') +
+      '<div class="tt-hero-t"><b class="t' + t.idx + '">' + t.cur + '</b><span>已解锁 ' + (t.idx + 1) + ' / ' + TITLES.length + ' 个称号</span></div></div>' +
+      '<div class="tt-list">';
+    TITLES.forEach(function (ti, i) {
+      var on = i <= t.idx, conds = [];
+      if (ti.owned) conds.push(['收录', s.owned, ti.owned, '张']);
+      if (ti.mastered) conds.push(['掌握', s.mastered, ti.mastered, '词']);
+      if (ti.streak) conds.push(['连续', s.streak, ti.streak, '天']);
+      var ch = conds.length ? conds.map(function (c) {
+        var ok = c[1] >= c[2];
+        return '<span class="' + (ok ? 'ok' : '') + '">' + c[0] + ' ' + (on ? c[2] : Math.min(c[1], c[2]) + '/' + c[2]) + ' ' + c[3] + '</span>';
+      }).join('') : '<span class="ok">初始称号</span>';
+      html += '<div class="tt t' + i + (on ? ' on' : '') + (i === t.idx ? ' cur' : '') + '">' + titleEmblem(i) +
+        '<div class="tt-main"><div class="tt-top"><b>' + ti.nm + '</b><i>Lv.' + (i + 1) + '</i>' +
+        (i === t.idx ? '<em>当前</em>' : '') + '</div><div class="tt-cond">' + ch + '</div></div>' +
+        '<span class="tt-st">' + (on ? '✓' : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="5.5" y="10.5" width="13" height="9.5" rx="2"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"/></svg>') + '</span></div>';
+    });
+    box.innerHTML = html + '</div><p class="tt-foot">收录 / 掌握 / 连续打卡同时达标即可晋升</p>';
+  }
+
   function renderMine() {
     refreshCounts();
+    renderTitle();
     showMinePane(curPane);
   }
 
   function showMinePane(name) {
-    curPane = name;
-    var tabs = document.querySelectorAll('#mineTabs button');
-    for (var i = 0; i < tabs.length; i++) {
-      tabs[i].classList.toggle('on', tabs[i].getAttribute('data-pane') === name);
-    }
-    var panes = { book: 'paneBook', record: 'paneRecord', ach: 'paneAch' };
-    for (var k in panes) {
-      var p = $(panes[k]);
-      if (p) p.classList.toggle('on', k === name);
-    }
-    if (name === 'book') { renderBookTabs(); renderChips(); renderSort(); renderGrid(); }
-    if (name === 'record') renderRecords();
-    if (name === 'ach') renderAchievements();
+    curPane = name || 'book';
+    renderBookTabs(); renderCats(); renderChips(); renderGrid(true);
   }
 
-  function renderRecords() {
-    var box = $('paneRecord');
+  /* ── 我的：筛选 / 战绩 / 成就 共用底部弹层 ── */
+  function openMineSheet(mode) {
+    var sh = $('mineSheet');
+    if (!sh) return;
+    var body = $('mineSheetBody');
+    $('mineSheetTitle').textContent = mode === 'record' ? '战绩' : mode === 'ach' ? '成就' : mode === 'title' ? '称号' : '筛选';
+    if (mode === 'record') renderRecords(body);
+    else if (mode === 'ach') renderAchievements(body);
+    else if (mode === 'title') renderTitleSheet(body);
+    else renderFilterSheet(body);
+    var m = $('mask');
+    if (m) m.classList.add('on');
+    sh.classList.remove('monster-detail');
+    setMineSheetPage(sh, mode === 'ach' || mode === 'record');
+    sh.classList.add('open');
+    sfx('sheet');
+  }
+  // 整页（战绩/成就）从右侧滑入滑出，配返回按钮；其余为底部弹层，配 ✕
+  function setMineSheetPage(sh, full) {
+    if (sh.classList.contains('achievement-page') !== full) {
+      sh.style.transition = 'none';
+      sh.classList.toggle('achievement-page', full);
+      void sh.offsetWidth;
+      sh.style.transition = '';
+      void sh.offsetWidth;
+    }
+    var x = $('mineSheetClose');
+    if (x) {
+      x.classList.toggle('sheet-x', !full);
+      x.textContent = full ? '‹ 返回' : '✕';
+      x.setAttribute('aria-label', full ? '返回' : '关闭');
+    }
+  }
+  function closeMineSheet() {
+    var sh = $('mineSheet');
+    if (sh) { sh.classList.remove('open', 'monster-detail'); sfx('sheetClose'); }
+    var m = $('mask');
+    if (m) m.classList.remove('on');
+  }
+  function renderFilterSheet(body) {
+    body.innerHTML =
+      '<div class="mf"><p class="mf-lab">分类</p><div class="chips tags" id="tags"></div></div>' +
+      '<div class="mf"><p class="mf-lab">获得状态</p><div class="chips" id="chips"></div></div>' +
+      '<div class="mf"><p class="mf-lab">稀有度</p><div class="chips" id="tiers"></div></div>' +
+      '<div class="mf"><p class="mf-lab">排序</p><div class="chips" id="sorts"></div></div>' +
+      '<div class="wacts" style="margin-top:20px"><button class="btn" id="filterReset">重置</button>' +
+      '<button class="btn primary" id="filterDone">完成</button></div>';
+    renderChips(); renderSort();
+    $('filterReset').onclick = function () {
+      bookFilter = 'got'; bookTier = 0; bookSort = 'tier'; bookTag = '';
+      renderCats(); renderChips(); renderSort(); renderGrid(true);
+    };
+    $('filterDone').onclick = closeMineSheet;
+  }
+
+  function filterSummary() {
+    var f = bookFilter === 'got' ? '已获得' : bookFilter === 'locked' ? '未获得' : bookFilter === 'hidden' ? '隐藏款' : '全部';
+    var t = bookTier === 'hidden' ? '隐藏款' : bookTier ? TIERS[bookTier].code : '';
+    var s = '';
+    for (var i = 0; i < SORTS.length; i++) if (SORTS[i].k === bookSort) s = SORTS[i].nm;
+    var tag = bookTag && window.TAGS[bookTag] ? ' · ' + window.TAGS[bookTag] : '';
+    return f + tag + (t ? ' · ' + t : '') + (s ? ' · ' + s : '');
+  }
+
+  function renderRecords(box) {
+    box = box || $('mineSheetBody');
     if (!box) return;
     var list = state.records || [];
     var wins = 0, best = 0, ink = 0, kills = 0;
@@ -796,37 +1681,47 @@
     var rate = list.length ? Math.round(wins / list.length * 100) : 0;
 
     var html =
-      '<div class="rec-sum">' +
-        '<div><b>' + list.length + '</b><span>远征次数</span></div>' +
-        '<div><b>' + wins + '</b><span>胜利</span></div>' +
-        '<div><b>' + rate + '%</b><span>胜率</span></div>' +
-        '<div><b>' + best + '</b><span>最高关</span></div>' +
+      '<div class="rv-hero">' +
+        '<div class="rv-ring" style="--p:' + rate + '"><b>' + rate + '<i>%</i></b><span>胜率</span></div>' +
+        '<div class="rv-hstats">' +
+          '<div><b>' + list.length + '</b><span>漫游</span></div>' +
+          '<div><b>' + wins + '</b><span>胜利</span></div>' +
+          '<div><b>' + best + '</b><span>最高关</span></div>' +
+          '<div><b>' + kills + '</b><span>击杀</span></div>' +
+        '</div>' +
       '</div>';
 
     if (!list.length) {
       box.innerHTML = html +
-        '<div class="rec-empty"><p>还没有战绩</p><span>打一场远征，记录会出现在这里</span>' +
-        '<button class="btn" id="recGoExp">去远征</button></div>';
+        '<div class="rv-empty"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 21V4"/><path d="M6 4.5h11l-2.4 3.8L17 12H6"/></svg></i>' +
+        '<p>还没有战绩</p><span>走一趟漫游，记录会出现在这里</span>' +
+        '<button class="btn primary" id="recGoExp">去漫游</button></div>';
       var go = $('recGoExp');
-      if (go) go.onclick = function () { switchTab('expedition'); };
+      if (go) go.onclick = function () { closeMineSheet(); switchTab('expedition'); };
       return;
     }
 
-    var rows = list.map(function (r) {
-      var d = new Date(r.at);
-      var date = (d.getMonth() + 1) + '.' + d.getDate();
-      return '<div class="rec">' +
-        '<span class="rec-badge ' + (r.win ? 'win' : 'lose') + '">' + (r.win ? '胜' : '败') + '</span>' +
-        '<div class="rec-main">' +
-          '<p class="rec-w">' + (r.word || '—') + '</p>' +
-          '<p class="rec-sub">' + (r.waves || 0) + ' / 5 关　·　击杀 ' + (r.kills || 0) +
-            '　·　强射 ' + (r.strong || 0) + '</p>' +
+    var today = new Date(); today.setHours(0, 0, 0, 0);
+    var lastDay = '', rows = '';
+    list.forEach(function (r) {
+      var d = new Date(r.at), d0 = new Date(r.at); d0.setHours(0, 0, 0, 0);
+      var diff = Math.round((today - d0) / 864e5);
+      var day = diff === 0 ? '今天' : diff === 1 ? '昨天' : (d.getMonth() + 1) + '月' + d.getDate() + '日';
+      if (day !== lastDay) { rows += '<p class="rv-day">' + day + '</p>'; lastDay = day; }
+      var hm = ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+      var stars = '';
+      if (r.stageName && r.win) for (var i = 0; i < 3; i++) stars += '<i class="' + (i < (r.stars || 0) ? 'on' : '') + '">★</i>';
+      rows += '<div class="rv ' + (r.win ? 'win' : 'lose') + '">' +
+        '<span class="rv-badge">' + (r.win ? '胜' : '败') + '</span>' +
+        '<div class="rv-main">' +
+          '<div class="rv-top"><b class="rv-w">' + (r.word || '—') + '</b>' + (stars ? '<span class="rv-stars">' + stars + '</span>' : '') + '</div>' +
+          '<p class="rv-stage">' + (r.stageName || (r.waves || 0) + ' / 5 关') + ' · 击杀 ' + (r.kills || 0) + ' · 拼词 ' + (r.strong || 0) + '</p>' +
         '</div>' +
-        '<div class="rec-right"><b>+' + (r.ink || 0) + '</b><span>墨水</span><em>' + date + '</em></div>' +
+        '<div class="rv-ink"><b>+' + (r.ink || 0) + '<small>成长点</small></b><em>' + hm + '</em></div>' +
       '</div>';
-    }).join('');
-    box.innerHTML = html + '<div class="rec-list">' + rows + '</div>' +
-      '<p class="rec-total">累计 ' + list.length + ' 场 · 击杀 ' + kills + ' · 墨水 ' + ink + '</p>';
+    });
+    box.innerHTML = html + '<div class="rv-list">' + rows + '</div>' +
+      '<p class="rv-total">最近 ' + list.length + ' 场 · 共获得 ' + ink + ' 成长点</p>';
   }
 
   function openBook() {
@@ -840,33 +1735,109 @@
   function renderBookTabs() {
     var box = $('bookTabs');
     box.innerHTML = '';
-    [['cards', '卡片收藏'], ['atlas', '字母图鉴']].forEach(function (t) {
+    [['cards', '单词图鉴'], ['atlas', '字母图鉴'], ['monsters', '怪物图鉴']].forEach(function (t) {
       var b = mk('button', 'btab' + (bookTab === t[0] ? ' on' : ''));
       b.textContent = t[1];
-      b.onclick = function () { bookTab = t[0]; renderBookTabs(); };
+      b.onclick = function () { sfx('page'); bookTab = t[0]; renderBookTabs(); };
       box.appendChild(b);
     });
     $('bookCards').style.display = bookTab === 'cards' ? '' : 'none';
     $('atlas').style.display = bookTab === 'atlas' ? '' : 'none';
+    if (bookTab !== 'cards') {
+      var tb = $('codexTop');
+      if (tb) tb.classList.remove('on');
+    }
     if (bookTab === 'atlas' && !$('atlas').innerHTML) $('atlas').innerHTML = atlasHTML();
+    var mc = $('mcodex');
+    if (!mc) {
+      mc = mk('div', 'mcodex');
+      mc.id = 'mcodex';
+      $('atlas').parentNode.insertBefore(mc, $('atlas').nextSibling);
+    }
+    mc.style.display = bookTab === 'monsters' ? '' : 'none';
+    if (bookTab === 'monsters') renderMonsterCodex(mc);
+  }
+
+  /* ── 怪物图鉴：漫游中击败怪物有几率掉落，按地区分组 ── */
+  function renderMonsterCodex(box) {
+    var A = window.StageArt;
+    if (!A) { box.innerHTML = ''; return; }
+    var cx = state.codex || {}, total = 0, got = 0, html = '';
+    REGIONS.forEach(function (r) {
+      var R = A.REGIONS[r.id];
+      if (!R) return;
+      var ids = R.items.concat([R.elite, R.landmark]);
+      var n = ids.filter(function (id) { return cx[id]; }).length;
+      total += ids.length; got += n;
+      html += '<div class="mc-reg"><div class="mc-head"><b>' + r.place + '</b><span>' + n + ' / ' + ids.length + '</span></div><div class="mc-grid">';
+      ids.forEach(function (id, i) {
+        var role = i === ids.length - 1 ? '地标' : i === ids.length - 2 ? '精英' : '';
+        var nm = A.info(id), has = !!cx[id];
+        html += '<div class="mc-cell' + (has ? ' got' : '') + (role ? ' rare' : '') + '" data-id="' + id + '">' +
+          '<canvas width="32" height="32"></canvas>' +
+          (role ? '<em>' + role + '</em>' : '') +
+          (has ? '<i>×' + cx[id] + '</i>' : '') +
+          '<b>' + (has ? nm.cn : '???') + '</b><span>' + (has ? nm.en : '漫游中掉落') + '</span></div>';
+      });
+      html += '</div></div>';
+    });
+    box.innerHTML = '<p class="mc-tip">击败怪物有几率掉落图鉴卡，飞机吃到即收录 · 精英 / 首领掉率更高 · 新收录 +10 成长点' +
+      '<b>' + got + ' / ' + total + '</b></p>' + html;
+    var cells = box.querySelectorAll('.mc-cell');
+    for (var i = 0; i < cells.length; i++) {
+      var c = cells[i].querySelector('canvas'), g = c.getContext('2d'), id = cells[i].getAttribute('data-id');
+      g.imageSmoothingEnabled = false;
+      if (cx[id]) A.draw(g, id, 16, 16, 32, false);
+      else { g.globalAlpha = 0.16; A.draw(g, id, 16, 16, 32, true); }
+      cells[i].onclick = function () {
+        var id = this.getAttribute('data-id');
+        if (cx[id]) openMonsterDetail(id);
+        else toast('尚未收录，击败漫游中的怪物有概率获得图鉴');
+      };
+    }
+  }
+
+  // full：漫游页查看时无论是否收录都展示完整资料
+  function openMonsterDetail(id, full) {
+    var A = window.StageArt, sh = $('mineSheet'), body = $('mineSheetBody');
+    if (!A || !sh || !body) return;
+    var info = A.info(id), cnt = (state.codex || {})[id] || 0, n = cnt || full;
+    body.innerHTML =
+      '<div class="monster-detail-hero">' +
+        '<canvas class="monster-detail-icon" width="96" height="96"></canvas>' +
+        '<div><h2>' + info.cn + '</h2><p>' + info.en + '</p></div>' +
+      '</div>' +
+      '<p class="monster-detail-desc">' + (n ? (info.desc || '关于它的文化与历史资料仍在整理中。') : '尚未收录。漫游中击败它有概率掉落图鉴卡，收录后解锁完整资料。') + '</p>' +
+      '<p class="monster-detail-meta">' + (cnt ? '收录次数 ×' + cnt : '未收录') + '</p>';
+    $('mineSheetTitle').textContent = '怪物图鉴';
+    setMineSheetPage(sh, false);
+    sh.classList.add('monster-detail', 'open');
+    var cv = body.querySelector('.monster-detail-icon'), g = cv.getContext('2d');
+    g.imageSmoothingEnabled = false;
+    if (n) A.draw(g, id, 48, 48, 88, false);
+    else { g.globalAlpha = 0.3; A.draw(g, id, 48, 48, 88, true); }
+    var m = $('mask');
+    if (m) m.classList.add('on');
+    sfx('sheet');
   }
 
   var SORTS = [
     { k: 'tier', nm: '稀有度' },
-    { k: 'str', nm: '伤害' },
-    { k: 'wis', nm: '技能' },
-    { k: 'res', nm: '连击' },
+    { k: 'kind', nm: '主武器' },
+    { k: 'ammo', nm: '弹药' },
     { k: 'new', nm: '最新' },
   ];
 
   function renderSort() {
+    var sum = $('filterSum');
+    if (sum) sum.textContent = filterSummary();
     var box = $('sorts');
     if (!box) return;
-    box.innerHTML = '<span class="chip-lab">排序</span>';
+    box.innerHTML = '';
     SORTS.forEach(function (o) {
       var b = mk('button', 'chip' + (bookSort === o.k ? ' on' : ''));
       b.textContent = o.nm;
-      b.onclick = function () { bookSort = o.k; renderSort(); renderGrid(); };
+      b.onclick = function () { sfx('tap'); bookSort = o.k; renderSort(); renderGrid(true); };
       box.appendChild(b);
     });
   }
@@ -877,72 +1848,240 @@
       arr.sort(function (a, b2) { return (rec(b2).at || 0) - (rec(a).at || 0); });
     } else if (bookSort === 'tier') {
       arr.sort(function (a, b2) { return cardLvOf(b2) - cardLvOf(a) || (state.owned[b2.w] && state.owned[b2.w].hid ? 1 : 0) - (state.owned[a.w] && state.owned[a.w].hid ? 1 : 0) || a.w.length - b2.w.length; });
+    } else if (bookSort === 'kind') {
+      var order = Object.keys(Card.KINDS);
+      var mainOf = function (w) { return order.indexOf(Card.weaponKinds(w, levelsOf(w)).main); };
+      arr.sort(function (a, b2) { return mainOf(a) - mainOf(b2) || cardLvOf(b2) - cardLvOf(a); });
     } else {
-      arr.sort(function (a, b2) {
-        var d = Card.statsOf(viewOf(b2), levelsOf(b2))[bookSort] - Card.statsOf(viewOf(a), levelsOf(a))[bookSort];
-        return d || cardLvOf(b2) - cardLvOf(a);
-      });
+      arr.sort(function (a, b2) { return b2.w.length - a.w.length || cardLvOf(b2) - cardLvOf(a); });
     }
     return arr;
   }
 
   function renderChips() {
+    var sum = $('filterSum');
+    if (sum) sum.textContent = filterSummary();
+    var opts = [['got', '已获得'], ['locked', '未获得'], ['all', '全部']];
     var box = $('chips');
-    box.innerHTML = '<span class="chip-lab">筛选</span>';
-    [['got', '已获得'], ['locked', '未获得'], ['all', '全部']].forEach(function (o) {
-      var b = mk('button', 'chip' + (bookFilter === o[0] ? ' on' : ''));
-      b.textContent = o[1];
-      b.onclick = function () { bookFilter = o[0]; renderChips(); renderGrid(); };
-      box.appendChild(b);
-    });
-    box.appendChild(mk('i', 'chip-sep'));
-    [0, 1, 2, 3, 4, 5].forEach(function (t) {
-      var b = mk('button', 'chip' + (bookTier === t ? ' on' : ''));
-      b.textContent = t ? TIERS[t].code : '全稀有度';
-      b.onclick = function () { bookTier = t; renderChips(); renderGrid(); };
-      box.appendChild(b);
-    });
+    if (box) {
+      box.innerHTML = '';
+      opts.forEach(function (o) {
+        var b = mk('button', 'chip' + (bookFilter === o[0] ? ' on' : ''));
+        b.textContent = o[1];
+        b.onclick = function () { sfx('tap'); bookFilter = o[0]; renderChips(); renderGrid(true); };
+        box.appendChild(b);
+      });
+    }
+    // 分类（含各自收录进度）
+    var tb2 = $('tags');
+    if (tb2) {
+      tb2.innerHTML = '';
+      var st = tagStats();
+      var list = [['', '全部', st.all]].concat(
+        Object.keys(window.TAGS).filter(function (k) { return st[k]; }).map(function (k) {
+          return [k, window.TAGS[k], st[k]];
+        })
+      );
+      list.forEach(function (o) {
+        var b = mk('button', 'cchip' + (bookTag === o[0] ? ' on' : '') + (o[2] && o[2].got >= o[2].total ? ' full' : ''));
+        b.innerHTML = '<span class="cc-n">' + o[1] + '</span>';
+        b.onclick = function () {
+          if (bookTag === o[0]) return;
+          sfx('tap'); bookTag = o[0]; renderChips(); renderGrid(true);
+        };
+        tb2.appendChild(b);
+      });
+    }
+    var tb = $('tiers');
+    if (tb) {
+      tb.innerHTML = '';
+      [0, 1, 2, 3, 4, 5, 'hidden'].forEach(function (t) {
+        var b = mk('button', 'chip' + (bookTier === t ? ' on' : ''));
+        b.textContent = t === 'hidden' ? '隐藏款' : t ? TIERS[t].code : '全部';
+        b.onclick = function () { sfx('tap'); bookTier = t; renderChips(); renderGrid(true); };
+        tb.appendChild(b);
+      });
+    }
   }
 
-  function renderGrid() {
-    var grid = $('grid');
-    grid.innerHTML = '';
-    var list = sortWords(WORDS.filter(function (w) {
+  /* ── 单词图鉴：分类导航 + 进度 ─────────────────── */
+  function codexPool() { return poolWords(); }
+  // 每个分类的收录数与总数
+  function tagStats() {
+    var out = { all: { got: 0, total: 0 } };
+    codexPool().forEach(function (w) {
       var got = !!state.owned[w.w];
-      if (bookFilter === 'got' && !got) return false;
-      if (bookFilter === 'locked' && got) return false;
-      return !bookTier || cardLvOf(w) === bookTier;
-    }));
-    if (!list.length) {
-      grid.innerHTML = '<div class="grid-empty">' + (bookFilter === 'got' ? '还没有获得卡片，去拆封吧' : '没有符合条件的卡片') + '</div>';
-    }
-    list.forEach(function (w) {
-      var got = !!state.owned[w.w];
-      var tier = Math.max(1, Math.min(5, cardLvOf(w)));
-      var el = mk('div', 'mini r' + tier + ' ' + (got ? 'got' : 'locked'));
-      var first = w.w.charAt(0).toUpperCase();
-      var inner = '<div class="mi">' + (got ? '<span class="t">' + (state.owned[w.w].hid ? 'EX' : TIERS[tier].code) + '</span>' : '');
-      if (got) {
-        var lv = levelsOf(w);
-        var hid = state.owned[w.w].hid;
-        if (hid) el.classList.add('hid');
-        inner += '<span class="lvt">Lv' + cardLvOf(w) + '</span>' +
-          '<div class="mt">' + Card.typeTileSVG(first, lv[0] || 1, 54, { mythic: hid }) + '</div>' +
-          '<span class="mw">' + w.w + '</span>';
-        el.onclick = function () { openDetail(w); };
-      } else {
-        var cn = w.senses && w.senses.length ? w.senses[0].cn : (w.cn || '');
-        inner += '<div class="mt q">?</div>' +
-          '<span class="mw">' + new Array(w.w.length + 1).join('_ ').trim() + '</span>' +
-          '<span class="mc">' + cn + '</span>';
-      }
-      el.innerHTML = inner + '</div>';
-      grid.appendChild(el);
+      if (!out[w.tag]) out[w.tag] = { got: 0, total: 0 };
+      out[w.tag].total++;
+      out.all.total++;
+      if (got) { out[w.tag].got++; out.all.got++; }
     });
-    var owned = 0;
-    for (var k in state.owned) owned++;
-    $('bookStat').textContent = '已获得 ' + owned + ' / ' + WORDS.length;
+    return out;
   }
+
+  function renderCats() {
+    var st = tagStats(), all = st.all;
+    var pct = all.total ? all.got / all.total * 100 : 0;
+    var got = $('codexGot'), tot = $('codexTotal'), bar = $('codexBar');
+    if (got) got.textContent = all.got;
+    if (tot) tot.textContent = all.total;
+    if (bar) bar.style.width = pct.toFixed(1) + '%';
+  }
+
+  function codexCardNode(w, cardW) {
+    var got = !!state.owned[w.w];
+    var hidden = bookTier === 'hidden';
+    // 图鉴完整显示所有卡：未收录的只是压暗，仍然能看全词形、释义与卡面
+    var shown = viewOf(w);
+    if (hidden) {
+      shown = Object.assign({}, shown, {
+        w: '?????',
+        ph: '/ ··· /',
+        pos: '???',
+        cn: '？？？',
+        ex: '',
+        exCn: '',
+        hid: true,
+      });
+    }
+    var th = cardThumb(shown, cardW);
+    th.classList.add('book-card');
+    if (hidden) th.classList.add('codex-hidden');
+    if (!got) {
+      th.classList.add('codex-locked');
+    }
+    if (!hidden) th.onclick = function () { openDetail(w); };
+    return th;
+  }
+
+  // 图鉴列表：mode = true/『reset』重建并回到第一页；『rebuild』重建但保留已加载数量；其余 = 仅追加新一页
+  function renderGrid(mode) {
+    var rebuild = mode === true || mode === 'reset' || mode === 'rebuild';
+    if (mode === true || mode === 'reset') codexShown = CODEX_PAGE;
+    var grid = $('grid');
+    var scroller = $('screenMine');
+    var keepTop = rebuild && !(mode === true || mode === 'reset') ? scroller.scrollTop : 0;
+    var q = bookQuery.trim().toLowerCase();
+    var list = sortWords(WORDS.filter(function (w) {
+      if (w.w.length > MAX_WORD_LEN) return false;
+      if (bookTag && w.tag !== bookTag) return false;
+      var got = !!state.owned[w.w];
+      // 隐藏款是每个词卡都可能出现的特殊版本，筛选时展示其神秘占位卡，
+      // 不受“已获得 / 未获得”筛选影响；具体内容用问号遮挡且不可进入详情。
+      if (bookTier !== 'hidden') {
+        if (bookFilter === 'got' && !got) return false;
+        if (bookFilter === 'locked' && got) return false;
+      }
+      if (bookTier && bookTier !== 'hidden' && w.tier !== bookTier) return false;
+      if (q) {
+        // 图鉴对未收录也完整展示，所以释义同样参与搜索
+        var hay = w.w + ' ' + (w.cn || '');
+        if (hay.toLowerCase().indexOf(q) < 0) return false;
+      }
+      return true;
+    }));
+    codexTotal = list.length;
+    if (rebuild || codexRendered > list.length) {
+      grid.innerHTML = '';
+      codexRendered = 0;
+      if (!list.length) {
+        grid.innerHTML = '<div class="grid-empty"><svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round">' +
+          '<rect x="10" y="8" width="22" height="30" rx="4"/><path d="M18 12h16a4 4 0 0 1 4 4v22" opacity=".5"/></svg>' +
+          '<p>' + (q ? '没有找到相关单词' : '暂无卡片') + '</p></div>';
+      }
+    }
+    // 卡宽按实际可用宽度分配：容器宽 - 中间间距，再对半；比例由 aspect-ratio 维持
+    var gw = grid.clientWidth;
+    if (!gw) gw = Math.min(430, window.innerWidth || 430) - 36;
+    var cardW = Math.max(60, Math.floor((gw - GRID_GAP) / 2));
+    // 只追加增量：清空 grid 会把滚动容器的可滚动高度瞬间压到 0，列表就会弹回顶部
+    var upto = Math.min(list.length, codexShown);
+    var frag = document.createDocumentFragment();
+    for (var i = codexRendered; i < upto; i++) frag.appendChild(codexCardNode(list[i], cardW));
+    grid.appendChild(frag);
+    codexRendered = upto;
+    renderMore(list.length);
+    if (keepTop) {
+      scroller.scrollTop = keepTop;
+      requestAnimationFrame(function () { scroller.scrollTop = keepTop; });
+    }
+    var stat = $('bookStat');
+    if (stat) {
+      stat.textContent = !list.length ? ''
+        : list.length > codexShown ? '显示 ' + codexShown + ' / ' + list.length + ' · 继续下滑加载更多'
+        : '共 ' + list.length + ' 张';
+    }
+  }
+
+  // 分页加载：底部按钮 + 自动续页（滚到底部附近就补一页，一屏不够高也补）
+  function renderMore(total) {
+    var box = $('codexMore');
+    if (!box) return;
+    if (total <= codexShown) {
+      box.innerHTML = '';
+      if (codexObs) { codexObs.disconnect(); codexObs = null; }
+      return;
+    }
+    var exist = $('codexLoad');
+    if (exist) exist.textContent = '加载更多 ' + (total - codexShown) + ' 张';
+    else {
+      box.innerHTML = '<button class="codex-load" id="codexLoad">加载更多 ' +
+        (total - codexShown) + ' 张</button>';
+      var b = $('codexLoad');
+      if (b) b.onclick = function () { codexShown += CODEX_PAGE; renderGrid(); };
+    }
+    watchMore(box);
+  }
+
+  // 自动续页：以滚动容器 #screenMine 自身的滚动位置判断（容器内 WebView 的 innerHeight / 视口 IO 不可靠），
+  // 滚到底部附近（或整页还没填满一屏）就继续补，一次可以连补多页。
+  function codexNearBottom() {
+    var s = $('screenMine');
+    if (!s || !s.clientHeight) return false;
+    return s.scrollTop + s.clientHeight >= s.scrollHeight - 600;
+  }
+
+  function codexFill() {
+    if (curTab !== 'mine' || curPane !== 'book' || bookTab !== 'cards') return;
+    var s = $('screenMine');
+    var guard = 0;
+    while (guard++ < 24 && codexShown < codexTotal) {
+      if (!codexNearBottom()) break;
+      codexShown += CODEX_PAGE;
+      renderGrid();
+    }
+    // 内容还不够撑满一屏时也继续补，否则页面根本没法滚
+    if (s) {
+      guard = 0;
+      while (guard++ < 24 && codexShown < codexTotal && s.scrollHeight <= s.clientHeight + 80) {
+        codexShown += CODEX_PAGE;
+        renderGrid();
+        s = $('screenMine');
+      }
+    }
+  }
+
+  // 用 IntersectionObserver 当触发器；真正的续页判断交给 codexFill
+  function watchMore(sentinel) {
+    if (!sentinel || !window.IntersectionObserver) return;
+    if (codexObs) { codexObs.disconnect(); codexObs = null; }
+    codexObs = new IntersectionObserver(function (ents) {
+      for (var i = 0; i < ents.length; i++) {
+        if (!ents[i].isIntersecting) continue;
+        codexFill();
+        return;
+      }
+    }, { root: $('screenMine'), rootMargin: '0px 0px 600px 0px' });
+    codexObs.observe(sentinel);
+  }
+
+  // 兜底：捕获任意层级滚动 / 触摸 / 滚轮，再加低频定时检查
+  window.addEventListener('scroll', function () { codexFill(); }, true);
+  window.addEventListener('touchmove', function () { codexFill(); }, { passive: true });
+  window.addEventListener('wheel', function () { codexFill(); }, { passive: true });
+  window.addEventListener('touchend', function () { setTimeout(codexFill, 60); }, { passive: true });
+  if ($('screenMine')) $('screenMine').addEventListener('scroll', function () { codexFill(); }, { passive: true });
+  setInterval(codexFill, 700);
 
   /* ── 字母图鉴 ─────────────────────────────────── */
   function atlasHTML() {
@@ -967,74 +2106,174 @@
   function tierLabel(w) {
     var v = viewOf(w);
     if (v.hid) return '隐藏款 · EX';
-    return TIERS[v.tier].name + ' · ' + TIERS[v.tier].code;
+    return TIERS[v.tier].name + ' · ' + TIERS[v.tier].code + (stageOf(w) + 1);
+  }
+
+  // 详情卡：点击翻面，背面是该卡飞机吃满火力的实时预览（翻到背面才启动，翻回即停）
+  function buildDetailFlip(w) {
+    var lv = levelsOf(w);
+    var flip = mk('div', 'dflip');
+    var inner = mk('div', 'dflip-in');
+    inner.appendChild(Card.render(w, { mastery: starsOf(w), levels: lv }));
+    var back = mk('div', 'dflip-back');
+    var cv = document.createElement('canvas');
+    var tag = mk('div', 'dflip-tag');
+    tag.textContent = '满火力预览';
+    back.appendChild(cv);
+    back.appendChild(tag);
+    inner.appendChild(back);
+    flip.appendChild(inner);
+    flip.onclick = function () {
+      var on = flip.classList.toggle('flipped');
+      sfx('page');
+      if (on) {
+        if (!window.Battle || !Battle.preview) return;
+        var pv = Battle.preview(cv, w, lv, { bottom: Math.round(back.offsetHeight * 0.22) });
+        if (pv) tag.innerHTML = '满火力 <b>' + powerPips(pv) + '</b> + 觉醒';
+      } else if (cv._raf) {
+        cancelAnimationFrame(cv._raf);
+        cv._raf = null;
+      }
+    };
+    return flip;
   }
 
   function openDetail(w0) {
     var w = viewOf(w0);
+    var owned = !!state.owned[w0.w];
+    $('detail').classList.toggle('unowned', !owned);
     var box = $('detailCard');
+    var oldCv = box.querySelector('canvas');
+    if (oldCv && oldCv._raf) { cancelAnimationFrame(oldCv._raf); oldCv._raf = null; }
     box.innerHTML = '';
-    box.appendChild(Card.render(w, { mastery: starsOf(w), levels: levelsOf(w) }));
+    box.appendChild(buildDetailFlip(w));
     $('detailTier').textContent = tierLabel(w);
     var acts = $('detailActions');
     acts.innerHTML = '';
-    var b1 = mk('button', 'btn primary');
-    b1.textContent = '默 写';
-    b1.onclick = function () { startWrite(w0); };
-    var b2 = mk('button', 'btn');
-    b2.textContent = '存为图片';
-    b2.onclick = function () { exportImage(w); };
-    acts.appendChild(b1);
-    acts.appendChild(b2);
-    renderUpgrade(w0);
+    if (owned) {
+      var b1 = mk('button', 'btn primary');
+      b1.textContent = '默写 ' + recWrite(w).wr + '/' + needOf(w);
+      b1.onclick = function () { startWrite(w0); };
+      var b2 = mk('button', 'btn');
+      b2.textContent = '存为图片';
+      b2.onclick = function () { exportImage(w); };
+      acts.appendChild(b1);
+      acts.appendChild(b2);
+    }
+    sfx('page');
 
-    var st = Card.statsOf(w, levelsOf(w));
     var at = rec(w).at ? new Date(rec(w).at) : null;
-    $('detailEntry').innerHTML = entryHTML(w);
-    $('detailMeta').innerHTML =
-      '等级 <span>' + tierLabel(w) + '</span><br>' +
-      '默写 <span>' + recWrite(w).wr + ' / ' + needOf(w) + '</span>　·　看答案 <span>' +
-      recWrite(w).pk + ' 次</span><br>' +
-      (at ? '收于 <span>' + at.getFullYear() + '.' + (at.getMonth() + 1) + '.' + at.getDate() + '</span><br>' : '') +
-      '伤害 <span>' + st.str + '</span>　·　技能 <span>' + st.wis + '</span>　·　连击 <span>' + st.res + '</span>';
+    var foot = '<p class="dfoot">' + (TAGS[w.tag] ? TAGS[w.tag] + ' · ' : '') + (at ? '收于 ' + at.getFullYear() + '.' + (at.getMonth() + 1) + '.' + at.getDate() + ' · ' : '') +
+      '看过答案 ' + recWrite(w).pk + ' 次</p>';
+    $('detailEntry').innerHTML = entryHTML(w) + foot;
+    $('detailMeta').classList.add('detail-build');
+    $('detailMeta').innerHTML = powerInfo(w) + xpMini(w0);
+    var helpBtn = $('detailMeta').querySelector('[data-pow-help]');
+    if (helpBtn) helpBtn.onclick = function () { powerHelp(w); };
+    if (owned) renderUpgrade(w0);
+    else {
+      var oldLv = $('detailLv');
+      var oldTraits = $('detailTraits');
+      if (oldLv) oldLv.parentNode.removeChild(oldLv);
+      if (oldTraits) oldTraits.parentNode.removeChild(oldTraits);
+    }
+    var traitBtn = $('detailMeta').querySelector('[data-trait-help]');
+    if (traitBtn) traitBtn.onclick = function () { traitHelp(w); };
     $('detail').classList.add('open');
+  }
+
+  // 卡面只放图标和战力数字，详情页给出武器名称和战力构成
+  function powerInfo(w) {
+    var lv = levelsOf(w), pp = Card.powerParts(w, lv), wk = Card.weaponKinds(w, lv);
+    var wpn = function (k, lab) {
+      return '<span class="dp-w">' + Card.weaponIcon(k, '') + '<em>' + lab + '</em>' + Card.KINDS[k].nm + '</span>';
+    };
+    return '<div class="dpow">' +
+      '<div class="dp-top"><b>战力 <strong>' + pp.total + '</strong><button class="dp-q" data-pow-help>?</button></b>' +
+        '<span class="dp-ws">' + wpn(wk.main, '主') + (wk.sub ? wpn(wk.sub, '副') : '') + '</span></div>' +
+      (w.hid ? '<p class="dp-passive">隐藏被动：完整记忆 · 整词默写成功后，本场所有武器词条效果 +10%</p>' : '') +
+    '</div>';
+  }
+
+  function powerHelp(w) {
+    var dlg = mk('div', 'pw-dlg');
+    dlg.innerHTML = '<div class="pw-box">' +
+      '<h3>什么是战力？</h3>' +
+      '<p>战力：这张卡当前的综合战斗能力。</p>' +
+      '<ul>' +
+        '<li><b>输出</b>：伤害和发射频率。</li>' +
+        '<li><b>稳定性</b>：命中和持续输出能力。</li>' +
+        '<li><b>覆盖</b>：范围、穿透和多目标能力。</li>' +
+        '<li><b>控制 / 防御</b>：减速、连锁、卫星挡弹等效果。</li>' +
+      '</ul>' +
+      '<p class="pw-note">每个字母先增强自己的武器词条，再汇总成一个综合比较值。</p>' +
+      '<button class="pw-ok">知道了</button></div>';
+    dlg.addEventListener('click', function (e) {
+      if (e.target === dlg || e.target.classList.contains('pw-ok')) dlg.remove();
+    });
+    document.body.appendChild(dlg);
+  }
+
+  function traitHelp(w) {
+    var traits = Card.letterTraits(w, levelsOf(w)) || [];
+    var rows = traits.map(function (t, i) {
+      return '<div><b>' + w.w.charAt(i).toUpperCase() + ' · ' + t.name + '</b>' +
+        '<span>基础 ' + t.base + '，每级幅度 ' + t.step + ' × 成长率 ' + t.grow +
+        ' → 当前 ' + t.text.replace(t.unit + ' ', '') + '</span></div>';
+    }).join('');
+    var dlg = mk('div', 'pw-dlg');
+    dlg.innerHTML = '<div class="pw-box trait-help-box">' +
+      '<h3>字母词条怎么算？</h3>' +
+      '<p>每个字母有自己的基础值和升级幅度，成长率只作用于升级部分。</p>' +
+      '<p class="pw-note">当前值 = 基础值 + 四舍五入（(Lv − 1) × 每级增量 × 成长率）</p>' +
+      '<div class="trait-calc">' + rows + '</div>' +
+      '<button class="pw-ok">知道了</button></div>';
+    dlg.addEventListener('click', function (e) {
+      if (e.target === dlg || e.target.classList.contains('pw-ok')) dlg.remove();
+    });
+    document.body.appendChild(dlg);
   }
 
   function renderUpgrade(w) {
     var box = $('detailLv');
+    var oldTraits = $('detailTraits');
+    if (oldTraits) oldTraits.parentNode.removeChild(oldTraits);
     if (!box) {
       box = mk('div', 'lv-panel');
       box.id = 'detailLv';
-      var acts = $('detailActions');
-      acts.parentNode.insertBefore(box, acts.nextSibling);
+      $('detailMeta').appendChild(box);
     }
     var lv = levelsOf(w);
     if (!lv) { box.innerHTML = ''; return; }
     var cl = cardLvOf(w), cap = capOf(w);
-    box.innerHTML = '<div class="lv-head">养成 <span>墨水 ' + state.ink + '</span></div>';
+    box.innerHTML = '<div class="lg-head"><div><b>字母成长</b><button class="lg-help" data-trait-help>?</button></div><div class="lg-tags"><em>成长点 ' +
+      (DEV_MODE ? '∞' : state.ink) + '</em></div></div>';
 
-    var cardRow = mk('div', 'lv-card');
-    var maxed = cl >= cap;
-    var ready = canUpgradeCard(w);
-    cardRow.innerHTML = '<div><b>卡片 Lv ' + cl + '</b><span>最高 Lv ' + cap + ' · 字母上限 = 卡片等级</span></div>';
-    var cb = mk('button', 'btn lv-up' + (ready ? ' ready' : ''));
-    cb.textContent = maxed ? '已满级' : '升级 · ' + cardUpgradeCost(cl);
-    if (maxed) cb.disabled = true;
-    cb.onclick = function () { if (upgradeCard(w)) openDetail(w); };
-    cardRow.appendChild(cb);
-    box.appendChild(cardRow);
-    if (!maxed && !ready) box.insertAdjacentHTML('beforeend', '<div class="lv-tip">所有字母升到 Lv ' + cl + ' 后才能升级卡片</div>');
-
-    var row = mk('div', 'lv-row');
+    var row = mk('div', 'lg-grid');
+    var traits = Card.letterTraits ? Card.letterTraits(w, lv) : [];
+    var hid = !!(state.owned[w.w] && state.owned[w.w].hid);
     w.w.toUpperCase().split('').forEach(function (ch, i) {
-      var b = mk('button', 'lv-btn');
       var k = Card.letterKind(ch);
-      var full = lv[i] >= cl;
-      b.style.setProperty('--k', Card.KINDS[k].c);
-      b.innerHTML = '<b>' + ch + '</b><i>Lv' + lv[i] + '</i><em>' + (full ? '已满' : upgradeCost(lv[i])) + '</em>';
-      if (full) b.disabled = true;
-      b.onclick = function () { if (upgradeLetter(w, i)) openDetail(w); };
-      row.appendChild(b);
+      var trait = traits[i];
+      var full = lv[i] >= cap;
+      var locked = !full && stageOf(w) < stageNeedFor(lv[i] + 1);
+      var item = mk('div', 'lg-card lv' + Math.min(lv[i], 6) + (full ? ' full' : '') + (locked ? ' locked' : '') +
+        (!full && lv[i] <= cl ? ' next' : ''));
+      item.style.setProperty('--k', Card.KINDS[k].c);
+      item.innerHTML = '<i class="lg-lv">' + (full ? 'MAX' : 'Lv' + lv[i]) + '</i>' +
+        '<div class="lg-tile">' + Card.typeTileSVG(ch, Math.min(lv[i], 5), 34, { mythic: hid }) + '</div>' +
+        '<div class="lg-info"><b>' + trait.name + '</b><span>' + trait.text + '</span>' +
+        (full ? '' : '<em>' + trait.next + '</em>') + '</div>';
+      if (!full) {
+        var b = mk('button', 'lg-up');
+        b.type = 'button';
+        b.innerHTML = locked ? '🔒<small>' + (stageNeedFor(lv[i] + 1) + 1) + '阶</small>' :
+          '升级<small>' + upgradeCost(lv[i]) + '</small>';
+        b.disabled = locked;
+        b.onclick = function () { if (upgradeLetter(w, i)) openDetail(w); };
+        item.appendChild(b);
+      }
+      row.appendChild(item);
     });
     box.appendChild(row);
   }
@@ -1069,8 +2308,9 @@
     cv.width = Card.CARD_W * scale;
     cv.height = Card.CARD_H * scale;
     var ctx = cv.getContext('2d');
-    Card.drawToCanvas(ctx, cv.width, cv.height, w, { mastery: starsOf(w) });
+    Card.drawToCanvas(ctx, cv.width, cv.height, w, { mastery: starsOf(w), levels: levelsOf(w) });
     var url = cv.toDataURL('image/png');
+    sfx('shutter');
 
     var ov = mk('div');
     ov.style.cssText =
@@ -1088,136 +2328,399 @@
   }
 
   /* ── 今日词历 ─────────────────────────────────── */
+  /* ── 今日词历 / 每日任务 ───────────────────────────
+     每日任务不再直接发新词（那是抽卡的事），而是推动复习与持续学习。 */
+  var DAILY_TASKS = [
+    { id: 'spell', need: 3, short: '拼写', nm: '拼写 3 个词', sub: '抽卡拼写或默写都算', rw: '抽卡 +1', reward: 'draw', amount: 1, ico: 'pen' },
+    { id: 'review', need: 2, short: '复习', nm: '复习 2 个到期词', sub: '下方复习列表，隔 2 天到期', rw: '抽卡 +1', reward: 'draw', amount: 1, ico: 'loop' },
+    { id: 'battle', need: 1, short: '漫游', nm: '完成 1 次漫游', sub: '胜负都算完成', rw: '成长点 +15', reward: 'ink', amount: 15, ico: 'sword' },
+    { id: 'win', need: 2, short: '通关', nm: '漫游通关 2 关', sub: '通关还有几率掉落抽卡券', rw: '抽卡 +1', reward: 'draw', amount: 1, ico: 'cup' },
+  ];
+  var TASK_ICO = {
+    pen: '<path d="M5 19l1-4L16 5l3 3L9 18z"/><path d="M14 7l3 3"/>',
+    loop: '<path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"/><path d="M19.5 4.5v4h-4"/>',
+    sword: '<path d="M5 4l9 9M4 9l5-5M19 20l-6-6M14 19l5-5"/>',
+    cup: '<path d="M8 4h8v5a4 4 0 0 1-8 0z"/><path d="M8 6H5.5a2.5 2.5 0 0 0 2.6 3.6M16 6h2.5a2.5 2.5 0 0 1-2.6 3.6M12 13v4M8.5 20h7"/>',
+  };
+  function taskIco(k) {
+    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + TASK_ICO[k] + '</svg>';
+  }
+  function swapLeft() {
+    quotaLeft();
+    return Math.max(0, INK_SWAP_CAP - (state.quota.swap || 0));
+  }
+  function inkSwap() {
+    if (swapLeft() <= 0) { toast('今日兑换次数已用完'); sfx('deny'); return; }
+    if (!DEV_MODE && state.ink < INK_PER_DRAW) { toast('成长点不足 ' + INK_PER_DRAW); sfx('deny'); return; }
+    if (!grantBonus()) { toast('今日额外抽卡已达上限'); sfx('deny'); return; }
+    if (!DEV_MODE) state.ink -= INK_PER_DRAW;
+    state.quota.swap = (state.quota.swap || 0) + 1;
+    save();
+    sfx('claim');
+    refreshCounts();
+    renderDaily();
+    toast('兑换成功 · 抽卡 +1 组');
+  }
+
   function ensureDay() {
     var t = todayStr();
     if (state.day && state.day.d === t) return;
-    // 3 个新词 + 1 个复习
-    var picks = [], names = [];
-    var fresh = WORDS.filter(function (w) { return !state.owned[w.w]; });
-    if (fresh.length < 3) fresh = WORDS.slice();
-    for (var i = 0; i < 4; i++) {
-      var w = pickFrom(fresh, names);
-      if (!w) break;
-      picks.push({ w: w.w, kind: 'new', done: false });
-      names.push(w.w);
-    }
-    var review = WORDS.filter(function (w) {
-      return state.owned[w.w] && BY_WORD[w.w] && starsOf(BY_WORD[w.w]) < 3 && names.indexOf(w.w) < 0;
-    });
-    if (!review.length) review = WORDS.filter(function (w) { return names.indexOf(w.w) < 0; });
-    for (var rv = 0; rv < 2; rv++) {
-      var rw = pickFrom(review, names);
-      if (!rw) break;
-      picks.push({ w: rw.w, kind: 'review', done: false });
-      names.push(rw.w);
-    }
-
-    // 连续天数
-    if (state.lastDay) {
-      if (state.lastDay === yesterdayStr()) state.streak = (state.streak || 0) + 1;
-      else if (state.lastDay !== t) state.streak = 1;
-    } else state.streak = 1;
-    state.lastDay = t;
-
-    state.day = { d: t, picks: picks };
+    // 仅初始化当天数据；连续打卡必须由用户点击个人页的打卡模块完成。
+    state.day = { d: t, g: { spell: 0, review: 0, battle: 0, win: 0 }, claimed: {}, checkedIn: false };
     save();
   }
-
-  function pickFrom(arr, exclude) {
-    var pool = arr.filter(function (w) { return exclude.indexOf(w.w) < 0; });
-    if (!pool.length) pool = arr;
-    if (!pool.length) return null;
-    return pool[Math.floor(Math.random() * pool.length)];
+  function checkInToday() {
+    ensureDay();
+    if (state.day.checkedIn) return false;
+    var t = todayStr();
+    if (state.lastDay === yesterdayStr()) state.streak = (state.streak || 0) + 1;
+    else state.streak = 1;
+    state.lastDay = t;
+    state.day.checkedIn = true;
+    state.ink += CHECKIN_REWARD;
+    save();
+    refreshCounts();
+    checkAchievementUnlocks();
+    return true;
+  }
+  function ensureDayG() {
+    ensureDay();
+    if (!state.day.g) state.day.g = {};
+    DAILY_TASKS.forEach(function (t) { if (!(t.id in state.day.g)) state.day.g[t.id] = 0; });
+    if (!state.day.claimed) state.day.claimed = {};
+    return state.day;
+  }
+  function dayNum(s) {
+    var p = String(s || '').split('-');
+    return p.length === 3 ? new Date(+p[0], +p[1] - 1, +p[2]).getTime() : 0;
+  }
+  function daysSince(s) {
+    if (!s) return 999;
+    return Math.floor((new Date(todayStr()).getTime() - dayNum(s)) / 86400000);
+  }
+  // 到期复习：已收录且超过 2 天没拼过
+  function reviewDue(w) {
+    var o = state.owned[w.w];
+    if (!o) return false;
+    return daysSince(o.ls) >= 2;
+  }
+  function reviewPool(n) {
+    var arr = [];
+    for (var k in state.owned) {
+      var w = BY_WORD[k];
+      if (!w) continue;
+      if (!reviewDue(w)) continue;
+      arr.push(w);
+    }
+    arr.sort(function (a, b) {
+      return daysSince(state.owned[b.w].ls) - daysSince(state.owned[a.w].ls);
+    });
+    return n ? arr.slice(0, n) : arr;
+  }
+  function addDaily(key) {
+    var d = ensureDayG();
+    if (!(key in d.g)) return;
+    d.g[key]++;
+    save();
+    updateDailyBrief();
   }
 
   function openDaily() {
-    ensureDay();
+    sfx('sheet');
+    ensureDayG();
     renderDaily();
     $('daily').classList.add('open');
   }
 
   function renderDaily() {
-    var day = state.day;
-    var doneN = day.picks.filter(function (p) { return p.done; }).length;
+    var d = ensureDayG();
+    var doneN = DAILY_TASKS.filter(function (t) { return (d.g[t.id] || 0) >= t.need; }).length;
     $('dailyStreak').textContent = '连续 ' + (state.streak || 1) + ' 天';
-    $('dailyNote').innerHTML = '今日 <b>' + doneN + ' / ' + day.picks.length + '</b>' +
-      '　·　4 个新词 + 2 个复习　·　点卡片揭晓';
+    var left = quotaLeft();
+    $('dailyNote').innerHTML =
+      '<div class="dh-ring" style="--p:' + (doneN / DAILY_TASKS.length * 100).toFixed(1) + '"><b>' + doneN +
+      '<i>/' + DAILY_TASKS.length + '</i></b><span>已完成</span></div>' +
+      '<div class="dh-main"><p class="dh-k">今日剩余抽卡</p><p class="dh-v"><b>' + (DEV_MODE ? '∞' : left) +
+      '</b> 组<em>每组 3 张</em></p><p class="dh-s">免费 ' + FREE_PER_DAY + ' 组 · 已获额外 ' +
+      (state.quota.bonus || 0) + ' / ' + BONUS_CAP + '</p></div>';
     updateDailyBrief();
 
     var grid = $('dailyGrid');
     grid.innerHTML = '';
-    day.picks.forEach(function (p, i) {
-      var w = BY_WORD[p.w];
-      if (!w) return;
-      var cell = mk('div', 'dcell' + (p.done ? ' done' : ''));
-      var kind = p.kind === 'review' ? '复习' : '新词';
-      if (!p.done) {
-        cell.innerHTML = '<span class="k">' + kind + '</span><div class="emblem">' +
-          TIERS[w.tier].code + '</div>';
-        cell.onclick = function () {
-          p.done = true;
-          if (!state.owned[w.w]) state.owned[w.w] = { m: 0, at: Date.now() };
-          state.draws++;
-          save();
-          refreshCounts();
-          renderDaily();
-          FX.sprinkle(14, w.tier);
-          buzz(10);
-        };
-      } else {
-        cell.innerHTML = '<span class="k">' + kind + '</span><div class="w">' + w.w +
-          '</div><div class="c">' + w.cn + '</div>';
-        cell.onclick = function () { startWrite(w); };
-      }
-      grid.appendChild(cell);
+    var sec = mk('div', 'dsec');
+    sec.innerHTML = '<b>每日任务</b><span>完成后领取对应奖励</span>';
+    grid.appendChild(sec);
+    DAILY_TASKS.forEach(function (t) {
+      var cur = Math.min(d.g[t.id] || 0, t.need);
+      var ok = cur >= t.need;
+      var claimed = !!d.claimed[t.id];
+      var row = mk('div', 'dtask' + (ok ? ' ok' : '') + (claimed ? ' claimed' : ''));
+      row.innerHTML =
+        '<span class="dt-ico">' + taskIco(t.ico) + '</span>' +
+        '<div class="dt-main"><b>' + t.nm + '<em>' + cur + '/' + t.need + '</em></b><span>' + t.sub + '</span>' +
+        '<div class="dt-bar"><i style="width:' + Math.round(cur / t.need * 100) + '%"></i></div></div>' +
+        '<div class="dt-right"></div>';
+      var btn = mk('button', 'dt-claim');
+      btn.innerHTML = claimed ? '已领取' : '<i>' + t.rw + '</i>' + (ok ? '领取' : '未完成');
+      btn.disabled = claimed || !ok;
+      if (ok && !claimed) btn.classList.add('ready');
+      btn.onclick = function () {
+        if (d.claimed[t.id]) return;
+        d.claimed[t.id] = true;
+        sfx('claim');
+        claimDaily(t);
+        save();
+        renderDaily();
+        refreshCounts();
+        toast('任务完成 · ' + t.rw);
+      };
+      row.querySelector('.dt-right').appendChild(btn);
+      grid.appendChild(row);
     });
+
+    var sw = swapLeft();
+    var swap = mk('div', 'dswap');
+    swap.innerHTML = '<span class="dt-ico ink"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5s6 6.4 6 10.6a6 6 0 0 1-12 0C6 9.9 12 3.5 12 3.5Z"/></svg></span><div class="dt-main"><b>成长点兑换</b><span>' +
+      INK_PER_DRAW + ' 成长点换 1 组抽卡 · 今日还可兑换 ' + sw + ' 次</span></div>';
+    var sb = mk('button', 'dt-claim' + (sw ? ' ready' : ''));
+    sb.innerHTML = '<i>−' + INK_PER_DRAW + ' 成长点</i>兑换';
+    sb.disabled = !sw;
+    sb.onclick = inkSwap;
+    swap.appendChild(sb);
+    grid.appendChild(swap);
+
+    // 到期复习入口
+    var due = reviewPool(8);
+    var head = mk('div', 'dsec');
+    head.innerHTML = '<b>到期复习</b><span>' + (due.length ? due.length + ' 个待巩固' : '暂无到期，明天再来') + '</span>';
+    grid.appendChild(head);
+    if (due.length) {
+      var list = mk('div', 'dreview');
+      due.forEach(function (w) {
+        var it = mk('button', 'drev-item');
+        it.innerHTML = '<span class="kl">' + Card.lvGem(cardLvOf(w)) + '</span>' + Card.elemGems(w, levelsOf(w)) +
+          '<b>' + w.w + '</b><em>' + w.cn + '</em><i>' + daysSince(state.owned[w.w].ls) + ' 天未复习</i>';
+        it.onclick = function () {
+          $('daily').classList.remove('open');
+          startWrite(w);
+        };
+        list.appendChild(it);
+      });
+      grid.appendChild(list);
+    }
   }
 
-  function renderAchievements() {
-    var owned = Object.keys(state.owned).length;
-    var mastered = countMastered();
-    var t5 = 0, maxLv = 0;
-    for (var k in state.owned) {
-      var w = BY_WORD[k];
-      if (!w) continue;
-      if (cardLvOf(w) >= 5) t5++;
-      if (cardLvOf(w) > maxLv) maxLv = cardLvOf(w);
+  function claimDaily(t) {
+    if (t.reward === 'ink') {
+      state.ink += t.amount || 0;
+      refreshCounts();
+      return;
     }
-    var recs = state.records || [];
-    var wins = 0;
-    recs.forEach(function (r) { if (r.win) wins++; });
+    grantBonus();
+  }
 
-    var list = [
-      { nm: '初开卷', d: '收集 10 张词卡', cur: owned, max: 10 },
-      { nm: '藏书家', d: '收集 100 张词卡', cur: owned, max: 100 },
-      { nm: '半部词册', d: '收集一半词卡', cur: owned, max: Math.round(WORDS.length / 2) },
-      { nm: '通晓十词', d: '10 个单词默写满星', cur: mastered, max: 10 },
-      { nm: '通晓五十', d: '50 个单词默写满星', cur: mastered, max: 50 },
-      { nm: '拾得孤本', d: '获得一张 Lv5 词卡', cur: t5, max: 1 },
-      { nm: '连续七日', d: '连续 7 天打开词册', cur: state.streak || 1, max: 7 },
-      { nm: '抽满百次', d: '累计拆封 100 次', cur: state.draws, max: 100 },
-      { nm: '远征首胜', d: '第一次通关远征', cur: wins, max: 1 },
-      { nm: '远征十胜', d: '累计通关 10 次', cur: wins, max: 10 },
+  var achievementQueue = [], achievementBusy = false;
+  var ACH_KIND_NM = { gacha: '抽卡', study: '学习', battle: '漫游', upgrade: '养成', codex: '图鉴', collection: '收藏' };
+  var MEDAL_NM = { bronze: '铜章', silver: '银章', gold: '金章', max: '满阶' };
+  // 系列内阶段决定奖牌材质：前 1/3 铜、中段银、后段金、最后一阶满阶
+  var ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII', 'XIII', 'XIV', 'XV', 'XVI', 'XVII', 'XVIII', 'XIX', 'XX'];
+  function achName(a) { return a.sname + ' ' + (ROMAN[a.sidx] || a.sidx + 1); }
+  function medalTier(idx, len) {
+    if (idx < 0) return 'none';
+    if (idx >= len - 1) return 'max';
+    var r = (idx + 1) / len;
+    return r >= 0.67 ? 'gold' : r >= 0.34 ? 'silver' : 'bronze';
+  }
+  var TIER_LV = { bronze: 1, silver: 2, gold: 3, max: 4 };
+  function buildAchPop() {
+    if (buildAchPop.done) return;
+    buildAchPop.done = true;
+    $('achievementPop').addEventListener('click', closeAchievement);
+  }
+  function closeAchievement() {
+    var pop = $('achievementPop');
+    if (!pop || !pop.classList.contains('show') || pop.classList.contains('out')) return;
+    clearTimeout(closeAchievement.tm);
+    pop.classList.add('out');
+    setTimeout(function () {
+      pop.className = 'achievement-pop';
+      pop.setAttribute('aria-hidden', 'true');
+      achievementBusy = false;
+      showNextAchievement();
+    }, 200);
+  }
+  function showAchievement(a) {
+    var pop = $('achievementPop');
+    if (!pop) return;
+    buildAchPop();
+    var tier = medalTier(a.sidx, a.slen);
+    pop.className = 'achievement-pop';
+    void pop.offsetWidth;
+    pop.className = 'achievement-pop show k-' + a.kind + ' m-' + tier;
+    pop.setAttribute('aria-hidden', 'false');
+    $('apIcon').textContent = a.icon;
+    $('apLv').textContent = ROMAN[a.sidx] || a.sidx + 1;
+    $('apKicker').textContent = (ACH_KIND_NM[a.kind] || '收藏') + '成就达成';
+    $('apName').textContent = achName(a);
+    $('apLevel').textContent = MEDAL_NM[tier];
+    $('apDesc').textContent = a.d;
+    var burst = $('apBurst'), n = tier === 'max' ? 36 : tier === 'gold' ? 30 : 22, html = '';
+    for (var i = 0; i < n; i++) {
+      html += '<i style="--a:' + Math.round(i * 360 / n + Math.random() * 14) + 'deg;--r:' +
+        Math.round(90 + Math.random() * 90) + 'px;--d:' + Math.round(140 + Math.random() * 120) + 'ms;--s:' +
+        (5 + Math.random() * 6).toFixed(1) + 'px"></i>';
+    }
+    burst.innerHTML = html;
+    var motes = '';
+    for (var j = 0; j < (tier === 'max' ? 18 : 12); j++) {
+      motes += '<i style="--x:' + Math.round(Math.random() * 260 - 130) + 'px;--d:' + Math.round(300 + Math.random() * 1300) +
+        'ms;--t:' + (1.6 + Math.random() * 0.9).toFixed(2) + 's;--s:' + (2 + Math.random() * 2.5).toFixed(1) + 'px"></i>';
+    }
+    $('apMotes').innerHTML = motes;
+    sfx('jackpot', TIER_LV[tier] || 1);
+    buzz(tier === 'max' ? [20, 40, 30] : [18, 30, 12]);
+    clearTimeout(closeAchievement.tm);
+    closeAchievement.tm = setTimeout(closeAchievement, 2600);
+  }
+  function showNextAchievement() {
+    if (achievementBusy || !achievementQueue.length) return;
+    achievementBusy = true;
+    showAchievement(achievementQueue.shift());
+  }
+  function queueAchievements(list) {
+    if (!list || !list.length) return;
+    achievementQueue = achievementQueue.concat(list);
+    showNextAchievement();
+  }
+
+  var achievementFilter = 'all';
+  function achievementList() {
+    var owned = Object.keys(state.owned).length, mastered = countMastered();
+    var t2 = 0, t5 = 0, nTier = 0, rTier = 0, sr = 0, ssr = 0, ur = 0, ex = 0;
+    var maxLetter = 0, letterUp = 0, totalWrites = 0, practiced = 0, stage3 = 0;
+    for (var k in state.owned) {
+      var w = BY_WORD[k], rec = state.owned[k];
+      if (!w) continue;
+      var cl = cardLvOf(w), lv = levelsOf(w) || [];
+      totalWrites += rec.wr || 0;
+      if ((rec.wr || 0) > 0) practiced++;
+      if ((rec.stage || 0) >= 3) stage3++;
+      if (cl >= 2) t2++;
+      if (cl >= 5) t5++;
+      if (w.hid || rec.hid) ex++;
+      else if (w.tier <= 1) nTier++;
+      else if (w.tier === 2) rTier++;
+      else if (w.tier >= 5) ur++;
+      else if (w.tier >= 4) ssr++;
+      else if (w.tier >= 3) sr++;
+      lv.forEach(function (n) { maxLetter = Math.max(maxLetter, n); letterUp += Math.max(0, n - 1); });
+    }
+    var stats = state.stats || {}, wins = stats.wins || 0;
+    var battles = stats.battles || 0, kills = stats.kills || 0, stars = stats.stars || 0;
+    var codex = Object.keys(state.codex || {}).length, regions = 0;
+    for (var ri = 0; ri < REGIONS.length; ri++) {
+      var rg = state.stages && state.stages[REGIONS[ri].id];
+      if (rg && rg.c >= 5) regions++;
+    }
+    var out = [], add = function (cat, kind, key, title, desc, cur, targets, icon) {
+      targets.forEach(function (n, i) {
+        out.push({ id: key + '_' + n, cat: cat, kind: kind, icon: icon || '✦',
+          nm: title + ' · ' + n, d: desc.replace('{n}', n), cur: cur, max: n,
+          series: key, sname: title, sidx: i, slen: targets.length, targets: targets, desc: desc });
+      });
+    };
+    add('gacha', 'gacha', 'draw', '抽卡记录', '累计抽到 {n} 张卡', state.draws, [1, 3, 5, 10, 20, 30, 50, 80, 100, 200, 300, 500, 800, 1000, 2000], '✦');
+    add('gacha', 'gacha', 'sr', '稀见入手', '累计获得 {n} 张 SR 卡', sr, [1, 3, 5, 10, 20, 30, 50, 80, 100, 200], '◇');
+    add('gacha', 'gacha', 'ssr', '秘典入藏', '累计获得 {n} 张 SSR 卡', ssr, [1, 2, 3, 5, 10, 20, 30, 50, 80, 100], '◆');
+    add('gacha', 'gacha', 'ur', '孤本现世', '累计获得 {n} 张 UR 卡', ur, [1, 2, 3, 5, 8, 10, 20, 50], '★');
+    add('gacha', 'gacha', 'ex', '隐藏现世', '累计获得 {n} 张 EX 隐藏卡', ex, [1, 2, 3, 5, 8, 10], '☼');
+    add('collection', 'collection', 'owned', '词册收藏', '收集 {n} 张词卡', owned, [1, 3, 5, 10, 20, 30, 50, 80, 100, 150, 200, 300, 500, 800, 1000, 1500, 2000], '▦');
+    add('collection', 'collection', 'mastered', '通晓词义', '{n} 个单词默写满星', mastered, [1, 3, 5, 10, 20, 30, 50, 80, 100, 150, 200, 300, 500, 800, 1000], '✎');
+    add('collection', 'collection', 'tier', '全品阶收藏', '至少拥有 {n} 个不同品阶', [nTier, rTier, sr, ssr, ur, ex].filter(function (n) { return n > 0; }).length, [1, 2, 3, 4, 5, 6], '◎');
+    add('study', 'study', 'write', '默写练习', '累计正确默写 {n} 次', totalWrites, [1, 3, 5, 10, 20, 30, 50, 80, 100, 200, 300, 500, 800, 1000, 2000], '✎');
+    add('study', 'study', 'practice', '广泛涉猎', '练习 {n} 个不同单词', practiced, [1, 3, 5, 10, 20, 30, 50, 80, 100, 200, 300, 500], '☰');
+    add('study', 'study', 'stage', '熟练进阶', '{n} 个单词达到熟练度第 3 阶', stage3, [1, 3, 5, 10, 20, 30, 50, 80, 100, 200], '↗');
+    add('study', 'study', 'streak', '连续学习', '连续学习 {n} 天', state.streak || 1, [3, 5, 7, 10, 14, 21, 30, 45, 60, 90, 120, 180, 365], '♨');
+    add('upgrade', 'upgrade', 'cardlv', '卡牌培养', '{n} 张词卡达到 Lv5', t5, [1, 2, 3, 5, 10, 20, 30, 50, 80, 100, 200], '⬆');
+    add('upgrade', 'upgrade', 'cardlv2', '初次升级', '{n} 张词卡达到 Lv2', t2, [1, 3, 5, 10, 20, 30, 50, 80, 100], '◆');
+    add('upgrade', 'upgrade', 'letter', '字母工坊', '累计升级字母 {n} 次', letterUp, [1, 3, 5, 10, 20, 30, 50, 80, 100, 200, 300, 500, 800, 1000], 'A');
+    add('upgrade', 'upgrade', 'lettermax', '字母登顶', '最高字母等级达到 Lv{n}', maxLetter, [2, 3, 4, 5, 6], 'Λ');
+    add('codex', 'codex', 'monster', '怪物图鉴', '收录 {n} 个怪物', codex, [1, 3, 5, 10, 20, 30, 50, 80, 100, 150, 200, 300, 500, 800, 1000], '♞');
+    add('expedition', 'battle', 'battle', '漫游足迹', '完成 {n} 次漫游', battles, [1, 3, 5, 10, 20, 30, 50, 80, 100, 200, 300, 500], '⌁');
+    add('expedition', 'battle', 'win', '漫游胜利', '累计通关 {n} 次', wins, [1, 3, 5, 10, 20, 30, 50, 80, 100, 200], '⚔');
+    add('expedition', 'battle', 'star', '星光之路', '累计获得 {n} 颗关卡星', stars, [1, 3, 5, 10, 20, 30, 50, 80, 100, 200, 300, 500], '✦');
+    add('expedition', 'battle', 'kill', '百怪斩', '累计击杀 {n} 个敌人', kills, [1, 10, 30, 50, 100, 200, 300, 500, 800, 1000, 2000, 3000], '☄');
+    add('expedition', 'battle', 'region', '远行者', '完成 {n} 个地区', regions, [1, 2, 3, 5, 8, 13, 20, 30, 50, 80, 100], '⌖');
+    return out;
+  }
+  function checkAchievementUnlocks(silentInit) {
+    var all = achievementList();
+    if (silentInit && !state.achInit) {
+      all.forEach(function (a) { if (a.cur >= a.max) state.achSeen[a.id] = true; });
+      state.achInit = true;
+      save();
+      return;
+    }
+    var fresh = [];
+    all.forEach(function (a) {
+      if (a.cur >= a.max && !state.achSeen[a.id]) {
+        state.achSeen[a.id] = true;
+        fresh.push(a);
+      }
+    });
+    if (fresh.length) {
+      state.achInit = true;
+      save();
+      queueAchievements(fresh.slice(0, 3));
+    }
+  }
+
+  function renderAchievements(box) {
+    box = box || $('mineSheetBody');
+    var list = achievementList();
+    var cats = [
+      ['all', '全部'], ['gacha', '抽卡'], ['collection', '收藏'],
+      ['study', '学习'], ['upgrade', '养成'], ['codex', '图鉴'], ['expedition', '漫游']
     ];
     var unlocked = list.filter(function (a) { return a.cur >= a.max; }).length;
+    checkAchievementUnlocks(true);
 
-    var box = $('paneAch');
     if (!box) return;
-    var html = '<div class="ach-head">已解锁 <b>' + unlocked + '</b> / ' + list.length + '</div>' +
-      '<div class="ach-list">';
+    var pct = list.length ? Math.round(unlocked / list.length * 100) : 0;
+    var tally = { bronze: 0, silver: 0, gold: 0, max: 0 };
+    list.forEach(function (a) { if (a.cur >= a.max) tally[medalTier(a.sidx, a.slen)]++; });
+    var html = '<div class="ach-fixed-head"><div class="ach-hero">' +
+      '<div class="ach-ring" style="--p:' + pct + '"><b>' + pct + '<i>%</i></b></div>' +
+      '<div class="ach-hero-t"><p>成就收藏</p><b>' + unlocked + '<i> / ' + list.length + '</i></b>' +
+      '<div class="ach-tally">' + ['bronze', 'silver', 'gold', 'max'].map(function (k) {
+        return '<span class="m-' + k + '"><i></i>' + MEDAL_NM[k] + ' ' + tally[k] + '</span>';
+      }).join('') + '</div></div></div><div class="ach-tabs">';
+    cats.forEach(function (c) {
+      html += '<button class="ach-tab' + (achievementFilter === c[0] ? ' on' : '') + '" data-ach-cat="' + c[0] + '">' + c[1] + '</button>';
+    });
+    html += '</div></div><div class="as-list">';
+
+    // 每一档都是独立成就：奖牌材质由该档在系列中的位置决定，未达成置灰
     list.forEach(function (a) {
-      var on = a.cur >= a.max;
-      var pct = Math.min(100, Math.round(a.cur / a.max * 100));
-      html += '<div class="ach-row' + (on ? ' on' : '') + '">' +
-        '<div class="ach-ic">' + (on ? '✓' : '·') + '</div>' +
-        '<div class="ach-main">' +
-          '<div class="ach-top"><b>' + a.nm + '</b><span>' + Math.min(a.cur, a.max) + ' / ' + a.max + '</span></div>' +
-          '<p>' + a.d + '</p>' +
-          '<div class="ach-bar"><i style="width:' + pct + '%"></i></div>' +
-        '</div>' +
-      '</div>';
+      if (achievementFilter !== 'all' && a.cat !== achievementFilter) return;
+      var on = a.cur >= a.max, tier = medalTier(a.sidx, a.slen);
+      var p = Math.max(0, Math.min(100, a.cur / a.max * 100));
+      html += '<div class="as k-' + a.kind + ' m-' + tier + (on ? ' done' : ' none') + '">' +
+        '<div class="as-medal"><span>' + a.icon + '</span><b>' + (ROMAN[a.sidx] || a.sidx + 1) + '</b></div>' +
+        '<div class="as-main">' +
+          '<div class="as-top"><b>' + achName(a) + '</b><span class="as-tier">' + MEDAL_NM[tier] + '</span></div>' +
+          '<p class="as-d">' + a.d + '</p>' +
+          (on ? '' : '<div class="as-prog"><div class="achs-bar"><i style="width:' + p.toFixed(1) + '%"></i></div>' +
+            '<em>' + Math.min(a.cur, a.max) + '/' + a.max + '</em></div>') +
+        '</div>' + (on ? '<em class="as-ok">✓</em>' : '') + '</div>';
     });
     box.innerHTML = html + '</div>';
+    var tabs = box.querySelectorAll('[data-ach-cat]');
+    for (var ti = 0; ti < tabs.length; ti++) tabs[ti].onclick = function () {
+      achievementFilter = this.getAttribute('data-ach-cat');
+      sfx('tap');
+      renderAchievements(box);
+    };
   }
 
   /* ── 默写 ─────────────────────────────────────── */
@@ -1243,9 +2746,103 @@
     return Math.max(0, Math.min(3, Math.floor((o.wr * 3) / need)));
   }
 
+  /* ── 熟练度 XP 与段内阶段（N1 → N2 → N3）─────────────
+     每天每词前 5 次完整收益，6~10 次少量，超过 10 次不产出，
+     但仍然允许一直练习，不硬锁玩家。 */
+  var XP_STAGE_GATE = [0, 45, 100, 170]; // 阶段 1/2/3 的累计 XP 门槛
+  var XP_FULL_TIMES = 5;                  // 每日完整收益次数
+  var XP_HALF_TIMES = 10;                 // 每日半收益截止
+  var XP_PER_COPY = 15;                   // 照卡拼对
+  var XP_PER_PERFECT = 22;                 // 零失误
+  var XP_PER_WRITE = 10;                  // 默写正确
+
+  function progOf(w) {
+    var o = state.owned[w.w];
+    if (!o) return null;
+    if (typeof o.xp !== 'number') o.xp = 0;
+    if (typeof o.stage !== 'number') o.stage = 0;
+    if (!o.pd) { o.pd = ''; o.pn = 0; }
+    return o;
+  }
+  function stageOf(w) { var o = progOf(w); return o ? Math.min(2, o.stage || 0) : 0; }
+  function addXp(w, base) {
+    var o = progOf(w);
+    if (!o || base <= 0) return 0;
+    var t = todayStr();
+    if (o.pd !== t) { o.pd = t; o.pn = 0; }
+    o.pn++;
+    o.ls = todayStr();   // 最近一次拼写日期，用于「到期复习」
+    var gain = o.pn <= XP_FULL_TIMES ? base : o.pn <= XP_HALF_TIMES ? Math.round(base * 0.4) : 0;
+    if (gain <= 0) { save(); return 0; }
+    o.xp += gain;
+    var st = o.stage || 0;
+    while (st < 2 && o.xp >= XP_STAGE_GATE[st + 1]) st++;
+    o.stage = st;
+    save();
+    return gain;
+  }
+  function xpOf(w) { var o = progOf(w); return o ? o.xp : 0; }
+
+  /* 熟练度组件：三阶刻度 + 进度条 + 获取途径（详情页 / 默写页共用） */
+  var XP_SRC = '抽卡拼对 +15（零失误 +22）· 默写 +10 · 漫游拼满单词 +8 · 漫游通关 +12';
+  function xpWidget(w, opts) {
+    opts = opts || {};
+    var xp = xpOf(w), st = stageOf(w), top = XP_STAGE_GATE[2];
+    var pct = Math.min(100, xp / top * 100);
+    var mark = XP_STAGE_GATE[1] / top * 100;
+    var full = st >= 2;
+    var steps = ['1 阶', '2 阶 · 解锁 Lv4', '3 阶 · 解锁 Lv5'].map(function (t, i) {
+      return '<span class="' + (st >= i ? 'on' : '') + '">' + t + '</span>';
+    }).join('');
+    return '<div class="xpw' + (full ? ' full' : '') + '">' +
+      '<div class="xpw-top"><b>熟练度</b><span class="xpw-num">' +
+        (full ? '已满 · 字母可升到满级' : xp + ' / ' + (xpNeedOf(w) || top) + ' XP') + '</span></div>' +
+      '<div class="xpw-bar"><i style="width:' + pct.toFixed(1) + '%"></i><em style="left:' + mark.toFixed(1) + '%"></em></div>' +
+      '<div class="xpw-steps">' + steps + '</div>' +
+      (opts.src === false ? '' : '<p class="xpw-src">获取：' + XP_SRC + '</p>') +
+    '</div>';
+  }
+  // 详情页用的单行熟练度条
+  function xpMini(w) {
+    var xp = xpOf(w), st = stageOf(w), top = XP_STAGE_GATE[2], full = st >= 2;
+    var pct = Math.min(100, xp / top * 100), mark = XP_STAGE_GATE[1] / top * 100;
+    return '<div class="dxp' + (full ? ' full' : '') + '"><b>熟练 ' + (st + 1) + ' 阶</b>' +
+      '<div class="xpw-bar"><i style="width:' + pct.toFixed(1) + '%"></i><em style="left:' + mark.toFixed(1) + '%"></em></div>' +
+      '<span>' + (full ? '已满' : xp + '/' + (xpNeedOf(w) || top)) + '</span></div>';
+  }
+  // 熟练度增长动画：进度条推进 + 浮出 +N
+  function bumpXp(box, w, gain) {
+    if (!box) return;
+    var old = box.querySelector('.xpw-bar i');
+    var from = old ? old.style.width : '0%';
+    box.innerHTML = xpWidget(w, { src: false });
+    var bar = box.querySelector('.xpw-bar i');
+    if (bar) {
+      var to = bar.style.width;
+      bar.style.transition = 'none';
+      bar.style.width = from;
+      void bar.offsetWidth;
+      bar.style.transition = '';
+      bar.style.width = to;
+    }
+    var f = mk('span', 'xpw-float');
+    f.textContent = gain > 0 ? '+' + gain + ' XP' : '今日收益已满';
+    if (gain <= 0) f.classList.add('dim');
+    box.querySelector('.xpw').appendChild(f);
+    var num = box.querySelector('.xpw-num');
+    if (num && gain > 0) num.classList.add('bump');
+  }
+  function xpNeedOf(w) {
+    var o = progOf(w);
+    if (!o) return 0;
+    var st = o.stage || 0;
+    return st >= 2 ? 0 : XP_STAGE_GATE[st + 1];
+  }
+
   function startWrite(w) {
     curWrite = { w: w, tries: 0, revealed: false, mode: 'pick', picks: [], bank: buildBank(w) };
     $('quiz').classList.add('open');
+    sfx('sheet');
     renderWrite();
   }
 
@@ -1289,6 +2886,7 @@
     var mode = curWrite.mode || 'pick';
     var body = $('qBody');
     body.innerHTML =
+      '<div class="wxp" id="wXp">' + xpWidget(w, { src: false }) + '</div>' +
       '<div class="wcn">' + cnHtml + '</div>' +
       '<div class="wmeta">' + (w.w.length) + ' 个字母' +
       (curWrite.revealed ? '　·　' + (w.ph || '') : '') + '</div>' +
@@ -1406,12 +3004,14 @@
     if (got === w.w.toLowerCase()) {
       var slots = $('wSlots');
       if (slots) slots.classList.add('good');
+      sfx('good');
       writeCorrect();
       setTimeout(resetPicks, 720);
     } else {
       curWrite.lock = true;
       var s2 = $('wSlots');
       if (s2) s2.classList.add('bad');
+      sfx('wrong');
       buzz([8, 40, 8]);
       writeWrong();
       setTimeout(resetPicks, 620);
@@ -1459,18 +3059,23 @@
     o.wr++;
     o.at = o.at || Date.now();
     o.m = starsOf(w);
+    var gain = addXp(w, XP_PER_WRITE);
     save();
     refreshCounts();
-    rewardWrite();
+    rewardWrite(gain);
+    bumpXp($('wXp'), w, gain);
+    addDaily('spell');
+    if (reviewDue(w)) addDaily('review');
     var bar = $('wBarFill');
     if (bar) bar.style.width = Math.min(100, (o.wr / needOf(w)) * 100).toFixed(1) + '%';
     renderPeekState();
+    sfx('claim');
     buzz(12);
     FX.sprinkle(14, w.tier);
     var left = Math.max(0, needOf(w) - o.wr);
     $('wFoot').innerHTML = left > 0
       ? '<span class="wok">对了　·　再默 ' + left + ' 次满星</span>'
-      : '<span class="wok">' + (o.m >= 3 ? '通晓了' : '完成本轮') + '　·　' + w.w + '</span>' +
+      : '<span class="wok">' + (o.m >= 3 ? '已掌握' : '完成本轮') + '　·　' + w.w + '</span>' +
         '<button class="btn" id="wDone" style="margin-top:10px;height:40px">返 回</button>';
     if (left === 0) {
       var dn = $('wDone');
@@ -1496,11 +3101,13 @@
       inp.classList.remove('bad');
       inp.classList.add('good');
       setTimeout(function () { inp.classList.remove('good'); }, 420);
+      sfx('good');
       writeCorrect();
       try { inp.focus(); } catch (e) {}
     } else {
       inp.classList.remove('good');
       inp.classList.add('bad');
+      sfx('wrong');
       buzz([8, 40, 8]);
       setTimeout(function () { inp.classList.remove('bad'); }, 420);
       writeWrong();
@@ -1509,11 +3116,13 @@
   }
 
   function closeQuiz() {
+    sfx('sheetClose');
     $('quiz').classList.remove('open');
     curWrite = null;
     if ($('daily').classList.contains('open')) renderDaily();
     if (curTab === 'mine' && curPane === 'book') {
-      renderGrid();
+      renderCats();
+      renderGrid('rebuild');
       if ($('detail').classList.contains('open')) {
         var dc = $('detailCard').querySelector('.card');
         var dw = dc && dc.getAttribute('data-word');
@@ -1541,45 +3150,185 @@
   var WRITES_PER_BONUS = 3;
   var writeTally = 0;
 
-  function rewardWrite() {
+  function rewardWrite(xpGain) {
     state.ink += WRITE_INK;
     refreshCounts();
     writeTally++;
-    if (writeTally % WRITES_PER_BONUS !== 0) return;
-    if (grantBattleBonus()) toast('默写 ' + WRITES_PER_BONUS + ' 次 · 多得一次远征');
+    var bonusShown = false;
+    if (writeTally % WRITES_PER_BONUS === 0) {
+      if (grantBattleBonus()) { toast('默写 ' + WRITES_PER_BONUS + ' 次 · 多得一次漫游'); bonusShown = true; }
+    }
+    if (!bonusShown && xpGain) toast('熟练度 +' + xpGain + ' · 成长点 +' + WRITE_INK);
   }
 
   /* ── 绑定 ─────────────────────────────────────── */
+  // 先等原生存档读完再开局，否则 autoDraw 会把空状态写回去覆盖旧存档
   load();
-  ensureDay();
-  refreshCounts();
-  renderQuota();
-  renderBattleQuota();
-  updateDailyBrief();
+  var booted = false;
+  function boot() {
+    if (booted) return;
+    booted = true;
+    ensureDay();
+    refreshCounts();
+    renderQuota();
+    renderBattleQuota();
+    updateDailyBrief();
+    renderDrawThemes();
+    autoDraw();
+  }
+  sgetNative().then(function (raw) {
+    if (booted) return;
+    var local = state.draws || 0;
+    if (raw) {
+      try {
+        var o = JSON.parse(raw);
+        if (o && o.owned && (o.draws || 0) >= local) load(raw);
+      } catch (e) {}
+    }
+    boot();
+  });
+  setTimeout(boot, 1500);
 
-  $('btnDraw').onclick = draw;
+  $('btnDraw').onclick = function () {
+    if (busy) return;
+    if (quotaLeft() <= 0) { switchTab('expedition'); return; }
+    // 交给 draw() 判断：当前组还有没开的卡就先弹确认，不在这里直接丢弃
+    draw();
+  };
   $('btnDaily').onclick = openDaily;
   $('expStart').onclick = startExpedition;
-  $('dailyClose').onclick = function () { $('daily').classList.remove('open'); updateDailyBrief(); };
-  $('detailClose').onclick = function () { $('detail').classList.remove('open'); };
+  $('dailyClose').onclick = function () { sfx('sheetClose'); $('daily').classList.remove('open'); updateDailyBrief(); };
+  $('detailClose').onclick = function () { sfx('sheetClose'); $('detail').classList.remove('open'); };
+  $('expSheetClose').onclick = closeExpSheet;
   $('qBack').onclick = closeQuiz;
 
   var tabBtns = document.querySelectorAll('#tabbar .tab');
   for (var ti = 0; ti < tabBtns.length; ti++) {
     tabBtns[ti].onclick = function () { switchTab(this.getAttribute('data-tab')); };
   }
-  var mineBtns = document.querySelectorAll('#mineTabs button');
-  for (var mi = 0; mi < mineBtns.length; mi++) {
-    mineBtns[mi].onclick = function () { showMinePane(this.getAttribute('data-pane')); };
+  if ($('mineRecordBtn')) $('mineRecordBtn').onclick = function () { openMineSheet('record'); };
+  if ($('mineAchBtn')) $('mineAchBtn').onclick = function () { openMineSheet('ach'); };
+  if ($('pfTitleBtn')) $('pfTitleBtn').onclick = function () { openMineSheet('title'); };
+  if ($('pfAvatar')) $('pfAvatar').onclick = function () { openMineSheet('title'); };
+  if ($('filterBtn')) $('filterBtn').onclick = function () { openMineSheet('filter'); };
+
+  // 点击遮罩关掉底部弹层，避免穿透到下面的图鉴
+  var maskEl = $('mask');
+  if (maskEl) maskEl.onclick = function () { closeMineSheet(); };
+  var sheetCloseEl = $('mineSheetClose');
+  if (sheetCloseEl) sheetCloseEl.onclick = function () { closeMineSheet(); };
+
+  // 图鉴搜索：输入即筛，输入时自动切到「全部」以免锁卡搜不到
+  var searchEl = $('codexSearch');
+  if (searchEl) {
+    var searchTm = 0;
+    searchEl.addEventListener('input', function () {
+      var v = this.value || '';
+      var clr = $('codexClear');
+      if (clr) clr.style.display = v ? '' : 'none';
+      clearTimeout(searchTm);
+      searchTm = setTimeout(function () {
+        bookQuery = v;
+        if (v && (bookFilter === 'got' || bookTag || bookTier)) {
+          bookFilter = 'all'; bookTag = ''; bookTier = 0;
+          renderCats(); renderChips(); renderSort();
+        }
+        renderGrid(true);
+      }, 140);
+    });
+    searchEl.addEventListener('search', function () { searchEl.dispatchEvent(new Event('input')); });
+  }
+  if ($('codexClear')) {
+    $('codexClear').onclick = function () {
+      if (searchEl) searchEl.value = '';
+      this.style.display = 'none';
+      bookQuery = '';
+      renderGrid(true);
+      if (searchEl) searchEl.blur();
+    };
   }
 
-  stage.addEventListener('click', function (e) {
-    if (e.target.closest && e.target.closest('.pack')) draw();
+  // 图鉴分页交给 IntersectionObserver，不再依赖具体滚动容器
+
+  function openStatDialog(title, text, rewardTitle, rewardText) {
+    var old = $('statDialog');
+    if (old) old.parentNode.removeChild(old);
+    var ov = mk('div', 'stat-dialog');
+    ov.id = 'statDialog';
+    var reward = rewardTitle ? '<section class="stat-dialog-reward"><small>今日签到奖励</small><b>' + rewardTitle + '</b><span>' + rewardText + '</span></section>' : '';
+    ov.innerHTML = '<div class="stat-dialog-card">' +
+      '<div class="stat-dialog-mark">✦</div><h3>' + title + '</h3>' + reward +
+      '<section class="stat-dialog-explain"><small>' + (rewardTitle ? '签到说明' : '说明') + '</small><p>' + text + '</p></section>' +
+      '<button class="btn primary stat-dialog-ok">知道了</button></div>';
+    document.body.appendChild(ov);
+    function close() { ov.classList.add('out'); setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 180); }
+    ov.onclick = function (e) { if (e.target === ov || e.target.closest('.stat-dialog-x, .stat-dialog-ok')) close(); };
+    sfx('sheet');
+  }
+  [].forEach.call(document.querySelectorAll('.pf-stat'), function (b) {
+    b.onclick = function () {
+      var title = b.getAttribute('data-stat-title');
+      var text = b.getAttribute('data-stat-text');
+      if (b.classList.contains('st-fire')) {
+        var fresh = checkInToday();
+        text = '每天点击一次完成签到，连续天数会影响称号成长；中断一天后会从 1 天重新计算。';
+        openStatDialog(
+          title,
+          text,
+          fresh ? '成长点 +' + CHECKIN_REWARD : '今日已签到',
+          fresh ? '首次签到领取，连续 ' + state.streak + ' 天' : '今天不重复发放奖励，当前连续 ' + state.streak + ' 天'
+        );
+        return;
+      }
+      openStatDialog(title, text);
+    };
+  });
+
+  // 返回顶部：滚动一段后出现，点击平滑回到列表顶部
+  var codexTopBtn = $('codexTop');
+  var mineScrollEl = $('screenMine');
+  if (codexTopBtn) {
+    codexTopBtn.onclick = function () {
+      sfx('tap');
+      if (mineScrollEl) {
+        if (mineScrollEl.scrollTo) mineScrollEl.scrollTo({ top: 0, behavior: 'smooth' });
+        else mineScrollEl.scrollTop = 0;
+      }
+    };
+  }
+  if (mineScrollEl) {
+    var topRaf = 0;
+    mineScrollEl.addEventListener('scroll', function () {
+      if (topRaf || !codexTopBtn) return;
+      topRaf = requestAnimationFrame(function () {
+        topRaf = 0;
+        var show = curTab === 'mine' && curPane === 'book' && (bookTab === 'cards' || bookTab === 'monsters') &&
+          mineScrollEl.scrollTop > 360;
+        codexTopBtn.classList.toggle('on', show);
+      });
+    }, { passive: true });
+  }
+
+  // 屏幕尺寸变化时重算卡宽（横向空间按容器宽度分配）
+  var codexRsTm = 0;
+  window.addEventListener('resize', function () {
+    if (curTab !== 'mine' || curPane !== 'book') return;
+    clearTimeout(codexRsTm);
+    codexRsTm = setTimeout(function () { renderGrid('rebuild'); }, 120);
+  });
+
+  // 兜底的按钮点按声：专门音效刚响过就不再叠一层
+  document.addEventListener('click', function (e) {
+    var t = e.target;
+    if (!t || !t.closest) return;
+    if (!t.closest('button, .tab, .region, .btab, .chip, .dt-claim')) return;
+    if (Sfx.recent && Sfx.recent(60)) return;
+    sfx('tap');
   });
 
   if (window.xhs && window.xhs.miniTool && window.xhs.miniTool.setNavigationBar) {
     try {
-      window.xhs.miniTool.setNavigationBar({ title: '抽词成册', backgroundColor: '#13100d', frontColor: '#ffffff' });
+      window.xhs.miniTool.setNavigationBar({ title: '词卡物语', backgroundColor: '#13100d', frontColor: '#ffffff' });
     } catch (e) {}
   }
 })();

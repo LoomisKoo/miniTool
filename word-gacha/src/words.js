@@ -1,6 +1,7 @@
 /* 词库 · 191 词 / 10 类
    字段: w 单词 | ph 音标 | pos 词性 | cn 释义 | tier 稀有度 1-5 | tag 分类 | ex 例句 | exCn 例句翻译 */
 window.TAGS = {
+  basic: '常用',
   nature: '草木',
   light: '光影',
   sound: '声籁',
@@ -254,15 +255,17 @@ window.WORDS = [
 ];
 
 window.TIERS = {
-  5: { name: '孤本', code: 'LR', color: '#7b2d3b', foil: '#c9a227' },
-  4: { name: '秘典', code: 'UR', color: '#2d4a6b', foil: '#9db6cf' },
-  3: { name: '稀见', code: 'SSR', color: '#3f5a3c', foil: '#a3b98f' },
-  2: { name: '藏本', code: 'SR', color: '#5a4a3a', foil: '#c9ae87' },
-  1: { name: '常本', code: 'C', color: '#6b6155', foil: '#bdb198' },
+  5: { name: '孤本', code: 'UR', color: '#7b2d3b', foil: '#c9a227' },
+  4: { name: '秘典', code: 'SSR', color: '#2d4a6b', foil: '#9db6cf' },
+  3: { name: '稀见', code: 'SR', color: '#3f5a3c', foil: '#a3b98f' },
+  2: { name: '藏本', code: 'R', color: '#5a4a3a', foil: '#c9ae87' },
+  1: { name: '常本', code: 'N', color: '#6b6155', foil: '#bdb198' },
 };
 
 // 稀有度权重：越稀有越难抽
-window.TIER_WEIGHTS = { 1: 480, 2: 280, 3: 160, 4: 66, 5: 16 };
+// 正式权重：{ 1: 480, 2: 280, 3: 160, 4: 66, 5: 16 }
+// [DEV-TEST] 测试用：各等级等概率，发版前必须改回正式权重！
+window.TIER_WEIGHTS = { 1: 1, 2: 1, 3: 1, 4: 1, 5: 1 };
 
 // ══ 扩充词库 · 6 个新类型 120 词 ═══════════════════════════
 // 紧凑元组: [w, ph, pos, cn, tier, tag, ex, exCn]

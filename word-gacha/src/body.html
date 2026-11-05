@@ -1,103 +1,132 @@
 <div id="app">
+  <!-- 机库预览：整屏底层，画当前出战卡的满火力弹幕（必须在滚动容器之外，否则会被 overflow 裁掉） -->
+  <div class="exp-bg" id="expBg">
+    <canvas id="expShip"></canvas>
+    <p class="exp-hangar-tag" id="expShipTag"></p>
+  </div>
   <main class="screens">
 
     <!-- ══ 抽卡 ══ -->
     <section class="screen on" id="screenDraw">
       <header class="hdr">
         <div class="hdr-l">
-          <p class="hdr-sub">每天三张新词卡</p>
-          <h1 class="hdr-title">抽词成册</h1>
+          <p class="hdr-sub">英语单词卡牌养成游戏</p>
+          <h1 class="hdr-title">词卡物语</h1>
         </div>
-        <div class="ink-badge"><b id="drawInk">0</b><span>墨水</span></div>
       </header>
 
-      <div class="draw-meta">
-        <div class="mcell"><b id="drawQuota">6</b><span>今日拆封</span></div>
-        <div class="mcell"><b id="drawOwned">0</b><span>已收藏</span></div>
-        <div class="mcell"><b id="drawStreak">0</b><span>连续天数</span></div>
-      </div>
-
-      <div class="stage" id="stage">
-        <div class="pack" id="pack">
-          <div class="seal">抽</div>
-          <div class="cap">轻 触 拆 封</div>
-        </div>
-      </div>
-
-      <div class="hint" id="hint">每次拆封 3 张单词卡</div>
-
-      <button class="cta" id="btnDraw">拆 封</button>
-
-      <button class="task-card" id="btnDaily">
-        <span class="tc-l"><b>每日任务</b><em id="dailyBrief">今日 0 / 6</em></span>
-        <span class="tc-r">去完成 ›</span>
+      <button class="task-card" id="btnDaily" type="button">
+        <span class="tc-head">
+          <span class="tc-t"><b>今日任务</b><i id="dailyBrief">0/4</i><span>完成领取奖励</span></span>
+          <em class="tc-go">去完成 ›</em>
+        </span>
+        <span class="tc-list" id="dailyPills"></span>
       </button>
+
+      <div class="draw-themes" id="drawThemes" aria-label="主题卡池"></div>
+      <div class="draw-theme-desc" id="drawThemeDesc" aria-live="polite"></div>
+      <div class="stage" id="stage"></div>
+
+      <div class="draw-foot">
+        <div class="hint" id="hint">每组 3 张单词卡</div>
+        <button class="cta" id="btnDraw">再 来 一 组</button>
+      </div>
     </section>
 
     <!-- ══ 远征 ══ -->
     <section class="screen" id="screenExpedition">
-      <header class="hdr">
-        <div class="hdr-l">
-          <p class="hdr-sub">用一张词卡打穿五关</p>
-          <h1 class="hdr-title">远征</h1>
-        </div>
-        <div class="ink-badge"><b id="expQuota">3</b><span>今日次数</span></div>
-      </header>
+      <div class="exp-map" id="expMap"></div>
 
-      <div class="seg-tabs" id="expTabs"></div>
-
-      <div class="exp-meta">
-        <span id="expCount">0 张可选</span>
-        <button class="sort-btn" id="expSort">等级优先</button>
-      </div>
-
-      <div class="exp-list" id="expList"></div>
-
-      <div class="dock">
-        <div class="dock-info" id="expPickInfo">请选择一张词卡</div>
-        <button class="cta" id="expStart" disabled>开始远征</button>
+      <div class="dock exp-dock">
+        <button class="exp-pick" id="expPickBtn" type="button">
+          <span class="exp-pick-card" id="expPickCard"></span>
+          <span class="exp-pick-meta">
+            <span class="dock-info" id="expPickInfo">请选择一张词卡</span>
+            <em>点击更换出战卡 ›</em>
+          </span>
+        </button>
+        <button class="cta" id="expStart" disabled>出 发</button>
       </div>
     </section>
 
     <!-- ══ 我的 ══ -->
     <section class="screen" id="screenMine">
-      <header class="hdr">
-        <div class="hdr-l">
-          <p class="hdr-sub">收藏、战绩与成就</p>
-          <h1 class="hdr-title">我的</h1>
-        </div>
-      </header>
-
       <div class="profile">
-        <div class="pf-avatar">词</div>
-        <div class="pf-main">
-          <p class="pf-name">词卡学徒</p>
-          <p class="pf-sub"><b id="mineOwned">0</b> 张卡 · <b id="mineMastered">0</b> 通晓 · <b id="mineInk">0</b> 墨水</p>
+        <div class="pf-top">
+          <button class="pf-avatar" id="pfAvatar" type="button" aria-label="称号一览"><span class="tm t0" id="pfEmblem"></span><i id="pfRank">1</i></button>
+          <div class="pf-main">
+            <button class="pf-title" id="pfTitleBtn" type="button"><b class="pf-name">未开卷</b><em>›</em></button>
+            <div class="mine-acts">
+              <button class="mine-act act-rec" id="mineRecordBtn" type="button">
+                <i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 21V4"/><path d="M6 4.5h11l-2.4 3.8L17 12H6"/></svg></i>
+                <span><b>战绩</b><small id="mineRecSub">—</small></span>
+              </button>
+              <button class="mine-act act-ach" id="mineAchBtn" type="button">
+                <i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7.5 4h9v4.5a4.5 4.5 0 0 1-9 0V4Z"/><path d="M7.5 6H5a2.6 2.6 0 0 0 3 3.6M16.5 6H19a2.6 2.6 0 0 1-3 3.6M12 13v3.5M8.5 20h7l-.8-3.5H9.3L8.5 20Z"/></svg></i>
+                <span><b>成就</b><small id="mineAchSub">—</small></span>
+              </button>
+            </div>
+          </div>
         </div>
-      </div>
-
-      <div class="seg-tabs mine-tabs" id="mineTabs">
-        <button class="on" data-pane="book">图鉴</button>
-        <button data-pane="record">战绩</button>
-        <button data-pane="ach">成就</button>
+        <div class="pf-stats">
+          <button class="pf-stat st-star" data-stat-title="已掌握" data-stat-text="一个单词默写到满 3 星就算掌握。漫游地区需要按顺序通关前一地区的第 5 关解锁，不是按掌握数量解锁。">
+            <span class="ps-ico"><svg viewBox="0 0 24 24"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/></svg></span>
+            <span class="ps-txt"><b id="mineMastered">0</b><em>已掌握</em></span>
+          </button>
+          <button class="pf-stat st-fire" data-stat-title="连续打卡" data-stat-text="点击这里完成今日打卡并查看说明。每天最多计算一次，中断一天会从 1 重新算。连续天数也是升级称号的条件。">
+            <span class="ps-ico"><svg viewBox="0 0 24 24"><path d="M12 3c.6 3.2 4.8 5.4 4.8 10a4.8 4.8 0 0 1-9.6 0c0-2 1-3.3 2-4.3.2 1.6 1 2.6 2 2.9C10.6 9 11 6 12 3z"/></svg></span>
+            <span class="ps-txt"><b id="mineStreak">0</b><em>连续打卡</em></span>
+          </button>
+          <button class="pf-stat st-ink" data-stat-title="成长点" data-stat-text="默写正确、重复抽到的卡、漫游都会获得。用来升级卡片字母，也能在每日任务里兑换抽卡。">
+            <span class="ps-ico"><svg viewBox="0 0 24 24"><path d="M12 3.5s6 6.4 6 10.6a6 6 0 0 1-12 0C6 9.9 12 3.5 12 3.5z"/></svg></span>
+            <span class="ps-txt"><b id="mineInk">0</b><em>成长点</em></span>
+          </button>
+        </div>
       </div>
 
       <div class="pane on" id="paneBook">
         <div class="book-tabs" id="bookTabs"></div>
         <div id="bookCards">
-          <div class="chips" id="chips"></div>
-          <div class="chips sorts" id="sorts"></div>
+          <div class="codex-head">
+            <div class="codex-prog">
+              <span class="cp-lab">已收录 <b id="codexGot">0</b> / <i id="codexTotal">0</i></span>
+              <span class="cp-bar"><i id="codexBar"></i></span>
+            </div>
+          </div>
+          <div class="book-tools">
+            <div class="codex-search">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.2" stroke="currentColor" stroke-width="1.8"/><path d="M15.2 15.2L20 20" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+              <input id="codexSearch" type="search" inputmode="search" placeholder="搜索单词或释义" autocomplete="off" autocapitalize="off" spellcheck="false">
+              <button class="cs-clear" id="codexClear" type="button" aria-label="清空">✕</button>
+            </div>
+            <button class="filter-btn" id="filterBtn">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+              筛选<em id="filterSum">全部</em>
+            </button>
+          </div>
           <div class="grid" id="grid"></div>
+          <div class="codex-more" id="codexMore"></div>
           <p class="book-stat" id="bookStat"></p>
         </div>
         <div class="atlas" id="atlas"></div>
+        <button class="codex-top" id="codexTop" aria-label="返回顶部">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 11.5l6-6 6 6M12 6v13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+        </button>
       </div>
-
-      <div class="pane" id="paneRecord"></div>
-      <div class="pane" id="paneAch"></div>
     </section>
 
   </main>
+
+  <!-- 我的：筛选 / 战绩 / 成就 共用一个底部弹层 -->
+  <div class="mask" id="mask"></div>
+  <div class="sheet" id="mineSheet">
+    <div class="sheet-head">
+      <span id="mineSheetTitle">筛选</span>
+      <span></span>
+      <button class="sheet-x" id="mineSheetClose" aria-label="关闭">✕</button>
+    </div>
+    <div class="sheet-body" id="mineSheetBody"></div>
+  </div>
 
   <nav class="tabbar" id="tabbar">
     <button class="tab on" data-tab="draw">
@@ -114,7 +143,7 @@
         <path d="M19 20.5L12.5 14M19.8 15.2l-3.4 3.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
         <path d="M13.6 4.6l5.8 5.8M6.2 12.4l5.4 5.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
       </svg>
-      <span>远征</span>
+      <span>漫游</span>
     </button>
     <button class="tab" data-tab="mine">
       <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -129,33 +158,28 @@
 <!-- ══ 远征战斗 ══ -->
 <div class="sheet battle-sheet" id="battle">
   <div class="battle-panel" id="battle-play">
-    <div class="bhud">
-      <span class="bhp" id="battleHp"></span>
-      <span class="bstat">关卡 <b id="battleWave">1 / 5</b></span>
-      <span class="bstat">击杀 <b id="battleKill">0</b></span>
-      <button class="blink" id="battleQuit">撤退</button>
-    </div>
-    <div class="bstage" id="battleStage">
+    <div class="bstage sx-stage" id="battleStage">
       <canvas id="battleCanvas"></canvas>
+      <div class="sx-top">
+        <button class="sx-btn" id="battleQuit" aria-label="返回"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+        <span class="sx-level" id="battleWave">1-5</span>
+        <button class="sx-btn sx-snd" id="battleSound" aria-label="音效"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor" fill-opacity=".25"/><path class="snd-w" d="M15.5 9a4.5 4.5 0 0 1 0 6M18 6.5a8 8 0 0 1 0 11"/><path class="snd-x" d="M16 9.5l5 5M21 9.5l-5 5"/></svg></button>
+      </div>
       <div class="btoast" id="battleToast"></div>
-    </div>
-    <div class="bbar">
-      <div class="bslots" id="battleSlots"></div>
-      <button class="btn primary bcharge-btn" id="battleFireStrong">强 射</button>
+      <div class="sx-bottom">
+        <button class="sx-bomb" id="battleBomb"><i class="sx-bomb-ring"></i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></svg><span id="battleBombDots"></span></button>
+      </div>
     </div>
   </div>
 
   <div class="battle-panel" id="battle-charge">
     <div class="charge-box">
-      <div class="charge-k">强射装填</div>
+      <div class="charge-k">齐射装填</div>
       <canvas id="chargePreview" class="charge-preview" width="120" height="120"></canvas>
       <div class="charge-cn" id="chargeCn"></div>
       <div class="charge-meta" id="chargeMeta"></div>
-      <input id="chargeInput" class="winput" type="text" autocomplete="off" autocorrect="off"
-        autocapitalize="off" spellcheck="false" placeholder="默写这个单词">
       <div class="wacts" style="margin-top:14px">
-        <button class="btn" id="chargeCancel">取消</button>
-        <button class="btn primary" id="chargeSubmit">发 射</button>
+        <button class="btn" id="chargeCancel">关闭</button>
       </div>
       <div class="wfoot" id="chargeFoot"></div>
     </div>
@@ -165,7 +189,7 @@
     <div class="sheet-head">
       <span>关卡结算</span>
       <span></span>
-      <span></span>
+      <button id="battleUpBack">‹ 返回</button>
     </div>
     <div class="sheet-body">
       <div class="bup-grid" id="battleUpgrade"></div>
@@ -173,16 +197,11 @@
   </div>
 
   <div class="battle-panel" id="battle-result">
-    <div class="sheet-head">
-      <span id="battleResultTitle">结算</span>
-      <span></span>
-      <span></span>
-    </div>
     <div class="sheet-body" style="text-align:center">
       <div class="bres" id="battleResultBody"></div>
       <div class="wacts" style="margin-top:22px">
-        <button class="btn" id="battleBack">返回</button>
-        <button class="btn primary" id="battleAgain">再来一次</button>
+        <button class="btn br-back" id="battleBack">返回</button>
+        <button class="btn primary br-again" id="battleAgain">再来一次</button>
       </div>
     </div>
   </div>
@@ -202,24 +221,57 @@
 </div>
 
 <!-- ══ 卡片详情 ══ -->
+<div class="sheet" id="expSheet">
+  <div class="sheet-head">
+    <span>选择出战词卡</span>
+    <span id="expCount"></span>
+    <button id="expSheetClose">‹ 返回</button>
+  </div>
+  <div class="exp-filter" id="expFilter"></div>
+  <div class="sheet-body">
+    <div class="exp-list" id="expList"></div>
+  </div>
+</div>
+
 <div class="sheet" id="detail">
   <div class="sheet-head">
-    <span>卡片</span>
+    <span>卡片详情</span>
     <span id="detailTier"></span>
     <button id="detailClose">‹ 返回</button>
   </div>
   <div class="sheet-body">
     <div class="detail-card" id="detailCard"></div>
+    <div class="meta-list" id="detailMeta"></div>
     <div class="detail-actions" id="detailActions"></div>
     <div class="entry-wrap" id="detailEntry"></div>
-    <div class="meta-list" id="detailMeta"></div>
   </div>
 </div>
 
 <div class="quiz" id="quiz">
-  <div class="quiz-top"><button class="qback" id="qBack">‹ 返回</button><span id="qKind">默 写</span><span id="qProg"></span></div>
+  <div class="quiz-top"><button class="qback" id="qBack" aria-label="关闭">×</button><span id="qKind">默 写</span><span id="qProg"></span></div>
   <div class="quiz-body" id="qBody"></div>
   <div class="quiz-foot" id="qFoot"></div>
 </div>
 
 <div class="toast" id="toast"></div>
+
+<!-- 成就庆祝：默认不阻塞操作，战斗成就由结算页主动展示 -->
+<div class="achievement-pop" id="achievementPop" aria-live="polite" aria-hidden="true">
+  <div class="ap-veil" id="apVeil"></div>
+  <div class="ap-stage">
+    <div class="ap-hero">
+      <div class="ap-rays"></div>
+      <div class="ap-glow"></div>
+      <div class="ap-streak"></div>
+      <div class="ap-ring"></div>
+      <div class="ap-medal"><span id="apIcon"></span><b id="apLv"></b><i class="ap-sheen"></i></div>
+      <div class="ap-flash"></div>
+      <div class="ap-burst" id="apBurst"></div>
+      <div class="ap-motes" id="apMotes"></div>
+    </div>
+    <p class="ap-kicker" id="apKicker"></p>
+    <h2 id="apName"></h2>
+    <span class="ap-level" id="apLevel"></span>
+    <p class="ap-desc" id="apDesc"></p>
+  </div>
+</div>

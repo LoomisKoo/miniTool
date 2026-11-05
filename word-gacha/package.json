@@ -2,7 +2,7 @@
   "name": "word-gacha",
   "private": true,
   "version": "0.1.0",
-  "description": "抽词成册 — 抽单词，字母随机排版",
+  "description": "词卡物语 — 英语单词卡牌养成游戏",
   "scripts": {
     "glyphs": "node tools/extract-glyphs.mjs",
     "build": "node build.mjs xiaohongshu",

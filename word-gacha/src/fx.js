@@ -8,6 +8,7 @@
     if (cv) return;
     cv = document.createElement('canvas');
     cv.className = 'fx-canvas';
+    cv.style.display = 'none';
     document.body.appendChild(cv);
     ctx = cv.getContext('2d');
     resize();
@@ -160,12 +161,14 @@
     } else {
       running = false;
       ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+      if (cv) cv.style.display = 'none';   // 空闲时不占一层全屏合成
     }
   }
 
   function start() {
     if (running) return;
     running = true;
+    if (cv) cv.style.display = 'block';
     raf = requestAnimationFrame(step);
   }
 

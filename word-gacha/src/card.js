@@ -39,30 +39,45 @@
 
   /* ── 统一风格套组：整张卡共享视觉语法，字母只做局部强调 ───── */
   var THEMES = {
-    herbarium: { name: '植物标本', paper: '#e8ead8', deep: '#cbd2b8', ink: '#26372b', accent: '#718b4f', dark: false,
+    herbarium: { name: '植物标本', paper: '#e9efd9', deep: '#c6d4b0', ink: '#22331f', accent: '#6d8f3f', dark: false,
       fonts: ['garamond', 'cormorant'], texture: 'leaf',
-      word: 'garamond', emblem: 'cormorant', shape: 'circle', ground: '#4f6f3a', glow: '#9fd36b', letter: '#f3f1dc' },
-    blueprint: { name: '蓝图档案', paper: '#d8e5e8', deep: '#a8c2ca', ink: '#173743', accent: '#367d91', dark: false,
+      word: 'garamond', emblem: 'cormorant', shape: 'circle', ground: '#3f6b33', glow: '#a8e06a', letter: '#f4f7e0' },
+    blueprint: { name: '蓝图档案', paper: '#d6e8f0', deep: '#a2c4d6', ink: '#0f3546', accent: '#2e7fa0', dark: false,
       fonts: ['cinzel', 'playfair'], texture: 'grid',
-      word: 'cinzel', emblem: 'playfair', shape: 'diamond', ground: '#1d5b72', glow: '#6fd8ff', letter: '#e6f6fa' },
-    vermilion: { name: '朱印古册', paper: '#ead8cd', deep: '#c9aaa0', ink: '#3e211d', accent: '#a84739', dark: false,
+      word: 'cinzel', emblem: 'playfair', shape: 'diamond', ground: '#14536e', glow: '#63d9ff', letter: '#e6f7fc' },
+    vermilion: { name: '朱印古册', paper: '#f6dcdc', deep: '#dfb0b4', ink: '#4a1620', accent: '#c2384c', dark: false,
       fonts: ['garamond', 'abril'], texture: 'fibers',
-      word: 'playfair', emblem: 'abril', shape: 'square', ground: '#a3372a', glow: '#ff8a5c', letter: '#fbe9d6' },
-    nightchart: { name: '夜航星图', paper: '#202c43', deep: '#11192b', ink: '#e9e5d4', accent: '#73a6c2', dark: true,
+      word: 'playfair', emblem: 'abril', shape: 'square', ground: '#b02a41', glow: '#ff7f8f', letter: '#fde8e8' },
+    nightchart: { name: '夜航星图', paper: '#1e2b4a', deep: '#0f1830', ink: '#eef1ff', accent: '#8fa6dd', dark: true,
       fonts: ['cinzel', 'playfair'], texture: 'stars',
-      word: 'cinzel', emblem: 'cinzel', shape: 'ring', ground: '#18264a', glow: '#8fb8ff', letter: '#eef2ff' },
-    blackletter: { name: '黑金秘典', paper: '#2b211d', deep: '#130f0e', ink: '#eadbb8', accent: '#c99f3d', dark: true,
+      word: 'cinzel', emblem: 'cinzel', shape: 'ring', ground: '#1a2a5c', glow: '#93b4ff', letter: '#f0f4ff' },
+    blackletter: { name: '黑金秘典', paper: '#251a33', deep: '#120b1e', ink: '#f0e2b8', accent: '#d7ab48', dark: true,
       fonts: ['fraktur', 'cinzel', 'abril'], texture: 'grain',
-      word: 'cinzel', emblem: 'fraktur', shape: 'shield', ground: '#2a1a12', glow: '#ffc24a', letter: 'gold' },
-    vellum: { name: '羊皮书页', paper: '#f1e6ca', deep: '#d8c39b', ink: '#33271b', accent: '#93613b', dark: false,
+      word: 'cinzel', emblem: 'fraktur', shape: 'shield', ground: '#2b1640', glow: '#ffcc55', letter: 'gold' },
+    vellum: { name: '羊皮书页', paper: '#f6ecd2', deep: '#e0cda2', ink: '#3a2a17', accent: '#a3762f', dark: false,
       fonts: ['cormorant', 'garamond', 'playfair'], texture: 'paper',
-      word: 'cormorant', emblem: 'garamond', shape: 'arch', ground: '#7a4a26', glow: '#ffcf8a', letter: '#f8ebcf' },
+      word: 'cormorant', emblem: 'garamond', shape: 'arch', ground: '#8a5a22', glow: '#ffd385', letter: '#fdf3dc' },
+    sakura: { name: '樱笺物语', paper: '#fde3ee', deep: '#f2bfd5', ink: '#5c1a3a', accent: '#dd5c96', dark: false,
+      fonts: ['cormorant', 'playfair'], texture: 'paper',
+      word: 'cormorant', emblem: 'playfair', shape: 'circle', ground: '#c73f7e', glow: '#ff9ecb', letter: '#fff0f6' },
+    lavender: { name: '紫藤信笺', paper: '#e9e0fb', deep: '#cbb8ef', ink: '#301a52', accent: '#8a5fd6', dark: false,
+      fonts: ['playfair', 'cormorant'], texture: 'stars',
+      word: 'playfair', emblem: 'cormorant', shape: 'diamond', ground: '#6a3fb5', glow: '#c9a4ff', letter: '#f6efff' },
+    coral: { name: '珊瑚食谱', paper: '#ffe4d3', deep: '#f5bfa2', ink: '#5a2410', accent: '#e0622f', dark: false,
+      fonts: ['abril', 'garamond'], texture: 'fibers',
+      word: 'abril', emblem: 'garamond', shape: 'square', ground: '#c74a1e', glow: '#ffa271', letter: '#fff1e6' },
+    aqua: { name: '碧水手记', paper: '#d7f2ec', deep: '#a6dbd2', ink: '#0c3a36', accent: '#279083', dark: false,
+      fonts: ['cormorant', 'cinzel'], texture: 'waves',
+      word: 'cormorant', emblem: 'cinzel', shape: 'circle', ground: '#157067', glow: '#6ff0dd', letter: '#e8fffb' },
+    rosewood: { name: '檀木词录', paper: '#5a2c2c', deep: '#33161a', ink: '#f6dfc8', accent: '#d99a5e', dark: true,
+      fonts: ['playfair', 'cinzel'], texture: 'grain',
+      word: 'playfair', emblem: 'cinzel', shape: 'shield', ground: '#4a1f24', glow: '#ffb373', letter: 'gold' },
   };
   var TAG_THEME = {
-    nature: 'herbarium', light: 'blueprint', sound: 'nightchart', feeling: 'vellum',
-    time: 'vermilion', place: 'vellum', people: 'vermilion', motion: 'blueprint',
-    rare: 'blackletter', study: 'blueprint', tech: 'blueprint', body: 'herbarium',
-    food: 'vermilion', object: 'vellum', sky: 'nightchart', beast: 'herbarium',
+    nature: 'herbarium', light: 'aqua', sound: 'nightchart', feeling: 'sakura',
+    time: 'lavender', place: 'vellum', people: 'rosewood', motion: 'blueprint',
+    rare: 'blackletter', study: 'blueprint', tech: 'aqua', body: 'herbarium',
+    food: 'coral', object: 'vellum', sky: 'nightchart', beast: 'herbarium',
   };
 
   /* ── 配色微调 ───────────────────────────────────────────── */
@@ -173,20 +188,11 @@
     return out;
   }
 
-  /* ── 稀有度：由"生僻度"算出，不是随机 ─────────────────── */
-  // 生僻度 = 词长 + 词性抽象度 + 分类稀有度 → 五档
+  /* ── 稀有度：词库标注的学习价值，不由词长推导 ───────────── */
   function rarityOf(word) {
-    // 已拥有的卡：外观等级 = 卡片等级
-    if (typeof word.lvl === 'number') return Math.max(1, Math.min(5, word.lvl));
-    var n = word.w.length;
-    var len = n <= 5 ? 0 : n <= 7 ? 1 : n <= 9 ? 2 : n <= 12 ? 3 : 4;
-    var pos = { n: 0, v: 1, adj: 1, adv: 2 }[word.pos] || 0;
-    var tag = word.tag === 'rare' ? 2 : word.tag === 'study' ? 1 : 0;
-    var score = len + pos + tag;
-    var t = score <= 1 ? 1 : score === 2 ? 2 : score === 3 ? 3 : score === 4 ? 4 : 5;
-    // 与人工标注取均值，避免公式把明显的日常词抬得过高
-    if (typeof word.tier === 'number') t = Math.round((t + word.tier) / 2) || 1;
-    return Math.max(1, Math.min(5, t));
+    var t = typeof word.rarity === 'number' ? word.rarity :
+      typeof word.tier === 'number' ? word.tier : 1;
+    return Math.max(1, Math.min(5, Math.round(t)));
   }
 
   /* ── 文本测量与断行（中文按字、英文按词）────────────────── */
@@ -637,20 +643,24 @@
   }
 
   /* ── DOM 渲染 ───────────────────────────────────────────── */
-  /* ── 战斗属性：字母 → 弹种（卡面与远征共用）──────────────── */
+  /* ── 战斗属性：字母 → 弹种（卡面与漫游共用）──────────────── */
   var KINDS = {
-    shield: { nm: '护盾', c: '#5fe0a0', shot: '环绕护盾' },
-    blast:  { nm: '散射', c: '#ff8a3d', shot: '三向散射' },
-    frost:  { nm: '减速', c: '#7fd8ff', shot: '冰缓弹' },
-    pierce: { nm: '激光', c: '#b38cff', shot: '贯穿激光' },
-    swift:  { nm: '追踪', c: '#ffd84d', shot: '自动追踪' },
+    shield:  { nm: '卫星', c: '#5fe0a0', shot: '环绕字母卫星', tip: '字母卫星环绕撞敌，每颗挡一发后要充能，大弹挡不住；开局自带 1 层护盾' },
+    blast:   { nm: '散弹', c: '#ff8a3d', shot: '扇形霰弹', tip: '扇形散射，贴近敌人伤害翻倍，远了很弱' },
+    frost:   { nm: '冰霜', c: '#7fd8ff', shot: '冰锥减速', tip: '冰锥让敌人减速、击杀时碎裂溅射，全场敌弹变慢' },
+    pierce:  { nm: '激光', c: '#ff5fa2', shot: '贯穿光束', tip: '一道直线光束贯穿整列，伤害最高，但要对准' },
+    swift:   { nm: '追踪', c: '#ffd84d', shot: '追踪飞弹', tip: '飞弹自动找敌人，不用瞄准，单发较弱' },
+    thunder: { nm: '雷电', c: '#b38cff', shot: '连锁闪电', tip: '自动劈最近的敌人并连锁跳跃，弹药等级越高射程越远、分叉越多' },
+    tide:    { nm: '潮汐', c: '#4fd6e8', shot: '波动水弹', tip: '水弹摆动前进，命中炸开水花溅射周围并冲散敌弹，清场与保命兼备' },
+    blade:   { nm: '飞刃', c: '#ff7ae0', shot: '回旋飞刃', tip: '旋转飞刃贯穿敌人后回旋下落，单发能打多个目标' },
   };
   // 卡片没有单一"类型"：取字母里出现最多的一种作为主倾向，平局取靠前的字母
   function dominantKind(word) {
     var s = String((word && word.w) || ''), cnt = {}, max = 0, i;
     for (i = 0; i < s.length; i++) {
       var k = letterKind(s[i]);
-      cnt[k] = (cnt[k] || 0) + 1;
+      // 元音太常见，权重减半，否则大半卡牌都会是护盾
+      cnt[k] = (cnt[k] || 0) + (k === 'shield' ? 0.5 : 1);
       if (cnt[k] > max) max = cnt[k];
     }
     for (i = 0; i < s.length; i++) {
@@ -659,13 +669,84 @@
     }
     return 'blast';
   }
+  // 次武器：去掉主倾向后占比最高的属性；单一属性的词没有次武器
+  function secondKind(word) {
+    var s = String((word && word.w) || ''), main = dominantKind(word), cnt = {}, best = null, max = 0, i;
+    for (i = 0; i < s.length; i++) {
+      var k = letterKind(s[i]);
+      if (k === main) continue;
+      cnt[k] = (cnt[k] || 0) + (k === 'shield' ? 0.5 : 1);
+    }
+    for (i = 0; i < s.length; i++) {
+      var kk = letterKind(s[i]);
+      if (cnt[kk] > max) { max = cnt[kk]; best = kk; }
+    }
+    return best;
+  }
+  // 战斗武器：每类字母按「等级和」排序，最高为主武器、次高为副武器；
+  // 该类字母的平均等级 = 这种武器的弹药等级（伤害与弹道华丽度）
+  function weaponKinds(word, levels) {
+    var s = String((word && word.w) || ''), sum = {}, cnt = {}, tot = {}, dom = dominantKind(word), i;
+    for (i = 0; i < s.length; i++) {
+      var k = letterKind(s[i]), lv = (levels && levels[i]) || 1;
+      sum[k] = (sum[k] || 0) + lv * (k === 'shield' ? 0.5 : 1);
+      cnt[k] = (cnt[k] || 0) + 1;
+      tot[k] = (tot[k] || 0) + lv;
+    }
+    var order = Object.keys(sum).sort(function (a, b) {
+      return (sum[b] - sum[a]) || ((b === dom) - (a === dom));
+    });
+    var ammo = {};
+    for (var k2 in cnt) ammo[k2] = Math.max(1, Math.round(tot[k2] / cnt[k2]));
+    return { main: order[0] || 'blast', sub: order[1] || null, ammo: ammo };
+  }
   function letterKind(ch) {
     ch = String(ch || '').toUpperCase();
     if ('AEIOU'.indexOf(ch) >= 0) return 'shield';
-    if ('BPRG'.indexOf(ch) >= 0) return 'blast';
-    if ('CFST'.indexOf(ch) >= 0) return 'frost';
-    if ('DKMNVWXZ'.indexOf(ch) >= 0) return 'pierce';
+    if ('RPGB'.indexOf(ch) >= 0) return 'blast';
+    if ('SCF'.indexOf(ch) >= 0) return 'frost';
+    if ('TD'.indexOf(ch) >= 0) return 'pierce';
+    if ('LMZQ'.indexOf(ch) >= 0) return 'thunder';
+    if ('JYV'.indexOf(ch) >= 0) return 'tide';
+    if ('KXW'.indexOf(ch) >= 0) return 'blade';
     return 'swift';
+  }
+
+  /* ── 字母词条：每个字母都有自己的可解释成长效果 ───────── */
+  var LETTER_TRAITS = {
+    shield:  { nm: '卫星', unit: '充能时间', base: 1, step: 1, fmt: function (v) { return '-' + v + '%'; } },
+    blast:   { nm: '散弹', unit: '散弹伤害', base: 2, step: 2, fmt: function (v) { return '+' + v + '%'; } },
+    frost:   { nm: '冰霜', unit: '减速效果', base: 8, step: 4, fmt: function (v) { return '+' + v + '%'; } },
+    pierce:  { nm: '激光', unit: '穿透层数', base: 1, step: 1, fmt: function (v) { return '+' + v; } },
+    swift:   { nm: '追踪', unit: '追踪强度', base: 10, step: 5, fmt: function (v) { return '+' + v + '%'; } },
+    thunder: { nm: '雷电', unit: '连锁距离', base: 24, step: 8, fmt: function (v) { return '+' + v; } },
+    tide:    { nm: '潮汐', unit: '溅射范围', base: 12, step: 4, fmt: function (v) { return '+' + v; } },
+    blade:   { nm: '飞刃', unit: '回旋伤害', base: 4, step: 3, fmt: function (v) { return '+' + v + '%'; } },
+  };
+  // 成长率与学习价值挂钩，但档差收窄，避免稀有卡数值碾压普通卡
+  var GROW = { 1: 1, 2: 1.08, 3: 1.16, 4: 1.25, 5: 1.35, 6: 1.35 };
+  function growOf(word) {
+    var rank = word.hid ? 6 : rarityOf(Object.assign({}, word, { lvl: null }));
+    return { rank: rank, rate: GROW[rank], name: rank === 6 ? '隐藏' : (window.TIERS[rank] || {}).name };
+  }
+  function letterTrait(ch, lv, g) {
+    var kind = letterKind(ch), t = LETTER_TRAITS[kind] || LETTER_TRAITS.swift;
+    lv = Math.max(1, Math.round(lv || 1));
+    g = g || 1;
+    var val = function (l) { return t.base + Math.round((l - 1) * t.step * g); };
+    return {
+      kind: kind, name: t.nm, unit: t.unit, level: lv,
+      base: t.base, step: t.step, grow: g,
+      value: val(lv),
+      text: t.unit + ' ' + t.fmt(val(lv)),
+      next: t.unit + ' ' + t.fmt(val(lv + 1)),
+    };
+  }
+  function letterTraits(word, levels) {
+    var g = growOf(word).rate;
+    return String(word && word.w || '').toUpperCase().split('').map(function (ch, i) {
+      return letterTrait(ch, levels && levels[i], g);
+    });
   }
 
   /* ── 首字母徽章：Initialis 式「字母 + 底形 + 纹样」，整卡唯一视觉主体 ── */
@@ -676,6 +757,7 @@
     square: '<rect x="13" y="13" width="134" height="134" rx="8"/>',
     shield: '<path d="M18 14H142V82Q142 134 80 152Q18 134 18 82Z"/>',
     arch: '<path d="M16 152V74Q16 10 80 10Q144 10 144 74V152Z"/>',
+    octagon: '<path d="M50 13H110L147 50V110L110 147H50L13 110V50Z"/>',
   };
   function patternDef(id, th) {
     var c = hexA(th.glow, 0.32);
@@ -766,15 +848,48 @@
   var TILE_FONTS = ['playfair', 'cinzel', 'garamond', 'abril', 'cormorant', 'fraktur'];
   var TILE_SHAPES = ['square', 'circle', 'arch', 'diamond', 'shield', 'octagon', 'none'];
   var TILE_PATTERNS = ['dots', 'gems', 'grid', 'cross', 'waves', 'stars', 'checker', 'scales', 'zigzag'];
+  /* 光学尺寸统一：方形/菱形/八角会顶到画布四角，看起来比圆形大得多，
+     所以统一收进 4–8 的内边；圆形则保持接近满幅，六种形状观感才一致 */
   var TILE_SHAPE_SVG = {
-    square: '<rect x="4" y="4" width="92" height="92" rx="7"/>',
-    circle: '<circle cx="50" cy="50" r="46"/>',
-    arch: '<path d="M6 96V44Q6 4 50 4Q94 4 94 44V96Z"/>',
-    diamond: '<path d="M50 2L98 50L50 98L2 50Z"/>',
-    shield: '<path d="M8 6H92V50Q92 86 50 98Q8 86 8 50Z"/>',
-    octagon: '<path d="M30 4H70L96 30V70L70 96H30L4 70V30Z"/>',
-    none: '<rect x="4" y="4" width="92" height="92" rx="7"/>',
+    square: '<rect x="6" y="6" width="88" height="88" rx="8"/>',
+    circle: '<circle cx="50" cy="50" r="47"/>',
+    arch: '<path d="M8 94V44Q8 6 50 6Q92 6 92 44V94Z"/>',
+    diamond: '<path d="M50 4L96 50L50 96L4 50Z"/>',
+    shield: '<path d="M9 7H91V50Q91 85 50 95Q9 85 9 50Z"/>',
+    octagon: '<path d="M31 5H69L95 31V69L69 95H31L5 69V31Z"/>',
+    none: '<rect x="6" y="6" width="88" height="88" rx="8"/>',
   };
+  // 同一套形状的 Path2D 路径数据（canvas 战场复用，保证子弹和卡面一致）
+  var SHAPE_PATH = {
+    square: 'M14 6H86A8 8 0 0 1 94 14V86A8 8 0 0 1 86 94H14A8 8 0 0 1 6 86V14A8 8 0 0 1 14 6Z',
+    circle: 'M3 50A47 47 0 1 1 97 50A47 47 0 1 1 3 50Z',
+    arch: 'M8 94V44Q8 6 50 6Q92 6 92 44V94Z',
+    diamond: 'M50 4L96 50L50 96L4 50Z',
+    shield: 'M9 7H91V50Q91 85 50 95Q9 85 9 50Z',
+    octagon: 'M31 5H69L95 31V69L69 95H31L5 69V31Z',
+  };
+  SHAPE_PATH.none = SHAPE_PATH.square;
+
+  /* 战场用：把某字母某等级的外观抽出来（形状 / 配色 / 纹样），canvas 直接画 */
+  function tileLook(ch, lv, opts) {
+    opts = opts || {};
+    var mythic = !!opts.mythic;
+    var kind = letterKind(ch);
+    var S = TYPE_STYLE[kind];
+    var L = Math.max(1, Math.min(5, Math.round(lv || 1)));
+    var b = S.bgs[L - 1];
+    return {
+      kind: kind,
+      shape: S.shape,
+      bg: mythic ? tint(S.bg, 0, -0.1) : S.bg,
+      fg: S.fg,
+      ln: S.ln,
+      lv: L,
+      pattern: b ? b[1] : null,
+      deco: !!(b && b[0] === 'd'),
+      mythic: mythic,
+    };
+  }
   function tilePattern(id, kind, c) {
     var open = '<pattern id="' + id + '" patternUnits="userSpaceOnUse" ';
     if (kind === 'dots') return open + 'width="10" height="10"><circle cx="5" cy="5" r="2.2" fill="' + c + '"/></pattern>';
@@ -796,10 +911,11 @@
   function tileDeco(kind, c, c2) {
     var i, s = '';
     if (kind === 'rays') {
+      // 半径收到 44 以内，不再溢出瓦片
       for (i = 0; i < 16; i += 2) {
         var a0 = i * Math.PI / 8, a1 = (i + 1) * Math.PI / 8;
-        s += '<path d="M50 50L' + (50 + 80 * Math.cos(a0)).toFixed(1) + ' ' + (50 + 80 * Math.sin(a0)).toFixed(1) +
-          'L' + (50 + 80 * Math.cos(a1)).toFixed(1) + ' ' + (50 + 80 * Math.sin(a1)).toFixed(1) + 'Z" fill="' + c + '"/>';
+        s += '<path d="M50 50L' + (50 + 44 * Math.cos(a0)).toFixed(1) + ' ' + (50 + 44 * Math.sin(a0)).toFixed(1) +
+          'L' + (50 + 44 * Math.cos(a1)).toFixed(1) + ' ' + (50 + 44 * Math.sin(a1)).toFixed(1) + 'Z" fill="' + c + '"/>';
       }
       return s;
     }
@@ -840,8 +956,8 @@
       return s;
     }
     if (kind === 'crystal') {
-      return '<path d="M50 2L66 34L98 50L66 66L50 98L34 66L2 50L34 34Z" fill="' + c + '"/>' +
-        '<path d="M50 18L58 42L82 50L58 58L50 82L42 58L18 50L42 42Z" fill="' + c2 + '"/>';
+      return '<path d="M50 12L63 37L88 50L63 63L50 88L37 63L12 50L37 37Z" fill="' + c + '"/>' +
+        '<path d="M50 26L57 43L74 50L57 57L50 74L43 57L26 50L43 43Z" fill="' + c2 + '"/>';
     }
     if (kind === 'bolt') {
       return '<path d="M60 0L24 56H46L36 100L78 38H54L68 0Z" fill="' + c + '"/>';
@@ -932,10 +1048,16 @@
       bgs: [null, ['p', 'gems'], ['p', 'checker'], ['d', 'rays'], ['d', 'flame']] },
     frost: { shape: 'diamond', font: 'cinzel', bg: '#1c5f94', fg: '#eef9ff', ln: '#8fdcff',
       bgs: [null, ['p', 'grid'], ['p', 'cross'], ['d', 'snow'], ['d', 'crystal']] },
-    pierce: { shape: 'arch', font: 'playfair', bg: '#5a32a0', fg: '#f6eeff', ln: '#c6a2ff',
+    pierce: { shape: 'arch', font: 'playfair', bg: '#a3245f', fg: '#fff0f6', ln: '#ff8cc0',
       bgs: [null, ['p', 'zigzag'], ['p', 'arrows'], ['d', 'rings'], ['p', 'stars']] },
+    thunder: { shape: 'square', font: 'abril', bg: '#4a34a8', fg: '#f3eeff', ln: '#c6a2ff',
+      bgs: [null, ['p', 'cross'], ['p', 'checker'], ['d', 'bolt'], ['d', 'rays']] },
     swift: { shape: 'circle', font: 'cormorant', bg: '#9a7206', fg: '#fffbe6', ln: '#ffe066',
       bgs: [null, ['p', 'waves'], ['p', 'speed'], ['d', 'bolt'], ['d', 'sparkle']] },
+    tide: { shape: 'arch', font: 'cormorant', bg: '#0f6b7a', fg: '#effdff', ln: '#5fe6ff',
+      bgs: [null, ['p', 'waves'], ['p', 'grid'], ['d', 'rings'], ['d', 'crystal']] },
+    blade: { shape: 'octagon', font: 'cinzel', bg: '#8a1f6b', fg: '#fff0fb', ln: '#ff9ae6',
+      bgs: [null, ['p', 'zigzag'], ['p', 'arrows'], ['d', 'rings'], ['d', 'rays']] },
   };
   // opts.mythic：超稀有，统一哥特体 + 彩虹描边
   function typeTileSVG(ch, lv, size, opts) {
@@ -969,7 +1091,7 @@
     var s = '<svg class="tile lv' + Math.min(lv, 5) + (mythic ? ' mythic' : '') + '" width="' + size + '" height="' + size +
       '" viewBox="0 0 100 100" style="overflow:visible"><defs>' + defs + '</defs>';
     s += '<g fill="' + bgCol + '">' + sh + '</g><g clip-path="url(#' + uid + 'c)">';
-    if (b && b[0] === 'd') s += '<g opacity=".5">' + tileDeco(b[1], lnCol, hexA(lnCol, 0.5)) + '</g>';
+    if (b && b[0] === 'd') s += '<g opacity=".3" transform="translate(50 50) scale(.9) translate(-50 -50)">' + tileDeco(b[1], lnCol, hexA(lnCol, 0.5)) + '</g>';
     if (b && b[0] === 'p') s += '<rect width="100" height="100" fill="url(#' + uid + 'p)"/>';
     s += '</g>';
     var edge = mythic ? 'url(#' + uid + 'r)' : lv >= 5 ? '#f6d77a' : lnCol;
@@ -986,11 +1108,18 @@
           '<animate attributeName="opacity" values="0;1;0" dur="2.4s" begin="' + p[3] + 's" repeatCount="indefinite"/></path>';
       });
     }
-    var fg = mythic ? 'url(#' + uid + 'r)' : S.fg;
-    s += '<svg x="' + (x + 2.5).toFixed(1) + '" y="' + (y + 3).toFixed(1) + '" width="' + gw.toFixed(1) + '" height="' + gh.toFixed(1) +
-      '" viewBox="0 0 ' + g.w + ' ' + g.h + '" overflow="visible"><path d="' + g.d + '" fill="rgba(0,0,0,.38)"/></svg>' +
-      '<svg x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + gw.toFixed(1) + '" height="' + gh.toFixed(1) +
-      '" viewBox="0 0 ' + g.w + ' ' + g.h + '" overflow="visible"><path d="' + g.d + '" fill="' + fg + '"/></svg></svg>';
+    // 字母一律用亮色实心 + 深色描边，保证在彩色底形上也有足够对比；
+    // 隐藏款把彩虹挪到描边和光晕上，不再直接填在字形里
+    var fg = S.fg;
+    var letterSvg = '<svg x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + gw.toFixed(1) + '" height="' + gh.toFixed(1) +
+      '" viewBox="0 0 ' + g.w + ' ' + g.h + '" overflow="visible">' +
+      '<path d="' + g.d + '" fill="' + fg + '" stroke="rgba(18,10,22,.55)" stroke-width="' + (2.2 / sc).toFixed(1) +
+      '" stroke-opacity="' + (mythic ? 0.6 : 0.9) + '"/>' +
+      (mythic ? '<path d="' + g.d + '" fill="none" stroke="url(#' + uid + 'r)" stroke-width="' + (4.8 / sc).toFixed(1) +
+        '" stroke-linejoin="round" opacity=".95"/>' : '') + '</svg>';
+    s += '<svg x="' + (x + 2).toFixed(1) + '" y="' + (y + 2.4).toFixed(1) + '" width="' + gw.toFixed(1) + '" height="' + gh.toFixed(1) +
+      '" viewBox="0 0 ' + g.w + ' ' + g.h + '" overflow="visible"><path d="' + g.d + '" fill="rgba(0,0,0,.45)"/></svg>' +
+      letterSvg + '</svg>';
     return s;
   }
   // Initialis 式独立配色：底 / 字 / 纹 / 第二色
@@ -1054,7 +1183,7 @@
     if (!bare) {
       s += '<g fill="' + col.bg + '">' + sh + '</g>';
       s += '<g clip-path="url(#' + uid + 'c)">';
-      if (isDeco) s += '<g opacity="' + (bgKind === 'split' || bgKind === 'halves' || bgKind === 'blob' ? 1 : 0.8) + '">' + tileDeco(bgKind, col.pt, ink[2]) + '</g>';
+      if (isDeco) s += '<g opacity="' + (bgKind === 'split' || bgKind === 'halves' || bgKind === 'blob' ? 0.85 : 0.42) + '">' + tileDeco(bgKind, col.pt, ink[2]) + '</g>';
       if (pat !== 'solid') s += '<rect width="100" height="100" fill="url(#' + uid + 'p)" opacity="' + (isDeco ? 0.4 : 1) + '"/>';
       s += '</g>';
       s += '<g fill="none" stroke="' + (tier >= 4 ? '#f6d77a' : col.line) + '" stroke-width="' + (tier >= 4 ? 4 : 2.5) + '">' + sh + '</g>';
@@ -1070,7 +1199,7 @@
   // 在给定区域里排成若干行，让瓦片尽量大
   function tilesHTML(word, levels, th, areaW, areaH) {
     var chars = word.w.toUpperCase().split('');
-    var n = chars.length, gap = 4, best = { size: 0, per: n };
+    var n = chars.length, gap = 6, best = { size: 0, per: n };
     for (var rows = 1; rows <= 4; rows++) {
       var per = Math.ceil(n / rows);
       var size = Math.min((areaW - gap * (per - 1)) / per, (areaH - gap * (rows - 1)) / rows, 74);
@@ -1167,13 +1296,12 @@
     var T = global.TIERS[tier];
     var mastery = opts.mastery || 0;
     var levels = opts.levels || null;
-    var st = statsOf(word, levels);
     var cLv = cardLevel(word, levels);
     var senses = word.senses && word.senses.length ? word.senses : null;
     var cnText = senses ? senses.map(function (x) { return x.cn; }).join('；') : (word.cn || '');
 
     var card = document.createElement('article');
-    card.className = 'card gc tier-' + tier + ' theme-' + th.key + (word.hid ? ' gc-hid' : '');
+    card.className = 'card gc tier-' + tier + ' theme-' + th.key + (word.hid ? ' gc-hid' : '') + (opts.compact ? ' sm' : '');
     card.setAttribute('data-word', word.w);
     card.style.width = CARD_W + 'px';
     card.style.height = CARD_H + 'px';
@@ -1184,46 +1312,193 @@
     var innerW = CARD_W - ring * 2;
     card.style.setProperty('--ring', ring + 'px');
 
-    var html = word.hid ? cardAuraSVG() : '';
+    var lite = !!opts.lite;
+    var html = word.hid && !lite ? cardAuraSVG() : '';
     html += '<div class="gc-in">';
 
     html += '<div class="gc-art">' +
-      (tier >= 3 ? '<span class="gc-rays"></span>' : '') +
-      tilesHTML(word, levels, th, innerW - 24, 132) +
-      '<div class="gc-badge"><b>' + (word.hid ? 'EX' : T.code) + '</b><span>' + (word.hid ? '隐藏款' : T.name) +
-      '</span><em>Lv ' + (word.lvl || cLv) + '</em></div>' +
-      '<div class="gc-tag">' + (global.TAGS[word.tag] || '词') + '</div>' +
+      (tier >= 3 && !lite ? '<span class="gc-rays"></span>' : '') +
+      tilesHTML(word, levels, th, innerW - 28, 116) +
+      '<div class="gc-badge">' + lvGem(word.lvl || cLv) + '</div>' +
+      '<div class="gc-tier">' + (word.hid ? 'EX' : T.code) + '</div>' +
       '</div>';
 
-    var letters = word.w.toUpperCase().split('');
-    var plateFs = Math.min(24, Math.floor((innerW - 40) / (letters.length * 0.72)));
-    html += '<div class="gc-plate"><span class="plate-word" style="font-size:' + plateFs + 'px">';
-    letters.forEach(function (ch) {
-      html += '<i style="--k:' + KINDS[letterKind(ch)].c + '">' + ch.toLowerCase() + '</i>';
-    });
-    html += '</span></div>';
+    var plateFs = opts.compact
+      ? Math.min(38, Math.floor((innerW - 24) / (word.w.length * 0.66)))
+      : Math.min(24, Math.floor((innerW - 40) / (word.w.length * 0.72)));
+    html += '<div class="gc-plate"><span class="plate-word" style="font-size:' + plateFs + 'px">' +
+      word.w.toLowerCase() + '</span></div>';
+    var wk = weaponKinds(word, levels);
 
     html += '<div class="gc-info">' +
-      '<div class="gc-ph">' + (word.pos || '') + '&nbsp;&nbsp;' + (word.ph || '') + '</div>' +
+      '<div class="gc-ph">' +
+        (word.pos ? '<b class="pos">' + word.pos + '</b>' : '') +
+        '<span class="ipa">' + (word.ph || '') + '</span>' +
+      '</div>' +
       '<div class="gc-cn">' + cnText + '</div>';
 
-    html += '<div class="gc-stats">' +
-      statBar('伤害', st.str) + statBar('技能', st.wis) + statBar('连击', st.res) + '</div>' +
-      '<div class="gc-foot"><span class="gc-stars">';
-    for (var i = 0; i < 3; i++) html += '<i class="' + (i < mastery ? 'on' : '') + '"></i>';
-    html += '</span><span class="gc-no">' + sp.serial + '</span></div>' +
+    html += '<div class="gc-wpn"><span class="gc-wico">' + weaponIcon(wk.main, 'main') + (wk.sub ? weaponIcon(wk.sub, 'sub') : '') + '</span>' +
+      '<span class="gc-pow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">' +
+      '<path d="M14.5 17.5 3 6V3h3l11.5 11.5"/><path d="M13 19l6-6M16 16l4 4M19 21l2-2"/></svg><b>' + powerOf(word, levels) + '</b></span></div>' +
       '</div>';
 
-    if (tier >= 4) html += '<span class="gc-holo"></span>';
+    if (tier >= 4 && !lite) html += '<span class="gc-holo"></span>';
     html += '</div>' + frameSVG(tier);
 
+    // 列表用：去掉 SVG 动画和模糊滤镜层（隐藏款流光等），只留静态外观
+    if (lite) {
+      html = html.replace(/<animate(?:Transform|Motion)?\b[^>]*\/>/g, '')
+        .replace(/<g filter="url\([^)]*\)"[^>]*>[\s\S]*?<\/g>/g, '');
+      card.classList.add('lite');
+    }
     card.innerHTML = html;
     card._spec = sp;
     return card;
   }
-  function statBar(nm, v) {
-    return '<div class="sb"><span>' + nm + '</span><i><b style="width:' + Math.min(100, v / 12 * 100).toFixed(0) +
-      '%"></b></i><em>' + v + '</em></div>';
+  // 武器图标（24×24 描边路径），与战斗内大招按钮同一套造型
+  var KIND_ICON = {
+    blast: '<path d="M19 5 9 15"/><path d="M15 3 7 11"/><path d="M21 9 13 17"/><circle cx="7" cy="17" r="3.2"/>',
+    pierce: '<path d="M12 2v20"/><path d="M8 4v16M16 4v16" opacity=".5"/>',
+    swift: '<path d="M4 20 12 4l8 16"/><path d="M8 20l4-8 4 8"/>',
+    thunder: '<path d="M13 2 5 13h6l-1 9 8-12h-6z"/>',
+    frost: '<path d="M12 2v20M3.3 7l17.4 10M3.3 17 20.7 7"/>',
+    shield: '<path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z"/>',
+    tide: '<path d="M2 15c3 0 3-3 6-3s3 3 6 3 3-3 6-3"/><path d="M2 20c3 0 3-3 6-3s3 3 6 3 3-3 6-3"/>',
+    blade: '<path d="M4 20C8 10 14 5 21 3c-2 7-7 13-17 17z"/><path d="M4 20l5-5"/>',
+  };
+  function weaponIcon(kind, cls) {
+    var K = KINDS[kind];
+    return '<i class="wico ' + cls + '" style="--c:' + K.c + '" title="' + (cls === 'sub' ? '副武器 · ' : '主武器 · ') + K.nm + '">' +
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">' +
+      KIND_ICON[kind] + '</svg></i>';
+  }
+  // 综合战力：尽量复用 battle.js 的武器参数，避免“显示战力”和实战脱节。
+  var COMBAT_RANK = { 1: 1, 2: 1.12, 3: 1.26, 4: 1.42, 5: 1.6, 6: 1.6 };
+  function weaponEstimate(kind, lv, vt, rank, sub) {
+    var base = 4 * (COMBAT_RANK[rank] || 1) * (1 + 0.15 * Math.max(0, vt - 1));
+    var dps = 0, def = 0, ctl = 0, cover = 0, multi = 0, reliable = 0, hit = sub ? .78 : .9;
+    lv = Math.max(1, Math.min(7, lv || 1));
+    if (kind === 'blast') {
+      dps = base * (3 + 2 * (lv - 1)) * 1.6 / (lv >= 6 ? .24 : .34) * hit;
+      cover = 1.1 + lv * .18; multi = 1.2 + lv * .22; reliable = .58;
+    } else if (kind === 'frost') {
+      var fn = [1, 2, 3, 4, 5, 6, 7][lv - 1];
+      dps = base * fn * 1.25 / .13 * hit;
+      ctl = fn * (0.8 + lv * .12);
+      cover = fn * .8; multi = fn * .55; reliable = .86;
+    } else if (kind === 'swift') {
+      var sm = [1, 2, 2, 3, 4, 5, 6][lv - 1];
+      dps = base * sm * 1.5 / .3 * hit;
+      ctl = sm * 0.7;
+      cover = sm * .7; multi = sm * .4; reliable = .98;
+    } else if (kind === 'thunder') {
+      var jumps = 1 + Math.ceil(lv * .7);
+      dps = base * 4.4 * jumps / (lv >= 6 ? .3 : .48) * hit;
+      ctl = jumps * 1.5;
+      cover = 1.2 + jumps * .7; multi = jumps * 1.3; reliable = .78;
+    } else if (kind === 'pierce') {
+      var beams = lv >= 7 ? 5 : lv >= 5 ? 3 : 1;
+      dps = base * (16 + 4 * lv) * (beams > 1 ? 1.6 : 1) * hit;
+      ctl = beams * 1.2;
+      cover = beams * 1.8 + 2.5; multi = beams * 1.1; reliable = .82;
+    } else if (kind === 'tide') {
+      var tn = [1, 1, 2, 2, 3, 3, 4][lv - 1];
+      dps = base * tn * 1.9 / (.26 - lv * .008) * hit;
+      ctl = tn * (1.1 + lv * .18);
+      cover = tn * 1.4; multi = tn * .9; reliable = .72;
+    } else if (kind === 'blade') {
+      var bn = [4, 5, 6, 6, 7, 7, 8][lv - 1] + (rank >= 5 ? 1 : 0);
+      dps = base * bn * (9 + lv * 1.3) / .75 * (sub ? .48 : .58);
+      ctl = bn * .35;
+      cover = 2.2 + lv * .35; multi = bn * .8; reliable = .55;
+    } else if (kind === 'shield') {
+      var satellites = 1 + lv;
+      dps = base * satellites * 4.2 * .25 + base / .16 * hit;
+      def = satellites / Math.max(.8, (1.6 - vt * .1));
+      ctl = satellites * .25;
+      cover = satellites * .65; multi = satellites * .25; reliable = .9;
+    }
+    return { dps: dps, def: def, ctl: ctl, cover: cover, multi: multi, reliable: reliable };
+  }
+  function powerParts(word, levels) {
+    var traits = letterTraits(word, levels), wk = weaponKinds(word, levels);
+    var g = growOf(word);
+    var def = 0, ctl = 0, cover = 0, multi = 0, reliable = 0, weaponScore = 0;
+    var cardLv = cardLevel(word, levels), mainLv = cardLv, subLv = Math.max(1, cardLv - 2);
+    var main = weaponEstimate(wk.main, mainLv, wk.ammo[wk.main] || 1, g.rank, false);
+    weaponScore += main.dps; def += main.def; ctl += main.ctl;
+    cover += main.cover; multi += main.multi; reliable += main.reliable;
+    if (wk.sub) {
+      var sub = weaponEstimate(wk.sub, subLv, wk.ammo[wk.sub] || 1, g.rank, true);
+      weaponScore += sub.dps; def += sub.def; ctl += sub.ctl;
+      cover += sub.cover; multi += sub.multi; reliable += sub.reliable;
+    }
+    // 字母词条只增强对应武器的实际效果；卫星词条作用于挡弹充能，不虚增攻击。
+    var traitAmp = {};
+    traits.forEach(function (t) {
+      traitAmp[t.kind] = (traitAmp[t.kind] || 0) + t.level;
+    });
+    var mainTrait = 1 + (traitAmp[wk.main] || 0) * .025;
+    var subTrait = wk.sub ? 1 + (traitAmp[wk.sub] || 0) * .02 : 0;
+    weaponScore = main.dps * mainTrait + (wk.sub ? (weaponScore - main.dps) * subTrait : 0);
+    if (traitAmp.shield) def += traitAmp.shield * .45;
+    var rank = g.rank;
+    var factor = COMBAT_RANK[rank] || 1;
+    // 以同等级下的所有武器平均表现为基准，避免单一武器把总分拉开数倍。
+    var kinds = ['shield', 'blast', 'frost', 'pierce', 'swift', 'thunder', 'tide', 'blade'];
+    var refDps = 0, refRel = 0, refCover = 0, refCtl = 0, refDef = 0;
+    kinds.forEach(function (kind) {
+      var ref = weaponEstimate(kind, mainLv, mainLv, rank, false);
+      refDps += ref.dps; refRel += ref.reliable; refCover += ref.cover + ref.multi * .8;
+      refCtl += ref.ctl; refDef += ref.def;
+    });
+    refDps /= kinds.length; refRel /= kinds.length; refCover /= kinds.length;
+    refCtl /= kinds.length; refDef /= kinds.length;
+    if (wk.sub) {
+      var subRefDps = 0, subRefRel = 0, subRefCover = 0, subRefCtl = 0, subRefDef = 0;
+      kinds.forEach(function (kind) {
+        var sr = weaponEstimate(kind, subLv, subLv, rank, true);
+        subRefDps += sr.dps; subRefRel += sr.reliable; subRefCover += sr.cover + sr.multi * .8;
+        subRefCtl += sr.ctl; subRefDef += sr.def;
+      });
+      refDps += subRefDps / kinds.length; refRel += subRefRel / kinds.length;
+      refCover += subRefCover / kinds.length; refCtl += subRefCtl / kinds.length; refDef += subRefDef / kinds.length;
+    }
+    var rawCover = cover + multi * .8;
+    var stability = reliable / (wk.sub ? 2 : 1);
+    var roleFactor = .48 * weaponScore / Math.max(1, refDps) +
+      .16 * stability / Math.max(.1, refRel) +
+      .14 * rawCover / Math.max(.1, refCover) +
+      .12 * ctl / Math.max(.1, refCtl) +
+      .10 * def / Math.max(.1, refDef);
+    roleFactor = Math.max(.86, Math.min(1.14, roleFactor));
+    var lengthFactor = 1 + Math.max(-.03, Math.min(.08, (traits.length - 5) * .012));
+    var levelBase = 70 + cardLv * 12 + rank * 10;
+    var total = Math.round(levelBase * factor * g.rate * roleFactor * lengthFactor);
+    var output = Math.round((levelBase * .42 * roleFactor) * factor * g.rate);
+    var coverage = Math.round((levelBase * .16 * roleFactor) * factor * g.rate);
+    var control = Math.round((levelBase * .12 * roleFactor) * factor * g.rate);
+    var defense = Math.round((levelBase * .12 * roleFactor) * factor * g.rate);
+    var stabilityScore = Math.round((levelBase * .18 * roleFactor) * factor * g.rate);
+    return {
+      grow: g.rate, tier: g.name, len: traits.length, rank: rank,
+      weapon: output, stability: stabilityScore, coverage: coverage,
+      defense: defense, control: control,
+      total: total,
+    };
+  }
+  function powerOf(word, levels) { return powerParts(word, levels).total; }
+  /* ── 通用角标：大卡 / 列表 / 图鉴共用，尺寸由外层 font-size 决定 ── */
+  function lvGem(lv) {
+    return '<i class="lvgem"><small>LV</small><b>' + lv + '</b></i>';
+  }
+  function elemGem(kind, cls) {
+    var K = KINDS[kind];
+    return '<i class="elgem ' + (cls || '') + '" style="--k:' + K.c + '" title="' + K.nm + '">' + K.nm.charAt(0) + '</i>';
+  }
+  function elemGems(word, levels) {
+    var wk = weaponKinds(word, levels);
+    return '<span class="elgems">' + elemGem(wk.main, 'main') + (wk.sub ? elemGem(wk.sub, 'sub') : '') + '</span>';
   }
 
   function dividerSVG(th) {
@@ -1235,77 +1510,170 @@
   }
 
   /* ── 卡背 ───────────────────────────────────────────────── */
-  function renderBack(tier) {
-    tier = tier || 1;
-    var T = global.TIERS[tier];
-    var R = RARITY[tier];
+  // 同一套骨架，按抽卡主题换底色 / 烫金色 / 中央徽记；不透任何稀有度信息
+  var BACK_THEMES = {
+    all: { nm: '万 象', foil: '#dcbb78', rgb: '226,196,136',
+      bg: 'radial-gradient(120% 82% at 50% 12%, #3b2f5e 0%, #241a3e 34%, #150e26 66%, #0a0614 100%)' },
+    wild: { nm: '自 然 奇 境', foil: '#b9e28c', rgb: '176,222,140',
+      bg: 'radial-gradient(120% 82% at 50% 12%, #2f5a3a 0%, #1c3b26 34%, #0f2316 66%, #06110a 100%)' },
+    life: { nm: '人 间 烟 火', foil: '#f2b77e', rgb: '242,178,122',
+      bg: 'radial-gradient(120% 82% at 50% 12%, #6a3324 0%, #4a2118 34%, #2a110c 66%, #140605 100%)' },
+    mind: { nm: '心 智 工 坊', foil: '#8fd0ff', rgb: '140,200,250',
+      bg: 'radial-gradient(120% 82% at 50% 12%, #1f4a72 0%, #14304f 34%, #0a1a30 66%, #040b18 100%)' },
+    mood: { nm: '光 影 心 绪', foil: '#ffb3dc', rgb: '255,176,218',
+      bg: 'radial-gradient(120% 82% at 50% 12%, #5a2a62 0%, #3c1b46 34%, #220d2a 66%, #100515 100%)' },
+  };
+
+  // 主题徽记：画在曼陀罗内环里（200×200 坐标，中心 100,100）
+  function backSigil(id, c) {
+    var st = '" fill="none" stroke="' + hexA(c, 0.9) + '" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>';
+    if (id === 'wild') {
+      return '<path d="M100 70C124 82 126 114 100 130C74 114 76 82 100 70Z' + st +
+        '<path d="M100 78V128M100 96L111 87M100 108L89 99M100 119L110 111' + st.replace('2.2', '1.5');
+    }
+    if (id === 'life') {
+      return '<path d="M74 104H126C124 120 114 128 100 128C86 128 76 120 74 104ZM88 129H112' + st +
+        '<path d="M90 97C86 91 94 87 90 79M100 97C96 91 104 87 100 79M110 97C106 91 114 87 110 79' + st.replace('2.2', '1.6');
+    }
+    if (id === 'mind') {
+      var teeth = '';
+      for (var i = 0; i < 8; i++) {
+        var a = (i * Math.PI) / 4;
+        teeth += 'M' + (100 + Math.cos(a) * 20).toFixed(1) + ' ' + (100 + Math.sin(a) * 20).toFixed(1) +
+          'L' + (100 + Math.cos(a) * 28).toFixed(1) + ' ' + (100 + Math.sin(a) * 28).toFixed(1);
+      }
+      return '<circle cx="100" cy="100" r="19' + st + '<circle cx="100" cy="100" r="7' + st +
+        '<path d="' + teeth + '" fill="none" stroke="' + hexA(c, 0.9) + '" stroke-width="5.5" stroke-linecap="round"/>';
+    }
+    if (id === 'mood') {
+      return '<path d="M106 72A28 28 0 1 0 126 118A22 22 0 1 1 106 72Z' + st +
+        '<path d="M122 80L124.5 86.5L131 89L124.5 91.5L122 98L119.5 91.5L113 89L119.5 86.5Z" fill="' + hexA(c, 0.92) + '"/>';
+    }
+    return '';
+  }
+
+  // 中央曼陀罗：刻度环 + 双层花瓣 + 八芒星（主题卡池换成主题徽记）
+  function backMandala(c, sigil) {
+    var i, a, s = '';
+    // 外圈刻度
+    var ticks = '';
+    for (i = 0; i < 72; i++) {
+      a = (i * Math.PI) / 36;
+      var r1 = 96, r2 = i % 6 === 0 ? 86 : 91.5;
+      ticks += 'M' + (100 + Math.cos(a) * r2).toFixed(1) + ' ' + (100 + Math.sin(a) * r2).toFixed(1) +
+        'L' + (100 + Math.cos(a) * r1).toFixed(1) + ' ' + (100 + Math.sin(a) * r1).toFixed(1);
+    }
+    s += '<path d="' + ticks + '" stroke="' + hexA(c, 0.5) + '" stroke-width=".9"/>';
+    // 外环 / 虚线环
+    s += '<circle cx="100" cy="100" r="99" fill="none" stroke="' + hexA(c, 0.62) + '" stroke-width="1.9"/>';
+    s += '<circle cx="100" cy="100" r="84" fill="none" stroke="' + hexA(c, 0.3) + '" stroke-width=".7"/>';
+    s += '<circle cx="100" cy="100" r="80" fill="none" stroke="' + hexA(c, 0.42) +
+      '" stroke-width=".9" stroke-dasharray="1 4.2"/>';
+
+    // 12 片大花瓣
+    var big = '';
+    for (i = 0; i < 12; i++) {
+      big += '<g transform="rotate(' + i * 30 + ' 100 100)">' +
+        '<path d="M100 24C112 40 114 58 100 72C86 58 88 40 100 24Z" fill="none" stroke="' +
+        hexA(c, 0.46) + '" stroke-width="1"/></g>';
+    }
+    s += big;
+
+    // 8 片小花瓣
+    var small = '';
+    for (i = 0; i < 8; i++) {
+      small += '<g transform="rotate(' + (i * 45 + 22.5) + ' 100 100)">' +
+        '<path d="M100 44C108 54 108 64 100 72C92 64 92 54 100 44Z" fill="' + hexA(c, 0.16) +
+        '" stroke="' + hexA(c, 0.5) + '" stroke-width=".8"/></g>';
+    }
+    s += small;
+
+    s += '<circle cx="100" cy="100" r="42" fill="none" stroke="' + hexA(c, 0.55) + '" stroke-width="1.2"/>';
+    if (sigil) {
+      s += '<circle cx="100" cy="100" r="40" fill="' + hexA(c, 0.1) + '"/>' + sigil;
+    } else {
+      s += backStar(c);
+    }
+    // 四向菱饰
+    [[100, 18], [100, 182], [18, 100], [182, 100]].forEach(function (p) {
+      s += '<path d="M' + p[0] + ' ' + (p[1] - 5) + 'L' + (p[0] + 5) + ' ' + p[1] +
+        'L' + p[0] + ' ' + (p[1] + 5) + 'L' + (p[0] - 5) + ' ' + p[1] + 'Z" fill="' + hexA(c, 0.85) + '"/>';
+    });
+    return s;
+  }
+
+  function backStar(c) {
+    var i, a, s = '';
+    var star = '';
+    for (i = 0; i < 8; i++) {
+      a = (i * Math.PI) / 4 - Math.PI / 2;
+      star += 'M100 100L' + (100 + Math.cos(a) * 30).toFixed(1) + ' ' +
+        (100 + Math.sin(a) * 30).toFixed(1);
+    }
+    s += '<path d="' + star + '" stroke="' + hexA(c, 0.7) + '" stroke-width="1.1" stroke-linecap="round"/>';
+    var star2 = '';
+    for (i = 0; i < 8; i++) {
+      a = (i * Math.PI) / 4 - Math.PI / 2 + Math.PI / 8;
+      star2 += 'M100 100L' + (100 + Math.cos(a) * 19).toFixed(1) + ' ' +
+        (100 + Math.sin(a) * 19).toFixed(1);
+    }
+    s += '<path d="' + star2 + '" stroke="' + hexA(c, 0.34) + '" stroke-width=".8"/>';
+    s += '<circle cx="100" cy="100" r="12" fill="none" stroke="' + hexA(c, 0.7) + '" stroke-width="1.1"/>';
+    s += '<circle cx="100" cy="100" r="4.4" fill="' + hexA(c, 0.92) + '"/>';
+    return s;
+  }
+
+  // 角花：双弧 + 卷草
+  function cornerFlourish(c) {
+    return '<g fill="none" stroke="' + hexA(c, 0.5) + '" stroke-width="1.1" stroke-linecap="round">' +
+      '<path d="M2 40C2 18 18 2 40 2"/>' +
+      '<path d="M8 40C8 22 22 8 40 8"/>' +
+      '<path d="M14 34C16 22 22 16 34 14"/>' +
+      '<path d="M20 24C22 20 24 18 28 16"/>' +
+      '</g>' +
+      '<path d="M14 14L19 14L14 19Z" fill="' + hexA(c, 0.75) + '"/>';
+  }
+
+  function renderBack(tier, themeId) {
+    var id = BACK_THEMES[themeId] ? themeId : 'all';
+    var B = BACK_THEMES[id];
     var el = document.createElement('article');
-    el.className = 'card back tier-' + tier + ' th-back';
+    el.className = 'card back th-back bk-' + id;
     el.style.width = CARD_W + 'px';
     el.style.height = CARD_H + 'px';
-    el.style.background =
-      'radial-gradient(110% 70% at 50% 18%, #4a3a78 0%, #2a1f4f 55%, #160f2e 100%)';
+    el.style.background = B.bg;
+    el.style.setProperty('--bk-foil', B.foil);
+    el.style.setProperty('--bk-rgb', B.rgb);
 
-    var g = hexA(T.foil, 1);
-    var off = Math.max(10, R.pad - 4);
+    var c = B.foil;
     var html = '';
 
-    // 边光：稀有度预告
-    if (tier >= 3) {
-      html += '<span class="fr" style="inset:' + (off - 4) + 'px;border-width:3px;border-color:' +
-        hexA(T.foil, 0.06 + tier * 0.022) + ';filter:blur(3px)"></span>';
-    }
+    // 底色面板
+    html += '<span class="bk-panel"></span>';
+    // 菱格织纹
+    html += '<span class="bk-lattice"></span>';
+    // 双层描金框
+    html += '<span class="bk-line l1"></span>';
+    html += '<span class="bk-line l2"></span>';
 
-    // 双框 + 四角括号
-    html += '<span class="fr" style="inset:' + off + 'px;border-width:1.1px;border-color:' +
-      hexA(T.foil, 0.34 + tier * 0.05) + '"></span>';
-    html += '<span class="fr" style="inset:' + (off + 4) + 'px;border-width:.5px;border-color:' +
-      hexA(T.foil, 0.16 + tier * 0.03) + '"></span>';
-
-    var br = '';
-    [[1, 1], [-1, 1], [1, -1], [-1, -1]].forEach(function (m) {
-      br += '<path d="' + bracket(17) + '" transform="' +
-        cornerMatrix([m[0], m[1], off + 4], CARD_W, CARD_H) +
-        '" fill="none" stroke="' + hexA(T.foil, 0.4) + '" stroke-width="1"/>';
+    // 四角卷草
+    var corners = '';
+    [[0, 0], [1, 0], [0, 1], [1, 1]].forEach(function (m) {
+      corners += '<g transform="' + cornerMatrix([m[0] ? -1 : 1, m[1] ? -1 : 1, 16], CARD_W, CARD_H) + '">' +
+        cornerFlourish(c) + '</g>';
     });
-    html += '<svg class="fr-svg" viewBox="0 0 ' + CARD_W + ' ' + CARD_H + '">' + br + '</svg>';
+    html += '<svg class="bk-corner" viewBox="0 0 ' + CARD_W + ' ' + CARD_H + '">' + corners + '</svg>';
 
-    // 点阵底纹
-    html += '<span class="bk-weave"></span>';
+    // 中央曼陀罗
+    html += '<svg class="bk-emblem" viewBox="0 0 200 200">' + backMandala(c, backSigil(id, c)) + '</svg>';
 
-    // 中央徽记
-    var cx = 80, cy = 80;
-    var rays = '';
-    for (var i = 0; i < 16; i++) {
-      var a = (i * Math.PI) / 8;
-      var r1 = i % 2 ? 30 : 34, r2 = i % 2 ? 37 : 42;
-      rays += 'M' + (cx + Math.cos(a) * r1).toFixed(1) + ' ' + (cy + Math.sin(a) * r1).toFixed(1) +
-        'L' + (cx + Math.cos(a) * r2).toFixed(1) + ' ' + (cy + Math.sin(a) * r2).toFixed(1);
-    }
-    var star = '';
-    for (var k = 0; k < 8; k++) {
-      var ang = (k * Math.PI) / 4;
-      star += 'M' + cx + ' ' + cy + 'L' + (cx + Math.cos(ang) * 20).toFixed(1) + ' ' +
-        (cy + Math.sin(ang) * 20).toFixed(1);
-    }
-    html +=
-      '<svg class="bk-emblem" viewBox="0 0 160 160" width="176" height="176">' +
-      '<circle cx="80" cy="80" r="46" fill="none" stroke="' + hexA(T.foil, 0.62) + '" stroke-width="1.1"/>' +
-      '<circle cx="80" cy="80" r="43" fill="none" stroke="' + hexA(T.foil, 0.22) +
-        '" stroke-width=".6" stroke-dasharray="1 3.4"/>' +
-      '<circle cx="80" cy="80" r="30" fill="none" stroke="' + hexA(T.foil, 0.46) + '" stroke-width=".8"/>' +
-      '<path d="' + rays + '" stroke="' + hexA(T.foil, 0.55) + '" stroke-width="1" stroke-linecap="round"/>' +
-      '<path d="' + star + '" stroke="' + hexA(T.foil, 0.72) + '" stroke-width=".8"/>' +
-      '<circle cx="80" cy="80" r="13" fill="none" stroke="' + hexA(T.foil, 0.62) + '" stroke-width=".9"/>' +
-      '<path d="M80 68L87 80L80 92L73 80Z" fill="' + hexA(T.foil, 0.9) + '"/>' +
-      '<path d="M80 74L83.4 80L80 86L76.6 80Z" fill="#141009"/>' +
-      '<g fill="' + hexA(T.foil, 0.85) + '">' +
-      '<circle cx="80" cy="34" r="1.8"/><circle cx="80" cy="126" r="1.8"/>' +
-      '<circle cx="34" cy="80" r="1.8"/><circle cx="126" cy="80" r="1.8"/>' +
-      '</g></svg>';
+    // 上下菱链
+    html += '<span class="bk-chain top"></span>';
+    html += '<span class="bk-chain bot"></span>';
 
-    html += '<div class="bk-cap">' + T.code + '　·　' + T.name + '</div>';
-    html += '<div class="bk-mark">抽 词 成 册</div>';
+    // 品牌字
+    html += '<div class="bk-cap">抽 词 成 册</div>';
+    html += '<div class="bk-pool">' + B.nm + '</div>';
 
     el.innerHTML = html;
     return el;
@@ -1317,7 +1685,6 @@
     var sp = spec(word);
     var th = sp.theme, tier = sp.tier, R = sp.rarity;
     var T = global.TIERS[tier];
-    var st = statsOf(word);
     var mastery = opts.mastery || 0;
     var S = W / CARD_W;
     var senses = word.senses && word.senses.length ? word.senses : null;
@@ -1374,14 +1741,11 @@
       ctx.restore();
     });
 
-    // 页眉
-    ctx.font = '9.5px "Songti SC", serif';
+    // 页眉：稀有度字标
+    ctx.font = 'italic 900 13px Georgia, serif';
     ctx.textAlign = 'left';
-    ctx.fillStyle = hexA(th.ink, th.dark ? 0.72 : 0.58);
-    ctx.fillText(global.TAGS[word.tag] || '词语', R.pad + 3, sp.hdTop + 8);
-    ctx.textAlign = 'right';
     ctx.fillStyle = th.dark ? hexA(T.foil, 0.9) : T.color;
-    ctx.fillText(T.name, CARD_W - R.pad - 3, sp.hdTop + 8);
+    ctx.fillText(word.hid ? 'EX' : T.code, R.pad + 3, sp.hdTop + 9);
 
     // 主词
     sp.hero.items.forEach(function (it) {
@@ -1412,10 +1776,10 @@
       ctx.restore();
     });
 
-    // 音标
+    // 音标（放大，与卡面 DOM 版一致）
     ctx.textAlign = 'center';
-    ctx.fillStyle = hexA(th.ink, th.dark ? 0.62 : 0.55);
-    ctx.font = 'italic 11px Georgia, serif';
+    ctx.fillStyle = hexA(th.ink, th.dark ? 0.78 : 0.72);
+    ctx.font = 'italic 15px Georgia, "Times New Roman", serif';
     ctx.fillText((word.pos ? word.pos + '  ' : '') + (word.ph || ''), CARD_W / 2, sp.phBase);
 
     // 分隔
@@ -1453,26 +1817,35 @@
       ctx.fillText(ln, CARD_W / 2, sp.text.exCn.top + sp.text.exCn.lh * (i + 0.76));
     });
 
-    // 属性
-    ctx.fillStyle = hexA(th.ink, th.dark ? 0.7 : 0.62);
-    ctx.font = '11px "Songti SC", serif';
-    var stats = [['力', st.str], ['智', st.wis], ['韵', st.res]];
-    var gap = 46, x0 = CARD_W / 2 - gap;
-    stats.forEach(function (v, i) {
-      var cx2 = x0 + i * gap;
-      ctx.fillStyle = hexA(th.ink, 0.4);
-      ctx.font = '10px "Songti SC", serif';
-      ctx.fillText(v[0], cx2 - 8, sp.statY + 11);
-      ctx.fillStyle = hexA(th.ink, th.dark ? 0.8 : 0.66);
-      ctx.font = '12px Georgia, serif';
-      ctx.fillText(String(v[1]), cx2 + 6, sp.statY + 11);
+    // 武器胶囊：主 / 副（与卡面 DOM 版一致）
+    var wk = weaponKinds(word, opts.levels);
+    var chips = [wk.main].concat(wk.sub ? [wk.sub] : []).map(function (k) {
+      return { c: KINDS[k].c, t: KINDS[k].nm };
     });
-
-    // 页脚
-    ctx.textAlign = 'center';
-    ctx.fillStyle = hexA(th.ink, th.dark ? 0.55 : 0.42);
-    ctx.font = '9px Georgia, serif';
-    ctx.fillText(sp.serial, CARD_W / 2, sp.footY + 8);
+    ctx.font = '600 12.5px "PingFang SC", sans-serif';
+    var chH = 24, chGap = 8;
+    chips.forEach(function (c) { c.w = ctx.measureText(c.t).width + 30; });
+    var chTotal = chips.reduce(function (s, c) { return s + c.w; }, 0) + chGap * (chips.length - 1);
+    var chx = CARD_W / 2 - chTotal / 2, chy = sp.statY - 4;
+    chips.forEach(function (c) {
+      var pill = null;
+      try { pill = new Path2D(roundRectPath(chx, chy, c.w, chH, 12)); } catch (e) {}
+      if (pill) {
+        ctx.fillStyle = hexA(c.c, 0.14);
+        ctx.fill(pill);
+        ctx.strokeStyle = hexA(c.c, 0.5);
+        ctx.lineWidth = 0.8;
+        ctx.stroke(pill);
+      }
+      ctx.beginPath();
+      ctx.arc(chx + 12, chy + chH / 2, 4, 0, Math.PI * 2);
+      ctx.fillStyle = c.c;
+      ctx.fill();
+      ctx.textAlign = 'left';
+      ctx.fillStyle = tint(c.c, 0, th.dark ? 0.05 : -0.2);
+      ctx.fillText(c.t, chx + 21, chy + 16.5);
+      chx += c.w + chGap;
+    });
 
     // 掌握星
     for (var si = 0; si < 3; si++) {
@@ -1579,6 +1952,8 @@
     statsOf: statsOf,
     levelCap: levelCap,
     typeTileSVG: typeTileSVG,
+    tileLook: tileLook,
+    SHAPE_PATH: SHAPE_PATH,
     cardLevel: cardLevel,
     CARD_W: CARD_W,
     CARD_H: CARD_H,
@@ -1588,9 +1963,20 @@
     render: render,
     emblemSVG: emblemSVG,
     letterKind: letterKind,
+    letterTrait: letterTrait,
+    letterTraits: letterTraits,
+    growOf: growOf,
+    powerOf: powerOf,
+    powerParts: powerParts,
+    weaponIcon: weaponIcon,
     dominantKind: dominantKind,
+    secondKind: secondKind,
+    weaponKinds: weaponKinds,
+    lvGem: lvGem,
+    elemGems: elemGems,
     KINDS: KINDS,
     renderBack: renderBack,
+    BACK_THEMES: BACK_THEMES,
     spec: spec,
     frameSpec: frameSpec,
     drawToCanvas: drawToCanvas,
