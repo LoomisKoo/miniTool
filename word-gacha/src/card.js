@@ -1524,32 +1524,105 @@
       bg: 'radial-gradient(120% 82% at 50% 12%, #5a2a62 0%, #3c1b46 34%, #220d2a 66%, #100515 100%)' },
   };
 
-  // 主题徽记：画在曼陀罗内环里（200×200 坐标，中心 100,100）
-  function backSigil(id, c) {
-    var st = '" fill="none" stroke="' + hexA(c, 0.9) + '" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>';
-    if (id === 'wild') {
-      return '<path d="M100 70C124 82 126 114 100 130C74 114 76 82 100 70Z' + st +
-        '<path d="M100 78V128M100 96L111 87M100 108L89 99M100 119L110 111' + st.replace('2.2', '1.5');
+  // 主题徽记：24×24 坐标（中心 12,12，半径 ≤ 11）。
+  // main 是主轮廓，卡背和抽卡主题按钮共用；face/shade/detail/dots 只画在卡背上
+  function polar(r, deg) {
+    var a = (deg * Math.PI) / 180;
+    return (12 + Math.cos(a) * r).toFixed(2) + ' ' + (12 + Math.sin(a) * r).toFixed(2);
+  }
+  function circ(cx, cy, r) {
+    return 'M' + (cx - r) + ' ' + cy + 'a' + r + ' ' + r + ' 0 1 0 ' + 2 * r + ' 0a' + r + ' ' + r + ' 0 1 0 ' + -2 * r + ' 0Z';
+  }
+  var SIGILS = (function () {
+    var i, d;
+    // 万象：八芒罗盘星，长芒指四正，短芒指四隅
+    var star = [], facets = '';
+    for (i = 0; i < 16; i++) star.push(polar(i % 2 ? 2.6 : (i % 4 ? 6.4 : 10.6), i * 22.5 - 90));
+    for (i = 0; i < 16; i += 2) facets += 'M12 12L' + star[i] + 'L' + star[(i + 1) % 16] + 'Z';
+    // 心智：三轨星核，三条椭圆轨道互成 60°，每轨一颗电子
+    var orbits = '', electrons = '';
+    for (i = 0; i < 3; i++) {
+      d = i * 60 - 90;
+      var ca = Math.cos((d * Math.PI) / 180), sa = Math.sin((d * Math.PI) / 180);
+      var p1 = (12 + ca * 10.4).toFixed(2) + ' ' + (12 + sa * 10.4).toFixed(2);
+      var p2 = (12 - ca * 10.4).toFixed(2) + ' ' + (12 - sa * 10.4).toFixed(2);
+      orbits += 'M' + p1 + 'A10.4 3.6 ' + d + ' 1 0 ' + p2 + 'A10.4 3.6 ' + d + ' 1 0 ' + p1 + 'Z';
+      var t = ((i * 120 + 35) * Math.PI) / 180, ex = Math.cos(t) * 10.4, ey = Math.sin(t) * 3.6;
+      electrons += circ(+(12 + ex * ca - ey * sa).toFixed(2), +(12 + ex * sa + ey * ca).toFixed(2), 0.85);
     }
-    if (id === 'life') {
-      return '<path d="M74 104H126C124 120 114 128 100 128C86 128 76 120 74 104ZM88 129H112' + st +
-        '<path d="M90 97C86 91 94 87 90 79M100 97C96 91 104 87 100 79M110 97C106 91 114 87 110 79' + st.replace('2.2', '1.6');
-    }
-    if (id === 'mind') {
-      var teeth = '';
-      for (var i = 0; i < 8; i++) {
-        var a = (i * Math.PI) / 4;
-        teeth += 'M' + (100 + Math.cos(a) * 20).toFixed(1) + ' ' + (100 + Math.sin(a) * 20).toFixed(1) +
-          'L' + (100 + Math.cos(a) * 28).toFixed(1) + ' ' + (100 + Math.sin(a) * 28).toFixed(1);
+
+    return {
+      all: {
+        main: 'M' + star.join('L') + 'Z',
+        face: 'M' + star.join('L') + 'Z',
+        shade: facets,
+        detail: circ(12, 12, 8.6) + 'M12 12L' + star[4] + 'M12 12L' + star[12] + 'M12 12L' + star[0] + 'M12 12L' + star[8],
+        dots: circ(12, 12, 1.15)
+      },
+      wild: {
+        main: 'M12 2.5C14.6 4.6 14.6 7.8 12 9.6C9.4 7.8 9.4 4.6 12 2.5Z' +
+          'M12 11.2C13.2 8 16 6.6 19 6.8C18.4 9.8 15.6 11.6 12 11.2Z' +
+          'M12 11.2C10.8 8 8 6.6 5 6.8C5.6 9.8 8.4 11.6 12 11.2Z' +
+          'M12 16C13.4 12.9 16.4 11.8 19.4 12.4C18.4 15.3 15.4 16.7 12 16Z' +
+          'M12 16C10.6 12.9 7.6 11.8 4.6 12.4C5.6 15.3 8.6 16.7 12 16Z' +
+          'M12 9.6V21.2',
+        face: 'M12 2.5C14.6 4.6 14.6 7.8 12 9.6C9.4 7.8 9.4 4.6 12 2.5Z' +
+          'M12 11.2C13.2 8 16 6.6 19 6.8C18.4 9.8 15.6 11.6 12 11.2Z' +
+          'M12 11.2C10.8 8 8 6.6 5 6.8C5.6 9.8 8.4 11.6 12 11.2Z' +
+          'M12 16C13.4 12.9 16.4 11.8 19.4 12.4C18.4 15.3 15.4 16.7 12 16Z' +
+          'M12 16C10.6 12.9 7.6 11.8 4.6 12.4C5.6 15.3 8.6 16.7 12 16Z',
+        detail: 'M12 4V8.6M12.7 10.7Q15.4 8.6 18 7.4M11.3 10.7Q8.6 8.6 6 7.4' +
+          'M12.7 15.5Q15.6 13.4 18.4 12.9M11.3 15.5Q8.4 13.4 5.6 12.9',
+        dots: circ(12, 21.4, 0.95) + circ(9.6, 19.6, 0.6) + circ(14.4, 19.6, 0.6)
+      },
+      life: {
+        main: 'M12 1.8C13.2 5 17.6 7.6 17.6 13.4C17.6 17.6 15.2 20.8 12 20.8C8.8 20.8 6.4 17.6 6.4 13.4' +
+          'C6.4 10.4 8 8.4 9.2 7C9.2 9.2 10 10.4 11 11C10.6 7.6 11 4.4 12 1.8Z' +
+          'M12 10.4C13 12.4 15 13.8 15 16.4C15 18.4 13.7 19.6 12 19.6C10.3 19.6 9 18.4 9 16.6' +
+          'C9 15 9.8 14 10.6 13.4C10.6 14.6 11 15.2 11.6 15.6C11.4 13.8 11.4 12 12 10.4Z',
+        face: 'M12 1.8C13.2 5 17.6 7.6 17.6 13.4C17.6 17.6 15.2 20.8 12 20.8C8.8 20.8 6.4 17.6 6.4 13.4' +
+          'C6.4 10.4 8 8.4 9.2 7C9.2 9.2 10 10.4 11 11C10.6 7.6 11 4.4 12 1.8Z',
+        shade: 'M12 10.4C13 12.4 15 13.8 15 16.4C15 18.4 13.7 19.6 12 19.6C10.3 19.6 9 18.4 9 16.6' +
+          'C9 15 9.8 14 10.6 13.4C10.6 14.6 11 15.2 11.6 15.6C11.4 13.8 11.4 12 12 10.4Z',
+        detail: 'M15.4 9.8C16.4 11.2 16.6 14.6 15 17.4M12.6 4.6C13.4 6.4 14.6 7.6 15.2 8.6M8 10.6C7.6 11.8 7.6 13 7.8 14.2',
+        dots: 'M12 15.4C12.8 16.4 13.4 17 13.4 17.8A1.4 1.4 0 0 1 10.6 17.8C10.6 17 11.2 16.4 12 15.4Z' +
+          'M18.6 4.2L19 5.4L20.2 5.8L19 6.2L18.6 7.4L18.2 6.2L17 5.8L18.2 5.4Z' +
+          circ(19.6, 9.4, 0.55) + circ(5.4, 6.2, 0.5) + circ(4.8, 9.6, 0.38)
+      },
+      mind: {
+        main: orbits + circ(12, 12, 2.1),
+        face: circ(12, 12, 4.4),
+        shade: circ(12, 12, 2.9),
+        detail: circ(12, 12, 4.4) + circ(12, 12, 10.6),
+        dots: circ(12, 12, 1.25) + electrons
+      },
+      mood: {
+        main: 'M10.66 4.51A8.5 8.5 0 1 0 19.06 15.7A7 7 0 0 1 10.66 4.51Z' +
+          'M17.6 3L18.35 5.45L20.8 6.2L18.35 6.95L17.6 9.4L16.85 6.95L14.4 6.2L16.85 5.45Z',
+        face: 'M10.66 4.51A8.5 8.5 0 1 0 19.06 15.7A7 7 0 0 1 10.66 4.51Z',
+        shade: 'M17.6 3L18.35 5.45L20.8 6.2L18.35 6.95L17.6 9.4L16.85 6.95L14.4 6.2L16.85 5.45Z',
+        detail: 'M4.92 10.42A6.6 6.6 0 0 0 11.8 19.55',
+        dots: circ(20.3, 11, 0.75) + circ(14.3, 11.6, 0.55)
       }
-      return '<circle cx="100" cy="100" r="19' + st + '<circle cx="100" cy="100" r="7' + st +
-        '<path d="' + teeth + '" fill="none" stroke="' + hexA(c, 0.9) + '" stroke-width="5.5" stroke-linecap="round"/>';
-    }
-    if (id === 'mood') {
-      return '<path d="M106 72A28 28 0 1 0 126 118A22 22 0 1 1 106 72Z' + st +
-        '<path d="M122 80L124.5 86.5L131 89L124.5 91.5L122 98L119.5 91.5L113 89L119.5 86.5Z" fill="' + hexA(c, 0.92) + '"/>';
-    }
-    return '';
+    };
+  })();
+
+  // 卡背徽记：画在曼陀罗内环里（200×200 坐标，中心 100,100）
+  function backSigil(id, c) {
+    var g = SIGILS[id];
+    if (!g) return '';
+    return '<g transform="translate(100 100) scale(3.1) translate(-12 -12)" stroke-linecap="round" stroke-linejoin="round">' +
+      '<path d="' + g.face + '" fill="' + hexA(c, 0.16) + '" fill-rule="evenodd"/>' +
+      (g.shade ? '<path d="' + g.shade + '" fill="' + hexA(c, 0.42) + '"/>' : '') +
+      '<path d="' + g.detail + '" fill="none" stroke="' + hexA(c, 0.5) + '" stroke-width=".3"/>' +
+      '<path d="' + g.main + '" fill="none" stroke="' + hexA(c, 0.95) + '" stroke-width=".66"/>' +
+      '<path d="' + g.dots + '" fill="' + hexA(c, 0.95) + '"/></g>';
+  }
+
+  // 抽卡主题按钮图标：与卡背徽记同形
+  function sigilIcon(id) {
+    var g = SIGILS[id] || SIGILS.all;
+    return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="' + g.main + '"/></svg>';
   }
 
   // 中央曼陀罗：刻度环 + 双层花瓣 + 八芒星（主题卡池换成主题徽记）
@@ -1579,47 +1652,26 @@
     }
     s += big;
 
-    // 8 片小花瓣
+    // 8 片小花瓣：必须和大花瓣同频（12 片），并偏移半个夹角
+    // 12 与 8 的间距无法对齐，小花瓣会在相邻大花瓣间左右摇摆
     var small = '';
-    for (i = 0; i < 8; i++) {
-      small += '<g transform="rotate(' + (i * 45 + 22.5) + ' 100 100)">' +
+    for (i = 0; i < 12; i++) {
+      small += '<g transform="rotate(' + (i * 30 + 15) + ' 100 100)">' +
         '<path d="M100 44C108 54 108 64 100 72C92 64 92 54 100 44Z" fill="' + hexA(c, 0.16) +
         '" stroke="' + hexA(c, 0.5) + '" stroke-width=".8"/></g>';
     }
     s += small;
 
     s += '<circle cx="100" cy="100" r="42" fill="none" stroke="' + hexA(c, 0.55) + '" stroke-width="1.2"/>';
-    if (sigil) {
-      s += '<circle cx="100" cy="100" r="40" fill="' + hexA(c, 0.1) + '"/>' + sigil;
-    } else {
-      s += backStar(c);
-    }
+    s += '<circle cx="100" cy="100" r="40" fill="' + hexA(c, 0.1) + '"/>';
+    s += '<circle cx="100" cy="100" r="37.5" fill="none" stroke="' + hexA(c, 0.3) +
+      '" stroke-width=".7" stroke-dasharray=".6 3" stroke-linecap="round"/>';
+    s += sigil;
     // 四向菱饰
     [[100, 18], [100, 182], [18, 100], [182, 100]].forEach(function (p) {
       s += '<path d="M' + p[0] + ' ' + (p[1] - 5) + 'L' + (p[0] + 5) + ' ' + p[1] +
         'L' + p[0] + ' ' + (p[1] + 5) + 'L' + (p[0] - 5) + ' ' + p[1] + 'Z" fill="' + hexA(c, 0.85) + '"/>';
     });
-    return s;
-  }
-
-  function backStar(c) {
-    var i, a, s = '';
-    var star = '';
-    for (i = 0; i < 8; i++) {
-      a = (i * Math.PI) / 4 - Math.PI / 2;
-      star += 'M100 100L' + (100 + Math.cos(a) * 30).toFixed(1) + ' ' +
-        (100 + Math.sin(a) * 30).toFixed(1);
-    }
-    s += '<path d="' + star + '" stroke="' + hexA(c, 0.7) + '" stroke-width="1.1" stroke-linecap="round"/>';
-    var star2 = '';
-    for (i = 0; i < 8; i++) {
-      a = (i * Math.PI) / 4 - Math.PI / 2 + Math.PI / 8;
-      star2 += 'M100 100L' + (100 + Math.cos(a) * 19).toFixed(1) + ' ' +
-        (100 + Math.sin(a) * 19).toFixed(1);
-    }
-    s += '<path d="' + star2 + '" stroke="' + hexA(c, 0.34) + '" stroke-width=".8"/>';
-    s += '<circle cx="100" cy="100" r="12" fill="none" stroke="' + hexA(c, 0.7) + '" stroke-width="1.1"/>';
-    s += '<circle cx="100" cy="100" r="4.4" fill="' + hexA(c, 0.92) + '"/>';
     return s;
   }
 
@@ -1672,7 +1724,7 @@
     html += '<span class="bk-chain bot"></span>';
 
     // 品牌字
-    html += '<div class="bk-cap">抽 词 成 册</div>';
+    html += '<div class="bk-cap">词 卡 物 语</div>';
     html += '<div class="bk-pool">' + B.nm + '</div>';
 
     el.innerHTML = html;
@@ -1977,6 +2029,7 @@
     KINDS: KINDS,
     renderBack: renderBack,
     BACK_THEMES: BACK_THEMES,
+    sigilIcon: sigilIcon,
     spec: spec,
     frameSpec: frameSpec,
     drawToCanvas: drawToCanvas,

@@ -2133,7 +2133,7 @@ body {
   text-align: center; transition: .16s ease;
 }
 .draw-theme b { display: block; color: #cbc4d5; font-size: 12px; font-weight: 600; white-space: nowrap; }
-.draw-theme svg { display: block; width: 17px; height: 17px; margin: 0 auto 2px; fill: none; stroke: var(--th, #f4d78f); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; opacity: .7; }
+.draw-theme svg { display: block; width: 17px; height: 17px; margin: 0 auto 2px; fill: none; stroke: var(--th, #f4d78f); stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; opacity: .7; }
 .draw-theme.on {
   border-color: rgba(var(--th-rgb, 244, 215, 143), .65);
   background: linear-gradient(180deg, rgba(var(--th-rgb, 244, 215, 143), .22), rgba(var(--th-rgb, 244, 215, 143), .06));

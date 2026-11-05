@@ -355,13 +355,6 @@
     mind: { nm: '心智工坊', short: '心智', sub: '学术 · 机巧 · 动静', tags: ['study', 'tech', 'motion'] },
     mood: { nm: '光影心绪', short: '光影', sub: '光影 · 声籁 · 时序', tags: ['light', 'feeling', 'sound', 'time'] }
   };
-  var DRAW_THEME_ICONS = {
-    all: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6L5.6 18.4"/></svg>',
-    wild: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20c-4-2.2-6-5.1-6-8.7C6 7.5 8.2 5 11 4c.2 2.3 1.1 3.8 2.4 4.8C14 6.2 15.8 4.8 18 4c.2 4.2-1.1 7-3.4 8.5"/></svg>',
-    life: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10.5h16M6 10.5v8h12v-8M8 10V6.5h8V10M10 14h4M12 3v3.5"/></svg>',
-    mind: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.2 15.8a5.7 5.7 0 1 1 7.6 0c-.8.7-1.2 1.4-1.4 2.2H9.6c-.2-.8-.6-1.5-1.4-2.2ZM10 21h4M10 18h4M12 2v1.5M4.9 4.9 6 6M19.1 4.9 18 6"/></svg>',
-    mood: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5 14.2 9l5.8.4-4.5 3.7 1.4 5.6L12 15.6l-4.9 3.1 1.4-5.6L4 9.4 9.8 9 12 3.5Z"/></svg>'
-  };
   function drawThemeWords() {
     var theme = DRAW_THEMES[state.drawTheme] || DRAW_THEMES.all;
     return WORDS.filter(function (w) {
@@ -402,7 +395,7 @@
       var t = DRAW_THEMES[id], B = Card.BACK_THEMES[id] || Card.BACK_THEMES.all;
       html += '<button type="button" class="draw-theme' + (state.drawTheme === id ? ' on' : '') +
         '" data-theme="' + id + '" aria-label="' + t.nm + '" style="--th:' + B.foil + ';--th-rgb:' + B.rgb + '">' +
-        DRAW_THEME_ICONS[id] + '<b>' + t.short + '</b></button>';
+        Card.sigilIcon(id) + '<b>' + t.short + '</b></button>';
     });
     box.innerHTML = html;
     var desc = $('drawThemeDesc');
@@ -413,7 +406,7 @@
     box.querySelectorAll('[data-theme]').forEach(function (btn) {
       btn.onclick = function () {
         var id = btn.getAttribute('data-theme');
-        if (id === state.drawTheme || busy) return;
+        if (id === state.drawTheme || (busy && !reskinTimers.length)) return;
         state.drawTheme = id;
         save();
         renderDrawThemes();
@@ -424,13 +417,21 @@
   }
 
   // 切换卡池：还没翻开的牌按新主题重抽单词（稀有度不变），并翻面换上新牌背
+  // 换背动画可被下一次切换打断，其余动画期间仍锁定
+  var reskinTimers = [];
   function reskinPile() {
     if (!pileWrap) return;
+    var interrupted = reskinTimers.length > 0;
+    reskinTimers.forEach(clearTimeout);
+    reskinTimers = [];
     var pile = stage.querySelector('.pile');
     var items = pile ? pile.querySelectorAll('.pile-card') : [];
     var idx = [];
     pileWrap.states.forEach(function (s, i) { if (s === 'back' && items[i]) idx.push(i); });
-    if (!idx.length) return;
+    if (!idx.length) {
+      if (interrupted) { if (pile) pile.classList.remove('reskin'); busy = false; }
+      return;
+    }
     var keep = pileWrap.picks.map(function (p, i) { return idx.indexOf(i) < 0 ? p.w.w : null; }).filter(Boolean);
     idx.forEach(function (i) {
       var w = drawWord(keep);
@@ -445,9 +446,10 @@
       var item = items[i];
       item.style.setProperty('--i', k);
       item.style.setProperty('--bk-glow', B.foil);
-      item.classList.remove('rs-in');
+      item.classList.remove('rs-in', 'rs-out');
+      void item.offsetWidth;
       item.classList.add('rs-out');
-      setTimeout(function () {
+      reskinTimers.push(setTimeout(function () {
         var old = item.querySelector('.card');
         var node = Card.renderBack(pileWrap.picks[i].lv, state.drawTheme);
         node.style.transform = old ? old.style.transform : '';
@@ -455,13 +457,14 @@
         item.classList.remove('rs-out');
         item.classList.add('rs-in');
         sfx('flick', k);
-      }, 200 + k * 60);
+      }, 200 + k * 60));
     });
-    setTimeout(function () {
+    reskinTimers.push(setTimeout(function () {
       pile.classList.remove('reskin');
       for (var j = 0; j < items.length; j++) items[j].classList.remove('rs-in');
+      reskinTimers = [];
       busy = false;
-    }, 200 + idx.length * 60 + 440);
+    }, 200 + idx.length * 60 + 440));
   }
 
   function rollBatch(n) {
