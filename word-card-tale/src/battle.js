@@ -445,6 +445,7 @@
   /* ── 开局 ─────────────────────────────────────── */
   var BOSS_AT = 60;          // 第 60 秒首领登场，整关约 75 秒
   var hudTop = 44, hudBot = 64, eid = 0;
+  var hudRowY = 26, hudSide = 58;   // 顶部按钮行的中线 / 两侧按钮占用宽度（拼词条夹在中间）
   /* 大招充能：开局 0 格，随时间充满一格，最多存 3 格；品阶越高充得越快（N 40 秒 → EX 20 秒），放大招期间暂停充能 */
   var ULT_CHARGE_T = { 1: 40, 2: 36, 3: 32, 4: 28, 5: 24, 6: 20 };
   function chargeUlt(dt) {
@@ -459,7 +460,7 @@
       renderHud();
     }
     var bb = el('battleBomb'), pc = Math.round(state.charge * 100);
-    if (bb && bb._pc !== pc) { bb._pc = pc; bb.style.setProperty('--c', pc + '%'); }
+    if (bb && bb._pc !== pc) { bb._pc = pc; bb.style.setProperty('--c', (pc / 100).toFixed(2)); }
   }
   // 大招按钮图标（24×24 描边路径）
   var ULT_ICON = {
@@ -589,6 +590,16 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     var top = root && root.querySelector('.sx-top');
     if (top) hudTop = Math.max(36, Math.round(top.getBoundingClientRect().bottom - rect.top));
+    var qb = root && root.querySelector('#battleQuit');
+    if (qb) {
+      var qr = qb.getBoundingClientRect();
+      if (qr.height) {
+        hudRowY = Math.round(qr.top - rect.top + qr.height / 2);
+        hudSide = Math.round(qr.right - rect.left + 10);
+      }
+    }
+    // 拼词行下方再留一条：关卡信息 / 首领血条
+    hudTop += 22;
     var bot = root && root.querySelector('.sx-bottom');
     if (bot) hudBot = Math.max(48, Math.round(rect.bottom - bot.getBoundingClientRect().top));
     if (state) clampPlayer();
@@ -604,27 +615,31 @@
   }
   /* 全局难度档：地区和关内进度一起算，1 = 第一个地区第一关。
      （原来只按「地区内第几关」算，换地区后进度清零；need 又在上限处截断，
-      于是后期根本没有变难，全靠玩家自己变强） */
-  function diffTier() {
+      于是后期根本没有变难，全靠玩家自己变强）
+     progressTier 把地区解锁需求（0~348）折算成 0~1 的流程进度，
+     这样 30 个地区 150 关的难度能一路爬到满档，而不是在 need 240 处封死。 */
+  function progressTier() {
     var need = (state.region && state.region.need) || 0;
-    return clamp(1 + 0.7 * (state.stage || 0) + Math.min(need, 300) / 45, 1, 9);
+    return clamp(Math.min(need, 360) / 360, 0, 1);
   }
-  // 弹幕密度倍率：新手关只有六成，后期最高 1.2 倍
-  function bScale() { return clamp(0.5 + 0.08 * diffTier(), 0.55, 1.2); }
+  function diffTier() {
+    return clamp(1 + 0.7 * (state.stage || 0) + progressTier() * 12, 1, 18);
+  }
+  // 弹幕密度倍率：新手关只有六成，后期最高 1.5 倍
+  function bScale() { return clamp(0.5 + 0.08 * diffTier(), 0.55, 1.5); }
   // 按难度缩放弹数，至少 1 发
   function bCount(n) { return Math.max(1, Math.round(n * bScale())); }
 
   function levelMul() {
-    var need = (state.region && state.region.need) || 0;
-    // 地区加成上限放宽到 need 300，后期才能真正变硬
-    return (1 + 0.15 * (state.level - 1)) * (1 + Math.min(need, 300) / 450);
+    // 关内 1~5 关 × 地区流程进度，150 关全程约 1 → 3 倍
+    return (1 + 0.15 * (state.level - 1)) * (1 + 0.9 * progressTier());
   }
   // 精英 / 首领血量按关卡和地区渐进：前期宽松，后期增加但不让高战力被反向拖慢
   function bossMul() {
-    var need = (state.region && state.region.need) || 0;
-    return (1 + 0.11 * (state.level - 1)) * (1 + Math.min(need, 300) / 700);
+    return (1 + 0.11 * (state.level - 1)) * (1 + 1.1 * progressTier());
   }
-  // 逆平衡：卡牌越强（阶级 / 武器等级 / 字母等级），敌人同步变硬变密，避免顶级卡一路平推
+  // 逆平衡：卡牌越强（阶级 / 武器等级 / 字母等级），敌人弹速和刷怪密度同步上升，
+  // 但血量不跟着涨 —— 否则升级在战斗里没有体感，无尽模式的分数也失去意义
   function cardPowerMul() {
     var c = state.card;
     if (!c) return 1;
@@ -704,8 +719,8 @@
   function fireRate() {
     var c = state.card, pw = powerProg();
     var guard = (c.kind === 'shield' || c.sub === 'shield') ? 1.08 : 0.88;
-    // 首领开火频率也吃全局难度：第一关只有六成，后期最多 1.2 倍
-    var ramp = state.phase === 'boss' ? clamp(0.5 + 0.1 * diffTier(), 0.5, 1.2) : clamp(0.4 + state.t / 30, 0.4, 1);
+    // 首领开火频率也吃全局难度：第一关只有六成，后期最多 1.35 倍
+    var ramp = state.phase === 'boss' ? clamp(0.5 + 0.1 * diffTier(), 0.5, 1.35) : clamp(0.4 + state.t / 30, 0.4, 1);
     return (0.5 + 0.5 * pw) * guard * ramp * (state.awaken > 0 ? 1.1 : 1) * clamp(0.85 + 0.08 * dpsRatio(), 0.85, 1.25);
   }
   function spriteName(id) {
@@ -715,7 +730,7 @@
   function beginLevel() {
     state.t = 0;
     state.phase = 'stage';
-    state.stats = { t: 0, hits: 0 };
+    state.stats = { t: 0, hits: 0, ultUsed: 0, bossT: 0 };
     if (state.dps == null) initDps();
     state.script = buildScript(state.level);
     // 开局补给：先给一波字母和一份火力，避免"怪已经压下来但子弹还不够"
@@ -787,6 +802,7 @@
       var lab = el('battleBombLab');
       if (lab && lab.textContent !== nm) lab.textContent = nm;
       bb.classList.toggle('ready', state.bombs > 0);
+      bb.setAttribute('data-n', state.bombs);
       var dots = '';
       for (var i = 0; i < 3; i++) dots += '<i class="' + (i < state.bombs ? 'on' : '') + '"></i>';
       var d = el('battleBombDots');
@@ -1671,6 +1687,7 @@
       state.phase = 'clear';
       state.clearT = 2.2;
       state.flash = 0.5;
+      state.stats.bossT = state.stats.t;   // 击败首领的用时，用于成就
       clearShots(true);
       for (var k = 0; k < 3; k++) {
         ringPulse(e.x + rnd(-30, 30), e.y + rnd(-30, 30), pick(['#ffd36b', '#ff9e7a', '#fff']), 10, 120 + k * 40, 0.6 + k * 0.15, 3);
@@ -1832,6 +1849,7 @@
     if (!state || state.ended || state.paused || state.bombs <= 0 || state.ult || state.phase === 'clear') return;
     var c = state.card, k = c.kind;
     state.bombs--;
+    state.stats.ultUsed = (state.stats.ultUsed || 0) + 1;
     // 阶级越高持续时间越长：N(1) 1× → EX(6) 1.75×
     var mul = ultScale(c);
     var dur = ({ blast: 1.9, pierce: 1.6, swift: 1.4, thunder: 1.6, frost: 3.2, shield: 1.45, tide: 2.2, blade: 1.6 }[k] || 1.5) * mul;
@@ -2120,7 +2138,10 @@
     setPanel('result');
     var r = grade(), stars = win ? r.stars : 0;
     if (win) Sfx.play('win', stars); else Sfx.play('lose');
-    var ink = win ? ({ S: 30, A: 20, B: 12, C: 6 }[r.g] + state.level * 3 + state.inkBonus) : Math.min(10, Math.floor(state.kills / 4)) + state.inkBonus;
+    var ink0 = win ? ({ S: 30, A: 20, B: 12, C: 6 }[r.g] + state.level * 3 + state.inkBonus) : Math.min(10, Math.floor(state.kills / 4)) + state.inkBonus;
+    // 每日收益递减在结算前就应用，结算页显示的就是实际到手的量
+    var inkMul = (api && api.inkMul) ? api.inkMul() : 1;
+    var ink = Math.max(1, Math.round(ink0 * inkMul));
     var gradeCh = win ? r.g : 'F';
     var starHtml = '';
     for (var i = 0; i < 3; i++) starHtml += '<i class="' + (i < stars ? 'on' : '') + '">★</i>';
@@ -2140,16 +2161,44 @@
         }).join('');
     }
     var score = win ? r.score : 0;
+    var cw = state.card.word, KS = global.Card && global.Card.KINDS;
+    var wTag = function (k, sub) {
+      if (!KS || !KS[k]) return '';
+      return '<span class="ek-tag' + (sub ? ' sub' : '') + '" style="--c:' + KS[k].c + '">' +
+        (global.Card.weaponIcon ? global.Card.weaponIcon(k, sub ? 'sub' : '') : '') +
+        '<b>' + KS[k].nm + '</b><em>' + (sub ? '副' : '主') + '</em></span>';
+    };
+    var cStars = '';
+    for (var si = 0; si < 3; si++) cStars += '<i class="' + (si < state.card.stars ? 'on' : '') + '">★</i>';
+    var cardHtml = '<div class="br-card" style="--c:' + state.card.color + '">' +
+      '<div class="brc-main"><span class="brc-k">出战词卡</span>' +
+        '<b class="brc-w">' + String(cw.w || '').toLowerCase() + '</b>' +
+        '<span class="brc-cn">' + String(cw.cn || '').split(/[；;]/)[0] + '</span></div>' +
+      '<div class="brc-side"><span class="brc-stars">' + cStars + '</span>' +
+        '<span class="brc-ws">' + wTag(state.card.kind) + (state.card.sub ? wTag(state.card.sub, true) : '') + '</span></div>' +
+    '</div>';
+    var seenHtml = '';
+    if (state.seenList.length) {
+      seenHtml = '<div class="br-seen"><div class="loot-head"><i></i><span>本局遭遇 ' + state.seenList.length + '</span><i></i></div><div class="brs-grid">' +
+        state.seenList.map(function (id) {
+          var n = spriteName(id);
+          return '<span class="brs-cell" data-sprite="' + id + '"><canvas width="64" height="64"></canvas><i>' + (n.cn || n.en) + '</i></span>';
+        }).join('') + '</div></div>';
+    }
     el('battleResultBody').innerHTML =
       '<div class="br-hero ' + (win ? 'win' : 'lose') + ' g' + gradeCh + '">' +
-        '<i class="br-rays"></i>' +
-        '<div class="br-rank"><b>' + gradeCh + '</b></div>' +
-        '<div class="br-stars">' + starHtml + '</div>' +
-        '<h2>' + (win ? '通 关' : '失 利') + '</h2>' +
-        '<p>' + regionPlace() + ' · ' + state.theme.title + '</p>' +
-        '<em class="br-note">' + (win ? (state.stage < 4 ? '已解锁下一关' : '本地区全部通关') : '再接再厉') + '</em>' +
+        '<div class="br-badge">' +
+          '<i class="br-rays"></i>' +
+          '<div class="br-rank"><b>' + gradeCh + '</b></div>' +
+          '<div class="br-stars">' + starHtml + '</div>' +
+        '</div>' +
+        '<div class="br-info">' +
+          '<h2>' + (win ? '通 关' : '失 利') + '</h2>' +
+          '<p>' + regionPlace() + ' · ' + state.theme.title + '</p>' +
+          '<em class="br-note">' + (win ? (state.stage < 4 ? '已解锁下一关' : '本地区全部通关') : '再接再厉') + '</em>' +
+          '<div class="br-score"><span>评分</span><div class="br-bar"><i style="width:' + score + '%"></i></div><b>' + score + '</b></div>' +
+        '</div>' +
       '</div>' +
-      '<div class="br-score"><span>评分</span><div class="br-bar"><i style="width:' + score + '%"></i></div><b>' + score + '</b></div>' +
       '<div class="bres-stats">' +
         '<div class="st-time"><b>' + Math.round(state.stats.t) + '<em>s</em></b><span>用时</span></div>' +
         '<div class="st-hit"><b>' + state.stats.hits + '</b><span>受伤</span></div>' +
@@ -2157,6 +2206,8 @@
         '<div class="st-kill"><b>' + state.kills + '</b><span>击杀</span></div>' +
       '</div>' +
       '<div class="br-ink"><i></i><b id="bresInk">+0</b><span>成长点</span></div>' +
+      cardHtml +
+      seenHtml +
       (lootHtml ? '<div class="bres-loot">' + lootHtml + '</div>'
         : '<div class="bres-empty">本关没有新图鉴 · 再挑战试试</div>');
     drawDexSprites(el('battleResultBody'));
@@ -2178,6 +2229,12 @@
       waves: win ? 1 : 0, strong: state.wordsDone, grade: win ? r.g : '',
       word: (state.card && state.card.word && state.card.word.w) || '',
       codex: state.codexGot.slice(),
+      time: state.stats.t,
+      hits: state.stats.hits,
+      nohit: win && state.stats.hits === 0,
+      noUlt: win && !(state.stats.ultUsed || 0),
+      bossT: state.stats.bossT || 0,
+      words: state.wordsDone,
     });
     el('battleAgain').onclick = exitToHome;
     el('battleBack').onclick = exitToHome;
@@ -2642,7 +2699,7 @@
   }
 
   // 弹药等级配色：1–3 本色，4 提亮，5 鎏金，6 彩虹流转
-  var VT_GOLD = { blast: '#ffd36b', frost: '#d8f6ff', swift: '#ffe58a', shield: '#c8ffd8', pierce: '#ffd0f0', thunder: '#e6d4ff', tide: '#bff6ff', blade: '#ffd0f6' };
+  var VT_GOLD = { blast: '#ffd36b', frost: '#d8f6ff', swift: '#ffe58a', shield: '#c8ffd8', pierce: '#ff5fc8', thunder: '#e6d4ff', tide: '#bff6ff', blade: '#ffd0f6' };
   // 冷色系（冰 / 水）满级不走彩虹，只在本色相带里冷光闪烁，保持"冰就是冰"
   var VT_COLD = { frost: [196, 14, 86] };
   // 潮汐：浅青 → 海蓝的冷色层次，满级在青蓝之间流动，亮度压低避免叠加发白
@@ -4436,35 +4493,63 @@
     ctx.fillStyle = g;
     ctx.fill();
   }
+  // 激光配色：外层必须是饱和色，lighter 叠加下淡色会直接加成一片白
+  function beamPal(v, i) {
+    if (v >= 6) {
+      var h = (i * 60 + tGlobal * 200) % 360;
+      return { o: 'hsl(' + h.toFixed(0) + ',100%,52%)', m: 'hsl(' + ((h + 50) % 360).toFixed(0) + ',100%,64%)', c: '#fff6fb', s: 'hsl(' + ((h + 120) % 360).toFixed(0) + ',100%,70%)' };
+    }
+    if (v >= 5) return { o: '#8a2dff', m: '#ff3fa8', c: '#ffe7b0', s: '#ffd36b' };
+    if (v >= 3) return { o: '#d81f8f', m: '#ff58d0', c: '#ffeefa', s: '#ffa8e6' };
+    return { o: '#ff2a78', m: '#ff6fae', c: '#ffe2ee', s: '#ff9cc6' };
+  }
   function drawBeamList(list, L) {
     if (!list.length) return;
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
     ctx.lineCap = 'round';
     list.forEach(function (bm, i) {
-      var v = bm.vt || 1, dx = Math.cos(bm.a), dy = Math.sin(bm.a);
+      var v = bm.vt || 1, dx = Math.cos(bm.a), dy = Math.sin(bm.a), nx = -dy, ny = dx;
       var ex = bm.x + dx * L, ey = bm.y + dy * L, al = bm.al != null ? bm.al : 1;
-      var col = vtColor('pierce', v, i * 60);
-      var w = bm.w * (1 + Math.sin(tGlobal * 50 + i * 1.7) * 0.12);
-      function line(lw) {
+      var P = beamPal(v, i);
+      var w = bm.w * (1 + Math.sin(tGlobal * 50 + i * 1.7) * 0.1);
+      function line(lw, ox) {
+        ox = ox || 0;
         ctx.lineWidth = lw;
-        ctx.beginPath(); ctx.moveTo(bm.x, bm.y); ctx.lineTo(ex, ey); ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(bm.x + nx * ox, bm.y + ny * ox);
+        ctx.lineTo(ex + nx * ox, ey + ny * ox);
+        ctx.stroke();
       }
-      // 外晕：渐变带，边缘自然衰减，不再是一条硬边宽线
-      ctx.strokeStyle = col;
-      ctx.globalAlpha = (0.24 + v * 0.03) * al;
-      beamBand(bm.x, bm.y, dx, dy, L, w * 1.2 + Math.min(28, w * (2.4 + v * 0.4)) * 1.3, col, 0.9);
-      ctx.globalAlpha = 0.85 * al;
-      line(w);
-      ctx.strokeStyle = '#ffffff';
-      ctx.globalAlpha = al;
-      line(Math.max(1, w * 0.36));
+      // 外晕
+      ctx.globalAlpha = (0.42 + v * 0.04) * al;
+      beamBand(bm.x, bm.y, dx, dy, L, w * 1.2 + Math.min(30, w * (2.4 + v * 0.45)) * 1.3, P.o, 0.9);
+      // 光束本体
+      ctx.strokeStyle = P.o;
+      ctx.globalAlpha = 0.8 * al;
+      line(w * 1.05);
+      // 两侧导轨：做出"能量管"的边缘
+      ctx.strokeStyle = P.m;
+      ctx.globalAlpha = 0.75 * al;
+      line(Math.max(0.8, w * 0.16), w * 0.62);
+      line(Math.max(0.8, w * 0.16), -w * 0.62);
+      // 流动能量段
+      ctx.setLineDash([w * 3.2, w * 2.4]);
+      ctx.lineDashOffset = -tGlobal * (520 + v * 60);
+      ctx.globalAlpha = 0.7 * al;
+      line(w * 0.5);
+      ctx.setLineDash([]);
+      // 细芯（只留一条细线，避免整束发白）
+      ctx.strokeStyle = P.c;
+      ctx.globalAlpha = 0.9 * al;
+      line(Math.max(0.9, w * 0.2));
+      // 双螺旋
       if (v >= 3) {
-        var nx = -dy, ny = dx, amp = w * (0.8 + v * 0.12), ph = tGlobal * 18;
-        ctx.lineWidth = 0.9 + (v - 3) * 0.25;
+        var amp = w * (0.85 + v * 0.12), ph = tGlobal * 18;
+        ctx.lineWidth = 1 + (v - 3) * 0.3;
         for (var s = 0; s < 2; s++) {
-          ctx.strokeStyle = s ? 'rgba(255,255,255,.8)' : col;
-          ctx.globalAlpha = 0.5 * al;
+          ctx.strokeStyle = s ? P.s : P.m;
+          ctx.globalAlpha = 0.6 * al;
           ctx.beginPath();
           for (var d = 0; d <= L; d += 8) {
             var o = Math.sin(d * 0.06 - ph + s * Math.PI) * amp;
@@ -4474,23 +4559,48 @@
           ctx.stroke();
         }
       }
-      if (v >= 4) {
-        ctx.globalAlpha = 0.9 * al;
-        for (var k = 0; k < v; k++) {
-          var dd = (tGlobal * 700 + k * L / v) % L;
-          softGlow(bm.x + dx * dd, bm.y + dy * dd, w * 1.4, col, 0.9);
+      // 沿光束上行的能量环
+      if (v >= 2) {
+        var nR = 1 + v;
+        ctx.strokeStyle = P.m;
+        ctx.lineWidth = 1.1 + v * 0.15;
+        for (var k = 0; k < nR; k++) {
+          var dd = (tGlobal * (620 + v * 40) + k * L / nR) % L;
+          ctx.globalAlpha = 0.75 * al * (1 - dd / L * 0.6);
+          ctx.beginPath();
+          ctx.ellipse(bm.x + dx * dd, bm.y + dy * dd, w * (1.2 + v * 0.12), w * 0.38, bm.a + Math.PI / 2, 0, Math.PI * 2);
+          ctx.stroke();
         }
       }
-      ctx.globalAlpha = al;
-      softGlow(bm.x, bm.y, w * (2 + v * 0.25), col, 0.95);
-      if (v >= 5) {
-        ctx.save();
-        ctx.translate(bm.x, bm.y);
-        ctx.rotate(tGlobal * 4);
-        ctx.globalAlpha = 0.85 * al;
-        star4(w * 2.4, '#fff');
-        ctx.restore();
+      // 两侧飘散的火花
+      var nS = 4 + v * 3;
+      for (var q = 0; q < nS; q++) {
+        var sd = (q * 97.3 + tGlobal * (260 + (q % 3) * 90)) % L;
+        var side = (q % 2 ? 1 : -1) * w * (1.1 + ((q * 0.618) % 1) * 1.6 + (sd / L) * 1.2);
+        var fl = 0.5 + 0.5 * Math.sin(tGlobal * 22 + q * 2.3);
+        ctx.globalAlpha = (0.35 + fl * 0.6) * al;
+        ctx.fillStyle = q % 3 ? P.s : P.c;
+        var sr = 0.8 + (q % 4) * 0.35 + (v >= 5 ? 0.4 : 0);
+        ctx.fillRect(bm.x + dx * sd + nx * side - sr, bm.y + dy * sd + ny * side - sr, sr * 2, sr * 2);
       }
+      // 发射口：光球 + 旋转双弧
+      ctx.globalAlpha = al;
+      softGlow(bm.x, bm.y, w * (2.1 + v * 0.25), P.o, 0.95);
+      softGlow(bm.x, bm.y, w * 1.1, P.m, 0.9);
+      ctx.save();
+      ctx.translate(bm.x, bm.y);
+      ctx.rotate(tGlobal * 6 + i);
+      ctx.strokeStyle = P.s;
+      ctx.lineWidth = 1.2;
+      ctx.globalAlpha = 0.85 * al;
+      var mr = w * (1.5 + v * 0.15);
+      ctx.beginPath(); ctx.arc(0, 0, mr, 0, 1.6); ctx.stroke();
+      ctx.beginPath(); ctx.arc(0, 0, mr, Math.PI, Math.PI + 1.6); ctx.stroke();
+      if (v >= 5) {
+        ctx.rotate(-tGlobal * 10);
+        star4(w * 2.2, P.c);
+      }
+      ctx.restore();
     });
     ctx.restore();
   }
@@ -6125,7 +6235,7 @@
     ctx.fillText(txt, x, y);
   }
   function drawHud() {
-    var x0 = 12, bw = W - 24, y = hudTop + 2;
+    var x0 = 12;
     var c1h = (state.region && state.region.c1) || '#ffd36b';
 
     // 顶部关卡进度：细线 + 前端亮点
@@ -6139,33 +6249,38 @@
     ctx.fillRect(0, 0, W * pr, 3);
     if (pr > 0 && pr < 1) softGlow(W * pr, 1.5, 7, c1h, 0.9);
 
-    // 首领血条：名字牌 + 分段血槽 + 受击白色残血 + 百分比
+    // 第二行：平时显示关卡信息；首领出场后换成紧凑血条（不再横贯全屏）
     var hasBoss = state.boss && !state.boss.dead;
+    var ry = hudTop - 20;
     if (hasBoss) {
       var b = state.boss, pb = clamp(b.hp / b.maxHp, 0, 1);
       b.hpLag = b.hpLag == null ? pb : Math.max(pb, b.hpLag - 0.35 * (1 / 60));
-      hudPanel(x0, y, bw, 30, 9, 'rgba(255,120,120,.35)');
-      hudText(b.name, x0 + 10, y + 9, '800 11px "PingFang SC", sans-serif', '#ffe9d6');
-      hudText(Math.ceil(pb * 100) + '%', x0 + bw - 10, y + 9, '800 10px "SF Mono", Menlo, monospace', '#ffb3a8', 'right');
-      var bx = x0 + 8, by = y + 17, bbw = bw - 16, bh = 7;
+      var bbw = Math.min(240, W - hudSide * 2), bx = W / 2 - bbw / 2, bh = 6, by = ry + 11;
+      hudText(b.name, bx, ry + 5, '800 10px "PingFang SC", sans-serif', '#ffd9cc');
+      hudText(Math.ceil(pb * 100) + '%', bx + bbw, ry + 5, '800 9.5px "SF Mono", Menlo, monospace', '#ffb3a8', 'right');
       ctx.fillStyle = 'rgba(0,0,0,.6)';
-      roundRect(bx, by, bbw, bh, 3.5); ctx.fill();
+      roundRect(bx - 1, by - 1, bbw + 2, bh + 2, 4); ctx.fill();
+      ctx.strokeStyle = 'rgba(255,140,130,.45)'; ctx.lineWidth = 1;
+      roundRect(bx - 1, by - 1, bbw + 2, bh + 2, 4); ctx.stroke();
       ctx.fillStyle = 'rgba(255,240,220,.75)';
-      roundRect(bx, by, Math.max(6, bbw * b.hpLag), bh, 3.5); ctx.fill();
+      roundRect(bx, by, Math.max(4, bbw * b.hpLag), bh, 3); ctx.fill();
       var g = ctx.createLinearGradient(0, by, 0, by + bh);
       g.addColorStop(0, '#ff8a7a'); g.addColorStop(0.5, '#ff3d5a'); g.addColorStop(1, '#b3122f');
       ctx.fillStyle = g;
-      roundRect(bx, by, Math.max(6, bbw * pb), bh, 3.5); ctx.fill();
+      roundRect(bx, by, Math.max(4, bbw * pb), bh, 3); ctx.fill();
       ctx.fillStyle = 'rgba(255,255,255,.35)';
-      ctx.fillRect(bx + 3, by + 1, Math.max(0, bbw * pb - 6), 1.5);
+      ctx.fillRect(bx + 2, by + 1, Math.max(0, bbw * pb - 4), 1);
       ctx.fillStyle = 'rgba(0,0,0,.45)';
       for (var tk = 1; tk < 10; tk++) ctx.fillRect(bx + bbw * tk / 10, by + 1, 1, bh - 2);
+    } else {
+      var cap = regionPlace() + '  ' + (state.stage + 1) + '/5' + (state.theme && state.theme.title ? '  ·  ' + state.theme.title : '');
+      hudText(cap, W / 2, ry + 9, '600 10.5px "PingFang SC", sans-serif', 'rgba(255,243,220,.5)', 'center');
     }
 
-    // 拼词格：卡片式字母牌，已拼亮色、当前格呼吸描边
-    var sy = hudTop + (hasBoss ? 38 : 8);
-    var n = spellLen(), gap = 3, tw = Math.min(20, (W - 132) / n - gap);
+    // 拼词格：与返回 / 暂停按钮同一行居中；已拼亮色、当前格呼吸描边
+    var n = spellLen(), gap = 3, tw = Math.max(11, Math.min(22, (W - hudSide * 2 - 16) / n - gap));
     var total = n * (tw + gap) - gap, sx = W / 2 - total / 2, ink = state.card.ink;
+    var sy = hudRowY - (tw + 4) / 2;
     hudPanel(sx - 8, sy - 5, total + 16, tw + 14, 9);
     // 觉醒：整块拼词面板当作进度条，从左往右随剩余时间退去
     var ak = 0;

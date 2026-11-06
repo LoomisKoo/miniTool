@@ -506,7 +506,7 @@
     if (!S) return '';
     return S.rounds[S.ri] === 'recall'
       ? '卡面已遮 · 凭释义默写'
-      : '照卡面拼 · 拼对即收录';
+      : (S.pick.rev ? '照卡面拼 · 复习巩固' : '照卡面拼 · 拼对即收录');
   }
 
   function paintStab() {
@@ -548,7 +548,7 @@
     ui.capPromptT.textContent = r === 'copy'
       ? '照卡面拼写'
       : '遮住卡面 · 默写';
-    ui.capPromptS.textContent = roundLabel() + (r === 'recall' ? cn + ' · 凭记忆拼' : '拼对即收录 · 超时会跑掉');
+    ui.capPromptS.textContent = roundLabel() + (r === 'recall' ? cn + ' · 凭记忆拼' : (S.pick.rev ? '复习巩固 · 超时会跑掉' : '拼对即收录 · 超时会跑掉'));
     ui.capRound.textContent = S.rounds.length > 1 ? (S.ri + 1) + ' / ' + S.rounds.length : '';
 
     renderSlots();
@@ -660,7 +660,7 @@
     var cur = S;
     ui.capPrompt.className = 'cap-prompt done';
     ui.capPromptT.textContent = '第 ' + (S.ri + 1) + ' 次完成';
-    ui.capPromptS.textContent = '再拼一次即可收录';
+    ui.capPromptS.textContent = S.pick.rev ? '再拼一次完成复习' : '再拼一次即可收录';
     setTimeout(function () {
       if (S !== cur || S.done) return;
       flySlots();
@@ -747,8 +747,10 @@
         });
       }
       ui.capPrompt.className = 'cap-prompt done';
-      ui.capPromptT.textContent = perfect ? '完美收服' : '收服成功';
-      ui.capPromptS.textContent = perfect ? '零失误 · 词灵已归册' : '词灵已归册';
+      var rev = !!(cur.pick && cur.pick.rev);
+      ui.capPromptT.textContent = rev ? (perfect ? '完美复习' : '复习完成') : (perfect ? '完美收服' : '收服成功');
+      ui.capPromptS.textContent = rev ? (perfect ? '零失误 · 记忆更牢了' : '熟练度提升')
+        : (perfect ? '零失误 · 词灵已归册' : '词灵已归册');
       ui.capFoot.className = 'cap-foot';
       ui.capFoot.textContent = '';
     } catch (e) {}
@@ -851,10 +853,15 @@
     void t.offsetWidth;
     t.classList.add('on');
     if (ok) {
-      ui.capToastT.textContent = perfect ? '完美收服' : '收入图鉴';
-      ui.capToastS.textContent = perfect
-        ? pick.w.w.toUpperCase() + ' · 零失误收录'
-        : pick.w.w.toUpperCase() + ' · 已加入你的词册';
+      if (pick.rev) {
+        ui.capToastT.textContent = perfect ? '完美复习' : '复习完成';
+        ui.capToastS.textContent = pick.w.w.toUpperCase() + (perfect ? ' · 零失误 · 记忆更牢了' : ' · 熟练度提升');
+      } else {
+        ui.capToastT.textContent = perfect ? '完美收服' : '收入图鉴';
+        ui.capToastS.textContent = perfect
+          ? pick.w.w.toUpperCase() + ' · 零失误收录'
+          : pick.w.w.toUpperCase() + ' · 已加入你的词册';
+      }
     } else {
       ui.capToastT.textContent = giveUp ? '已放弃' : '词灵逃走了';
       ui.capToastS.textContent = giveUp

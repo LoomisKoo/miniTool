@@ -18,15 +18,28 @@
   var stage = $('stage');
   var KEY = 'wordcodex.v3';
   var DEV_MODE = false;
+  // 演示数据：网址带 ?demo 时注入一批满级顶级卡，只存在内存里，不写存档
+  var DEMO = typeof location !== 'undefined' && /[?&#]demo\b/.test(location.search + location.hash);
   var FREE_PER_DAY = 3;   // 每日免费 3 组（每组 3 张 = 9 个新词）
-  var BATTLE_PER_DAY = 3; // 每日免费漫游
+  var BATTLE_PER_DAY = 3; // 已废弃：漫游改为精力制，保留常量兼容旧存档
   var BONUS_CAP = 10;     // 任务 / 漫游掉落 / 成长点兑换额外抽卡的每日上限
   var INK_PER_DRAW = 60;  // 成长点兑换一组抽卡
   var INK_SWAP_CAP = 3;   // 每日成长点兑换上限
+  /* ── 漫游精力（消消乐式体力）─────────────────────────
+     上限 5 点，每 10 分钟恢复 1 点（满槽约 50 分钟）。
+     目的是防止一次坐下连刷十几局，而不是卡住正常游玩。 */
+  var MAX_ENERGY = 5;
+  var ENERGY_REGEN_MS = 10 * 60 * 1000;
+  var ENERGY_BUY_COST = 40;   // 花成长点买 1 点精力
+  var ENERGY_BUY_CAP = 3;     // 每日最多买 3 次
+  function energyRegenMin() { return Math.round(ENERGY_REGEN_MS / 60000); }
   var CHECKIN_REWARD = 5; // 每日首次签到奖励
   var DROP_RATE = 0.35;   // 漫游胜利掉落抽卡券的几率（Boss 关必掉）
-  var DUP_INK = { 1: 6, 2: 10, 3: 20, 4: 40, 5: 80 }; // 重复卡转成长点
-  var WRITE_INK = 3;                                  // 每次默写正确
+  var DUP_INK = { 1: 6, 2: 10, 3: 20, 4: 40, 5: 80, 6: 150 }; // 重复卡转成长点
+  var WRITE_INK = 6;                                  // 每次默写正确（基础）
+  var WRITE_INK_NEW = 12;                             // 该词第一次默写正确
+  var WRITE_INK_REVIEW = 3;                           // 已经 3 星后的复习
+  var WRITE_INK_CAP = 60;                             // 默写成长点每日上限
 
   /* ── 世界漫游地区：真实地点 + 当地食物作为关卡敌人 ─────
      bg: 战场底色；bosses: 5 关的首领（食物/地标）；
@@ -139,7 +152,8 @@
     drawTheme: 'all',
     day: null, streak: 0, lastDay: '', records: [], shards: {}, achSeen: {},
     stats: { battles: 0, wins: 0, kills: 0, stars: 0 }, achInit: false,
-    region: '',
+    region: '', inkDay: { d: '', wr: 0 },
+    energy: { n: MAX_ENERGY, t: 0 },
     quota: { d: '', used: 0, bonus: 0, battleUsed: 0, battleBonus: 0 },
   };
   var busy = false;
@@ -194,6 +208,10 @@
       var o = JSON.parse(raw);
       if (!o) return;
       state.owned = o.owned || {};
+      for (var ok in state.owned) {
+        var oe = state.owned[ok];
+        if (oe && !oe.cl && !oe.lv && !oe.wr) delete state.owned[ok];
+      }
       state.draws = o.draws || 0;
       state.recent = o.recent || [];
       state.day = o.day || null;
@@ -201,6 +219,8 @@
       state.lastDay = o.lastDay || '';
       state.quota = o.quota || state.quota;
       state.ink = o.ink || 0;
+      state.inkDay = o.inkDay && typeof o.inkDay === 'object' ? o.inkDay : { d: '', wr: 0 };
+      state.energy = o.energy && typeof o.energy.n === 'number' ? o.energy : { n: MAX_ENERGY, t: Date.now() };
       state.drawTheme = o.drawTheme || 'all';
       state.records = o.records || [];
       state.shards = o.shards || {};
@@ -220,10 +240,12 @@
     } catch (e) {}
   }
   function save() {
+    if (DEMO) return;
     sset(JSON.stringify({
       owned: state.owned, draws: state.draws, recent: state.recent,
       day: state.day, streak: state.streak, lastDay: state.lastDay,
-      quota: state.quota, ink: state.ink, records: state.records,
+      quota: state.quota, ink: state.ink, inkDay: state.inkDay, energy: state.energy,
+      records: state.records,
       drawTheme: state.drawTheme,
       shards: state.shards, achSeen: state.achSeen, achInit: state.achInit, stats: state.stats,
       region: state.region, stages: state.stages, codex: state.codex,
@@ -248,16 +270,186 @@
     return Math.max(0, FREE_PER_DAY + state.quota.bonus - state.quota.used);
   }
   function battleQuotaLeft() {
-    return Infinity;
+    return DEV_MODE ? 999 : energyNow();
   }
   function battleQuotaUse() {
-    // 漫游不再限制每日次数，保留接口兼容旧存档。
+    if (DEV_MODE) return true;
+    return energySpend();
   }
+  /* ── 精力 ─────────────────────────────────────── */
+  function energyOf() {
+    if (!state.energy || typeof state.energy.n !== 'number') {
+      state.energy = { n: MAX_ENERGY, t: Date.now() };
+    }
+    return state.energy;
+  }
+  // 结算随时间恢复：不用定时器写存档，读的时候按时间差补
+  function energyNow() {
+    var e = energyOf();
+    if (e.n >= MAX_ENERGY) { e.t = Date.now(); return MAX_ENERGY; }
+    var gain = Math.floor((Date.now() - e.t) / ENERGY_REGEN_MS);
+    if (gain > 0) {
+      var before = e.n;
+      e.n = Math.min(MAX_ENERGY, e.n + gain);
+      e.t = e.n >= MAX_ENERGY ? Date.now() : e.t + gain * ENERGY_REGEN_MS;
+      if (e.n !== before) save();
+    }
+    if (e.n >= MAX_ENERGY) e.t = Date.now();
+    return e.n;
+  }
+  // 距离下一点精力的毫秒数；已满返回 0
+  function energyNextMs() {
+    var e = energyOf();
+    if (energyNow() >= MAX_ENERGY) return 0;
+    return Math.max(0, ENERGY_REGEN_MS - (Date.now() - e.t));
+  }
+  function energySpend() {
+    if (energyNow() <= 0) return false;
+    var e = energyOf();
+    if (e.n >= MAX_ENERGY) e.t = Date.now();   // 从满槽开始掉，重新计时
+    e.n = Math.max(0, e.n - 1);
+    save();
+    renderEnergy();
+    return true;
+  }
+  function energyBuyLeft() {
+    var t = todayStr();
+    if (!state.quota.energyDay || state.quota.energyDay.d !== t) {
+      state.quota.energyDay = { d: t, bought: 0 };
+    }
+    return Math.max(0, ENERGY_BUY_CAP - (state.quota.energyDay.bought || 0));
+  }
+  var energyBuyDialog = false;
+  function askEnergyBuy() {
+    if (energyBuyDialog) return;
+    if (energyNow() >= MAX_ENERGY) { toast('精力已满'); sfx('deny'); return; }
+    if (energyBuyLeft() <= 0) { toast('今日兑换次数已用完'); sfx('deny'); return; }
+    if (!DEV_MODE && state.ink < ENERGY_BUY_COST) { toast('成长点不足 ' + ENERGY_BUY_COST); sfx('deny'); return; }
+    energyBuyDialog = true;
+    sfx('tap');
+    var ov = mk('div', 'stat-dialog');
+    ov.innerHTML = '<div class="stat-dialog-card">' +
+      '<div class="stat-dialog-mark">⚡</div><h3>补给精力</h3>' +
+      '<section class="stat-dialog-explain"><p>花费 <b>' + ENERGY_BUY_COST + '</b> 成长点兑换 <b>1</b> 点精力。<br>今日还可兑换 <b>' + energyBuyLeft() + '</b> 次。</p></section>' +
+      '<div class="draw-confirm-actions"><button class="btn draw-confirm-no">取消</button><button class="btn primary draw-confirm-yes">确定</button></div>' +
+      '</div>';
+    document.body.appendChild(ov);
+    function close() {
+      energyBuyDialog = false;
+      ov.classList.add('out');
+      setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 190);
+    }
+    ov.querySelector('.draw-confirm-no').onclick = close;
+    ov.onclick = function (e) { if (e.target === ov) close(); };
+    ov.querySelector('.draw-confirm-yes').onclick = function () {
+      close();
+      energyBuy();
+    };
+  }
+  function energyBuy() {
+    if (energyNow() >= MAX_ENERGY) { toast('精力已满'); sfx('deny'); return; }
+    if (energyBuyLeft() <= 0) { toast('今日兑换次数已用完'); sfx('deny'); return; }
+    if (!DEV_MODE && state.ink < ENERGY_BUY_COST) { toast('成长点不足 ' + ENERGY_BUY_COST); sfx('deny'); return; }
+    if (!DEV_MODE) state.ink -= ENERGY_BUY_COST;
+    state.quota.energyDay.bought = (state.quota.energyDay.bought || 0) + 1;
+    var e = energyOf();
+    var before = e.n;
+    e.n = Math.min(MAX_ENERGY, e.n + 1);
+    save();
+    refreshCounts();
+    renderEnergy();
+    playEnergyGain(before);
+    sfx('claim');
+  }
+  function playEnergyGain(from) {
+    var bar = $('energyBar'), pips = $('energyPips');
+    if (!bar || !pips) return;
+    bar.classList.remove('en-gain');
+    void bar.offsetWidth;
+    bar.classList.add('en-gain');
+    var slot = pips.children[from];
+    if (slot) {
+      slot.classList.add('pop');
+      setTimeout(function () { slot.classList.remove('pop'); }, 520);
+    }
+    var fx = mk('span', 'en-fx');
+    fx.textContent = '+1';
+    bar.appendChild(fx);
+    setTimeout(function () { if (fx.parentNode) fx.parentNode.removeChild(fx); }, 700);
+    setTimeout(function () { bar.classList.remove('en-gain'); }, 600);
+  }
+  var energyTimer = null;
+  var energyPipN = -1;
+  function renderEnergy() {
+    var bar = $('energyBar');
+    if (!bar) return;
+    var n = energyNow(), timer = $('energyTimer'), buy = $('energyBuy');
+    var pips = $('energyPips');
+    var ms = energyNextMs();
+    var pct = ms > 0 ? Math.max(0, Math.min(100, (1 - ms / ENERGY_REGEN_MS) * 100)) : 0;
+    if (pips) {
+      if (energyPipN !== n || pips.children.length !== MAX_ENERGY) {
+        energyPipN = n;
+        var html = '';
+        for (var i = 0; i < MAX_ENERGY; i++) {
+          if (i < n) html += '<i class="on"></i>';
+          else if (i === n && ms > 0) html += '<i class="regen"><b></b></i>';
+          else html += '<i></i>';
+        }
+        pips.innerHTML = html;
+      }
+      var regen = pips.querySelector('.regen b');
+      if (ms > 0 && regen) regen.style.width = pct.toFixed(1) + '%';
+    }
+    bar.classList.toggle('low', n <= 0);
+    bar.classList.toggle('full', n >= MAX_ENERGY);
+    if (timer) {
+      if (ms <= 0) {
+        timer.hidden = true;
+        timer.textContent = '';
+      } else {
+        var s = Math.ceil(ms / 1000), m = Math.floor(s / 60);
+        timer.hidden = false;
+        timer.textContent = m + ':' + ('0' + (s % 60)).slice(-2);
+      }
+    }
+    if (buy) {
+      var left = energyBuyLeft();
+      var can = n < MAX_ENERGY && left > 0;
+      buy.hidden = n >= MAX_ENERGY;
+      buy.disabled = !can;
+      buy.textContent = '+';
+      buy.title = can
+        ? ('花费 ' + ENERGY_BUY_COST + ' 成长点兑换 1 点精力（今日剩 ' + left + ' 次）')
+        : (n >= MAX_ENERGY ? '精力已满' : '今日补给已用完');
+    }
+    // 精力变化时同步出发钮与「精力不足」提示（避免每秒重绘整块）
+    if (!expPick || !BY_WORD[expPick]) return;
+    var btn = $('expStart'), info = $('expPickInfo');
+    if (!btn || !info) return;
+    var lack = n <= 0, hasWarn = !!info.querySelector('.ep-warn');
+    if (lack !== hasWarn) syncExpDock(BY_WORD[expPick]);
+    else {
+      btn.disabled = lack;
+      btn.classList.toggle('ready', !lack);
+    }
+  }
+  function startEnergyTimer() {
+    if (energyTimer) return;
+    energyTimer = setInterval(function () {
+      var v = $('screenExpedition');
+      if (v && v.classList.contains('on')) renderEnergy();
+    }, 1000);
+  }
+  // 默写第 3 次换 1 点精力（满槽时不累计，避免浪费）
   function grantBattleBonus() {
     var t = todayStr();
     if (state.quota.d !== t) state.quota = { d: t, used: 0, bonus: 0, battleUsed: 0, battleBonus: 0 };
     if ((state.quota.battleBonus || 0) >= BONUS_CAP) return false;
+    var e = energyOf();
+    if (energyNow() >= MAX_ENERGY) return false;
     state.quota.battleBonus = (state.quota.battleBonus || 0) + 1;
+    e.n = Math.min(MAX_ENERGY, e.n + 1);
     save();
     renderBattleQuota();
     return true;
@@ -265,6 +457,11 @@
   function quotaUse() {
     quotaLeft();
     state.quota.used++;
+    // 当天配额抽到见底：只按「天」计一次
+    if (quotaLeft() === 0) {
+      var s = state.stats = state.stats || {}, t = todayStr();
+      if (s.quotaD !== t) { s.quotaD = t; s.quotaFull = (s.quotaFull || 0) + 1; }
+    }
     save();
     renderQuota();
   }
@@ -296,8 +493,19 @@
     btn.disabled = !ok;
   }
   function renderBattleQuota() {
-    var el = $('expQuota');
-    if (el) el.textContent = '不限';
+    renderEnergy();
+  }
+  /* 每日漫游成长点收益递减：前 3 局全额，4~6 局 60%，7~10 局 30%，之后只留一成。
+     和默写的递减规则一致 —— 精力负责「一次别刷太久」，
+     递减负责「一天别刷太多」，两层一起才锁得住养成节奏。 */
+  function battleInkMul() {
+    var t = todayStr();
+    if (state.quota.d !== t) return 1;
+    var n = state.quota.battleUsed || 0;
+    if (n < 3) return 1;
+    if (n < 6) return 0.6;
+    if (n < 10) return 0.3;
+    return 0.1;
   }
   function updateDailyBrief() {
     var el = $('dailyBrief');
@@ -332,18 +540,18 @@
   /* ── 抽卡 ─────────────────────────────────────── */
   var HIDDEN_RATE = 0.003; // 隐藏款：只能抽到，等级上限 6
   if (DEV_MODE && /[?&]hid\b/.test(location.search)) HIDDEN_RATE = 1;
-  // 抽到的卡片等级（概率）
-  function weightedTier() {
-    var W = window.TIER_WEIGHTS;
-    var order = [5, 4, 3, 2, 1];
-    var total = 0;
-    for (var i = 0; i < order.length; i++) total += W[order[i]];
-    var r = Math.random() * total;
-    for (var j = 0; j < order.length; j++) {
-      r -= W[order[j]];
-      if (r <= 0) return order[j];
+
+  /* 出卡时的初始字母等级：低等级为主，高等级只是小概率惊喜。
+     再用稀有度封顶，避免开出一张 UR 就直接接近满级。 */
+  var START_LV_W = [55, 27, 12, 5, 0.9, 0.1]; // Lv1~Lv6 的权重（合计 100）
+  var START_LV_CAP = { 1: 2, 2: 3, 3: 4, 4: 4, 5: 5, 6: 6 }; // 稀有度 → 最高初始等级
+  function rollStartLv(tier) {
+    var r = Math.random() * 100, acc = 0, lv = 1;
+    for (var i = 0; i < START_LV_W.length; i++) {
+      acc += START_LV_W[i];
+      if (r < acc) { lv = i + 1; break; }
     }
-    return 1;
+    return Math.min(lv, START_LV_CAP[tier] || 2);
   }
 
   // 单词等概率抽取；超长单词（10 个字母以上）不进卡池，卡面放不下也难记
@@ -355,10 +563,54 @@
     mind: { nm: '心智工坊', short: '心智', sub: '学术 · 机巧 · 动静', tags: ['study', 'tech', 'motion'] },
     mood: { nm: '光影心绪', short: '光影', sub: '光影 · 声籁 · 时序', tags: ['light', 'feeling', 'sound', 'time'] }
   };
+
+  /* ── 词池进度门控 ─────────────────────────────────────
+     不再一次性开放 1900 词：那样 30 天只能收集到 7%，图鉴永远填不满，
+     而且「新词」被稀释得毫无存在感。现在两层门一起控：
+       1) 稀有度门：通晓 0 / 60 / 150 词时依次放开 SSR / UR
+       2) 章节门：词库按 150 词一节，开局 4 节（约 600 词），每通晓 50 词再开 1 节
+     开局可抽约 510 词，30 天约收集 150 个新词（30%），
+     剩下的词留作长期目标；重复主要来自主动设计的 30% 复习池。 */
+  var CHAPTER_SIZE = 150;
+  var CHAPTER_START = 4;
+  var CHAPTER_PER = 50;
+  var POOL_GATES = [
+    { need: 0, max: 3 },    // 常本 + 藏本 + 稀见
+    { need: 60, max: 4 },   // + 秘典
+    { need: 150, max: 5 }   // + 孤本 / 隐藏
+  ];
+  function masteredTotal() {
+    var n = 0;
+    for (var k in state.owned) {
+      if (BY_WORD[k] && starsOf(BY_WORD[k]) >= 3) n++;
+    }
+    return n;
+  }
+  function poolMaxTier() {
+    var m = masteredTotal(), t = 1;
+    for (var i = 0; i < POOL_GATES.length; i++) if (m >= POOL_GATES[i].need) t = POOL_GATES[i].max;
+    return t;
+  }
+  function poolCount() {
+    var ch = CHAPTER_START + Math.floor(masteredTotal() / CHAPTER_PER);
+    return Math.min(WORDS.length, ch * CHAPTER_SIZE);
+  }
+  function hashStr(s) {
+    var h = 0;
+    for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+    return Math.abs(h);
+  }
   function drawThemeWords() {
     var theme = DRAW_THEMES[state.drawTheme] || DRAW_THEMES.all;
-    return WORDS.filter(function (w) {
-      return w.w.length <= MAX_WORD_LEN && (!theme.tags || theme.tags.indexOf(w.tag) >= 0);
+    var maxT = poolMaxTier(), range = poolCount();
+    return WORDS.slice(0, range).filter(function (w) {
+      if (w.w.length > MAX_WORD_LEN) return false;
+      if ((w.tier || 1) > maxT) return false;
+      if (!theme.tags) return true;
+      if (theme.tags.indexOf(w.tag) >= 0) return true;
+      // basic / rare 不属于任何主题，固定混入三分之一，
+      // 避免选主题后池子只剩一百多词、重复率暴涨
+      return (w.tag === 'basic' || w.tag === 'rare') && hashStr(w.w) % 3 === 0;
     });
   }
   function poolWords() {
@@ -391,20 +643,53 @@
     }
     return pool[pool.length - 1];
   }
+  // 新词池：优先从「还没拥有」的词里抽，抽不到才退回全池
   function drawWord(exclude, minTier) {
-    var pool = drawThemeWords().filter(function (w) {
+    var all = drawThemeWords();
+    function ok(w) {
       return state.recent.indexOf(w.w) < 0 && (!exclude || exclude.indexOf(w.w) < 0);
-    });
+    }
+    var pool = all.filter(function (w) { return ok(w) && !state.owned[w.w]; });
     if (minTier) {
       var hi = pool.filter(function (w) { return (w.tier || 1) >= minTier; });
-      if (hi.length) {
-        // 优先没拥有过的，别让新手保底落在重复卡上
-        var fresh = hi.filter(function (w) { return !state.owned[w.w]; });
-        pool = fresh.length ? fresh : hi;
-      }
+      if (hi.length) pool = hi;
     }
+    if (!pool.length) pool = all.filter(ok);
     if (!pool.length) pool = poolWords();
     return pickWeighted(pool);
+  }
+  // 隐藏款独立判定，命中后从最高稀有度的词里出，不受稀有度解锁门限制
+  function drawHiddenWord(exclude) {
+    var maxT = 1;
+    WORDS.forEach(function (w) { maxT = Math.max(maxT, w.tier || 1); });
+    var pool = WORDS.filter(function (w) {
+      return (w.tier || 1) === maxT && w.w.length <= MAX_WORD_LEN && (!exclude || exclude.indexOf(w.w) < 0);
+    });
+    var fresh = pool.filter(function (w) { return !(state.owned[w.w] && state.owned[w.w].hid); });
+    if (fresh.length) pool = fresh;
+    return pool.length ? pool[Math.floor(Math.random() * pool.length)] : null;
+  }
+  /* 复习池：已拥有、最近没抽过、且「到期未复习」或「还没 3 星」的词。
+     抽到复习卡会给额外熟练度，让「再见到熟悉的词」变成复习收益而不是浪费名额。 */
+  function drawReviewWord(exclude) {
+    var cand = [];
+    for (var k in state.owned) {
+      var w = BY_WORD[k];
+      if (!w || w.w.length > MAX_WORD_LEN) continue;
+      if (state.recent.indexOf(k) >= 0) continue;
+      if (exclude && exclude.indexOf(k) >= 0) continue;
+      if ((w.tier || 1) > poolMaxTier()) continue;
+      cand.push(w);
+    }
+    if (!cand.length) return null;
+    // 到期的排前面，其次是星级低的
+    cand.sort(function (a, b) {
+      var da = reviewDue(a) ? 0 : 1, db = reviewDue(b) ? 0 : 1;
+      if (da !== db) return da - db;
+      return starsOf(a) - starsOf(b);
+    });
+    var top = cand.slice(0, Math.max(1, Math.ceil(cand.length * 0.35)));
+    return top[(Math.random() * top.length) | 0];
   }
   function renderDrawThemes() {
     var box = $('drawThemes');
@@ -420,7 +705,7 @@
     var desc = $('drawThemeDesc');
     if (desc) {
       var active = DRAW_THEMES[state.drawTheme] || DRAW_THEMES.all;
-      desc.innerHTML = '<b>' + active.nm + '</b><span>' + active.sub + '</span>';
+      desc.innerHTML = '<b>' + active.nm + '</b><span>' + active.sub + ' · 本阶段可抽 ' + drawThemeWords().length + ' 词</span>';
     }
     box.querySelectorAll('[data-theme]').forEach(function (btn) {
       btn.onclick = function () {
@@ -457,6 +742,8 @@
       keep.push(w.w);
       pileWrap.picks[i].w = w;
       pileWrap.picks[i].th = state.drawTheme;
+      pileWrap.picks[i].lv = rollStartLv(w.tier || 1);
+      pileWrap.picks[i].rev = false;
     });
     busy = true;
     pile.classList.add('reskin');
@@ -464,6 +751,8 @@
     idx.forEach(function (i, k) {
       var item = items[i];
       item.style.setProperty('--i', k);
+      var stale = item.querySelector('.rev-tag');
+      if (stale && stale.parentNode) stale.parentNode.removeChild(stale);
       item.style.setProperty('--bk-glow', B.foil);
       item.classList.remove('rs-in', 'rs-out');
       void item.offsetWidth;
@@ -486,13 +775,35 @@
     }, 200 + idx.length * 60 + 440));
   }
 
+  /* 每批抽卡：70% 新词 + 30% 复习。
+     复习只会落在「已拥有」的词上，并额外给熟练度，
+     这样重复卡不是浪费名额，而是把复习安排进抽卡流程。
+     同时保证每组至少 1 张新词（新词池抽空后自动取消保底）。 */
+  var REVIEW_RATE = 0.3;
   function rollBatch(n) {
     var picks = [], names = [];
     for (var i = 0; i < n; i++) {
-      var w = drawWord(names);
-      var hid = Math.random() < HIDDEN_RATE;
-      picks.push({ w: w, lv: hid ? 5 : weightedTier(), hid: hid, th: state.drawTheme });
+      var hw = Math.random() < HIDDEN_RATE ? drawHiddenWord(names) : null;
+      var rv = !hw && Math.random() < REVIEW_RATE ? drawReviewWord(names) : null;
+      var w = hw || rv || drawWord(names);
+      var hid = !!hw;
+      // 复习卡按卡片当前等级展示；新词走初始等级随机
+      var startLv = rv ? ((state.owned[w.w] && state.owned[w.w].cl) || 1) : rollStartLv(w.tier || 1);
+      picks.push({
+        w: w, lv: hid ? 5 : startLv, hid: hid,
+        rev: !!rv, th: state.drawTheme,
+      });
       names.push(w.w);
+    }
+    // 新词保底：整组全是复习卡时，换一张新词进来
+    var hasNew = picks.some(function (p) { return !p.rev; });
+    if (!hasNew) {
+      var fresh = drawWord(names);
+      if (fresh && !state.owned[fresh.w]) {
+        var p0 = picks[0];
+        picks[0] = { w: fresh, lv: rollStartLv(fresh.tier || 1), hid: false, rev: false, th: p0.th };
+        names[0] = fresh.w;
+      }
     }
     // 新手保底：前两组里至少出现一张 SR 及以上，别让开局的六张全是 N 卡
     if (state.draws < n * 2) {
@@ -500,7 +811,7 @@
       for (var j = 0; j < picks.length; j++) best = Math.max(best, picks[j].w.tier || 1);
       if (best < 3) {
         var top = drawWord(names, 3), last = picks[n - 1];
-        picks[n - 1] = { w: top, lv: Math.max(last.lv, 3), hid: last.hid, th: last.th };
+        picks[n - 1] = { w: top, lv: Math.max(last.lv, 3), hid: last.hid, rev: false, th: last.th };
         names[n - 1] = top.w;
       }
     }
@@ -511,6 +822,10 @@
   function collect(p) {
     var w = p.w, o = state.owned[w.w];
     state.draws++;
+    if (!p.rev) noteDrawTier(w, p.hid);   // 复习卡不算新抽，不参与「非酋」连击
+    // 「念念不忘」：放弃后 60 秒内又抽回同一张
+    var s = state.stats = state.stats || {};
+    if (s.abW === w.w && Date.now() - (s.abAt || 0) < 60000) { s.abBack = (s.abBack || 0) + 1; s.abW = ''; }
     state.recent.push(w.w);
     if (state.recent.length > 10) state.recent.shift();
     if (!o) {
@@ -520,16 +835,46 @@
       };
       return 0;
     }
-    var up = (p.hid && !o.hid) || p.lv > (o.cl || 1);
-    if (up) {
-      if (p.hid) o.hid = true;
-      o.cl = Math.max(o.cl || 1, p.lv);
-      o.lv = levelsOf(w).map(function (x) { return Math.max(x, p.lv); });
-      return 0;
-    }
-    var got = DUP_INK[p.lv] || 6;
+    // 隐藏款：重复抽到可以点亮 EX，但等级不再被顶上去
+    if (p.hid && !o.hid) { o.hid = true; return 0; }
+    // 重复卡只转化为成长点，等级一律靠养成；
+    // 复习池抽到自己练过的卡时，按卡片当前等级给，练得越多回收越多
+    var got = DUP_INK[p.rev ? (o.cl || 1) : p.lv] || 6;
     state.ink += got;
+    state.stats = state.stats || {};
+    state.stats.dup = (state.stats.dup || 0) + 1;
     return got;
+  }
+  // 抽卡时的「非酋 / 欧皇」连击：高品阶（SSR+ 或隐藏）就清零
+  function noteDrawTier(w, hid) {
+    var s = state.stats = state.stats || {};
+    if (hid || (w && w.tier >= 4)) {
+      s.dry = 0;
+      if (hid) s.gotHid = (s.gotHid || 0) + 1;
+    } else {
+      s.dry = (s.dry || 0) + 1;
+      if (s.dry > (s.dryBest || 0)) s.dryBest = s.dry;
+    }
+  }
+  // 漫游结算：无伤 / 不放大招 / 用时 / 连续胜负等统计
+  function noteRun(info) {
+    if (!info) return;
+    var s = state.stats = state.stats || {};
+    if (info.win) {
+      s.cw = (s.cw || 0) + 1;
+      s.cl = 0;
+      if (s.cw > (s.cwBest || 0)) s.cwBest = s.cw;
+      if (info.nohit) s.nohit = (s.nohit || 0) + 1;
+      if (info.noUlt) s.noult = (s.noult || 0) + 1;
+      if (info.bossT > 0 && (!s.bossTS || info.bossT < s.bossTS)) s.bossTS = info.bossT;
+      if (info.time > 0 && (!s.runTS || info.time < s.runTS)) s.runTS = info.time;
+    } else {
+      s.cl = (s.cl || 0) + 1;
+      s.cw = 0;
+      if (s.cl > (s.clBest || 0)) s.clBest = s.cl;
+    }
+    if ((info.kills || 0) > (s.killBest || 0)) s.killBest = info.kills;
+    if ((info.words || 0) > (s.wordsBest || 0)) s.wordsBest = info.words;
   }
   function rec(w) { return state.owned[w.w] || { m: 0, at: 0 }; }
 
@@ -550,9 +895,10 @@
   }
   /* 养成只有一个动作：花成长点升级字母。
      卡片等级 = 所有字母的最低等级（自动提升）；
-     熟练度只卡高等级：升到 Lv4 需 2 阶，升到 Lv5 及以上需 3 阶 */
-  function upgradeCost(lv) { return 8 * lv; }
-  function stageNeedFor(lv) { return lv >= 5 ? 2 : lv >= 4 ? 1 : 0; }
+     成本按等级指数增长（8 / 26 / 52 / 84 / 123 / 168），避免一张卡两三天就满级；
+     熟练度只卡高等级：Lv3 起需 2 阶，Lv5 起需 3 阶 */
+  function upgradeCost(lv) { return Math.round(8 * Math.pow(lv, 1.7)); }
+  function stageNeedFor(lv) { return lv >= 5 ? 2 : lv >= 3 ? 1 : 0; }
   function upgradeLetter(w, i) {
     var lv = levelsOf(w), o = state.owned[w.w];
     if (!lv) return false;
@@ -568,6 +914,11 @@
     if (!DEV_MODE) state.ink -= cost;
     lv[i]++;
     sfx('upgrade', lv[i]);
+    // 字母覆盖：记录升级过的字母（26 个全练过的成就用）
+    var st1 = state.stats = state.stats || {};
+    st1.ltr = st1.ltr || {};
+    var ch1 = w.w.charAt(i).toUpperCase();
+    if (ch1) st1.ltr[ch1] = 1;
     var minLv = Math.min.apply(null, lv);
     var cardUp = minLv > (o.cl || 1);
     if (cardUp) o.cl = minLv;
@@ -593,10 +944,14 @@
     var map = { mineOwned: owned,
       mineMastered: mastered, mineInk: state.ink,
       mineStreak: state.streak || 1 };
+    // 成长点峰值：成就用「曾经攒到多少」，花掉不会清零
+    state.stats = state.stats || {};
+    if ((state.ink || 0) > (state.stats.inkMax || 0)) state.stats.inkMax = state.ink || 0;
     for (var id in map) {
       var el = $(id);
       if (el) el.textContent = DEV_MODE && id === 'mineInk' ? '∞' : map[id];
     }
+    if (typeof renderCheckin === 'function') renderCheckin();
     if (typeof renderTitle === 'function') renderTitle();
   }
 
@@ -771,6 +1126,11 @@
         }
         node.style.transform = 'scale(' + kh.toFixed(3) + ')';
         item.appendChild(node);
+        if (p.rev) {
+          var tag = mk('span', 'rev-tag');
+          tag.textContent = '复习';
+          item.appendChild(tag);
+        }
         if (st === 'back') item.onclick = function () { openPile(i); };
       }
       pile.appendChild(item);
@@ -811,7 +1171,7 @@
     var pick = pileWrap.picks[i];
     var bLv = pileWrap.bLv;
     busy = true;
-    $('hint').textContent = '收服词灵…';
+    $('hint').textContent = pick && pick.rev ? '复习单词…' : '收服词灵…';
     // 原卡先隐形，避免"两张卡同时在"的穿帮
     if (item) item.classList.add('lifted');
 
@@ -819,17 +1179,23 @@
     function applyResult(res) {
       if (!pileWrap) return;
       var dupInk = 0, gainXp = 0;
+      var st0 = state.stats = state.stats || {};
       if (res.ok) {
         dupInk = collect(res.pick);
         pileWrap.states[i] = 'front';
-        if (res.quality === 'perfect') state.ink += 5;
-        // 熟练度：拼写成功才推动成长，收益受每日递减限制
-        gainXp = addXp(pick.w, res.quality === 'perfect' ? XP_PER_PERFECT : XP_PER_COPY);
+        if (res.quality === 'perfect') { state.ink += 5; st0.pf = (st0.pf || 0) + 1; }
+        st0.fail = 0;   // 成功即中断失败连击
+        // 熟练度：拼写成功才推动成长，收益受每日递减限制；复习卡额外 +8
+        gainXp = addXp(pick.w, (res.quality === 'perfect' ? XP_PER_PERFECT : XP_PER_COPY) + (pick.rev ? 8 : 0));
         addDaily('spell');
         if (reviewDue(pick.w)) addDaily('review');
       } else {
         // 主动放弃不产出残页，直接放回卡池；超时/失败才留下残页线索
         if (res.quality !== 'abandoned') addShard(res.pick.w);
+        else noteAbandon(pick.w, !!pick.hid);   // 主动放弃：记录次数与品阶，供成就使用
+        if (res.quality === 'escaped') st0.esc = (st0.esc || 0) + 1;   // 词灵挣脱（超时）
+        st0.fail = (st0.fail || 0) + 1;
+        if (st0.fail > (st0.failBest || 0)) st0.failBest = st0.fail;
         pileWrap.states[i] = 'blank';
         pileWrap.fresh = i;
       }
@@ -841,7 +1207,7 @@
       if (dupInk) toast('重复卡已转化 · 成长点 +' + dupInk);
       else if (res.ok) {
         var msg = [];
-        if (res.quality === 'perfect') msg.push('完美收服');
+        if (res.quality === 'perfect') msg.push(pick.rev ? '完美复习' : '完美收服');
         if (gainXp > 0) msg.push('熟练度 +' + gainXp);
         else msg.push('今日收益已满 · 练习照常记录');
         toast(msg.join(' · '));
@@ -874,6 +1240,16 @@
   function addShard(w) {
     state.shards = state.shards || {};
     state.shards[w.w] = (state.shards[w.w] || 0) + 1;
+  }
+  // 主动放弃：累计次数 + 按品阶分档，用于「首次放弃 / 放弃 N 次 / 放弃过 N 个品阶」
+  function noteAbandon(w, hid) {
+    var s = state.stats = state.stats || {};
+    s.ab = (s.ab || 0) + 1;
+    s.abT = s.abT || {};
+    var t = hid ? 6 : ((w && w.tier) || 1);
+    s.abT[t] = (s.abT[t] || 0) + 1;
+    s.abW = w && w.w;
+    s.abAt = Date.now();
   }
 
   function packFlash(tier, hid) {
@@ -1036,7 +1412,7 @@
       if (tl) tl.textContent = TIERS[w.tier].code + ' · ' + TIERS[w.tier].name + ' · ' + (TAGS[w.tag] || '');
     }
     $('hint').textContent = (activeIdx + 1) + ' / ' + deckWords.length + ' · ' +
-      (TAGS[w.tag] || '') + ' · 默写 ' + recWrite(w).wr + '/' + needOf(w) +
+      (TAGS[w.tag] || '') + ' · 默写 ' + recRead(w).wr + '/' + needOf(w) +
       (flip._flipped ? ' · 点卡片看详情' : ' · 点卡片翻面');
   }
 
@@ -1098,24 +1474,35 @@
   function syncExpDock(w) {
     var btn = $('expStart');
     var info = $('expPickInfo');
+    var pick = $('expPickBtn');
     if (!btn || !info) return;
+    var lack = battleQuotaLeft() <= 0;
     if (!w) {
       btn.disabled = true;
-      info.textContent = '请选择一张词卡';
+      btn.classList.remove('ready');
+      if (pick) pick.classList.add('empty');
+      info.innerHTML = '<span class="ep-empty">选择出战词卡</span>';
       return;
     }
-    if (battleQuotaLeft() <= 0) {
-      btn.disabled = true;
-      info.textContent = '今日漫游次数已用完，默写可换次数';
-      return;
-    }
-    btn.disabled = false;
-    var wk = Card.weaponKinds ? Card.weaponKinds(w, levelsOf(w)) : null;
+    if (pick) pick.classList.remove('empty');
+    btn.disabled = lack;
+    btn.classList.toggle('ready', !lack);
+    var lv = levelsOf(w);
+    var wk = Card.weaponKinds ? Card.weaponKinds(w, lv) : null;
+    var pp = Card.powerParts ? Card.powerParts(w, lv) : null;
+    var cn = String(w.cn || '').split(/[；;]/)[0].trim();
+    if (cn.length > 14) cn = cn.slice(0, 14) + '…';
     var chip = function (tag, k) {
       return '<i class="ep-chip" style="--c:' + Card.KINDS[k].c + '"><em>' + tag + '</em>' + Card.KINDS[k].nm + '</i>';
     };
-    info.innerHTML = '<b class="ep-word">' + w.w + '</b>' +
-      (wk ? '<span class="ep-chips">' + chip('主', wk.main) + (wk.sub ? chip('副', wk.sub) : '') + '</span>' : '');
+    info.innerHTML =
+      '<b class="ep-word">' + w.w + '</b>' +
+      (cn ? '<span class="ep-cn">' + cn + '</span>' : '') +
+      '<span class="ep-foot">' +
+        (wk ? '<span class="ep-chips">' + chip('主', wk.main) + (wk.sub ? chip('副', wk.sub) : '') + '</span>' : '<span class="ep-chips"></span>') +
+        (pp ? '<i class="ep-pow"><em>战力</em>' + pp.total + '</i>' : '') +
+      '</span>' +
+      (lack ? '<span class="ep-warn">精力不足</span>' : '');
   }
 
   function renderRegionStrip() {
@@ -1296,6 +1683,7 @@
     // dock 高度在字体/布局稳定后才准，下一帧补测一次
     requestAnimationFrame(layoutStage);
     if (tag) tag.innerHTML = '<span>满火力</span><b>' + powerPips(pv) + '</b><span>觉醒</span><span>双层护盾</span>';
+    if (tag) tag.style.display = '';
   }
 
   // 火力格：卡片等级决定格数
@@ -1314,8 +1702,8 @@
     var r = d.getBoundingClientRect();
     return r.height ? Math.max(0, window.innerHeight - r.top) : dockH();
   }
-  // 飞机中心距 dock 顶 120px（矮屏 96px）：护盾下沿约留 70px；标签在 dock 上方 14px
-  function shipLift() { return (window.innerHeight || 800) < 720 ? 96 : 120; }
+  // 飞机中心距 dock 顶 140px（矮屏 112px）：护盾下沿约留 70px；标签在 dock 上方 14px
+  function shipLift() { return (window.innerHeight || 800) < 720 ? 112 : 140; }
   function stageGap() { return dockTopGap() + shipLift(); }
   function layoutStage() {
     if (curTab !== 'expedition') return;
@@ -1399,7 +1787,8 @@
     item.appendChild(cardThumb(w, width));
     var tag = mk('div', 'exp-kinds');
     tag.innerHTML = expKindsOf(w).map(function (k, i) {
-      return '<span style="color:' + Card.KINDS[k].c + '">' + (i ? '副 ' : '主 ') + Card.KINDS[k].nm + '</span>';
+      return '<span class="ek-tag' + (i ? ' sub' : '') + '" style="--c:' + Card.KINDS[k].c + '">' +
+        Card.weaponIcon(k, i ? 'sub' : '') + '<b>' + Card.KINDS[k].nm + '</b><em>' + (i ? '副' : '主') + '</em></span>';
     }).join('');
     item.appendChild(tag);
     item.onclick = function () {
@@ -1432,6 +1821,7 @@
       levelsOf: levelsOf,
       viewOf: viewOf,
       starsOf: starsOf,
+      inkMul: battleInkMul,
       onStrongWrite: function (w) {
         // 强射写对也计入默写成长
         var o = recWrite(w);
@@ -1440,13 +1830,13 @@
         addXp(w, XP_PER_WRITE);
         save();
         refreshCounts();
-        rewardWrite(XP_PER_WRITE);
+        rewardWrite(w, XP_PER_WRITE);
         addDaily('spell');
         if (reviewDue(w)) addDaily('review');
       },
       onStart: function () {
         if (battleQuotaLeft() <= 0) {
-          toast('今日漫游次数已用完，默写可换次数');
+          toast('精力不足 · 每 ' + energyRegenMin() + ' 分钟恢复 1 点');
           return false;
         }
         battleQuotaUse();
@@ -1460,6 +1850,7 @@
         var t = todayStr();
         if (state.quota.d !== t) state.quota = { d: t, used: 0, bonus: 0, battleUsed: 0, battleBonus: 0 };
         state.quota.battleBonus = (state.quota.battleBonus || 0) + n;
+        state.quota.battleUsed = (state.quota.battleUsed || 0) + 1;
         var ink = (info && info.ink) || 0;
         state.ink += ink;
         if (info && info.win && info.region != null) {
@@ -1485,6 +1876,7 @@
           state.stats.wins++;
           state.stats.stars += info.stars || 0;
         }
+        noteRun(info);
         if (info) pushRecord(info);
         addDaily('battle');
         var drop = false;
@@ -1506,7 +1898,7 @@
     if (!expPick) { toast('先选择一张词卡'); return; }
     var w = BY_WORD[expPick];
     if (!w) { toast('词卡不存在'); return; }
-    if (battleQuotaLeft() <= 0) { toast('今日漫游次数已用完，默写可换次数'); return; }
+    if (battleQuotaLeft() <= 0) { toast('精力不足 · 每 ' + energyRegenMin() + ' 分钟恢复 1 点'); return; }
     if (!window.Battle || !window.Battle.start) { toast('漫游模块未加载'); return; }
     sfx('start');
     window.Battle.start([viewOf(w)], battleApi());
@@ -1603,17 +1995,17 @@
     var rs = $('mineRecSub'), as = $('mineAchSub');
     if (rs) {
       var list = state.records || [], wins = list.filter(function (r) { return r.win; }).length;
-      rs.textContent = list.length ? list.length + ' 场 · 胜率 ' + Math.round(wins / list.length * 100) + '%' : '暂无记录';
+      rs.textContent = list.length ? list.length + '场 ' + Math.round(wins / list.length * 100) + '%' : '暂无';
     }
     if (as) {
       var al = achievementList(), got = al.filter(function (a) { return a.cur >= a.max; }).length;
-      as.textContent = got + ' / ' + al.length;
+      as.textContent = got + '/' + al.length;
     }
   }
   function renderTitleSheet(box) {
     var t = titleInfo(), s = t.stat, hv = titleVisual(t.idx);
     var html = '<div class="tt-hero t' + hv + '">' + titleEmblem(t.idx, 'lg') +
-      '<div class="tt-hero-t"><b class="t' + hv + '">' + t.cur + '</b><span>已解锁 ' + (t.idx + 1) + ' / ' + TITLES.length + ' 个称号</span></div></div>' +
+      '<div class="tt-hero-t"><b class="tn t' + hv + '">' + t.cur + '</b><span>已解锁 ' + (t.idx + 1) + ' / ' + TITLES.length + ' 个称号</span></div></div>' +
       '<div class="tt-list">';
     TITLES.forEach(function (ti, i) {
       var on = i <= t.idx, conds = [], v = titleVisual(i);
@@ -1625,7 +2017,7 @@
         return '<span class="' + (ok ? 'ok' : '') + '">' + c[0] + ' ' + (on ? c[2] : Math.min(c[1], c[2]) + '/' + c[2]) + ' ' + c[3] + '</span>';
       }).join('') : '<span class="ok">初始称号</span>';
       html += '<div class="tt t' + v + (on ? ' on' : '') + (i === t.idx ? ' cur' : '') + '">' + titleEmblem(i) +
-        '<div class="tt-main"><div class="tt-top"><b>' + ti.nm + '</b><i>Lv.' + (i + 1) + '</i>' +
+        '<div class="tt-main"><div class="tt-top"><b class="tn t' + v + '">' + ti.nm + '</b><i>Lv.' + (i + 1) + '</i>' +
         (i === t.idx ? '<em>当前</em>' : '') + '</div><div class="tt-cond">' + ch + '</div></div>' +
         '<span class="tt-st">' + (on ? '✓' : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="5.5" y="10.5" width="13" height="9.5" rx="2"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"/></svg>') + '</span></div>';
     });
@@ -1643,15 +2035,20 @@
     renderBookTabs(); renderCats(); renderChips(); renderGrid(true);
   }
 
-  /* ── 我的：筛选 / 战绩 / 成就 共用底部弹层 ── */
+  /* ── 我的：筛选 / 战绩 / 成就 / 玩法说明 共用底部弹层 ── */
   function openMineSheet(mode) {
     var sh = $('mineSheet');
     if (!sh) return;
     var body = $('mineSheetBody');
-    $('mineSheetTitle').textContent = mode === 'record' ? '战绩' : mode === 'ach' ? '成就' : mode === 'title' ? '称号' : '筛选';
+    $('mineSheetTitle').textContent =
+      mode === 'record' ? '战绩' :
+      mode === 'ach' ? '成就' :
+      mode === 'title' ? '称号' :
+      mode === 'help' ? '怎么玩' : '筛选';
     if (mode === 'record') renderRecords(body);
     else if (mode === 'ach') renderAchievements(body);
     else if (mode === 'title') renderTitleSheet(body);
+    else if (mode === 'help') renderHelpSheet(body);
     else renderFilterSheet(body);
     var m = $('mask');
     if (m) m.classList.add('on');
@@ -1659,6 +2056,20 @@
     setMineSheetPage(sh, mode === 'ach' || mode === 'record');
     sh.classList.add('open');
     sfx('sheet');
+  }
+
+  function renderHelpSheet(body) {
+    body.innerHTML =
+      '<div class="help-guide">' +
+        '<section><h4>主线</h4>' +
+          '<p>抽卡收集词卡 → 默写练熟 → 漫游出战。成长点用来升级字母、补给精力、兑换抽卡。</p></section>' +
+        '<section><h4>抽卡</h4>' +
+          '<p>每组 3 张，约三成是复习卡。<b>通晓满 3 星</b>达 60 / 150 词后，才开放 SSR / UR。隐藏款 EX 只在<strong>新词</strong>上出现，约 0.3%，复习卡不出。</p></section>' +
+        '<section><h4>词卡 = 战机</h4>' +
+          '<p>每张卡对应一架飞机；字母等级决定火力。主 / 副武器随单词属性变化（火、冰等），详情页可升级字母。</p></section>' +
+        '<section><h4>漫游</h4>' +
+          '<p>每次出战消耗 1 点精力，约每 <b>' + energyRegenMin() + '</b> 分钟恢复 1 点；也可用 <b>' + ENERGY_BUY_COST + '</b> 成长点补给（每日有限次）。</p></section>' +
+      '</div>';
   }
   // 整页（战绩/成就）从右侧滑入滑出，配返回按钮；其余为底部弹层，配 ✕
   function setMineSheetPage(sh, full) {
@@ -1692,7 +2103,7 @@
       '<button class="btn primary" id="filterDone">完成</button></div>';
     renderChips(); renderSort();
     $('filterReset').onclick = function () {
-      bookFilter = 'got'; bookTier = 0; bookSort = 'tier'; bookTag = '';
+      bookFilter = 'got'; bookTier = []; bookSort = 'tier'; bookTag = '';
       renderCats(); renderChips(); renderSort(); renderGrid(true);
     };
     $('filterDone').onclick = closeMineSheet;
@@ -1700,7 +2111,7 @@
 
   function filterSummary() {
     var f = bookFilter === 'got' ? '已获得' : bookFilter === 'locked' ? '未获得' : bookFilter === 'hidden' ? '隐藏款' : '全部';
-    var t = bookTier === 'hidden' ? '隐藏款' : bookTier ? TIERS[bookTier].code : '';
+    var t = bookTier.map(function (v) { return v === 'hidden' ? '隐藏款' : TIERS[v].code; }).join(' / ');
     var s = '';
     for (var i = 0; i < SORTS.length; i++) if (SORTS[i].k === bookSort) s = SORTS[i].nm;
     var tag = bookTag && window.TAGS[bookTag] ? ' · ' + window.TAGS[bookTag] : '';
@@ -1770,7 +2181,9 @@
   }
 
   var bookTab = 'cards';
-  var bookTier = 0;
+  var bookTier = [];   // 稀有度多选；空数组 = 全部，可同时包含 1-5 与 'hidden'
+
+  function tierOn(t) { return bookTier.indexOf(t) >= 0; }
 
   function renderBookTabs() {
     var box = $('bookTabs');
@@ -1935,17 +2348,30 @@
     var tb = $('tiers');
     if (tb) {
       tb.innerHTML = '';
-      [0, 1, 2, 3, 4, 5, 'hidden'].forEach(function (t) {
-        var b = mk('button', 'chip' + (bookTier === t ? ' on' : ''));
-        b.textContent = t === 'hidden' ? '隐藏款' : t ? TIERS[t].code : '全部';
-        b.onclick = function () { sfx('tap'); bookTier = t; renderChips(); renderGrid(true); };
+      var all = mk('button', 'chip' + (bookTier.length === 0 ? ' on' : ''));
+      all.textContent = '全部';
+      all.onclick = function () { sfx('tap'); bookTier = []; renderChips(); renderGrid(true); };
+      tb.appendChild(all);
+      [1, 2, 3, 4, 5, 'hidden'].forEach(function (t) {
+        var b = mk('button', 'chip' + (tierOn(t) ? ' on' : ''));
+        b.textContent = t === 'hidden' ? '隐藏款' : TIERS[t].code;
+        b.onclick = function () {
+          sfx('tap');
+          var i = bookTier.indexOf(t);
+          if (i >= 0) bookTier.splice(i, 1); else bookTier.push(t);
+          renderChips(); renderGrid(true);
+        };
         tb.appendChild(b);
       });
     }
   }
 
   /* ── 单词图鉴：分类导航 + 进度 ─────────────────── */
-  function codexPool() { return poolWords(); }
+  // 图鉴分母 = 图鉴实际能列出的词（全量词库，只排除超长词），
+  // 不能用 poolWords()：抽卡池受章节解锁、品阶上限和主题影响，会随进度变化，和列表对不上
+  function codexPool() {
+    return WORDS.filter(function (w) { return w.w.length <= MAX_WORD_LEN; });
+  }
   // 每个分类的收录数与总数
   function tagStats() {
     var out = { all: { got: 0, total: 0 } };
@@ -1961,36 +2387,21 @@
 
   function renderCats() {
     var st = tagStats(), all = st.all;
-    var pct = all.total ? all.got / all.total * 100 : 0;
-    var got = $('codexGot'), tot = $('codexTotal'), bar = $('codexBar');
+    var got = $('codexGot'), tot = $('codexTotal');
     if (got) got.textContent = all.got;
     if (tot) tot.textContent = all.total;
-    if (bar) bar.style.width = pct.toFixed(1) + '%';
   }
 
   function codexCardNode(w, cardW) {
     var got = !!state.owned[w.w];
-    var hidden = bookTier === 'hidden';
     // 图鉴完整显示所有卡：未收录的只是压暗，仍然能看全词形、释义与卡面
     var shown = viewOf(w);
-    if (hidden) {
-      shown = Object.assign({}, shown, {
-        w: '?????',
-        ph: '/ ··· /',
-        pos: '???',
-        cn: '？？？',
-        ex: '',
-        exCn: '',
-        hid: true,
-      });
-    }
     var th = cardThumb(shown, cardW);
     th.classList.add('book-card');
-    if (hidden) th.classList.add('codex-hidden');
     if (!got) {
       th.classList.add('codex-locked');
     }
-    if (!hidden) th.onclick = function () { openDetail(w); };
+    th.onclick = function () { openDetail(w); };
     return th;
   }
 
@@ -2006,13 +2417,18 @@
       if (w.w.length > MAX_WORD_LEN) return false;
       if (bookTag && w.tag !== bookTag) return false;
       var got = !!state.owned[w.w];
-      // 隐藏款是每个词卡都可能出现的特殊版本，筛选时展示其神秘占位卡，
-      // 不受“已获得 / 未获得”筛选影响；具体内容用问号遮挡且不可进入详情。
-      if (bookTier !== 'hidden') {
-        if (bookFilter === 'got' && !got) return false;
-        if (bookFilter === 'locked' && got) return false;
+      var ownedHid = got && !!state.owned[w.w].hid;
+      // 「全部」时不排除隐藏款；只有勾了具体品阶却没勾隐藏款时，才把已拥有的隐藏卡滤掉，
+      // 避免筛 UR 时混进 EX 隐藏卡
+      if (bookTier.length && !tierOn('hidden') && ownedHid) return false;
+      if (bookFilter === 'got' && !got) return false;
+      if (bookFilter === 'locked' && got) return false;
+      if (bookTier.length) {
+        var hit = !!w.tier && tierOn(w.tier);
+        // 勾选隐藏款时，拥有隐藏版本的词卡也命中（不论其基础品阶）
+        if (!hit && ownedHid && tierOn('hidden')) hit = true;
+        if (!hit) return false;
       }
-      if (bookTier && bookTier !== 'hidden' && w.tier !== bookTier) return false;
       if (q) {
         // 图鉴对未收录也完整展示，所以释义同样参与搜索
         var hay = w.w + ' ' + (w.cn || '');
@@ -2204,7 +2620,7 @@
 
     var at = rec(w).at ? new Date(rec(w).at) : null;
     var foot = '<p class="dfoot">' + (TAGS[w.tag] ? TAGS[w.tag] + ' · ' : '') + (at ? '收于 ' + at.getFullYear() + '.' + (at.getMonth() + 1) + '.' + at.getDate() + ' · ' : '') +
-      '看过答案 ' + recWrite(w).pk + ' 次</p>';
+      (owned ? '看过答案 ' + (rec(w).pk || 0) + ' 次' : '尚未收录') + '</p>';
     $('detailEntry').innerHTML = entryHTML(w) + foot;
     $('detailMeta').classList.add('detail-build');
     $('detailMeta').innerHTML = powerInfo(w) + xpMini(w0);
@@ -2420,10 +2836,20 @@
     state.lastDay = t;
     state.day.checkedIn = true;
     state.ink += CHECKIN_REWARD;
+    state.stats = state.stats || {};
+    state.stats.ci = (state.stats.ci || 0) + 1;   // 累计打卡天数
     save();
     refreshCounts();
     checkAchievementUnlocks();
     return true;
+  }
+  function renderCheckin() {
+    ensureDay();
+    var btn = $('pfCheckin'), lab = $('pfCheckinLab');
+    if (!btn || !lab) return;
+    var on = !!(state.day && state.day.checkedIn);
+    btn.classList.toggle('done', on);
+    lab.textContent = on ? ('连续 ' + (state.streak || 1) + ' 天') : '签到';
   }
   function ensureDayG() {
     ensureDay();
@@ -2463,6 +2889,12 @@
     var d = ensureDayG();
     if (!(key in d.g)) return;
     d.g[key]++;
+    // 单日三合一：打卡 + 拼写 + 漫游都在同一天完成
+    var s = state.stats = state.stats || {};
+    if (state.day && state.day.checkedIn && (d.g.spell || 0) >= 1 && (d.g.battle || 0) >= 1 && s.trioD !== d.d) {
+      s.trioD = d.d;
+      s.trio = (s.trio || 0) + 1;
+    }
     save();
     updateDailyBrief();
   }
@@ -2562,7 +2994,7 @@
   }
 
   var achievementQueue = [], achievementBusy = false;
-  var ACH_KIND_NM = { gacha: '抽卡', study: '学习', battle: '漫游', upgrade: '养成', codex: '图鉴', collection: '收藏' };
+  var ACH_KIND_NM = { gacha: '抽卡', study: '学习', battle: '漫游', upgrade: '养成', power: '战力', codex: '图鉴', collection: '收藏' };
   var MEDAL_NM = { bronze: '铜章', silver: '银章', gold: '金章', max: '满阶' };
   // 系列内阶段决定奖牌材质：前 1/3 铜、中段银、后段金、最后一阶满阶
   var ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII', 'XIII', 'XIV', 'XV', 'XVI', 'XVII', 'XVIII', 'XIX', 'XX'];
@@ -2636,29 +3068,101 @@
   }
 
   var achievementFilter = 'all';
+  // 战力缓存：成就检查很频繁，避免每次都重算整张卡
+  var pwCache = {};
+  function powerCached(w, lv) {
+    if (!Card.powerParts) return 0;
+    var sig = lv ? lv.join(':') : '';
+    var c = pwCache[w.w];
+    if (!c || c.sig !== sig) {
+      var pp = Card.powerParts(w, lv);
+      c = pwCache[w.w] = { sig: sig, total: (pp && pp.total) || 0 };
+    }
+    return c.total;
+  }
   function achievementList() {
     var owned = Object.keys(state.owned).length, mastered = countMastered();
     var t2 = 0, t5 = 0, nTier = 0, rTier = 0, sr = 0, ssr = 0, ur = 0, ex = 0;
     var maxLetter = 0, letterUp = 0, totalWrites = 0, practiced = 0, stage3 = 0;
+    // 分品阶满级数：让低阶卡也有明确的养成目标（N/R 满级同样计数）
+    var nMax = 0, rMax = 0, srMax = 0, ssrMax = 0, urMax = 0, lvSum = 0;
+    var pwMax = 0, pwSum = 0;
     for (var k in state.owned) {
       var w = BY_WORD[k], rec = state.owned[k];
       if (!w) continue;
       var cl = cardLvOf(w), lv = levelsOf(w) || [];
       totalWrites += rec.wr || 0;
+      lvSum += cl;
+      var pw = powerCached(w, lv);
+      pwMax = Math.max(pwMax, pw); pwSum += pw;
       if ((rec.wr || 0) > 0) practiced++;
       if ((rec.stage || 0) >= 3) stage3++;
       if (cl >= 2) t2++;
       if (cl >= 5) t5++;
       if (w.hid || rec.hid) ex++;
-      else if (w.tier <= 1) nTier++;
-      else if (w.tier === 2) rTier++;
-      else if (w.tier >= 5) ur++;
-      else if (w.tier >= 4) ssr++;
-      else if (w.tier >= 3) sr++;
+      else {
+        if (w.tier <= 1) nTier++;
+        else if (w.tier === 2) rTier++;
+        else if (w.tier >= 5) ur++;
+        else if (w.tier >= 4) ssr++;
+        else if (w.tier >= 3) sr++;
+        if (cl >= 5) {
+          if (w.tier <= 1) nMax++;
+          else if (w.tier === 2) rMax++;
+          else if (w.tier >= 5) urMax++;
+          else if (w.tier >= 4) ssrMax++;
+          else if (w.tier >= 3) srMax++;
+        }
+      }
       lv.forEach(function (n) { maxLetter = Math.max(maxLetter, n); letterUp += Math.max(0, n - 1); });
     }
+    // 分类收录 / 主武器覆盖 / 长词满级：都按「已拥有 + 已满级」统计
+    var tagOwn = {}, tagAll = {}, mainSet = {}, longN = 0;
+    var drawableN = 0;
+    WORDS.forEach(function (x) {
+      if (x.w.length > MAX_WORD_LEN) return;
+      drawableN++;
+      if (x.tag) tagAll[x.tag] = (tagAll[x.tag] || 0) + 1;
+    });
+    var kindSet = {};
+    for (var k2 in state.owned) {
+      var w2 = BY_WORD[k2];
+      if (!w2) continue;
+      if (w2.tag) tagOwn[w2.tag] = (tagOwn[w2.tag] || 0) + 1;
+      if (cardLvOf(w2) < 5) continue;
+      var lv2 = levelsOf(w2) || [];
+      if (w2.w.length >= 8) longN++;
+      var wk2 = Card.weaponKinds ? Card.weaponKinds(w2, lv2) : null;
+      if (wk2 && wk2.main) { mainSet[wk2.main] = 1; kindSet[wk2.main] = 1; if (wk2.sub) kindSet[wk2.sub] = 1; }
+    }
+    var tagFullN = 0;
+    for (var tg in tagAll) if (tagAll[tg] && (tagOwn[tg] || 0) >= tagAll[tg]) tagFullN++;
+    var mainN = 0; for (var mk in mainSet) mainN++;
+    var kindN = 0; for (var kk in kindSet) kindN++;
+    var ltrN = 0; var ltrMap = (state.stats && state.stats.ltr) || {};
+    for (var lk in ltrMap) if (ltrMap[lk]) ltrN++;
+    var allWords = drawableN || 1;
+    var collPct = Math.floor(owned * 100 / allWords);
+    // 每个品阶里最少的那个满级数：用来要求「全品阶都养到」
+    var tierFloor = Math.min(nMax, rMax, srMax, ssrMax, urMax);
+    var fullTierN = [nMax, rMax, srMax, ssrMax, urMax].filter(function (n) { return n > 0; }).length;
     var stats = state.stats || {}, wins = stats.wins || 0;
     var battles = stats.battles || 0, kills = stats.kills || 0, stars = stats.stars || 0;
+    // 打卡 / 放弃 / 成长点积蓄：由存档里的累计字段提供
+    var ci = stats.ci || 0, inkMax = Math.max(stats.inkMax || 0, state.ink || 0);
+    var abT = stats.abT || {}, abTotal = stats.ab || 0;
+    var abTierN = 0;
+    for (var ak in abT) if (abT[ak] > 0) abTierN++;
+    var abUR = abT[5] || 0, abHid = abT[6] || 0;
+    // 战斗过程类：无伤 / 无大招 / 竞速 / 连续胜负 / 单局记录
+    var nohit = stats.nohit || 0, noult = stats.noult || 0;
+    var bossTS = Math.round(stats.bossTS || 0), runTS = Math.round(stats.runTS || 0);
+    var killBest = stats.killBest || 0, wordsBest = stats.wordsBest || 0;
+    var cwBest = stats.cwBest || 0, clBest = stats.clBest || 0;
+    // 学习过程类：完美收服 / 词灵挣脱 / 失败连击 / 重复卡 / 非酋 / 单日三合一 / 抽满配额
+    var pf = stats.pf || 0, esc = stats.esc || 0, failBest = stats.failBest || 0;
+    var dup = stats.dup || 0, dryBest = stats.dryBest || 0;
+    var trio = stats.trio || 0, quotaFull = stats.quotaFull || 0, abBack = stats.abBack || 0;
     var codex = Object.keys(state.codex || {}).length, regions = 0;
     for (var ri = 0; ri < REGIONS.length; ri++) {
       var rg = state.stages && state.stages[REGIONS[ri].id];
@@ -2666,6 +3170,15 @@
     }
     var out = [], add = function (cat, kind, key, title, desc, cur, targets, icon) {
       targets.forEach(function (n, i) {
+        out.push({ id: key + '_' + n, cat: cat, kind: kind, icon: icon || '✦',
+          nm: title + ' · ' + n, d: desc.replace('{n}', n), cur: cur, max: n,
+          series: key, sname: title, sidx: i, slen: targets.length, targets: targets, desc: desc });
+      });
+    };
+    // 越小越好（用时类）：val <= 目标即达成，进度按目标/实际折算
+    var addLow = function (cat, kind, key, title, desc, val, targets, icon) {
+      targets.forEach(function (n, i) {
+        var cur = val > 0 ? Math.min(n, Math.round(n * n / val)) : 0;
         out.push({ id: key + '_' + n, cat: cat, kind: kind, icon: icon || '✦',
           nm: title + ' · ' + n, d: desc.replace('{n}', n), cur: cur, max: n,
           series: key, sname: title, sidx: i, slen: targets.length, targets: targets, desc: desc });
@@ -2685,6 +3198,52 @@
     add('study', 'study', 'streak', '连续学习', '连续学习 {n} 天', state.streak || 1, [3, 5, 7, 10, 14, 21, 30, 45, 60, 90, 120, 180, 365], '♨');
     add('upgrade', 'upgrade', 'cardlv', '卡牌培养', '{n} 张词卡达到 Lv5', t5, [1, 2, 3, 5, 10, 20, 30, 50, 80, 100, 200], '⬆');
     add('upgrade', 'upgrade', 'cardlv2', '初次升级', '{n} 张词卡达到 Lv2', t2, [1, 3, 5, 10, 20, 30, 50, 80, 100], '◆');
+    add('upgrade', 'upgrade', 'nmax', '常本满级', '{n} 张 N 卡练到 Lv5', nMax, [1, 3, 5, 10, 20, 30, 50, 80, 120, 200], 'N');
+    add('upgrade', 'upgrade', 'rmax', '藏本满级', '{n} 张 R 卡练到 Lv5', rMax, [1, 3, 5, 10, 20, 30, 50], 'R');
+    add('upgrade', 'upgrade', 'srmax', '稀见满级', '{n} 张 SR 卡练到 Lv5', srMax, [1, 2, 3, 5, 10, 20], '◇');
+    add('upgrade', 'upgrade', 'ssrmax', '秘典满级', '{n} 张 SSR 卡练到 Lv5', ssrMax, [1, 2, 3, 5, 10], '◆');
+    add('upgrade', 'upgrade', 'urmax', '孤本满级', '{n} 张 UR 卡练到 Lv5', urMax, [1, 2, 3, 5, 8], '★');
+    add('upgrade', 'upgrade', 'tierfull', '品阶无短板', '五个品阶各有 {n} 张满级卡', tierFloor, [1, 2, 3, 5], '◎');
+    add('upgrade', 'upgrade', 'tierreach', '品阶全覆盖', '{n} 个品阶都有满级卡', fullTierN, [1, 2, 3, 4, 5], '⚑');
+    add('upgrade', 'upgrade', 'lvsum', '卡册总等级', '所有词卡等级合计达到 {n}', lvSum, [10, 30, 60, 100, 160, 240, 350, 500, 800, 1200], 'Σ');
+    // 战力：单卡峰值 / 卡册总和 / 越线首卡
+    add('power', 'power', 'pwmax', '单卡战力', '单张最高的卡战力达到 {n}', pwMax, [200, 400, 700, 1000, 1500, 2200, 3000, 4500, 6500, 9000, 13000, 20000], '⚔');
+    add('power', 'power', 'pwsum', '卡册战力', '所有词卡战力合计达到 {n}', pwSum, [1000, 2000, 4000, 7000, 12000, 20000, 35000, 60000, 100000, 160000, 260000], '⛨');
+    add('power', 'power', 'pwfirst', '越线首卡', '首次拥有一张战力超过 {n} 的卡', pwMax, [1000, 2200, 4500, 9000, 20000], '✦');
+    // 放弃：割舍本身也是一种记录
+    add('power', 'power', 'abandon', '割舍之道', '累计放弃 {n} 张词卡', abTotal, [1, 3, 5, 10, 20, 40, 80, 150], '✕');
+    add('power', 'power', 'abtier', '割舍广度', '放弃过 {n} 个不同品阶的卡', abTierN, [1, 2, 3, 4, 5, 6], '⋮');
+    add('power', 'power', 'abur', '弃孤本', '放弃 {n} 张 UR 卡', abUR, [1, 3, 5, 10], '★');
+    add('power', 'power', 'abhid', '弃隐藏', '放弃 {n} 张隐藏款', abHid, [1, 3, 5], '☼');
+    // 打卡与积蓄
+    add('study', 'study', 'checkin', '每日一记', '累计打卡 {n} 天', ci, [1, 3, 7, 15, 30, 60, 100, 180, 365], '☑');
+    add('study', 'study', 'inkmax', '成长点积蓄', '成长点存量曾达到 {n}', inkMax, [10, 50, 100, 300, 500, 1000, 2000, 5000, 10000, 20000], '◆');
+    // 收藏广度
+    add('collection', 'collection', 'tagfull', '分类全通', '{n} 个分类全部收录', tagFullN, [1, 2, 3, 5, 8, 12], '▤');
+    add('collection', 'collection', 'mainkind', '兵器谱', '{n} 种主武器都有满级卡', mainN, [1, 2, 3, 4, 5, 6, 7, 8], '⚒');
+    add('collection', 'collection', 'kindall', '全兵种满级', '{n} 种武器词条（含副）都有满级卡', kindN, [2, 4, 6, 8, 10, 12, 14, 16], '⚙');
+    add('collection', 'collection', 'longword', '长词攻坚', '{n} 张 8 字母以上的词卡练到 Lv5', longN, [1, 3, 5, 10, 20, 30, 50], '≡');
+    add('collection', 'collection', 'letters', '字母全通', '升级过 {n} 个不同字母', ltrN, [5, 10, 15, 20, 26], 'A');
+    add('collection', 'collection', 'collpct', '图鉴进度', '词册收录率达到 {n}%', collPct, [5, 10, 25, 50, 75, 100], '◐');
+    add('collection', 'collection', 'dupcard', '旧识重逢', '重复获得 {n} 张已拥有的词卡', dup, [1, 5, 10, 30, 60, 100, 200, 400], '↻');
+    // 学习过程
+    add('study', 'study', 'perfect', '完美收服', '{n} 次完美拼写收服', pf, [1, 5, 10, 30, 60, 100, 200, 500], '✧');
+    add('study', 'study', 'escape', '失手记录', '累计让 {n} 个词灵挣脱（超时）', esc, [1, 5, 10, 30, 60, 120], '✕');
+    add('study', 'study', 'failbest', '屡败屡战', '连续拼写失败 {n} 次', failBest, [2, 5, 10, 20], '↺');
+    add('study', 'study', 'trio', '一日三事', '{n} 天同时完成打卡、拼写与漫游', trio, [1, 3, 7, 15, 30, 60, 100], '☰');
+    // 抽卡过程
+    add('gacha', 'gacha', 'quota', '抽空配额', '{n} 天把当日抽卡配额用尽', quotaFull, [1, 3, 7, 15, 30], '◍');
+    add('gacha', 'gacha', 'dry', '非酋之路', '连续 {n} 抽没有 SSR 及以上', dryBest, [10, 30, 50, 80, 120, 200], '☂');
+    add('gacha', 'gacha', 'abback', '念念不忘', '{n} 次放弃后 1 分钟内又抽回同一张', abBack, [1, 3, 5, 10], '↩');
+    // 漫游过程
+    add('power', 'power', 'nohit', '毫发无伤', '{n} 次全程不受任何伤害通关', nohit, [1, 3, 5, 10, 25, 50], '⛨');
+    add('power', 'power', 'noult', '不放大招', '{n} 次不用大招通关', noult, [1, 3, 5, 10, 25, 50], '⊘');
+    addLow('power', 'power', 'bossfast', '速斩首领', '最快 {n} 秒内击败首领', bossTS, [120, 100, 80, 60, 45, 30], '⏱');
+    addLow('power', 'power', 'runspeed', '闪电通关', '最快 {n} 秒通关', runTS, [180, 150, 120, 100, 80, 60], '⚡');
+    add('power', 'power', 'killrun', '单局屠戮', '单局击杀 {n} 个敌人', killBest, [20, 40, 60, 80, 120, 200], '☄');
+    add('power', 'power', 'wordrun', '单局拼词', '单局拼满 {n} 个单词', wordsBest, [3, 6, 10, 15, 20, 30], '✍');
+    add('power', 'power', 'consec', '连胜之路', '连续通关 {n} 次', cwBest, [2, 3, 5, 10, 20, 50], '⌁');
+    add('power', 'power', 'conseclose', '屡战屡败', '连续失利 {n} 次', clBest, [3, 5, 10, 20], '☓');
     add('upgrade', 'upgrade', 'letter', '字母工坊', '累计升级字母 {n} 次', letterUp, [1, 3, 5, 10, 20, 30, 50, 80, 100, 200, 300, 500, 800, 1000], 'A');
     add('upgrade', 'upgrade', 'lettermax', '字母登顶', '最高字母等级达到 Lv{n}', maxLetter, [2, 3, 4, 5, 6], 'Λ');
     add('codex', 'codex', 'monster', '怪物图鉴', '收录 {n} 个怪物', codex, [1, 3, 5, 10, 20, 30, 50, 80, 100, 150, 200, 300, 500, 800, 1000], '♞');
@@ -2722,7 +3281,7 @@
     var list = achievementList();
     var cats = [
       ['all', '全部'], ['gacha', '抽卡'], ['collection', '收藏'],
-      ['study', '学习'], ['upgrade', '养成'], ['codex', '图鉴'], ['expedition', '漫游']
+      ['study', '学习'], ['upgrade', '养成'], ['power', '战力'], ['codex', '图鉴'], ['expedition', '漫游']
     ];
     var unlocked = list.filter(function (a) { return a.cur >= a.max; }).length;
     checkAchievementUnlocks(true);
@@ -2777,12 +3336,16 @@
     if (o.pk === undefined) o.pk = 0;
     return o;
   }
+  function recRead(w) {
+    var o = state.owned[w.w];
+    return o ? recWrite(w) : { wr: 0, pk: 0 };
+  }
   function needOf(w) {
-    var o = recWrite(w);
+    var o = recRead(w);
     return Math.min(8, WRITE_BASE + o.pk * PEEK_PENALTY);
   }
   function starsOf(w) {
-    var o = recWrite(w);
+    var o = recRead(w);
     var need = needOf(w);
     if (!need) return 0;
     return Math.max(0, Math.min(3, Math.floor((o.wr * 3) / need)));
@@ -2952,11 +3515,12 @@
     var body = $('qBody');
     body.innerHTML =
       '<div class="wxp" id="wXp">' + xpWidget(w, { src: false }) + '</div>' +
+      '<div class="wquest"><span class="wq-k">释 义</span>' +
       '<div class="wcn">' + cnHtml + '</div>' +
-      '<div class="wmeta">' + (w.w.length) + ' 个字母' +
-      (curWrite.revealed ? '　·　' + (w.ph || '') : '') + '</div>' +
+      '<div class="wmeta"><b>' + (w.w.length) + '</b> 个字母' +
+      (curWrite.revealed ? '　·　' + (w.ph || '') : '') + '</div></div>' +
       '<div id="wMain"></div>' +
-      '<div class="wbar"><span id="wBarFill" style="width:' +
+      '<div class="wbar" style="--n:' + need + '"><span id="wBarFill" style="width:' +
       Math.min(100, (o.wr / need) * 100).toFixed(1) + '%"></span></div>' +
       '<div class="wacts">' +
       '<button class="btn" id="wMode">' + (mode === 'pick' ? '⌨ 手写' : '◈ 点选') + '</button>' +
@@ -2993,8 +3557,9 @@
     box.innerHTML =
       '<div class="wslots" id="wSlots"></div>' +
       '<div class="wbank" id="wBank"></div>' +
-      '<div class="wtips"><button id="wUndo">退格</button><button id="wClear">清空</button>' +
-      '<span>按顺序点字母</span></div>';
+      '<div class="wtips"><span>按顺序点字母</span>' +
+      '<button id="wUndo" type="button" aria-label="退格"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5h11v14H9l-6-7z"/><path d="M12.5 9.5l5 5M17.5 9.5l-5 5"/></svg>退格</button>' +
+      '<button id="wClear" type="button" aria-label="清空"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V4.5h6V7M6.5 7l1 13h9l1-13"/></svg>清空</button></div>';
     renderSlots();
     var bank = $('wBank');
     curWrite.bank.forEach(function (ch, i) {
@@ -3129,7 +3694,7 @@
     var gain = addXp(w, XP_PER_WRITE);
     save();
     refreshCounts();
-    rewardWrite(gain);
+    rewardWrite(w, gain);
     bumpXp($('wXp'), w, gain);
     addDaily('spell');
     if (reviewDue(w)) addDaily('review');
@@ -3217,24 +3782,76 @@
   var WRITES_PER_BONUS = 3;
   var writeTally = 0;
 
-  function rewardWrite(xpGain) {
-    state.ink += WRITE_INK;
+  // 单次默写的成长点：新词首默 > 常规 > 已 3 星复习（收益导向没掌握的词）
+  function writeInkAmount(w) {
+    var o = w ? recWrite(w) : null;
+    if (!o) return WRITE_INK;
+    if (o.wr <= 1) return WRITE_INK_NEW;
+    if (starsOf(w) >= 3) return WRITE_INK_REVIEW;
+    return WRITE_INK;
+  }
+  function rewardWrite(w, xpGain) {
+    var t = todayStr();
+    if (!state.inkDay || state.inkDay.d !== t) state.inkDay = { d: t, wr: 0 };
+    var room = Math.max(0, WRITE_INK_CAP - (state.inkDay.wr || 0));
+    var got = Math.min(writeInkAmount(w), room);
+    if (got > 0) { state.ink += got; state.inkDay.wr = (state.inkDay.wr || 0) + got; }
     refreshCounts();
     writeTally++;
     var bonusShown = false;
     if (writeTally % WRITES_PER_BONUS === 0) {
-      if (grantBattleBonus()) { toast('默写 ' + WRITES_PER_BONUS + ' 次 · 多得一次漫游'); bonusShown = true; }
+      if (grantBattleBonus()) { toast('默写 ' + WRITES_PER_BONUS + ' 次 · 精力 +1'); bonusShown = true; }
+      else if (energyNow() >= MAX_ENERGY) { /* 精力已满，不提示浪费 */ }
     }
-    if (!bonusShown && xpGain) toast('熟练度 +' + xpGain + ' · 成长点 +' + WRITE_INK);
+    if (!bonusShown && xpGain) {
+      toast('熟练度 +' + xpGain + (got > 0 ? ' · 成长点 +' + got : ' · 今日默写成长点已满'));
+    }
   }
 
   /* ── 绑定 ─────────────────────────────────────── */
   // 先等原生存档读完再开局，否则 autoDraw 会把空状态写回去覆盖旧存档
   load();
   var booted = false;
+  function seedDemo() {
+    var maxT = 1;
+    WORDS.forEach(function (w) { maxT = Math.max(maxT, w.tier || 1); });
+    var top = WORDS.filter(function (w) { return (w.tier || 1) === maxT; }).slice(0, 12);
+    var sub = WORDS.filter(function (w) { return (w.tier || 1) === maxT - 1; }).slice(0, 6);
+    var list = top.concat(sub), hidSet = {};
+    // 每种「主武器 + 副武器」组合（含无副武器）各取一张隐藏卡，同组合优先高品阶
+    var full = function (w) { return w.w.split('').map(function () { return 6; }); };
+    var combo = {};
+    WORDS.forEach(function (w) {
+      if ((w.tier || 1) < maxT) return;
+      var wk = Card.weaponKinds(w, full(w)), key = wk.main + '|' + (wk.sub || '');
+      if (!combo[key]) combo[key] = w;
+    });
+    for (var ck in combo) {
+      hidSet[combo[ck].w] = 1;
+      if (list.indexOf(combo[ck]) < 0) list.push(combo[ck]);
+    }
+    var now = Date.now();
+    list.forEach(function (w, i) {
+      var hid = !!hidSet[w.w] || i < 4;
+      var lv = hid ? 6 : 5;
+      state.owned[w.w] = {
+        m: 3, wr: 3, pk: 0, at: now - i * 60000, cl: lv, hid: hid,
+        lv: w.w.split('').map(function () { return lv; }),
+        xp: XP_STAGE_GATE[3], stage: 2, pd: '', pn: 0,
+      };
+    });
+    state.draws = Math.max(state.draws || 0, 520);
+    state.ink = Math.max(state.ink || 0, 9999);
+    state.streak = Math.max(state.streak || 0, 60);
+    state.lastDay = todayStr();
+    // 注入的数据视为早已达成，否则首次检查（通常是漫游结算）会一口气弹出一堆成就
+    achievementList().forEach(function (a) { if (a.cur >= a.max) state.achSeen[a.id] = true; });
+    state.achInit = true;
+  }
   function boot() {
     if (booted) return;
     booted = true;
+    if (DEMO) seedDemo();
     ensureDay();
     refreshCounts();
     renderQuota();
@@ -3262,8 +3879,11 @@
     // 交给 draw() 判断：当前组还有没开的卡就先弹确认，不在这里直接丢弃
     draw();
   };
+  if ($('btnHelp')) $('btnHelp').onclick = function () { openMineSheet('help'); };
   $('btnDaily').onclick = openDaily;
   $('expStart').onclick = startExpedition;
+  $('energyBuy').onclick = function (e) { e.stopPropagation(); askEnergyBuy(); };
+  startEnergyTimer();
   $('dailyClose').onclick = function () { sfx('sheetClose'); $('daily').classList.remove('open'); updateDailyBrief(); };
   $('detailClose').onclick = function () { sfx('sheetClose'); $('detail').classList.remove('open'); };
   $('expSheetClose').onclick = closeExpSheet;
@@ -3296,8 +3916,8 @@
       clearTimeout(searchTm);
       searchTm = setTimeout(function () {
         bookQuery = v;
-        if (v && (bookFilter === 'got' || bookTag || bookTier)) {
-          bookFilter = 'all'; bookTag = ''; bookTier = 0;
+        if (v && (bookFilter === 'got' || bookTag || bookTier.length)) {
+          bookFilter = 'all'; bookTag = ''; bookTier = [];
           renderCats(); renderChips(); renderSort();
         }
         renderGrid(true);
@@ -3332,24 +3952,22 @@
     ov.onclick = function (e) { if (e.target === ov || e.target.closest('.stat-dialog-x, .stat-dialog-ok')) close(); };
     sfx('sheet');
   }
-  [].forEach.call(document.querySelectorAll('.pf-stat'), function (b) {
+  [].forEach.call(document.querySelectorAll('.pf-meta[data-stat-title]'), function (b) {
     b.onclick = function () {
-      var title = b.getAttribute('data-stat-title');
-      var text = b.getAttribute('data-stat-text');
-      if (b.classList.contains('st-fire')) {
-        var fresh = checkInToday();
-        text = '每天点击一次完成签到，连续天数会影响称号成长；中断一天后会从 1 天重新计算。';
-        openStatDialog(
-          title,
-          text,
-          fresh ? '成长点 +' + CHECKIN_REWARD : '今日已签到',
-          fresh ? '首次签到领取，连续 ' + state.streak + ' 天' : '今天不重复发放奖励，当前连续 ' + state.streak + ' 天'
-        );
-        return;
-      }
-      openStatDialog(title, text);
+      openStatDialog(b.getAttribute('data-stat-title'), b.getAttribute('data-stat-text'));
     };
   });
+  if ($('pfCheckin')) $('pfCheckin').onclick = function () {
+    var b = $('pfCheckin');
+    var fresh = checkInToday();
+    openStatDialog(
+      b.getAttribute('data-stat-title') || '连续打卡',
+      '每天点击一次完成签到，连续天数会影响称号成长；中断一天后会从 1 天重新计算。',
+      fresh ? '成长点 +' + CHECKIN_REWARD : '今日已签到',
+      fresh ? '首次签到领取，连续 ' + state.streak + ' 天' : '今天不重复发放奖励，当前连续 ' + state.streak + ' 天'
+    );
+  };
+  renderCheckin();
 
   // 返回顶部：滚动一段后出现，点击平滑回到列表顶部
   var codexTopBtn = $('codexTop');

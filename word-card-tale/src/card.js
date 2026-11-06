@@ -190,6 +190,7 @@
 
   /* ── 稀有度：词库标注的学习价值，不由词长推导 ───────────── */
   function rarityOf(word) {
+    if (word.hid) return 5;
     var t = typeof word.rarity === 'number' ? word.rarity :
       typeof word.tier === 'number' ? word.tier : 1;
     return Math.max(1, Math.min(5, Math.round(t)));
@@ -1214,77 +1215,89 @@
     return out + '</div>';
   }
 
-  /* ── 外圈边框：只画在卡片金属边上，不压内容；稀有度越高越宽、造型越复杂 ── */
-  var RING = { 1: 6, 2: 8, 3: 10, 4: 12, 5: 14 };
+  /* ── 外圈边框：装帧书籍风。框宽统一，装饰全部收在卡片矩形内；
+     越高阶线条层次越多、角花越精细，而不是越粗越大 ── */
+  var RING = { 1: 10, 2: 10, 3: 10, 4: 10, 5: 10 };
+  var FRAME_KEY = { 1: 'n', 2: 'r', 3: 'sr', 4: 'ssr', 5: 'ur' };
   var FRAME_INK = {
-    1: ['#f2f5f8', '#5b6168'], 2: ['#ffe2b8', '#5a3416'], 3: ['#fff3c4', '#6d4706'],
-    4: ['#efe8ff', '#2a1f86'], 5: ['#fff7d6', '#7a2453'],
+    1: ['#eef0f3', '#3d4148'], 2: ['#f6d6ad', '#4a2c14'], 3: ['#fff1c4', '#5a3d08'],
+    4: ['#ffffff', '#474a5a'], 5: ['#fff6d8', '#6a4510'],
   };
+  var FRAME_GEM = { 4: ['#b9a2ff', '#5a3fc4'], 5: ['#ff8a9c', '#a3142f'] };
   function gemPath(cx, cy, r) {
     return 'M' + cx + ' ' + (cy - r) + 'L' + (cx + r) + ' ' + cy + 'L' + cx + ' ' + (cy + r) + 'L' + (cx - r) + ' ' + cy + 'Z';
   }
-  function frameSVG(tier) {
-    var W = CARD_W, H = CARD_H, ring = RING[tier];
-    var hi = FRAME_INK[tier][0], lo = FRAME_INK[tier][1];
-    var m = ring / 2;
-    var s = '<svg class="gc-frame" viewBox="0 0 ' + W + ' ' + H + '" width="' + W + '" height="' + H + '">';
-    // 外圈高光 + 内圈暗线，做出金属厚度
-    s += '<rect x="1" y="1" width="' + (W - 2) + '" height="' + (H - 2) + '" rx="15" fill="none" stroke="' + hi + '" stroke-opacity=".7" stroke-width="1.2"/>';
-    s += '<rect x="' + (ring - 1) + '" y="' + (ring - 1) + '" width="' + (W - ring * 2 + 2) + '" height="' + (H - ring * 2 + 2) +
-      '" rx="' + Math.max(4, 12 - ring / 2) + '" fill="none" stroke="' + lo + '" stroke-opacity=".9" stroke-width="1.5"/>';
-
-    if (tier >= 2) {
-      // 环中线
-      s += '<rect x="' + m + '" y="' + m + '" width="' + (W - m * 2) + '" height="' + (H - m * 2) + '" rx="13" fill="none" stroke="' +
-        lo + '" stroke-opacity=".45" stroke-width=".8"/>';
-      // 四角铆钉
-      [[m, m], [W - m, m], [m, H - m], [W - m, H - m]].forEach(function (p) {
-        s += '<circle cx="' + p[0] + '" cy="' + p[1] + '" r="' + (ring * 0.32) + '" fill="' + hi + '" stroke="' + lo + '" stroke-width=".8"/>';
-      });
-    }
+  // 角花：局部坐标原点在内框角点，正方向指向卡面内部
+  function frameCorner(tier, hi, lo) {
+    var g = '';
     if (tier >= 3) {
-      // 边中点的菱形钉饰
-      [[W / 2, m], [W / 2, H - m], [m, H / 2], [W - m, H / 2]].forEach(function (p) {
-        s += '<path d="' + gemPath(p[0], p[1], ring * 0.55) + '" fill="' + hi + '" stroke="' + lo + '" stroke-width=".8"/>';
-      });
-      // 四角护角：L 形压条
-      var L = 34;
-      [[1, 1], [-1, 1], [1, -1], [-1, -1]].forEach(function (d) {
-        var x0 = d[0] > 0 ? 3 : W - 3, y0 = d[1] > 0 ? 3 : H - 3;
-        s += '<path d="M' + x0 + ' ' + (y0 + d[1] * L) + 'V' + y0 + 'H' + (x0 + d[0] * L) + '" fill="none" stroke="' + hi +
-          '" stroke-width="2.4" stroke-linecap="round"/>';
-      });
+      g += '<path d="M3 21V3H21" fill="none" stroke="' + hi + '" stroke-width="1" stroke-linecap="round"/>' +
+        '<circle cx="3" cy="23" r="1.2" fill="' + hi + '"/><circle cx="23" cy="3" r="1.2" fill="' + hi + '"/>';
     }
     if (tier >= 4) {
-      // 两侧符文条
-      [m, W - m].forEach(function (x) {
-        for (var k = -2; k <= 2; k++) {
-          if (!k) continue;
-          s += '<path d="' + gemPath(x, H / 2 + k * 22, ring * 0.28) + '" fill="' + hi + '" fill-opacity=".85"/>';
-        }
-      });
-      // 顶部拱形徽冠
-      s += '<path d="M' + (W / 2 - 36) + ' ' + ring + 'Q' + (W / 2) + ' -12 ' + (W / 2 + 36) + ' ' + ring + 'Z" fill="' + lo + '" stroke="' + hi + '" stroke-width="1.4"/>';
-      s += '<path d="' + gemPath(W / 2, 4, 5) + '" fill="' + hi + '"/>';
-      // 底部徽带
-      s += '<path d="M' + (W / 2 - 46) + ' ' + (H - ring) + 'H' + (W / 2 + 46) + 'L' + (W / 2 + 38) + ' ' + H + 'H' + (W / 2 - 38) + 'Z" fill="' + lo +
-        '" stroke="' + hi + '" stroke-width="1.2"/>';
+      g += '<path d="M3 9Q9 9 9 3" fill="none" stroke="' + hi + '" stroke-width=".8" stroke-opacity=".85"/>' +
+        '<circle cx="7.6" cy="7.6" r="1" fill="' + hi + '"/>';
     }
     if (tier >= 5) {
-      // 王冠
-      var cx = W / 2, top = -2, base = ring + 2;
-      s += '<path d="M' + (cx - 44) + ' ' + base + 'L' + (cx - 40) + ' ' + (top + 6) + 'L' + (cx - 22) + ' ' + (base - 4) + 'L' + cx + ' ' + top +
-        'L' + (cx + 22) + ' ' + (base - 4) + 'L' + (cx + 40) + ' ' + (top + 6) + 'L' + (cx + 44) + ' ' + base + 'Z" fill="url(#lrCrown)" stroke="' + hi + '" stroke-width="1.2"/>';
-      [cx - 40, cx, cx + 40].forEach(function (x, k) {
-        s += '<circle cx="' + x + '" cy="' + (k === 1 ? top + 3 : top + 8) + '" r="3" fill="' + ['#68ddff', '#ff5d8f', '#bd7bff'][k] + '" stroke="#fff" stroke-width=".6"/>';
-      });
-      // 四角大宝石
-      [[m + 2, m + 2], [W - m - 2, m + 2], [m + 2, H - m - 2], [W - m - 2, H - m - 2]].forEach(function (p, k) {
-        s += '<path d="' + gemPath(p[0], p[1], 8) + '" fill="' + ['#ff5d8f', '#68ddff', '#ffe074', '#bd7bff'][k] + '" stroke="#fff" stroke-width="1"/>';
-      });
-      s += '<defs><linearGradient id="lrCrown" x1="0" x2="1"><stop offset="0" stop-color="#ff5d8f"/><stop offset=".35" stop-color="#ffe074"/>' +
-        '<stop offset=".7" stop-color="#68ddff"/><stop offset="1" stop-color="#bd7bff"/></linearGradient></defs>';
+      g += '<path d="M6 28V6H28" fill="none" stroke="' + hi + '" stroke-width=".6" stroke-opacity=".55"/>' +
+        '<path d="M28 6q3-2.5 5 0q-2 2.5-5 0Z" fill="' + hi + '" fill-opacity=".8"/>' +
+        '<path d="M6 28q-2.5 3 0 5q2.5-2 0-5Z" fill="' + hi + '" fill-opacity=".8"/>';
     }
+    if (tier >= 2) {
+      g += '<path d="' + gemPath(0, 0, tier >= 3 ? 4.2 : 3.4) + '" fill="' + hi + '" stroke="' + lo + '" stroke-width=".7"/>';
+    }
+    return g;
+  }
+  function frameSVG(tier, hid) {
+    var W = CARD_W, H = CARD_H, ring = RING[tier], m = ring / 2;
+    var hi = FRAME_INK[tier][0], lo = FRAME_INK[tier][1];
+    var defs = '';
+    if (hid) {
+      hi = 'url(#exInk)';
+      defs += '<linearGradient id="exInk" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffd1e0"/><stop offset=".3" stop-color="#fff2b8"/>' +
+        '<stop offset=".6" stop-color="#c8f4ff"/><stop offset="1" stop-color="#e6d2ff"/></linearGradient>';
+    }
+    var s = '<svg class="gc-frame" viewBox="0 0 ' + W + ' ' + H + '" width="' + W + '" height="' + H + '">';
+    // 外缘高光 + 内缘压线：一条细金属边
+    s += '<rect x="1.2" y="1.2" width="' + (W - 2.4) + '" height="' + (H - 2.4) + '" rx="15" fill="none" stroke="' + hi + '" stroke-opacity=".55" stroke-width="1"/>';
+    s += '<rect x="' + (ring - .6) + '" y="' + (ring - .6) + '" width="' + (W - ring * 2 + 1.2) + '" height="' + (H - ring * 2 + 1.2) +
+      '" rx="9.5" fill="none" stroke="' + lo + '" stroke-opacity=".9" stroke-width="1.2"/>';
+    if (tier >= 2) {
+      // 双线：框带中央一道刻线
+      s += '<rect x="' + m + '" y="' + m + '" width="' + (W - m * 2) + '" height="' + (H - m * 2) + '" rx="12.5" fill="none" stroke="' +
+        lo + '" stroke-opacity=".5" stroke-width=".7"/>';
+    }
+    if (tier >= 3) {
+      // 内框一道细金线，像书页压印
+      s += '<rect x="' + (ring + 3.5) + '" y="' + (ring + 3.5) + '" width="' + (W - ring * 2 - 7) + '" height="' + (H - ring * 2 - 7) +
+        '" rx="7" fill="none" stroke="' + hi + '" stroke-opacity=".28" stroke-width=".6"/>';
+    }
+    [[1, 1], [-1, 1], [1, -1], [-1, -1]].forEach(function (d) {
+      var x = d[0] > 0 ? ring : W - ring, y = d[1] > 0 ? ring : H - ring;
+      s += '<g transform="translate(' + x + ' ' + y + ') scale(' + d[0] + ' ' + d[1] + ')">' + frameCorner(tier, hi, lo) + '</g>';
+    });
+    if (tier >= 4) {
+      // 两侧腰线小菱 + 底部中央小菱
+      [[m, H / 2], [W - m, H / 2], [W / 2, H - ring]].forEach(function (p) {
+        s += '<path d="' + gemPath(p[0], p[1], 3) + '" fill="' + hi + '" stroke="' + lo + '" stroke-width=".6"/>';
+      });
+      // 顶部中央：一颗嵌在框带上的椭圆宝石，两侧短横线收束
+      var cx = W / 2, cy = ring, gc = FRAME_GEM[tier] || FRAME_GEM[5];
+      var gid = hid ? 'exGem' : 'fgem' + tier;
+      if (hid) {
+        defs += '<linearGradient id="exGem" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff9ec0"/><stop offset=".35" stop-color="#ffe680"/>' +
+          '<stop offset=".65" stop-color="#8ee8ff"/><stop offset="1" stop-color="#c49bff"/></linearGradient>';
+      } else {
+        defs += '<radialGradient id="' + gid + '" cx=".38" cy=".32" r=".8"><stop offset="0" stop-color="#fff"/><stop offset=".25" stop-color="' + gc[0] +
+          '"/><stop offset="1" stop-color="' + gc[1] + '"/></radialGradient>';
+      }
+      s += '<path d="M' + (cx - 30) + ' ' + m + 'H' + (cx - 13) + 'M' + (cx + 13) + ' ' + m + 'H' + (cx + 30) + '" stroke="' + hi + '" stroke-width="1" stroke-linecap="round"/>';
+      if (tier >= 5) s += '<ellipse class="gc-gem-halo" cx="' + cx + '" cy="' + cy + '" rx="14" ry="10" fill="' + (hid ? '#fff' : gc[0]) + '" fill-opacity=".35"/>';
+      s += '<ellipse cx="' + cx + '" cy="' + cy + '" rx="9" ry="6.2" fill="' + lo + '" stroke="' + hi + '" stroke-width="1.2"/>';
+      s += '<ellipse cx="' + cx + '" cy="' + cy + '" rx="6.6" ry="4.4" fill="url(#' + gid + ')"/>';
+      s += '<path d="M' + (cx - 2.6) + ' ' + (cy - 1.6) + 'q1.6-1.4 3.4-.8" fill="none" stroke="#fff" stroke-opacity=".85" stroke-width=".8" stroke-linecap="round"/>';
+    }
+    if (defs) s += '<defs>' + defs + '</defs>';
     return s + '</svg>';
   }
 
@@ -1308,9 +1321,19 @@
     card.style.setProperty('--glow', th.glow);
     card.style.setProperty('--ground', th.ground);
 
-    var ring = RING[tier];
-    var innerW = CARD_W - ring * 2;
+    var fkey = word.hid ? 'ex' : FRAME_KEY[tier];
+    var fimg = global.FRAME_IMG && global.FRAME_IMG[fkey];
+    var ring = RING[tier], innerW = CARD_W - ring * 2;
     card.style.setProperty('--ring', ring + 'px');
+    if (fimg) {
+      // 图片边框：内容区按实测框带厚度内缩，压进框带 1.5px 避免透缝
+      var raw = global.FRAME_INSET[fkey];
+      var ins = raw.map(function (v) { return Math.max(0, v - 1.5) + 'px'; });
+      card.classList.add('gc-img');
+      card.style.setProperty('--in', ins[2] + ' ' + ins[1] + ' ' + ins[3] + ' ' + ins[0]);
+      card.style.setProperty('--band-top', raw[2] + 'px');
+      innerW = CARD_W - parseFloat(ins[0]) - parseFloat(ins[1]);
+    }
 
     var lite = !!opts.lite;
     var html = word.hid && !lite ? cardAuraSVG() : '';
@@ -1319,13 +1342,13 @@
     html += '<div class="gc-art">' +
       (tier >= 3 && !lite ? '<span class="gc-rays"></span>' : '') +
       tilesHTML(word, levels, th, innerW - 28, 116) +
-      '<div class="gc-badge">' + lvGem(word.lvl || cLv) + '</div>' +
-      '<div class="gc-tier">' + (word.hid ? 'EX' : T.code) + '</div>' +
+      (fimg ? '' : '<div class="gc-badge">' + lvGem(word.lvl || cLv) + '</div>' +
+          '<div class="gc-tier">' + (word.hid ? 'EX' : T.code) + '</div>') +
       '</div>';
 
     var plateFs = opts.compact
       ? Math.min(38, Math.floor((innerW - 24) / (word.w.length * 0.66)))
-      : Math.min(24, Math.floor((innerW - 40) / (word.w.length * 0.72)));
+      : Math.min(30, Math.floor((innerW - 40) / (word.w.length * 0.72)));
     html += '<div class="gc-plate"><span class="plate-word" style="font-size:' + plateFs + 'px">' +
       word.w.toLowerCase() + '</span></div>';
     var wk = weaponKinds(word, levels);
@@ -1343,7 +1366,16 @@
       '</div>';
 
     if (tier >= 4 && !lite) html += '<span class="gc-holo"></span>';
-    html += '</div>' + frameSVG(tier);
+    html += '</div>';
+    // 图片边框：品级宝石、等级圆章压在框的左上 / 右上角
+    if (fimg) {
+      html += '<img class="gc-fimg" src="' + fimg + '" alt="">' +
+        '<img class="gc-rank" src="' + global.GEM_IMG[fkey] + '" alt="">' +
+        '<div class="gc-title"><b>' + (word.hid ? 'EX' : T.code) + '</b></div>' +
+        '<div class="gc-lv" style="background-image:url(' + global.LV_IMG[fkey] + ')"><b>' + (word.lvl || cLv) + '</b></div>';
+    } else {
+      html += frameSVG(tier, !!word.hid);
+    }
 
     // 列表用：去掉 SVG 动画和模糊滤镜层（隐藏款流光等），只留静态外观
     if (lite) {

@@ -16,7 +16,7 @@ const style = fs.readFileSync(path.join(src, 'style.css'), 'utf8');
 const ver = Date.now().toString(36).slice(-5);
 
 const SCRIPTS = [
-  'glyphs', 'words', 'words-bulk', 'card', 'fx', 'sfx',
+  'glyphs', 'words', 'words-bulk', 'frames', 'card', 'fx', 'sfx',
   'stages', 'battle', 'capture', 'app',
 ];
 
