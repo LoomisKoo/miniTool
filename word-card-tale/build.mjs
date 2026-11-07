@@ -28,6 +28,7 @@ const wordsBulk = fs.readFileSync(path.join(__dirname, 'src/words-bulk.js'), 'ut
 const frames = fs.readFileSync(path.join(__dirname, 'src/frames.js'), 'utf8');
 const card = fs.readFileSync(path.join(__dirname, 'src/card.js'), 'utf8');
 const fx = fs.readFileSync(path.join(__dirname, 'src/fx.js'), 'utf8');
+const tts = fs.readFileSync(path.join(__dirname, 'src/tts.js'), 'utf8');
 const sfx = fs.readFileSync(path.join(__dirname, 'src/sfx.js'), 'utf8');
 const stages = fs.readFileSync(path.join(__dirname, 'src/stages.js'), 'utf8');
 const battle = fs.readFileSync(path.join(__dirname, 'src/battle.js'), 'utf8');
@@ -35,7 +36,7 @@ const capture = fs.readFileSync(path.join(__dirname, 'src/capture.js'), 'utf8');
 const app = fs.readFileSync(path.join(__dirname, 'src/app.js'), 'utf8');
 
 // 所有 JS 合并成单文件 app.js
-const bundle = [glyphs, words, wordsBulk, frames, card, fx, sfx, stages, battle, capture, app].join('\n\n');
+const bundle = [glyphs, words, wordsBulk, frames, card, fx, tts, sfx, stages, battle, capture, app].join('\n\n');
 
 // 小红书容器顶部自带约 44px 导航栏，且会覆盖页面顶部的交互区域。
 // 其他平台保持原来的布局；小红书产物在这里追加平台专属适配，避免污染通用源码预览。
@@ -46,22 +47,41 @@ const XHS_CHROME_CSS = `
   --safe-b: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
   --nav-h: 44px;
   --xhs-nav: calc(var(--safe-t) + var(--nav-h));
+  --xhs-content-top: calc(8px + var(--xhs-nav));
+}
+/* 页面根背景继续铺到小红书导航栏下方；只给页面内容预留顶部操作空间。 */
+html,
+body,
+#app {
+  min-height: 100%;
 }
 .screen {
-  padding-top: calc(14px + var(--xhs-nav));
+  padding-top: var(--xhs-content-top);
 }
 .sheet:not(#mineSheet) .sheet-head,
 #mineSheet.achievement-page .sheet-head {
-  padding-top: calc(16px + var(--xhs-nav));
+  padding-top: var(--xhs-content-top);
 }
 .quiz {
-  padding-top: calc(20px + var(--xhs-nav));
+  padding-top: 0;
 }
+.quiz-top.sheet-head {
+  padding-top: var(--xhs-content-top);
+}
+/* 收服/默写是独立的全屏页面，背景铺满顶部，HUD 和退出按钮避开导航栏。 */
 .capw {
-  padding-top: calc(14px + var(--xhs-nav));
+  padding-top: var(--xhs-content-top);
 }
+.cap-quit {
+  top: var(--xhs-content-top);
+}
+/* 地图容器有 10px 顶部内边距给地区卡发光留位，扣掉后首行与其他页面对齐 */
+#screenExpedition {
+  padding-top: calc(var(--xhs-content-top) - 10px);
+}
+/* 战斗页的画布背景保持全屏，只把返回、暂停等操作按钮下移。 */
 .sx-top {
-  padding-top: calc(8px + var(--xhs-nav));
+  padding-top: var(--xhs-content-top);
 }
 `;
 

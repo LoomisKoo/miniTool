@@ -8,6 +8,7 @@
   var Card = window.Card;
   var FX = window.FX;
   var Capture = window.Capture;
+  var TTS = window.TTS || { supported: false, speak: function () { return false; }, stop: function () {}, diag: function () { return {}; } };
   var Sfx = window.Sfx || { play: function () {}, recent: function () { return false; } };
   function sfx(n, a) { try { Sfx.play(n, a); } catch (e) {} }
 
@@ -15,6 +16,12 @@
   for (var i = 0; i < WORDS.length; i++) BY_WORD[WORDS[i].w] = WORDS[i];
 
   var $ = function (id) { return document.getElementById(id); };
+
+  // iOS 首次发声必须在手势里解锁，这里在第一次触摸时就打开音频通道
+  if (document.addEventListener) {
+    document.addEventListener('touchstart', function () { try { TTS.unlock && TTS.unlock(); } catch (e) {} }, { once: true, passive: true });
+  }
+
   var stage = $('stage');
   var KEY = 'wordcodex.v3';
   var DEV_MODE = false;
@@ -480,6 +487,7 @@
     if (el) el.textContent = DEV_MODE ? '∞' : n;
     renderDrawBtn();
     updateDailyBrief();
+    if (!pileWrap && stage && stage.querySelector('.empty-pile')) showEmptyPile();
   }
   // 今日次数用完时隐藏「再来一组」按钮
   function renderDrawBtn() {
@@ -724,7 +732,7 @@
   // 换背动画可被下一次切换打断，其余动画期间仍锁定
   var reskinTimers = [];
   function reskinPile() {
-    if (!pileWrap) return;
+    if (!pileWrap) { reskinEmptyPile(); return; }
     var interrupted = reskinTimers.length > 0;
     reskinTimers.forEach(clearTimeout);
     reskinTimers = [];
@@ -773,6 +781,38 @@
       reskinTimers = [];
       busy = false;
     }, 200 + idx.length * 60 + 440));
+  }
+
+  // 空卡组（含次数用完）也按新主题翻面换牌背
+  function reskinEmptyPile() {
+    var pile = stage && stage.querySelector('.empty-pile');
+    if (!pile) return;
+    reskinTimers.forEach(clearTimeout);
+    reskinTimers = [];
+    var items = pile.querySelectorAll('.pile-card');
+    var B = Card.BACK_THEMES[state.drawTheme] || Card.BACK_THEMES.all;
+    pile.classList.add('reskin');
+    for (var k = 0; k < items.length; k++) (function (item, k) {
+      item.style.setProperty('--i', k);
+      item.style.setProperty('--bk-glow', B.foil);
+      item.classList.remove('rs-in', 'rs-out', 'deny');
+      void item.offsetWidth;
+      item.classList.add('rs-out');
+      reskinTimers.push(setTimeout(function () {
+        var old = item.querySelector('.card');
+        var node = Card.renderBack(1, state.drawTheme);
+        node.style.transform = old ? old.style.transform : '';
+        if (old) item.replaceChild(node, old); else item.appendChild(node);
+        item.classList.remove('rs-out');
+        item.classList.add('rs-in');
+        sfx('flick', k);
+      }, 200 + k * 60));
+    })(items[k], k);
+    reskinTimers.push(setTimeout(function () {
+      pile.classList.remove('reskin');
+      for (var j = 0; j < items.length; j++) items[j].classList.remove('rs-in');
+      reskinTimers = [];
+    }, 200 + items.length * 60 + 440));
   }
 
   /* 每批抽卡：70% 新词 + 30% 复习。
@@ -1064,13 +1104,44 @@
     }, 340);
   }
 
-  function autoDraw() {
-    if (busy || pileWrap) return;
-    if (quotaLeft() <= 0) {
-      $('hint').textContent = '今日次数已用完 · 做每日任务换次数';
-      return;
+  function showEmptyPile() {
+    if (busy || pileWrap || !stage) return;
+    var canDraw = quotaLeft() > 0;
+    var old = stage.querySelector('.empty-pile');
+    if (old && old.classList.contains('no-quota') === !canDraw) return;
+    var pile = mk('div', 'pile empty-pile' + (canDraw ? '' : ' no-quota'));
+    var kh = pileScale();
+    for (var i = 0; i < 3; i++) {
+      var item = mk('div', 'pile-card empty-slot' + (canDraw ? ' back' : ''));
+      var cw = Math.round(Card.CARD_W * kh);
+      item.style.width = cw + 'px';
+      item.style.height = Math.round(Card.CARD_H * kh) + 'px';
+      item.style.marginLeft = i ? -Math.round(cw * 0.22) + 'px' : '0';
+      var node = Card.renderBack(1, state.drawTheme);
+      node.style.transform = 'scale(' + kh.toFixed(3) + ')';
+      item.appendChild(node);
+      item.onclick = (function (idx, el) {
+        return function () {
+          if (quotaLeft() > 0) { openEmptyCard(idx); return; }
+          el.classList.remove('deny');
+          void el.offsetWidth;
+          el.classList.add('deny');
+          sfx('deny');
+          buzz(30);
+        };
+      })(i, item);
+      pile.appendChild(item);
     }
+    stage.innerHTML = '';
+    stage.appendChild(pile);
+    $('hint').textContent = canDraw ? '点一张直接翻开' : '今日次数已用完 · 做每日任务换次数';
+    renderDrawBtn();
+  }
+  // 空卡组：点哪张就生成本组并直接翻开那张，不再先换一组
+  function openEmptyCard(i) {
+    if (busy || pileWrap || quotaLeft() <= 0) return;
     draw(true);
+    if (pileWrap) openPile(i);
   }
 
   // 拆封后：三张卡并排，点一张就放大翻面去拼
@@ -1435,7 +1506,7 @@
     if (name === 'expedition') renderExpedition();
     else pauseHangarPreview();
     if (name === 'mine') renderMine();
-    if (name === 'draw') { refreshCounts(); renderQuota(); updateDailyBrief(); autoDraw(); }
+    if (name === 'draw') { refreshCounts(); renderQuota(); updateDailyBrief(); showEmptyPile(); }
   }
 
   /* ── 漫游页 ───────────────────────────────────── */
@@ -1456,7 +1527,7 @@
   }
 
   // 真实卡面缩略图：整张卡等比缩小
-  function cardThumb(w, width) {
+  function cardThumb(w, width, extra) {
     var scale = width / Card.CARD_W;
     var box = mk('div', 'cthumb');
     box.style.width = width + 'px';
@@ -1464,7 +1535,7 @@
     // 圆角跟着缩放走，否则和外框对不上会被切掉
     box.style.borderRadius = Math.max(3, Math.round(16 * scale)) + 'px';
     // 缩到 220 以下用紧凑版：关键数据（等级 / 稀有度 / 武器 / 单词）放大
-    var inner = Card.render(w, { mastery: starsOf(w), levels: levelsOf(w), compact: width < 220, lite: true });
+    var inner = Card.render(w, { mastery: starsOf(w), levels: levelsOf(w), compact: width < 220, lite: true, mask: !!(extra && extra.mask) });
     inner.classList.add('cthumb-in');
     inner.style.transform = 'scale(' + scale + ')';
     box.appendChild(inner);
@@ -1492,15 +1563,15 @@
     var pp = Card.powerParts ? Card.powerParts(w, lv) : null;
     var cn = String(w.cn || '').split(/[；;]/)[0].trim();
     if (cn.length > 14) cn = cn.slice(0, 14) + '…';
-    var chip = function (tag, k) {
-      return '<i class="ep-chip" style="--c:' + Card.KINDS[k].c + '"><em>' + tag + '</em>' + Card.KINDS[k].nm + '</i>';
+    var chip = function (k) {
+      return '<i class="ep-chip" style="--c:' + Card.KINDS[k].c + '">' + Card.KINDS[k].nm + '</i>';
     };
     info.innerHTML =
       '<b class="ep-word">' + w.w + '</b>' +
       (cn ? '<span class="ep-cn">' + cn + '</span>' : '') +
       '<span class="ep-foot">' +
-        (wk ? '<span class="ep-chips">' + chip('主', wk.main) + (wk.sub ? chip('副', wk.sub) : '') + '</span>' : '<span class="ep-chips"></span>') +
-        (pp ? '<i class="ep-pow"><em>战力</em>' + pp.total + '</i>' : '') +
+        (wk ? '<span class="ep-chips">' + chip(wk.main) + (wk.sub ? chip(wk.sub) : '') + '</span>' : '<span class="ep-chips"></span>') +
+        (pp ? '<i class="ep-pow" aria-label="战力"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 3.5 20.5 3.5 20.5 9.5 10 20 4 14Z" fill="currentColor" opacity=".9"/><path d="M3.5 20.5 7 17" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>' + pp.total + '</i>' : '') +
       '</span>' +
       (lack ? '<span class="ep-warn">精力不足</span>' : '');
   }
@@ -1702,8 +1773,8 @@
     var r = d.getBoundingClientRect();
     return r.height ? Math.max(0, window.innerHeight - r.top) : dockH();
   }
-  // 飞机中心距 dock 顶 140px（矮屏 112px）：护盾下沿约留 70px；标签在 dock 上方 14px
-  function shipLift() { return (window.innerHeight || 800) < 720 ? 112 : 140; }
+  // 飞机中心距 dock 顶 100px（矮屏 80px）：护盾下沿贴近底部标签；标签在 dock 上方 14px
+  function shipLift() { return (window.innerHeight || 800) < 720 ? 80 : 100; }
   function stageGap() { return dockTopGap() + shipLift(); }
   function layoutStage() {
     if (curTab !== 'expedition') return;
@@ -2196,10 +2267,8 @@
     });
     $('bookCards').style.display = bookTab === 'cards' ? '' : 'none';
     $('atlas').style.display = bookTab === 'atlas' ? '' : 'none';
-    if (bookTab !== 'cards') {
-      var tb = $('codexTop');
-      if (tb) tb.classList.remove('on');
-    }
+    var tb = $('codexTop'), sc = $('screenMine');
+    if (tb && sc) tb.classList.toggle('on', sc.scrollTop > 360);
     if (bookTab === 'atlas' && !$('atlas').innerHTML) $('atlas').innerHTML = atlasHTML();
     var mc = $('mcodex');
     if (!mc) {
@@ -2404,6 +2473,13 @@
     th.onclick = function () { openDetail(w); };
     return th;
   }
+  // 未获得的隐藏款：照常显示 EX 卡面、边框、武器与战力，单词与释义换成问号
+  function codexMysteryNode(w, cardW) {
+    var th = cardThumb(Object.assign({}, viewOf(w), { hid: true }), cardW, { mask: true });
+    th.classList.add('book-card', 'codex-mystery');
+    th.onclick = function () { sfx('deny'); toast('隐藏款尚未获得 · 抽卡时有极低概率出现'); };
+    return th;
+  }
 
   // 图鉴列表：mode = true/『reset』重建并回到第一页；『rebuild』重建但保留已加载数量；其余 = 仅追加新一页
   function renderGrid(mode) {
@@ -2413,22 +2489,32 @@
     var scroller = $('screenMine');
     var keepTop = rebuild && !(mode === true || mode === 'reset') ? scroller.scrollTop : 0;
     var q = bookQuery.trim().toLowerCase();
+    var mystery = {};
+    var hidSel = tierOn('hidden');
     var list = sortWords(WORDS.filter(function (w) {
       if (w.w.length > MAX_WORD_LEN) return false;
       if (bookTag && w.tag !== bookTag) return false;
       var got = !!state.owned[w.w];
       var ownedHid = got && !!state.owned[w.w].hid;
+      var normal = true;
       // 「全部」时不排除隐藏款；只有勾了具体品阶却没勾隐藏款时，才把已拥有的隐藏卡滤掉，
       // 避免筛 UR 时混进 EX 隐藏卡
-      if (bookTier.length && !tierOn('hidden') && ownedHid) return false;
-      if (bookFilter === 'got' && !got) return false;
-      if (bookFilter === 'locked' && got) return false;
-      if (bookTier.length) {
+      if (bookTier.length && !hidSel && ownedHid) normal = false;
+      if (bookFilter === 'got' && !got) normal = false;
+      if (bookFilter === 'locked' && got) normal = false;
+      if (normal && bookTier.length) {
         var hit = !!w.tier && tierOn(w.tier);
-        // 勾选隐藏款时，拥有隐藏版本的词卡也命中（不论其基础品阶）
-        if (!hit && ownedHid && tierOn('hidden')) hit = true;
-        if (!hit) return false;
+        if (!hit && ownedHid && hidSel) hit = true;
+        if (!hit) normal = false;
       }
+      if (!normal) {
+        // 勾选隐藏款：每个词都有隐藏版本，「已获得/未获得」按隐藏版本算；未获得的显示问号占位
+        if (!hidSel) return false;
+        if (bookFilter === 'got' && !ownedHid) return false;
+        if (bookFilter === 'locked' && ownedHid) return false;
+        if (!ownedHid) mystery[w.w] = 1;
+      }
+      if (q && mystery[w.w]) return false;
       if (q) {
         // 图鉴对未收录也完整展示，所以释义同样参与搜索
         var hay = w.w + ' ' + (w.cn || '');
@@ -2453,7 +2539,9 @@
     // 只追加增量：清空 grid 会把滚动容器的可滚动高度瞬间压到 0，列表就会弹回顶部
     var upto = Math.min(list.length, codexShown);
     var frag = document.createDocumentFragment();
-    for (var i = codexRendered; i < upto; i++) frag.appendChild(codexCardNode(list[i], cardW));
+    for (var i = codexRendered; i < upto; i++) {
+      frag.appendChild(mystery[list[i].w] ? codexMysteryNode(list[i], cardW) : codexCardNode(list[i], cardW));
+    }
     grid.appendChild(frag);
     codexRendered = upto;
     renderMore(list.length);
@@ -2541,14 +2629,20 @@
 
   /* ── 字母图鉴 ─────────────────────────────────── */
   function atlasHTML() {
-    var out = '<p class="at-intro">字母决定攻击效果；等级越高，背景越华丽、效果越强。隐藏款只能抽到，字母使用哥特体和彩虹描边，最高可升到 Lv6。</p>';
-    [['护盾', 'A E I O U', '获得护盾', 'A'], ['散射', 'B P R G', '三向散射', 'B'],
-     ['减速', 'C F S T', '冰缓敌人', 'S'], ['激光', 'D K M N V W X Z', '贯穿激光', 'K'],
-     ['追踪', 'H J L Q Y', '自动追敌', 'L']].forEach(function (t) {
+    var out = '<p class="at-intro">字母等级会强化主 / 副武器词条，也会提供主武器伤害、暴击率、大招蓄力、受击无敌等通用属性。普通卡最高 Lv5；隐藏款 EX 只能通过抽卡获得，字母可升至 Lv6。</p>';
+    var groups = {};
+    'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').forEach(function (ch) {
+      var k = Card.letterKind(ch);
+      (groups[k] = groups[k] || []).push(ch);
+    });
+    ['shield', 'blast', 'frost', 'pierce', 'thunder', 'tide', 'blade', 'swift'].forEach(function (k) {
+      var ls = groups[k], info = Card.KINDS[k];
+      if (!ls) return;
+      var rep = ls[0];
       var h = '<div class="at-tiles">';
-      for (var lv = 1; lv <= 5; lv++) h += '<div class="at-cell">' + Card.typeTileSVG(t[3], lv, 46) + 'Lv' + lv + '</div>';
-      h += '<div class="at-cell mythic">' + Card.typeTileSVG(t[3], 5, 46, { mythic: true }) + '隐藏款</div>';
-      out += '<div class="at-row"><div class="at-lab"><b>' + t[0] + '</b><span>' + t[1] + ' · ' + t[2] + '</span></div>' + h + '</div></div>';
+      for (var lv = 1; lv <= 5; lv++) h += '<div class="at-cell">' + Card.typeTileSVG(rep, lv, 46, { compact: true }) + 'Lv' + lv + '</div>';
+      h += '<div class="at-cell mythic">' + Card.typeTileSVG(rep, 5, 46, { mythic: true, compact: true }) + '隐藏款</div>';
+      out += '<div class="at-row"><div class="at-lab"><b>' + info.nm + '</b><span>' + ls.join(' ') + ' · ' + info.shot + '</span></div>' + h + '</div></div>';
     });
     return out;
   }
@@ -2570,7 +2664,9 @@
     var lv = levelsOf(w);
     var flip = mk('div', 'dflip');
     var inner = mk('div', 'dflip-in');
-    inner.appendChild(Card.render(w, { mastery: starsOf(w), levels: lv }));
+    var face = Card.render(w, { mastery: starsOf(w), levels: lv });
+    mountCardSpeak(face, w);
+    inner.appendChild(face);
     var back = mk('div', 'dflip-back');
     var cv = document.createElement('canvas');
     var tag = mk('div', 'dflip-tag');
@@ -2579,19 +2675,95 @@
     back.appendChild(tag);
     inner.appendChild(back);
     flip.appendChild(inner);
-    flip.onclick = function () {
+    flip._toggle = function () {
       var on = flip.classList.toggle('flipped');
       sfx('page');
       if (on) {
-        if (!window.Battle || !Battle.preview) return;
-        var pv = Battle.preview(cv, w, lv, { bottom: Math.round(back.offsetHeight * 0.22) });
-        if (pv) tag.innerHTML = '满火力 <b>' + powerPips(pv) + '</b> + 觉醒';
+        if (window.Battle && Battle.preview) {
+          var pv = Battle.preview(cv, w, lv, { bottom: Math.round(back.offsetHeight * 0.22) });
+          if (pv) tag.innerHTML = '满火力 <b>' + powerPips(pv) + '</b> + 觉醒';
+        }
       } else if (cv._raf) {
         cancelAnimationFrame(cv._raf);
         cv._raf = null;
       }
+      syncFlipBtn(on);
+      return on;
     };
+    flip.onclick = function () { flip._toggle(); };
     return flip;
+  }
+
+  function syncFlipBtn(on) {
+    var btn = $('detailFlip');
+    if (!btn) return;
+    btn.classList.toggle('back', !!on);
+    btn.setAttribute('aria-label', on ? '看正面' : '翻转卡牌');
+    var lab = btn.querySelector('em');
+    if (lab) lab.textContent = on ? '正面' : '翻面';
+  }
+
+  // 音标旁紧凑发音条：小喇叭示意 + 美 / 英点按发音，不触发翻面
+  function mountCardSpeak(card, w) {
+    var ph = card.querySelector('.gc-ph');
+    if (!ph || !w || !w.w) return;
+    var seal = mk('div', 'spk-seal');
+    seal.innerHTML =
+      '<span class="spk-ico" aria-hidden="true">' +
+        '<svg viewBox="0 0 24 24"><path d="M4 9v6h3.5L12 19V5L7.5 9H4zm10.2-2.2v2a3.2 3.2 0 0 1 0 6.4v2a5.2 5.2 0 0 0 0-10.4z"/></svg>' +
+      '</span>' +
+      '<button class="spk-side" type="button" data-accent="us" aria-label="美式发音">美</button>' +
+      '<button class="spk-side" type="button" data-accent="uk" aria-label="英式发音">英</button>';
+    seal.addEventListener('click', function (e) { e.stopPropagation(); });
+    seal.addEventListener('touchstart', function (e) { e.stopPropagation(); }, { passive: true });
+    ph.appendChild(seal);
+
+    var sides = seal.querySelectorAll('.spk-side');
+    var accent = 'us';
+    var pulse = function () {
+      seal.classList.remove('saying');
+      void seal.offsetWidth;
+      seal.classList.add('saying');
+      setTimeout(function () { seal.classList.remove('saying'); }, 500);
+    };
+    var say = function (a) {
+      if (!TTS.supported) { toast('当前环境不支持发音'); return; }
+      if (!TTS.hasEnglish()) { toast('设备缺少英语语音包'); return; }
+      accent = a === 'uk' ? 'uk' : 'us';
+      TTS.speak(w.w, a);
+      sfx('tap');
+      pulse();
+    };
+
+    for (var i = 0; i < sides.length; i++) {
+      (function (btn) {
+        var timer = null, long = false;
+        btn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          if (long) { long = false; return; }
+          say(btn.getAttribute('data-accent'));
+        });
+        // 长按任一口音 → 诊断
+        btn.addEventListener('touchstart', function () {
+          long = false;
+          timer = setTimeout(function () { long = true; ttsDiag(); }, 600);
+        }, { passive: true });
+        var clear = function () { if (timer) { clearTimeout(timer); timer = null; } };
+        btn.addEventListener('touchend', clear, { passive: true });
+        btn.addEventListener('touchcancel', clear, { passive: true });
+        btn.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+      })(sides[i]);
+    }
+
+    // 音标点读：沿用上次口音
+    var ipa = ph.querySelector('.ipa');
+    if (ipa && (w.ph || w.w)) {
+      ipa.classList.add('say');
+      ipa.addEventListener('click', function (e) {
+        e.stopPropagation();
+        say(accent);
+      });
+    }
   }
 
   function openDetail(w0) {
@@ -2602,8 +2774,20 @@
     var oldCv = box.querySelector('canvas');
     if (oldCv && oldCv._raf) { cancelAnimationFrame(oldCv._raf); oldCv._raf = null; }
     box.innerHTML = '';
-    box.appendChild(buildDetailFlip(w));
-    $('detailTier').textContent = tierLabel(w);
+    var flip = buildDetailFlip(w);
+    box.appendChild(flip);
+    syncFlipBtn(false);
+    var flipBtn = $('detailFlip');
+    if (flipBtn) {
+      flipBtn.classList.remove('spin');
+      flipBtn.onclick = function (e) {
+        e.stopPropagation();
+        flip._toggle();
+        flipBtn.classList.remove('spin');
+        void flipBtn.offsetWidth;
+        flipBtn.classList.add('spin');
+      };
+    }
     var acts = $('detailActions');
     acts.innerHTML = '';
     if (owned) {
@@ -2622,6 +2806,7 @@
     var foot = '<p class="dfoot">' + (TAGS[w.tag] ? TAGS[w.tag] + ' · ' : '') + (at ? '收于 ' + at.getFullYear() + '.' + (at.getMonth() + 1) + '.' + at.getDate() + ' · ' : '') +
       (owned ? '看过答案 ' + (rec(w).pk || 0) + ' 次' : '尚未收录') + '</p>';
     $('detailEntry').innerHTML = entryHTML(w) + foot;
+    bindSpeak(w);
     $('detailMeta').classList.add('detail-build');
     $('detailMeta').innerHTML = powerInfo(w) + xpMini(w0);
     var helpBtn = $('detailMeta').querySelector('[data-pow-help]');
@@ -2675,13 +2860,16 @@
   function traitHelp(w) {
     var traits = Card.letterTraits(w, levelsOf(w)) || [];
     var rows = traits.map(function (t, i) {
-      return '<div><b>' + w.w.charAt(i).toUpperCase() + ' · ' + t.name + '</b>' +
+      var tag = (t.role === 'aux' || t.role === 'resonance') ? (t.role === 'resonance' ? '共鸣' : '通用') : t.role === 'sub' ? '副武器' : '主武器';
+      return '<div><b>' + w.w.charAt(i).toUpperCase() + ' · ' + tag + ' · ' + t.name + '</b>' +
         '<span>基础 ' + t.base + '，每级幅度 ' + t.step + ' × 成长率 ' + t.grow +
         ' → 当前 ' + t.text.replace(t.unit + ' ', '') + '</span></div>';
     }).join('');
     var dlg = mk('div', 'pw-dlg');
     dlg.innerHTML = '<div class="pw-box trait-help-box">' +
       '<h3>字母词条怎么算？</h3>' +
+      '<p>主 / 副武器由字母<strong>构成</strong>决定，升级不会更换武器。</p>' +
+      '<p>主 / 副类字母强化自己的武器；其余字母提供<strong>通用词条</strong>（主武器伤害、暴击率、大招蓄力速度、受击无敌），升级一样有真实收益。</p>' +
       '<p>每个字母有自己的基础值和升级幅度，成长率只作用于升级部分。</p>' +
       '<p class="pw-note">当前值 = 基础值 + 四舍五入（(Lv − 1) × 每级增量 × 成长率）</p>' +
       '<div class="trait-calc">' + rows + '</div>' +
@@ -2697,7 +2885,7 @@
     var oldTraits = $('detailTraits');
     if (oldTraits) oldTraits.parentNode.removeChild(oldTraits);
     if (!box) {
-      box = mk('div', 'lv-panel');
+      box = mk('div', 'lv-panel lg-panel');
       box.id = 'detailLv';
       $('detailMeta').appendChild(box);
     }
@@ -2715,12 +2903,14 @@
       var trait = traits[i];
       var full = lv[i] >= cap;
       var locked = !full && stageOf(w) < stageNeedFor(lv[i] + 1);
-      var item = mk('div', 'lg-card lv' + Math.min(lv[i], 6) + (full ? ' full' : '') + (locked ? ' locked' : '') +
-        (!full && lv[i] <= cl ? ' next' : ''));
+      var item = mk('div', 'lg-card role-' + (trait.role || 'main') + ' lv' + Math.min(lv[i], 6) + (full ? ' full' : '') +
+        (locked ? ' locked' : '') + (!full && lv[i] <= cl ? ' next' : ''));
       item.style.setProperty('--k', Card.KINDS[k].c);
+      var label = (trait.role === 'aux' || trait.role === 'resonance') ? (trait.role === 'resonance' ? '共鸣' : '通用')
+        : (trait.role === 'sub' ? '副 · ' : '主 · ') + Card.KINDS[k].nm;
       item.innerHTML = '<i class="lg-lv">' + (full ? 'MAX' : 'Lv' + lv[i]) + '</i>' +
         '<div class="lg-tile">' + Card.typeTileSVG(ch, Math.min(lv[i], 5), 34, { mythic: hid }) + '</div>' +
-        '<div class="lg-info"><b>' + trait.name + '</b><span>' + trait.text + '</span>' +
+        '<div class="lg-info"><b>' + label + '</b><span>' + trait.text + '</span>' +
         (full ? '' : '<em>' + trait.next + '</em>') + '</div>';
       if (!full) {
         var b = mk('button', 'lg-up');
@@ -2753,36 +2943,171 @@
     }
     var exs = (w.exs && w.exs.length) ? w.exs : (w.ex ? [{ en: w.ex, cn: w.exCn }] : []);
     var exHtml = exs.map(function (e) {
-      return '<div class="ee"><p class="en">' + e.en + '</p><p class="cn">' + e.cn + '</p></div>';
+      return '<div class="ee say" data-en="' + String(e.en || '').replace(/"/g, '&quot;') + '"><p class="en">' + e.en + '</p><p class="cn">' + e.cn + '</p></div>';
     }).join('');
     return '<div class="entry">' + rows + '</div>' +
       (exHtml ? '<div class="exlist">' + exHtml + '</div>' : '');
   }
 
+  // 例句点击朗读（沿用卡面印章上次口音）
+  function bindSpeak(w) {
+    var wrap = $('detailEntry');
+    if (!wrap) return;
+    var exs = wrap.querySelectorAll('.ee.say');
+    for (var j = 0; j < exs.length; j++) {
+      (function (el) {
+        var text = el.getAttribute('data-en') || '';
+        el.addEventListener('click', function (e) {
+          e.stopPropagation();
+          if (!text) return;
+          if (!TTS.supported) { toast('当前环境不支持发音'); return; }
+          if (!TTS.hasEnglish()) { toast('设备缺少英语语音包'); return; }
+          TTS.speak(text, TTS.lastAccent || 'us');
+          el.classList.add('saying');
+          setTimeout(function () { el.classList.remove('saying'); }, 700);
+        });
+      })(exs[j]);
+    }
+  }
+
+  function ttsDiag() {
+    var d = TTS.diag ? TTS.diag() : {};
+    var en = (d.english && d.english.length) ? d.english.join('<br>') : '无';
+    var dlg = mk('div', 'pw-dlg');
+    dlg.innerHTML = '<div class="pw-box">' +
+      '<h3>发音诊断</h3>' +
+      '<div class="trait-calc">' +
+        '<div><b>语音合成 API</b><span>' + (d.supported ? '可用' : '不可用') + '</span></div>' +
+        '<div><b>语音总数</b><span>' + (d.total || 0) + '</span></div>' +
+        '<div><b>英语语音</b><span>' + en + '</span></div>' +
+        '<div><b>美式选用</b><span>' + (d.picked ? d.picked.us : '-') + '</span></div>' +
+        '<div><b>英式选用</b><span>' + (d.picked ? d.picked.uk : '-') + '</span></div>' +
+      '</div>' +
+      '<p class="pw-note">若语音总数为 0，说明当前容器未提供 TTS 引擎，需要改用内置音频方案。</p>' +
+      '<button class="pw-ok">知道了</button></div>';
+    dlg.addEventListener('click', function (e) {
+      if (e.target === dlg || e.target.classList.contains('pw-ok')) dlg.remove();
+    });
+    document.body.appendChild(dlg);
+  }
+
   /* ── 导出图片 ─────────────────────────────────── */
-  function exportImage(w) {
+  var cssCache = null;
+  function pageCSS() {
+    if (cssCache) return cssCache;
+    var out = [];
+    for (var i = 0; i < document.styleSheets.length; i++) {
+      try {
+        var rules = document.styleSheets[i].cssRules;
+        for (var j = 0; j < rules.length; j++) out.push(rules[j].cssText);
+      } catch (e) {}
+    }
+    return (cssCache = out.join('\n'));
+  }
+
+  // 分享海报：真实卡面 + 释义 / 例句 + 收录信息
+  function posterNode(w) {
+    var p = mk('div', 'sv-poster');
+    var head = mk('div', 'sv-head');
+    head.innerHTML = '<b>词卡物语</b>';
+    p.appendChild(head);
+    var cw = mk('div', 'sv-card');
+    cw.appendChild(Card.render(w, { mastery: starsOf(w), levels: levelsOf(w) }));
+    p.appendChild(cw);
+
+    // 卡面已有单词 / 音标 / 释义，这里只补卡面没有的例句
+    var exs = (w.exs && w.exs.length) ? w.exs.slice(0, 2) : (w.ex ? [{ en: w.ex, cn: w.exCn }] : []);
+    if (exs.length) {
+      var info = mk('div', 'sv-info');
+      info.innerHTML = exs.map(function (e) {
+        return '<div class="sv-ex"><p>' + e.en + '</p><p>' + (e.cn || '') + '</p></div>';
+      }).join('');
+      p.appendChild(info);
+    }
+
+    var at = rec(w).at ? new Date(rec(w).at) : null;
+    var foot = mk('div', 'sv-foot');
+    foot.innerHTML = '<span>' + tierLabel(w) + (TAGS[w.tag] ? ' · ' + TAGS[w.tag] : '') + '</span>' +
+      '<span>' + (at ? '收于 ' + at.getFullYear() + '.' + (at.getMonth() + 1) + '.' + at.getDate() + ' · ' : '') +
+      '默写 ' + recWrite(w).wr + '/' + needOf(w) + '</span>';
+    p.appendChild(foot);
+    return p;
+  }
+
+  function posterURL(w, done) {
+    var node = posterNode(w);
+    var host = mk('div');
+    host.style.cssText = 'position:fixed;left:-10000px;top:0;';
+    host.appendChild(node);
+    document.body.appendChild(host);
+    var W = node.offsetWidth, H = node.offsetHeight;
+    document.body.removeChild(host);
+
+    var wrap = document.createElement('div');
+    wrap.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml');
+    wrap.style.width = W + 'px';
+    wrap.style.height = H + 'px';
+    wrap.style.fontFamily = getComputedStyle(document.body).fontFamily;
+    var st = document.createElement('style');
+    st.textContent = pageCSS();
+    wrap.appendChild(st);
+    wrap.appendChild(node);
+    var s = 3;
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + W * s + '" height="' + H * s + '" viewBox="0 0 ' + W + ' ' + H + '">' +
+      '<foreignObject x="0" y="0" width="' + W + '" height="' + H + '">' + new XMLSerializer().serializeToString(wrap) +
+      '</foreignObject></svg>';
+    var img = new Image();
+    img.onload = function () {
+      // Safari 首次绘制可能还没解码 foreignObject 里的图片，稍等再画
+      setTimeout(function () {
+        try {
+          var cv = document.createElement('canvas');
+          cv.width = W * s; cv.height = H * s;
+          var g = cv.getContext('2d');
+          g.drawImage(img, 0, 0, cv.width, cv.height);
+          done(cv.toDataURL('image/png'));
+        } catch (e) { done(null); }
+      }, 80);
+    };
+    img.onerror = function () { done(null); };
+    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  }
+
+  function legacyCardURL(w) {
     var scale = 3;
     var cv = document.createElement('canvas');
     cv.width = Card.CARD_W * scale;
     cv.height = Card.CARD_H * scale;
-    var ctx = cv.getContext('2d');
-    Card.drawToCanvas(ctx, cv.width, cv.height, w, { mastery: starsOf(w), levels: levelsOf(w) });
-    var url = cv.toDataURL('image/png');
-    sfx('shutter');
+    Card.drawToCanvas(cv.getContext('2d'), cv.width, cv.height, w, { mastery: starsOf(w), levels: levelsOf(w) });
+    return cv.toDataURL('image/png');
+  }
 
+  function exportImage(w) {
+    sfx('shutter');
     var ov = mk('div');
     ov.style.cssText =
       'position:fixed;inset:0;z-index:96;background:rgba(12,9,6,.97);display:flex;flex-direction:column;' +
       'align-items:center;justify-content:center;gap:16px;padding:26px;';
-    ov.innerHTML =
-      '<img src="' + url + '" style="max-width:100%;max-height:70vh;box-shadow:0 24px 60px -24px #000">' +
-      '<div style="font-size:11px;letter-spacing:.22em;color:rgba(242,233,216,.45)">长按图片保存</div>';
+    var tip = mk('div');
+    tip.style.cssText = 'font-size:11px;letter-spacing:.22em;color:rgba(242,233,216,.45)';
+    tip.textContent = '生成中…';
+    ov.appendChild(tip);
     var close = mk('button', 'btn');
     close.textContent = '关 闭';
     close.style.cssText = 'padding:0 34px;height:42px;flex:0 0 auto';
-    close.onclick = function () { ov.parentNode.removeChild(ov); };
+    close.onclick = function () { if (ov.parentNode) ov.parentNode.removeChild(ov); };
     ov.appendChild(close);
     document.body.appendChild(ov);
+
+    posterURL(w, function (url) {
+      if (!url) { try { url = legacyCardURL(w); } catch (e) {} }
+      if (!url) { tip.textContent = '生成失败，请截图保存'; return; }
+      var im = new Image();
+      im.src = url;
+      im.style.cssText = 'max-width:100%;max-height:72vh;border-radius:14px;box-shadow:0 24px 60px -24px #000';
+      ov.insertBefore(im, tip);
+      tip.textContent = '长按图片保存';
+    });
   }
 
   /* ── 今日词历 ─────────────────────────────────── */
@@ -3084,6 +3409,7 @@
     var owned = Object.keys(state.owned).length, mastered = countMastered();
     var t2 = 0, t5 = 0, nTier = 0, rTier = 0, sr = 0, ssr = 0, ur = 0, ex = 0;
     var maxLetter = 0, letterUp = 0, totalWrites = 0, practiced = 0, stage3 = 0;
+    var stage2 = 0, xpSum = 0, pureM = 0;
     // 分品阶满级数：让低阶卡也有明确的养成目标（N/R 满级同样计数）
     var nMax = 0, rMax = 0, srMax = 0, ssrMax = 0, urMax = 0, lvSum = 0;
     var pwMax = 0, pwSum = 0;
@@ -3096,7 +3422,10 @@
       var pw = powerCached(w, lv);
       pwMax = Math.max(pwMax, pw); pwSum += pw;
       if ((rec.wr || 0) > 0) practiced++;
-      if ((rec.stage || 0) >= 3) stage3++;
+      if ((rec.stage || 0) >= 2) stage3++;
+      if ((rec.stage || 0) >= 1) stage2++;
+      xpSum += rec.xp || 0;
+      if ((rec.m || 0) >= 3 && !(rec.pk > 0)) pureM++;
       if (cl >= 2) t2++;
       if (cl >= 5) t5++;
       if (w.hid || rec.hid) ex++;
@@ -3195,6 +3524,23 @@
     add('study', 'study', 'write', '默写练习', '累计正确默写 {n} 次', totalWrites, [1, 3, 5, 10, 20, 30, 50, 80, 100, 200, 300, 500, 800, 1000, 2000], '✎');
     add('study', 'study', 'practice', '广泛涉猎', '练习 {n} 个不同单词', practiced, [1, 3, 5, 10, 20, 30, 50, 80, 100, 200, 300, 500], '☰');
     add('study', 'study', 'stage', '熟练进阶', '{n} 个单词达到熟练度第 3 阶', stage3, [1, 3, 5, 10, 20, 30, 50, 80, 100, 200], '↗');
+    // 默写过程：拼对 / 拼错 / 看答案 / 输入 / 点选 / 连对 / 一遍过 / 单日 / 天数 / 熟练度
+    var wOk = stats.wOk || 0, wBad = stats.wBad || 0, wPeek = stats.wPeek || 0;
+    add('study', 'study', 'wok', '拼写达人', '默写累计拼对 {n} 次', wOk, [1, 5, 10, 30, 50, 100, 200, 500, 1000, 2000, 5000], '✔');
+    add('study', 'study', 'wbad', '错中求进', '默写累计拼错 {n} 次', wBad, [1, 5, 10, 30, 50, 100, 200, 500], '✗');
+    add('study', 'study', 'wpeek', '偷看一眼', '默写时累计看答案 {n} 次', wPeek, [1, 5, 10, 30, 50, 100, 200], '◉');
+    add('study', 'study', 'wtype', '键盘侠', '输入模式累计提交 {n} 次', stats.wType || 0, [1, 5, 10, 30, 50, 100, 200, 500, 1000], '⌨');
+    add('study', 'study', 'wtypeok', '一字不差', '输入模式累计拼对 {n} 次', stats.wTypeOk || 0, [1, 5, 10, 30, 50, 100, 200, 500, 1000], '⌨');
+    add('study', 'study', 'wpickok', '拼图高手', '点选模式累计拼对 {n} 次', stats.wPickOk || 0, [1, 5, 10, 30, 50, 100, 200, 500, 1000], '◈');
+    add('study', 'study', 'wrun', '连对不断', '默写连续拼对 {n} 次', stats.wRunBest || 0, [3, 5, 10, 20, 30, 50, 100], '⌁');
+    add('study', 'study', 'wclean', '一遍过', '{n} 次进入默写后不看答案、不出错直接拼对', stats.wClean || 0, [1, 5, 10, 30, 50, 100, 200, 500], '✧');
+    add('study', 'study', 'wpure', '不看答案', '{n} 个单词从未看答案就默写满星', pureM, [1, 3, 5, 10, 20, 50, 100, 200], '◎');
+    add('study', 'study', 'wwords', '默写词汇量', '累计默写过 {n} 个不同单词', stats.wWords || 0, [1, 5, 10, 20, 30, 50, 80, 100, 200, 300, 500, 1000], '☰');
+    add('study', 'study', 'wlong', '长词拼写', '8 字母以上的单词拼对 {n} 次', stats.wLong || 0, [1, 5, 10, 30, 50, 100, 200], '≡');
+    add('study', 'study', 'wday', '单日苦读', '单日默写拼对 {n} 次', stats.wDayBest || 0, [5, 10, 20, 30, 50, 100], '☀');
+    add('study', 'study', 'wdays', '笔耕不辍', '累计 {n} 天进行过默写', stats.wDays || 0, [1, 3, 7, 15, 30, 60, 100, 180, 365], '✍');
+    add('study', 'study', 'stage2', '熟练入门', '{n} 个单词达到熟练度第 2 阶', stage2, [1, 3, 5, 10, 20, 30, 50, 80, 100, 200, 300], '↑');
+    add('study', 'study', 'xpsum', '熟练积累', '所有单词熟练度合计达到 {n} XP', xpSum, [50, 100, 300, 500, 1000, 2000, 5000, 10000, 20000, 50000], '✦');
     add('study', 'study', 'streak', '连续学习', '连续学习 {n} 天', state.streak || 1, [3, 5, 7, 10, 14, 21, 30, 45, 60, 90, 120, 180, 365], '♨');
     add('upgrade', 'upgrade', 'cardlv', '卡牌培养', '{n} 张词卡达到 Lv5', t5, [1, 2, 3, 5, 10, 20, 30, 50, 80, 100, 200], '⬆');
     add('upgrade', 'upgrade', 'cardlv2', '初次升级', '{n} 张词卡达到 Lv2', t2, [1, 3, 5, 10, 20, 30, 50, 80, 100], '◆');
@@ -3335,6 +3681,32 @@
     if (o.wr === undefined) o.wr = 0;
     if (o.pk === undefined) o.pk = 0;
     return o;
+  }
+  // 默写过程统计：写入 state.stats，放弃卡片后也不丢
+  function writeStat(kind, w) {
+    var s = state.stats = state.stats || {}, t = todayStr();
+    if (s.wDayD !== t) { s.wDayD = t; s.wDayN = 0; s.wDays = (s.wDays || 0) + 1; }
+    if (kind === 'ok') {
+      s.wOk = (s.wOk || 0) + 1;
+      s.wDayN++;
+      if (s.wDayN > (s.wDayBest || 0)) s.wDayBest = s.wDayN;
+      s.wRun = (s.wRun || 0) + 1;
+      if (s.wRun > (s.wRunBest || 0)) s.wRunBest = s.wRun;
+      if (curWrite && curWrite.mode === 'type') s.wTypeOk = (s.wTypeOk || 0) + 1;
+      else s.wPickOk = (s.wPickOk || 0) + 1;
+      if (w && w.w.length >= 8) s.wLong = (s.wLong || 0) + 1;
+      if (curWrite && !curWrite.okN && !curWrite.tries && !curWrite.revealed) s.wClean = (s.wClean || 0) + 1;
+      if (curWrite) curWrite.okN = (curWrite.okN || 0) + 1;
+      var ws = s.wSet = s.wSet || {};
+      if (w && !ws[w.w]) { ws[w.w] = 1; s.wWords = (s.wWords || 0) + 1; }
+    } else if (kind === 'bad') {
+      s.wBad = (s.wBad || 0) + 1;
+      s.wRun = 0;
+    } else if (kind === 'peek') {
+      s.wPeek = (s.wPeek || 0) + 1;
+    } else if (kind === 'type') {
+      s.wType = (s.wType || 0) + 1;
+    }
   }
   function recRead(w) {
     var o = state.owned[w.w];
@@ -3523,7 +3895,7 @@
       '<div class="wbar" style="--n:' + need + '"><span id="wBarFill" style="width:' +
       Math.min(100, (o.wr / need) * 100).toFixed(1) + '%"></span></div>' +
       '<div class="wacts">' +
-      '<button class="btn" id="wMode">' + (mode === 'pick' ? '⌨ 手写' : '◈ 点选') + '</button>' +
+      '<button class="btn" id="wMode">' + (mode === 'pick' ? '⌨ 输入' : '◈ 点选') + '</button>' +
       '<button class="btn" id="wPeek">看答案</button>' +
       (mode === 'type' ? '<button class="btn primary" id="wSubmit">提 交</button>' : '') +
       '</div>' +
@@ -3668,7 +4040,9 @@
     if (!curWrite.revealed) {
       curWrite.revealed = true;
       o.pk++;
+      writeStat('peek', w);
       save();
+      checkAchievementUnlocks();
       renderPeekState();
       var body = $('qBody');
       var old = body.querySelector('.wreveal');
@@ -3691,6 +4065,7 @@
     o.wr++;
     o.at = o.at || Date.now();
     o.m = starsOf(w);
+    writeStat('ok', w);
     var gain = addXp(w, XP_PER_WRITE);
     save();
     refreshCounts();
@@ -3707,16 +4082,15 @@
     var left = Math.max(0, needOf(w) - o.wr);
     $('wFoot').innerHTML = left > 0
       ? '<span class="wok">对了　·　再默 ' + left + ' 次满星</span>'
-      : '<span class="wok">' + (o.m >= 3 ? '已掌握' : '完成本轮') + '　·　' + w.w + '</span>' +
-        '<button class="btn" id="wDone" style="margin-top:10px;height:40px">返 回</button>';
-    if (left === 0) {
-      var dn = $('wDone');
-      if (dn) dn.onclick = closeQuiz;
-    }
+      : '<span class="wok">' + (o.m >= 3 ? '已掌握' : '完成本轮') + '　·　' + w.w + '</span>';
+    checkAchievementUnlocks();
   }
 
   function writeWrong() {
     curWrite.tries++;
+    writeStat('bad', curWrite.w);
+    save();
+    checkAchievementUnlocks();
     $('wFoot').innerHTML = '<span class="wbad">顺序不对　·　错 ' + curWrite.tries +
       ' 次　·　可再试，或看答案（会多加 1 次）</span>';
   }
@@ -3727,6 +4101,7 @@
     var w = curWrite.w;
     var val = inp.value.trim().toLowerCase().replace(/\s+/g, '');
     if (!val) return;
+    writeStat('type', w);
 
     if (val === w.w.toLowerCase()) {
       inp.value = '';
@@ -3809,7 +4184,7 @@
   }
 
   /* ── 绑定 ─────────────────────────────────────── */
-  // 先等原生存档读完再开局，否则 autoDraw 会把空状态写回去覆盖旧存档
+  // 先等原生存档读完再开局，避免空状态覆盖旧存档
   load();
   var booted = false;
   function seedDemo() {
@@ -3858,7 +4233,7 @@
     renderBattleQuota();
     updateDailyBrief();
     renderDrawThemes();
-    autoDraw();
+    showEmptyPile();
   }
   sgetNative().then(function (raw) {
     if (booted) return;
@@ -3885,7 +4260,7 @@
   $('energyBuy').onclick = function (e) { e.stopPropagation(); askEnergyBuy(); };
   startEnergyTimer();
   $('dailyClose').onclick = function () { sfx('sheetClose'); $('daily').classList.remove('open'); updateDailyBrief(); };
-  $('detailClose').onclick = function () { sfx('sheetClose'); $('detail').classList.remove('open'); };
+  $('detailClose').onclick = function () { sfx('sheetClose'); TTS.stop(); $('detail').classList.remove('open'); };
   $('expSheetClose').onclick = closeExpSheet;
   $('qBack').onclick = closeQuiz;
 
@@ -3987,10 +4362,43 @@
       if (topRaf || !codexTopBtn) return;
       topRaf = requestAnimationFrame(function () {
         topRaf = 0;
-        var show = curTab === 'mine' && curPane === 'book' && (bookTab === 'cards' || bookTab === 'monsters') &&
+        var show = curTab === 'mine' && curPane === 'book' &&
           mineScrollEl.scrollTop > 360;
         codexTopBtn.classList.toggle('on', show);
       });
+    }, { passive: true });
+  }
+
+  // 「我的」图鉴：左右滑动切换 单词 / 字母 / 怪物 图鉴
+  var paneBook = $('paneBook');
+  if (paneBook) {
+    var sw = null;
+    var hScrollable = function (el) {
+      for (; el && el !== paneBook; el = el.parentNode) {
+        if (el.scrollWidth > el.clientWidth + 2) {
+          var ox = getComputedStyle(el).overflowX;
+          if (ox === 'auto' || ox === 'scroll') return true;
+        }
+      }
+      return false;
+    };
+    paneBook.addEventListener('touchstart', function (e) {
+      var t = e.touches[0];
+      if (e.touches.length !== 1 || /INPUT|TEXTAREA/.test(e.target.tagName) || hScrollable(e.target)) { sw = null; return; }
+      sw = { x: t.clientX, y: t.clientY, at: Date.now() };
+    }, { passive: true });
+    paneBook.addEventListener('touchend', function (e) {
+      if (!sw) return;
+      var t = e.changedTouches[0], dx = t.clientX - sw.x, dy = t.clientY - sw.y;
+      var ok = Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.6 && Date.now() - sw.at < 600;
+      sw = null;
+      if (!ok) return;
+      var keys = ['cards', 'atlas', 'monsters'];
+      var ni = keys.indexOf(bookTab) + (dx < 0 ? 1 : -1);
+      if (ni < 0 || ni >= keys.length) return;
+      sfx('page');
+      bookTab = keys[ni];
+      renderBookTabs();
     }, { passive: true });
   }
 
