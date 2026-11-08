@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>本草</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <header class="top">
+    <h1>本草</h1>
+    <div class="wallet">
+      <span id="money">200 文</span>
+      <span id="rep" class="dim">声望 0</span>
+      <button class="help" id="helpBtn" aria-label="指南">?</button>
+    </div>
+  </header>
+  <main id="main"></main>
+  <nav class="tabbar">
+    <button data-tab="shop" class="on">药铺</button>
+    <button data-tab="farm">药圃</button>
+    <button data-tab="land">山林</button>
+    <button data-tab="atlas">图鉴</button>
+  </nav>
+  <div id="toast"></div>
+
+  <div id="intro" class="intro">
+    <div class="intro-box">
+      <div class="intro-track" id="introTrack">
+        <section class="intro-page">
+          <h2>本草</h2>
+          <p class="lead">你承下一间小药铺。</p>
+          <p>病人上门，你须<b>四诊</b>、<b>辨证</b>、<b>开方</b>。<br>药材不凭空来，得自己种、自己采。</p>
+          <p class="dim">图鉴里的每一味药，都是你亲手种过、用过之后才记住的。</p>
+        </section>
+        <section class="intro-page">
+          <h2>一局只看三样</h2>
+          <p><b>望</b>：面色与舌象</p>
+          <p><b>问</b>：病人自述的症状</p>
+          <p><b>切</b>：脉象</p>
+          <p class="dim">看完不必猜病名，先看系统给的「治法方向」——那是去哪一类药里找。</p>
+        </section>
+        <section class="intro-page">
+          <h2>开方没有标准答案</h2>
+          <p>方子按<b>功效</b>对病人的<b>病机</b>，命中越多越好。</p>
+          <p>缺药可以用同类替代，只会少得几分；<br>但十八反、十九畏一碰就「加重」。</p>
+          <p class="dim">治不好也不必怕，诊金照给，病人三日后再来。</p>
+        </section>
+        <section class="intro-page">
+          <h2>四件事轮着做</h2>
+          <p><b>药铺</b>：一日三次出诊</p>
+          <p><b>药圃</b>：播下种子，现实时间成熟</p>
+          <p><b>山林</b>：今日采药三次，或遣脚夫远行</p>
+          <p><b>图鉴</b>：认药、看方</p>
+        </section>
+      </div>
+      <div class="intro-dots" id="introDots"></div>
+      <div class="intro-actions">
+        <button id="introSkip">跳过</button>
+        <button id="introNext" class="primary">下一步</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="guide" class="sheet" hidden>
+    <div class="sheet-box">
+      <h2>行医指南</h2>
+      <h3>一日的顺序</h3>
+      <p>先<b>收药、补种</b>，再<b>出诊</b>，最后派脚夫远行（回来要几小时，睡一觉正好）。</p>
+      <h3>怎么开方</h3>
+      <p>四诊后系统会给「治法方向」，据此在药柜按功效筛选。选中后可按「君药」指定主药，再确认。</p>
+      <h3>为什么都没治好</h3>
+      <p>多半是<b>证型没辨对</b>，或<b>病机没覆盖全</b>。病例是按你药柜的现状生成的，不会超纲。</p>
+      <h3>缺药怎么办</h3>
+      <p>同类药可替代（评分略降）；也可婉拒病人，不判失败；缺什么就去种、去采。</p>
+      <h3>图鉴怎么涨</h3>
+      <p>种下或采到即「初识」，用它治好病人升「通」，用对多种炮制形态升「精」。</p>
+      <button class="primary" id="guideClose">知道了</button>
+    </div>
+  </div>
+</div>
+<script src="effects.js"></script>
+<script src="regions.js"></script>
+<script src="syndromes.js"></script>
+<script src="herbs.js"></script>
+<script src="preps.js"></script>
+<script src="formulas.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
