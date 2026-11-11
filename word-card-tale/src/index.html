@@ -11,7 +11,6 @@
   <!-- 机库预览：整屏底层，画当前出战卡的满火力弹幕（必须在滚动容器之外，否则会被 overflow 裁掉） -->
   <div class="exp-bg" id="expBg">
     <canvas id="expShip"></canvas>
-    <p class="exp-hangar-tag" id="expShipTag"></p>
   </div>
   <main class="screens">
 
@@ -37,6 +36,8 @@
       <div class="draw-theme-desc" id="drawThemeDesc" aria-live="polite"></div>
       <div class="stage" id="stage"></div>
 
+      <div class="quota-bar" id="quotaBar"></div>
+
       <div class="draw-foot">
         <div class="hint" id="hint">每组 3 张单词卡</div>
         <button class="cta" id="btnDraw">再 来 一 组</button>
@@ -48,30 +49,46 @@
       <div class="exp-map" id="expMap"></div>
 
       <div class="dock exp-dock">
+        <div class="exp-dock-top">
+          <p class="exp-hangar-tag" id="expShipTag"></p>
+          <button class="help-btn exp-help" id="expHelp" type="button" aria-label="漫游玩法说明">?</button>
+        </div>
         <div class="exp-hud">
-          <div class="energy-bar" id="energyBar">
-            <span class="en-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M13 2 4.5 13.2h5.4L9.6 22 19 10.3h-5.6L13 2Z"/></svg></span>
-            <span class="en-pips" id="energyPips" aria-hidden="true"></span>
-            <span class="en-cd" id="energyTimer" hidden></span>
-            <button class="en-buy" id="energyBuy" type="button" aria-label="补给精力">+</button>
-          </div>
           <div class="exp-launch">
-            <button class="exp-pick" id="expPickBtn" type="button">
-              <span class="exp-slot"><span class="exp-pick-card" id="expPickCard"></span></span>
-              <span class="exp-pick-meta">
-                <span class="dock-info" id="expPickInfo">请选择一张词卡</span>
-              </span>
-              <span class="exp-pick-chev" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>
-              </span>
-            </button>
-            <button class="exp-go" id="expStart" disabled>
-              <span class="exp-go-ring" aria-hidden="true"></span>
-              <span class="exp-go-core">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.2 4.8 19 12 8.2 19.2V4.8Z"/></svg>
-                <b>出发</b>
-              </span>
-            </button>
+            <div class="exp-main">
+              <div class="energy-bar" id="energyBar">
+                <span class="en-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M13 2 4.5 13.2h5.4L9.6 22 19 10.3h-5.6L13 2Z"/></svg></span>
+                <span class="en-pips" id="energyPips" aria-hidden="true"></span>
+                <span class="en-cd" id="energyTimer" hidden></span>
+                <button class="en-buy" id="energyBuy" type="button" aria-label="补给精力">+</button>
+              </div>
+              <button class="exp-pick" id="expPickBtn" type="button">
+                <span class="exp-slot"><span class="exp-pick-card" id="expPickCard"></span></span>
+                <span class="exp-pick-meta">
+                  <span class="dock-info" id="expPickInfo">请选择一张词卡</span>
+                </span>
+                <span class="exp-pick-chev" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>
+                </span>
+              </button>
+            </div>
+            <div class="exp-actions">
+              <button class="exp-go" id="expStart" disabled title="挑战当前关卡">
+                <i class="exp-btn-fx" aria-hidden="true"></i>
+                <svg class="exp-btn-ico" viewBox="0 0 24 24" aria-hidden="true">
+                  <path fill="currentColor" d="M12 2.1 13.6 13.5H10.4L12 2.1Z"/>
+                  <path fill="currentColor" d="M7.6 13.3h8.8v1.7H7.6zm3 1.7h2.8v6.3a1.4 1.4 0 0 1-2.8 0v-6.3Z"/>
+                </svg>
+                <b>闯关</b>
+              </button>
+              <button class="exp-endless locked" id="expEndless" type="button" aria-disabled="true" title="通关本地区第 1 关后解锁无尽">
+                <i class="exp-btn-fx" aria-hidden="true"></i>
+                <svg class="exp-btn-ico" viewBox="0 0 26 24" overflow="visible" aria-hidden="true">
+                  <path fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" d="M18.178 8c5.096 0 5.096 8 0 8-5.095 0-7.133-8-12.739-8-4.585 0-4.585 8 0 8 5.606 0 7.644-8 12.74-8z"/>
+                </svg>
+                <span class="exp-endless-lab"><b>无尽</b></span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -316,6 +333,9 @@
 <script src="glyphs.js?v=m4911"></script>
 <script src="words.js?v=m4911"></script>
 <script src="words-bulk.js?v=m4911"></script>
+<script src="gloss.js?v=m4911"></script>
+<script src="gloss-bulk.js?v=m4911"></script>
+<script src="senses.js?v=m4911"></script>
 <script src="frames.js?v=m4911"></script>
 <script src="card.js?v=m4911"></script>
 <script src="fx.js?v=m4911"></script>

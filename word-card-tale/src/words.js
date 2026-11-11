@@ -1,4 +1,4 @@
-/* 词库 · 191 词 / 10 类
+/* 词库 · 核心 328 词 / 16 类（配合 words-bulk.js 的 1572 词，共 1900 词）
    字段: w 单词 | ph 音标 | pos 词性 | cn 释义 | tier 稀有度 1-5 | tag 分类 | ex 例句 | exCn 例句翻译 */
 window.TAGS = {
   basic: '常用',

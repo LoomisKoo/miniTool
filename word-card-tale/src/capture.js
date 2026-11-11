@@ -25,14 +25,13 @@
     return a;
   }
 
-  // 第一轮永远照着卡面拼；只有高稀有度才追加一轮遮词回忆
-  // 轮次只看单词本身：长词（≥8 字母）或罕见词（词表 rarity ≥4）
+  // 每一轮都照着卡面拼，不遮词；长词（≥8 字母）或罕见词（词表 rarity ≥4）多拼一轮
   // 卡等（lv）只决定奖励与特效，不参与轮次判定
   function roundsFor(w) {
     var word = (w && w.w) || '';
     var long = word.length >= 8;
     var rare = !!w && w.tier >= 4;
-    return (long || rare) ? ['copy', 'recall'] : ['copy'];
+    return (long || rare) ? ['copy', 'copy'] : ['copy'];
   }
 
   function skill() {
@@ -60,11 +59,14 @@
   // 卡周围一圈闪烁星芒：位置固定，按序错开亮起
   function starsHtml() {
     var h = '';
-    for (var i = 0; i < 14; i++) {
-      var a = i / 14 * Math.PI * 2 + (i % 2 ? 0.2 : -0.1);
-      var r = 52 + (i * 37 % 17);
-      h += '<i style="--x:' + (50 + Math.cos(a) * r).toFixed(1) + '%;--y:' + (50 + Math.sin(a) * r * 0.86).toFixed(1) +
-        '%;--d:' + (i * 47 % 9) * 45 + 'ms;--s:' + (0.55 + (i * 29 % 10) / 14).toFixed(2) + '"></i>';
+    for (var i = 0; i < 22; i++) {
+      var a = i / 22 * Math.PI * 2 + (i % 2 ? 0.16 : -0.1);
+      var ca = Math.cos(a), sa = Math.sin(a);
+      var t = Math.min(50 / Math.abs(ca || 1e-6), 50 / Math.abs(sa || 1e-6));
+      var r = t + 3 + (i * 37 % 14);
+      h += '<i style="--x:' + (50 + ca * r).toFixed(1) + '%;--y:' + (50 + sa * r).toFixed(1) +
+        '%;--d:' + (i * 43 % 11) * 40 + 'ms;--s:' + (0.6 + (i * 29 % 12) / 10).toFixed(2) +
+        ';--o:' + (i * 31 % 30) + 'deg"></i>';
     }
     return h;
   }
@@ -75,13 +77,13 @@
     root.className = 'capw';
     root.innerHTML =
       '<div class="cap-bg" id="capBg"></div>' +
-      '<div class="cap-whiteout"></div>' +
       '<div class="cap-stage" id="capStage">' +
         '<div class="cap-card" id="capCard">' +
           '<span class="cap-pillar"></span>' +
           '<span class="cap-halo"></span>' +
           '<span class="cap-rays"></span>' +
           '<span class="cap-bloom"></span>' +
+          '<span class="cap-rim"></span>' +
           '<span class="cap-shock s1"></span>' +
           '<span class="cap-shock s2"></span>' +
           '<span class="cap-stars">' + starsHtml() + '</span>' +
@@ -177,10 +179,13 @@
     ui.cfBack.innerHTML = '';
     ui.cfFront.innerHTML = '';
     ui.cfBack.appendChild(Card.renderBack(pick.lv, pick.th));
-    ui.cfFront.appendChild(Card.render(
+    var frontCard = Card.render(
       Object.assign({}, pick.w, { lvl: pick.lv, hid: !!pick.hid }),
-      { mastery: 0, levels: pick.w.w.split('').map(function () { return pick.lv; }) }
-    ));
+      { mastery: 0, levels: pick.w.w.split('').map(function () { return pick.lv; }), perf: true }
+    );
+    ui.cfFront.appendChild(frontCard);
+    // 拼写时卡面也带发音条：音标旁 美/英，与详情页同一套交互
+    if (global.CardSpeak) global.CardSpeak(frontCard, pick.w);
     var sc = SCENE[tier] || SCENE[1];
     root.style.setProperty('--sc-glow', sc.glow);
     root.style.setProperty('--sc-floor', sc.floor);
@@ -201,7 +206,7 @@
 
     ui.capCard.className = 'cap-card fx-t' + tier;
     ui.capCard.removeAttribute('data-tz');
-    root.classList.remove('rv-whiteout', 'tease-cap', 'lit', 'fleeing', 'recall');
+    root.classList.remove('tease-cap', 'lit', 'fleeing', 'recall');
     root.classList.add('teasing');
     ui.capCard.style.setProperty('--flip-dur', flipDur(tier, sub) + 'ms');
     ui.capCard.style.opacity = '1';
@@ -422,34 +427,38 @@
 
   // 揭示特效：每档在上一档基础上叠一层
   var RV_CLASSES = ['rv-flash', 'rv-shock', 'rv-shock2', 'rv-bloom', 'rv-glint', 'rv-rays', 'rv-rays-long',
-    'rv-charge', 'rv-stars', 'rv-pillar', 'rv-halo', 'rv-holo', 'rv-tease', 'tz-ping'];
+    'rv-charge', 'rv-stars', 'rv-stars-long', 'rv-pillar', 'rv-halo', 'rv-holo', 'rv-rim', 'rv-tease', 'tz-ping'];
   function clearReveal() {
     RV_CLASSES.forEach(function (c) { ui.capCard.classList.remove(c); });
     ui.cfIn.classList.remove('rv-punch', 'rv-punch-big');
-    root.classList.remove('rv-whiteout');
   }
 
   function revealFx() {
     var t = S.tier;
     clearReveal();
     void ui.capCard.offsetWidth;
+    // 光只走卡边和卡外（光边、星芒、射线外圈），不用卡心柔光/光柱，避免糊住卡面
     var add = ['rv-flash', 'rv-shock'];
     if (t >= 2) add.push('rv-glint', 'rv-stars');
-    if (t >= 3) add.push('rv-bloom', 'rv-rays');
-    if (t >= 4) add.push('rv-shock2', 'rv-pillar');
-    if (t >= 5) { add.splice(add.indexOf('rv-rays'), 1); add.push('rv-rays-long', 'rv-halo', 'rv-holo'); }
+    if (t >= 3) add.push('rv-rim', 'rv-rays');
+    if (t >= 4) {
+      add.push('rv-shock2');
+      add.splice(add.indexOf('rv-stars'), 1);
+      add.push('rv-stars-long');
+    }
+    if (t >= 5) {
+      add.splice(add.indexOf('rv-rays'), 1);
+      add.push('rv-rays-long', 'rv-halo');
+    }
     add.forEach(function (c) { ui.capCard.classList.add(c); });
     ui.cfIn.classList.add(t >= 4 ? 'rv-punch-big' : 'rv-punch');
-    if (t >= 5) {
-      root.style.setProperty('--wo', t >= 6 ? 'rgba(255,190,245,.6)' : 'rgba(255,224,150,.55)');
-      root.classList.add('rv-whiteout');
-    }
     // 粒子只给中高档，量也收敛，避免廉价感
     if (t >= 3 && global.FX && global.FX.burst) {
       try {
         var box = ui.capCard.getBoundingClientRect();
         global.FX.burst(t, {
           x: box.left + box.width / 2, y: box.top + box.height / 2,
+          w: box.width, h: box.height,
           count: (t >= 6 ? 90 : t >= 5 ? 70 : t >= 4 ? 48 : 28) + (S.sub - 1) * 4,
         });
       } catch (e) {}
@@ -735,14 +744,16 @@
       ui.capWob.className = 'cap-wob win' + (cur.rounds[cur.ri - 1] === 'recall' ? ' veil' : '');
       clearReveal();
       void ui.capCard.offsetWidth;
-      var winFx = ['rv-flash', 'rv-shock', 'rv-shock2', 'rv-bloom', 'rv-glint', 'rv-stars'];
-      if (perfect) winFx.push('rv-rays', 'rv-pillar', 'rv-holo');
+      var winFx = ['rv-flash', 'rv-shock', 'rv-shock2', 'rv-rim', 'rv-glint'];
+      winFx.push(perfect ? 'rv-stars-long' : 'rv-stars');
+      if (perfect) winFx.push('rv-rays');
       if (perfect && cur.tier >= 4) winFx.push('rv-halo');
       winFx.forEach(function (c) { ui.capCard.classList.add(c); });
       if (global.FX && global.FX.burst) {
         var bx = ui.capCard.getBoundingClientRect();
         global.FX.burst(Math.max(3, cur.tier), {
           x: bx.left + bx.width / 2, y: bx.top + bx.height / 2,
+          w: bx.width, h: bx.height,
           count: (perfect ? 70 : 36) + (cur.sub - 1) * 5,
         });
       }

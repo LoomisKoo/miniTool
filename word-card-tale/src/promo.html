@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>词卡物语 · 宣传图</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  /* 类名统一 pm- 前缀；不关卡面动画（射线 / 全息 / 隐藏款光晕都要保留） */
+  html, body { margin: 0; padding: 0; width: 1080px; height: 1440px; overflow: hidden; background: #0d0816; }
+  .pm-slide {
+    position: relative; width: 1080px; height: 1440px; overflow: hidden; color: #fff;
+    background:
+      radial-gradient(ellipse 70% 45% at 50% 55%, rgba(120,60,150,.5) 0, transparent 70%),
+      linear-gradient(180deg, #1a0f2e 0%, #120a22 45%, #0b0714 100%);
+    font-family: 'PingFang SC', 'Hiragino Sans GB', sans-serif;
+  }
+
+  .pm-hd { position: absolute; top: 70px; left: 0; right: 0; text-align: center; z-index: 5; }
+  .pm-t {
+    display: inline-block; font-size: 100px; font-weight: 900; letter-spacing: 6px; line-height: 1.1; white-space: nowrap;
+    background: linear-gradient(180deg, #fff7d6 0%, #ffd77a 42%, #e59a2c 58%, #ffe9a8 100%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    -webkit-text-stroke: 3px #3a1640;
+    filter: drop-shadow(0 6px 0 #3a1640) drop-shadow(0 14px 18px rgba(0,0,0,.7));
+  }
+  .pm-s { margin-top: 22px; font-size: 36px; font-weight: 600; color: #f6e2b0; letter-spacing: 3px; white-space: nowrap; text-shadow: 0 3px 10px rgba(0,0,0,.7); }
+  .pm-s em { font-style: normal; color: #ffd77a; }
+
+  .pm-ft { position: absolute; bottom: 48px; left: 0; right: 0; display: flex; justify-content: center; align-items: center; gap: 16px; z-index: 5; }
+  .pm-ft svg { display: block; width: 64px; height: 64px; filter: drop-shadow(0 4px 8px rgba(0,0,0,.6)); }
+  .pm-ft b { font-size: 40px; font-weight: 900; letter-spacing: 6px; color: #ffe2a0; line-height: 1; }
+  .pm-ft i { font: 600 20px/1 Didot, Georgia, serif; letter-spacing: 8px; color: #c9a86a; font-style: normal; }
+  .pm-tx { display: flex; flex-direction: column; gap: 8px; }
+
+  .pm-cw { position: absolute; width: 330px; height: 406px; transform-origin: center center; overflow: visible; }
+  .pm-cw .card { box-shadow: 0 24px 40px rgba(0,0,0,.55); }
+  /* 全套宣传图：去掉卡外火焰光晕 / 彩虹描边 */
+  .pm-cw .gc-aura,
+  .pm-cw .card.gc-hid::before { display: none !important; }
+  .pm-cw .card.gc-hid { filter: none; box-shadow: 0 24px 40px rgba(0,0,0,.55); }
+  /* 第 5 张学习页再关掉卡内射线和全息，避免糊成一团 */
+  .pm-slide[data-n="5"] .pm-cw .gc-holo,
+  .pm-slide[data-n="5"] .pm-cw .gc-rays { display: none !important; }
+  .pm-slide[data-n="5"] .pm-cw .gc-frame,
+  .pm-slide[data-n="5"] .pm-cw .tile { animation: none !important; }
+  .pm-jack {
+    position: absolute; padding: 14px 28px 16px; border-radius: 18px; z-index: 6; text-align: center; line-height: 1;
+    background: linear-gradient(135deg, #ff6b9a, #ffb347 35%, #ffe066 55%, #5fe0a0 78%, #6fb6ff);
+    color: #2a0f2e; font-weight: 900; border: 4px solid #fff4e0;
+    box-shadow: 0 8px 0 #4a1f5c, 0 16px 24px rgba(0,0,0,.55);
+  }
+  .pm-jack b { display: block; font-size: 52px; letter-spacing: 1px; }
+  .pm-jack span { display: block; margin-top: 6px; font-size: 26px; letter-spacing: 3px; }
+  .pm-burst {
+    position: absolute; left: 50%; top: 52%; width: 900px; height: 900px; margin: -450px 0 0 -450px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(255,230,140,.55) 0, rgba(255,120,180,.22) 28%, transparent 62%);
+    pointer-events: none; z-index: 1;
+  }
+  .pm-ring {
+    position: absolute; left: 50%; top: 52%; width: 520px; height: 520px; margin: -260px 0 0 -260px; border-radius: 50%;
+    border: 6px solid rgba(255,230,140,.7); box-shadow: 0 0 40px rgba(255,200,120,.5), inset 0 0 30px rgba(255,200,120,.25);
+    pointer-events: none; z-index: 1;
+  }
+  .pm-chip {
+    position: relative; display: inline-flex; align-items: center; gap: 10px; padding: 12px 26px; border-radius: 999px;
+    background: rgba(20,10,36,.88); border: 2px solid rgba(255,215,122,.55); color: #ffe9b8;
+    font-size: 30px; font-weight: 700; white-space: nowrap; box-shadow: 0 6px 16px rgba(0,0,0,.5);
+  }
+  .pm-rays {
+    position: absolute; left: 50%; top: 46%; width: 1800px; height: 1800px; margin: -900px 0 0 -900px; border-radius: 50%;
+    background: repeating-conic-gradient(from 0deg, rgba(255,215,122,.16) 0 6deg, transparent 6deg 18deg);
+    -webkit-mask: radial-gradient(circle, transparent 0, transparent 16%, #000 26%, rgba(0,0,0,.6) 38%, transparent 62%);
+            mask: radial-gradient(circle, transparent 0, transparent 16%, #000 26%, rgba(0,0,0,.6) 38%, transparent 62%);
+  }
+  /* 抽卡页主卡：关掉卡内射线 / 全息，光效改到卡外 */
+  .pm-hero .gc-rays, .pm-hero .gc-holo { display: none !important; }
+  .pm-aura {
+    position: absolute; inset: -4px; border-radius: 20px; z-index: -1; pointer-events: none;
+    box-shadow: 0 0 0 2px rgba(255,236,170,.85), 0 0 16px 4px rgba(255,215,122,.75),
+      0 0 46px 14px rgba(255,170,90,.45), 0 0 90px 30px rgba(220,110,255,.28);
+  }
+  .pm-spark {
+    position: absolute; transform: translate(-50%, -50%); z-index: 2; pointer-events: none;
+    filter: drop-shadow(0 0 3px #fff3c4) drop-shadow(0 0 8px rgba(255,200,110,.9));
+  }
+  .pm-spark::before {
+    content: ''; position: absolute; inset: 0;
+    background: radial-gradient(circle, #fff 0 20%, #ffe7a0 50%);
+    clip-path: polygon(50% 0, 57% 43%, 100% 50%, 57% 57%, 50% 100%, 43% 57%, 0 50%, 43% 43%);
+  }
+
+  /* 抽卡 */
+  .pm-odds { position: absolute; left: 90px; right: 90px; top: 1090px; }
+  .pm-odds-cap { text-align: center; font-size: 28px; font-weight: 700; color: #e8dcc0; margin-bottom: 20px; letter-spacing: 4px; }
+  .pm-odds-bar { display: flex; height: 26px; border-radius: 13px; overflow: hidden; box-shadow: 0 0 0 3px rgba(255,255,255,.12); }
+  .pm-odds-lb { display: flex; justify-content: space-between; margin-top: 18px; font-size: 28px; font-weight: 800; }
+  .pm-odds-lb span { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .pm-odds-lb small { font-size: 22px; opacity: .8; font-weight: 600; }
+  .pm-new { position: absolute; padding: 8px 20px; border-radius: 12px; background: #ff5f7e; color: #fff; font-size: 34px; font-weight: 900;
+    letter-spacing: 2px; border: 3px solid #fff3e0; box-shadow: 0 6px 0 #6a1f3a, 0 12px 18px rgba(0,0,0,.5); z-index: 4; }
+  .pm-q { position: absolute; z-index: 4; }
+  .pm-rev { background: #3f8cff; box-shadow: 0 6px 0 #1a3a7a, 0 12px 18px rgba(0,0,0,.5); }
+  .pm-link { position: absolute; left: 692px; top: 990px; font-size: 56px; font-weight: 900; color: #ffe066;
+    text-shadow: 0 0 16px rgba(255,224,102,.8), 0 3px 0 #5a3a10; z-index: 4; }
+
+  /* 稀有度 */
+  .pm-tl { position: absolute; width: 330px; text-align: center; font-size: 32px; font-weight: 800; letter-spacing: 2px; }
+  .pm-tl small { display: block; margin-top: 4px; font-size: 22px; font-weight: 600; opacity: .7; letter-spacing: 4px; }
+
+  /* 武器 */
+  .pm-wp { position: absolute; width: 470px; height: 480px; border-radius: 28px; overflow: hidden;
+    background: linear-gradient(180deg, #1d1438 0%, #2a1a3e 60%, #170e26 100%);
+    box-shadow: 0 0 0 3px rgba(255,255,255,.08), 0 20px 40px rgba(0,0,0,.6); }
+  .pm-wp::before { content: ''; position: absolute; inset: 0;
+    background-image: linear-gradient(rgba(255,255,255,.05) 2px, transparent 2px), linear-gradient(90deg, rgba(255,255,255,.05) 2px, transparent 2px);
+    background-size: 47px 47px; }
+  .pm-wp canvas.pm-fx { position: absolute; left: 0; top: 0; width: 470px; height: 480px; }
+  .pm-mon { position: absolute; image-rendering: pixelated; filter: drop-shadow(0 8px 8px rgba(0,0,0,.45)); }
+  .pm-wnm { position: absolute; left: 22px; top: 20px; display: flex; align-items: center; gap: 12px; z-index: 3; }
+  .pm-wnm b { font-size: 40px; font-weight: 900; letter-spacing: 3px; text-shadow: 0 3px 8px rgba(0,0,0,.8); }
+  .pm-wnm span { font-size: 22px; padding: 4px 12px; border-radius: 8px; background: rgba(0,0,0,.45); color: #fff; }
+  .pm-wd { position: absolute; right: 22px; bottom: 18px; z-index: 3; font: italic 700 30px/1 Georgia, serif; color: #fff; text-shadow: 0 2px 8px #000; }
+  .pm-wd small { font: 900 18px/1 'PingFang SC', sans-serif; font-style: normal; padding: 3px 8px; border-radius: 6px; vertical-align: 4px;
+    color: #2a0f2e; background: linear-gradient(90deg, #ff6b9a, #ffe066, #5fe0a0, #6fb6ff); }
+
+  /* 学习闭环：标题与卡面错开；拼写贴内容；下半区吃满底部 */
+  .pm-cap {
+    position: absolute; left: 50%; top: 890px; z-index: 3;
+    width: max-content; transform: translateX(-50%);
+  }
+  .pm-cap .cap-panel {
+    margin: 0; padding: 10px; border-radius: 16px;
+    width: max-content; display: inline-flex; flex-direction: column; align-items: center;
+    box-sizing: border-box;
+  }
+  .pm-cap .cap-slots { gap: 6px; padding: 0 0 10px; flex-wrap: nowrap; justify-content: center; min-height: 0; }
+  .pm-cap .cap-slot {
+    width: 72px; height: 84px; font-size: 44px; line-height: 84px; text-align: center;
+    border-radius: 11px; font-family: Georgia, 'Times New Roman', serif;
+  }
+  .pm-cap .cap-bank { display: flex; justify-content: center; gap: 6px; padding: 0; min-height: 0; }
+  .pm-cap .cap-key {
+    width: 72px; height: 64px; font-size: 28px; border: 0; cursor: default; padding: 0;
+    font-family: Georgia, 'Times New Roman', serif;
+  }
+  .pm-xp { position: absolute; left: 120px; right: 120px; top: 1170px; }
+  .pm-xp-bar { height: 24px; border-radius: 12px; background: rgba(255,255,255,.1); overflow: hidden; box-shadow: inset 0 0 0 2px rgba(255,255,255,.12); }
+  .pm-xp-bar i { display: block; height: 100%; width: 72%; border-radius: 12px; background: linear-gradient(90deg, #2fd6b0, #8ff0c8); box-shadow: 0 0 18px #4fe0b8; }
+  .pm-xp-lb { display: flex; justify-content: space-between; margin-top: 10px; font-size: 22px; font-weight: 700; color: #bfeede; }
+  .pm-gain { position: absolute; right: -10px; top: -42px; font-size: 34px; font-weight: 900; color: #8ff0c8; text-shadow: 0 0 14px rgba(79,224,184,.8), 0 3px 0 #0b3a30; }
+  .pm-flow { position: absolute; left: 50px; right: 50px; top: 1305px; display: flex; justify-content: space-between; align-items: center; }
+  .pm-step { width: 200px; padding: 12px 0 10px; border-radius: 16px; text-align: center; background: rgba(30,16,52,.92);
+    border: 3px solid var(--c); box-shadow: 0 0 22px color-mix(in srgb, var(--c) 45%, transparent); }
+  .pm-step b { display: block; font-size: 30px; font-weight: 900; color: var(--c); letter-spacing: 4px; }
+  .pm-step small { display: block; margin-top: 4px; font-size: 18px; color: #e8dcff; opacity: .85; }
+  .pm-ar { font-size: 34px; color: #ffd77a; font-weight: 900; }
+  .pm-slide[data-n="5"] .pm-ft { display: none; }
+  .pm-slide[data-n="5"] .pm-hd { top: 48px !important; }
+  .pm-slide[data-n="5"] .pm-t { font-size: 84px; }
+  .pm-slide[data-n="5"] .pm-s { margin-top: 14px; font-size: 32px; }
+
+  /* 城市 */
+  .pm-city { position: absolute; width: 465px; height: 300px; border-radius: 28px; overflow: hidden;
+    box-shadow: 0 0 0 3px rgba(255,255,255,.14), 0 18px 36px rgba(0,0,0,.55); }
+  .pm-ccn { position: absolute; left: 26px; top: 22px; font-size: 48px; font-weight: 900; letter-spacing: 4px; text-shadow: 0 3px 0 rgba(0,0,0,.35); z-index: 2; }
+  .pm-cen { position: absolute; left: 28px; top: 86px; font: 600 20px/1 Didot, Georgia, serif; letter-spacing: 5px; opacity: .85; z-index: 2; }
+  .pm-boss { position: absolute; right: 18px; top: 18px; padding: 4px 12px; border-radius: 8px; background: rgba(0,0,0,.5); font-size: 20px; font-weight: 800; color: #ffd77a; letter-spacing: 2px; z-index: 2; }
+
+  /* 图鉴墙 */
+  .pm-wall { position: absolute; left: 50%; top: 52%; width: 1400px; height: 1800px; margin: -900px 0 0 -700px; transform: rotate(-9deg); }
+  .pm-fade { position: absolute; inset: 0; pointer-events: none; z-index: 4;
+    background:
+      linear-gradient(180deg, #120a22 0%, #120a22 22%, rgba(18,10,34,.55) 36%, rgba(11,7,20,.55) 76%, rgba(11,7,20,.97) 90%); }
+  .pm-glow { position: absolute; left: 50%; top: 870px; width: 900px; height: 900px; margin: -450px 0 0 -450px; z-index: 5; border-radius: 50%;
+    background: radial-gradient(circle, rgba(255,215,122,.35) 0, rgba(190,110,255,.18) 35%, transparent 65%); }
+</style>
+</head>
+<body>
+<div class="pm-slide" id="slide"></div>
+<script src="glyphs.js"></script>
+<script src="words.js"></script>
+<script src="words-bulk.js"></script>
+<script src="frames.js"></script>
+<script src="card.js"></script>
+<script src="fx.js"></script>
+<script src="sfx.js"></script>
+<script src="stages.js"></script>
+<script src="battle.js"></script>
+<script src="promo.js"></script>
+</body>
+</html>

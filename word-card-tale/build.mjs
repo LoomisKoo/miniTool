@@ -25,6 +25,9 @@ const body = fs.readFileSync(path.join(__dirname, 'src/body.html'), 'utf8');
 const glyphs = fs.readFileSync(path.join(__dirname, 'src/glyphs.js'), 'utf8');
 const words = fs.readFileSync(path.join(__dirname, 'src/words.js'), 'utf8');
 const wordsBulk = fs.readFileSync(path.join(__dirname, 'src/words-bulk.js'), 'utf8');
+const gloss = fs.readFileSync(path.join(__dirname, 'src/gloss.js'), 'utf8');
+const glossBulk = fs.readFileSync(path.join(__dirname, 'src/gloss-bulk.js'), 'utf8');
+const senses = fs.readFileSync(path.join(__dirname, 'src/senses.js'), 'utf8');
 const frames = fs.readFileSync(path.join(__dirname, 'src/frames.js'), 'utf8');
 const card = fs.readFileSync(path.join(__dirname, 'src/card.js'), 'utf8');
 const fx = fs.readFileSync(path.join(__dirname, 'src/fx.js'), 'utf8');
@@ -36,7 +39,7 @@ const capture = fs.readFileSync(path.join(__dirname, 'src/capture.js'), 'utf8');
 const app = fs.readFileSync(path.join(__dirname, 'src/app.js'), 'utf8');
 
 // 所有 JS 合并成单文件 app.js
-const bundle = [glyphs, words, wordsBulk, frames, card, fx, tts, sfx, stages, battle, capture, app].join('\n\n');
+const bundle = [glyphs, words, wordsBulk, gloss, glossBulk, senses, frames, card, fx, tts, sfx, stages, battle, capture, app].join('\n\n');
 
 // 小红书容器顶部自带约 44px 导航栏，且会覆盖页面顶部的交互区域。
 // 其他平台保持原来的布局；小红书产物在这里追加平台专属适配，避免污染通用源码预览。
@@ -138,14 +141,21 @@ ${body}
   fs.writeFileSync(path.join(outDir, 'style.css'), outputStyle);
   fs.writeFileSync(path.join(outDir, 'app.js'), bundle);
 
-  const iconSrc = path.join(__dirname, 'assets/icon.jpg');
+  const assetsDir = path.join(__dirname, 'assets');
+  const outAssets = path.join(outDir, 'assets');
+  fs.mkdirSync(outAssets, { recursive: true });
+  const iconSrc = path.join(assetsDir, 'icon.jpg');
   if (fs.existsSync(iconSrc)) {
-    fs.copyFileSync(iconSrc, path.join(outDir, 'assets/icon.jpg'));
+    fs.copyFileSync(iconSrc, path.join(outAssets, 'icon.jpg'));
     // 图标引用需在 html 里声明，这里补一行
     const h2 = fs
       .readFileSync(path.join(outDir, 'index.html'), 'utf8')
       .replace('<link rel="stylesheet"', '<link rel="icon" href="assets/icon.jpg">\n<link rel="stylesheet"');
     fs.writeFileSync(path.join(outDir, 'index.html'), h2);
+  }
+  for (const name of ['btn-stage-bg.png', 'btn-endless-bg.png']) {
+    const from = path.join(assetsDir, name);
+    if (fs.existsSync(from)) fs.copyFileSync(from, path.join(outAssets, name));
   }
 
   const zipPath = path.join(__dirname, 'dist', `${platformId}-${TOOL}.zip`);

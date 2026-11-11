@@ -684,22 +684,45 @@
     }
     return best;
   }
-  // 战斗武器：每类字母按「等级和」排序，最高为主武器、次高为副武器；
-  // 该类字母的平均等级 = 这种武器的弹药等级（伤害与弹道华丽度）
+  // 主 / 副武器只由「字母构成（数量）」决定，与字母等级无关：
+  // 升级不会把玩家养好的武器换掉，也不会让某条词条突然失效。
+  function kindOrder(word) {
+    var s = String((word && word.w) || ''), cnt = {}, order = [], dom = dominantKind(word), i;
+    for (i = 0; i < s.length; i++) {
+      var k = letterKind(s[i]);
+      if (cnt[k] === undefined) { cnt[k] = 0; order.push(k); }
+      cnt[k] += (k === 'shield' ? 0.5 : 1);
+    }
+    return order.slice().sort(function (a, b) {
+      return (cnt[b] - cnt[a]) || ((b === dom) - (a === dom)) || (order.indexOf(a) - order.indexOf(b));
+    });
+  }
   function weaponKinds(word, levels) {
-    var s = String((word && word.w) || ''), sum = {}, cnt = {}, tot = {}, dom = dominantKind(word), i;
+    var s = String((word && word.w) || ''), cnt = {}, tot = {}, order = kindOrder(word), i;
     for (i = 0; i < s.length; i++) {
       var k = letterKind(s[i]), lv = (levels && levels[i]) || 1;
-      sum[k] = (sum[k] || 0) + lv * (k === 'shield' ? 0.5 : 1);
       cnt[k] = (cnt[k] || 0) + 1;
       tot[k] = (tot[k] || 0) + lv;
     }
-    var order = Object.keys(sum).sort(function (a, b) {
-      return (sum[b] - sum[a]) || ((b === dom) - (a === dom));
-    });
+    // 弹药等级仍取该类字母的平均等级（只影响主 / 副武器的弹道与射速）
     var ammo = {};
     for (var k2 in cnt) ammo[k2] = Math.max(1, Math.round(tot[k2] / cnt[k2]));
-    return { main: order[0] || 'blast', sub: order[1] || null, ammo: ammo };
+    return { main: order[0] || 'blast', sub: order[1] || null, aux: order.slice(2), ammo: ammo };
+  }
+  // 每个字母的角色：main 主武器 / sub 副武器 / aux 通用（不参战，但提供通用词条）
+  function letterRoles(word) {
+    var order = kindOrder(word), main = order[0], sub = order[1] || null;
+    var seen = {};
+    return String((word && word.w) || '').toUpperCase().split('').map(function (ch) {
+      var k = letterKind(ch);
+      var role = k === main ? 'main' : (sub && k === sub ? 'sub' : 'aux');
+      // 同一属性的重复字母不再重复生成同一种武器词条，后续转为共鸣。
+      if (role !== 'aux') {
+        if (seen[k]) role = 'resonance';
+        seen[k] = true;
+      }
+      return role;
+    });
   }
   function letterKind(ch) {
     ch = String(ch || '').toUpperCase();
@@ -718,7 +741,7 @@
     shield:  { nm: '卫星', unit: '充能时间', base: 1, step: 1, fmt: function (v) { return '-' + v + '%'; } },
     blast:   { nm: '散弹', unit: '散弹伤害', base: 2, step: 2, fmt: function (v) { return '+' + v + '%'; } },
     frost:   { nm: '冰霜', unit: '减速效果', base: 8, step: 4, fmt: function (v) { return '+' + v + '%'; } },
-    pierce:  { nm: '激光', unit: '穿透层数', base: 1, step: 1, fmt: function (v) { return '+' + v; } },
+    pierce:  { nm: '激光', unit: '激光伤害', base: 2, step: 2, fmt: function (v) { return '+' + v + '%'; } },
     swift:   { nm: '追踪', unit: '追踪强度', base: 10, step: 5, fmt: function (v) { return '+' + v + '%'; } },
     thunder: { nm: '雷电', unit: '连锁距离', base: 24, step: 8, fmt: function (v) { return '+' + v; } },
     tide:    { nm: '潮汐', unit: '溅射范围', base: 12, step: 4, fmt: function (v) { return '+' + v; } },
@@ -730,13 +753,42 @@
     var rank = word.hid ? 6 : rarityOf(Object.assign({}, word, { lvl: null }));
     return { rank: rank, rate: GROW[rank], name: rank === 6 ? '隐藏' : (window.TIERS[rank] || {}).name };
   }
-  function letterTrait(ch, lv, g) {
-    var kind = letterKind(ch), t = LETTER_TRAITS[kind] || LETTER_TRAITS.swift;
+  /* ── 第二层：非主 / 副类字母的通用词条 ───────────────────
+     这类字母不进战斗武器，但升级仍然有真实收益，不会被浪费。 */
+  var AUX_TRAITS = {
+    dmg:   { unit: '主武器伤害', base: 1, step: 1, fmt: function (v) { return '+' + v + '%'; } },
+    crit:  { unit: '暴击率',     base: 1, step: 1, fmt: function (v) { return '+' + v + '%'; } },
+    ult:   { unit: '大招蓄力速度', base: 2, step: 2, fmt: function (v) { return '+' + v + '%'; } },
+    guard: { unit: '受击无敌',   base: 2, step: 1, fmt: function (v) { return '+' + v + '%'; } },
+  };
+  var AUX_BY_KIND = {
+    blast: 'dmg', tide: 'dmg',
+    frost: 'crit', blade: 'crit',
+    thunder: 'ult', swift: 'ult',
+    shield: 'guard', pierce: 'guard',
+  };
+  function auxTraitKey(kind) { return AUX_BY_KIND[kind] || 'dmg'; }
+  function letterTrait(ch, lv, g, role) {
+    var kind = letterKind(ch);
     lv = Math.max(1, Math.round(lv || 1));
     g = g || 1;
+    if (role === 'aux' || role === 'resonance') {
+      var key = auxTraitKey(kind), a = AUX_TRAITS[key];
+      var av = function (l) { return a.base + Math.round((l - 1) * a.step * g); };
+      return {
+        kind: kind, role: role, scope: 'aux', effect: key,
+        name: role === 'resonance' ? '共鸣' : '通用', unit: a.unit, level: lv,
+        base: a.base, step: a.step, grow: g,
+        value: av(lv),
+        text: a.unit + ' ' + a.fmt(av(lv)),
+        next: a.unit + ' ' + a.fmt(av(lv + 1)),
+      };
+    }
+    var t = LETTER_TRAITS[kind] || LETTER_TRAITS.swift;
     var val = function (l) { return t.base + Math.round((l - 1) * t.step * g); };
     return {
-      kind: kind, name: t.nm, unit: t.unit, level: lv,
+      kind: kind, role: role || 'main', scope: 'weapon',
+      name: t.nm, unit: t.unit, level: lv,
       base: t.base, step: t.step, grow: g,
       value: val(lv),
       text: t.unit + ' ' + t.fmt(val(lv)),
@@ -744,9 +796,9 @@
     };
   }
   function letterTraits(word, levels) {
-    var g = growOf(word).rate;
+    var g = growOf(word).rate, roles = letterRoles(word);
     return String(word && word.w || '').toUpperCase().split('').map(function (ch, i) {
-      return letterTrait(ch, levels && levels[i], g);
+      return letterTrait(ch, levels && levels[i], g, roles[i]);
     });
   }
 
@@ -1008,17 +1060,19 @@
   }
   // 常亮彩虹光边 + 沿边缘顺时针缓慢流动的不等长光带
   // shapeEl：带 {A} 占位的 SVG 图形元素（需闭合、顺时针），gid：彩虹渐变 id
-  function edgeFlow(shapeEl, gid, fid, w, dur) {
-    function el(attrs) { return shapeEl.replace('{A}', attrs); }
+  function flowEl(shapeEl, dur, attrs) {
     var tag = shapeEl.match(/^<(\w+)/)[1];
-    var flow = function (attrs) {
-      return el('fill="none" stroke-linecap="round" pathLength="100" stroke-dasharray="18 15.33 18 15.33 18 15.34" ' + attrs)
-        .replace('/>', '><animate attributeName="stroke-dashoffset" from="0" to="-100" dur="' + dur + 's" repeatCount="indefinite"/></' + tag + '>');
-    };
-    // 彩虹描边 + 三段沿边缘顺时针流动的柔光
-    return el('fill="none" stroke="url(#' + gid + ')" stroke-width="' + w + '"') +
-      '<g filter="url(#' + fid + 'h)" style="mix-blend-mode:screen">' + flow('stroke="#ffe9f6" stroke-width="' + (w * 13) + '" opacity=".42"') + '</g>' +
-      '<g filter="url(#' + fid + 's)" style="mix-blend-mode:screen">' + flow('stroke="#fff4fb" stroke-width="' + (w * 2.6) + '" opacity=".62"') + '</g>';
+    return shapeEl.replace('{A}', 'fill="none" stroke-linecap="round" pathLength="100" stroke-dasharray="18 15.33 18 15.33 18 15.34" ' + attrs)
+      .replace('/>', '><animate attributeName="stroke-dashoffset" from="0" to="-100" dur="' + dur + 's" repeatCount="indefinite"/></' + tag + '>');
+  }
+  // 三段沿边缘顺时针流动的柔光；haloK 控制外圈光晕宽度
+  function edgeGlow(shapeEl, fid, w, dur, haloK) {
+    return '<g filter="url(#' + fid + 'h)" style="mix-blend-mode:screen">' + flowEl(shapeEl, dur, 'stroke="#ffe9f6" stroke-width="' + (w * (haloK || 13)) + '" opacity=".42"') + '</g>' +
+      '<g filter="url(#' + fid + 's)" style="mix-blend-mode:screen">' + flowEl(shapeEl, dur, 'stroke="#fff4fb" stroke-width="' + (w * 2.6) + '" opacity=".62"') + '</g>';
+  }
+  function edgeFlow(shapeEl, gid, fid, w, dur) {
+    // 彩虹描边 + 流动柔光
+    return shapeEl.replace('{A}', 'fill="none" stroke="url(#' + gid + ')" stroke-width="' + w + '"') + edgeGlow(shapeEl, fid, w, dur);
   }
 
   function edgeDefs(fid, glow, soft) {
@@ -1061,24 +1115,32 @@
       bgs: [null, ['p', 'zigzag'], ['p', 'arrows'], ['d', 'rings'], ['d', 'rays']] },
   };
   // opts.mythic：超稀有，统一哥特体 + 彩虹描边
+  var typeUid = 0;
+  function typeGlyph(set, ch) {
+    var up = String(ch || '').toUpperCase();
+    return set.glyphs[up] || set.glyphs[up.toLowerCase()] || set.glyphs.E;
+  }
   function typeTileSVG(ch, lv, size, opts) {
     opts = opts || {};
+    lv = Math.max(1, Math.min(5, lv || 1));
     var kind = letterKind(ch);
-    var S = TYPE_STYLE[kind];
+    var S = TYPE_STYLE[kind] || TYPE_STYLE.swift;
     var mythic = !!opts.mythic;
     var fontId = mythic ? 'fraktur' : S.font;
     if (!global.GLYPHS[fontId]) fontId = 'garamond';
     var bgCol = mythic ? tint(S.bg, 0, -0.12) : S.bg;
     var lnCol = S.ln;
     var b = S.bgs[Math.min(lv, 5) - 1];
-    var uid = 'y' + hash32(ch + lv + kind + size + (mythic ? 'm' : '')).toString(36);
+    // 每个瓦片独立 id：同词重复字母不会共享 clipPath / 渐变，
+    // 避免 WebKit 里第二个同 id 的 SVG 偶发不绘制（字母成长偶见缺字）。
+    var uid = 'y' + (++typeUid) + hash32(ch + lv + kind + size + (mythic ? 'm' : '')).toString(36);
     var sh = TILE_SHAPE_SVG[S.shape];
 
     var set = global.GLYPHS[fontId];
-    var g = set.glyphs[ch] || set.glyphs.E;
-    var sc = 56 / (OPT[fontId] || 700);
+    var g = typeGlyph(set, ch);
+    var sc = (opts.compact ? 46 : 56) / (OPT[fontId] || 700);
     var gw = g.w * sc, gh = g.h * sc;
-    var x = 50 - gw / 2, y = 50 + 28 - g.b * sc;
+    var x = 50 - gw / 2, y = 50 + (opts.compact ? 25 : 28) - g.b * sc;
 
     var defs = '<clipPath id="' + uid + 'c">' + sh + '</clipPath>';
     if (b && b[0] === 'p') defs += tilePattern(uid + 'p', b[1], hexA(lnCol, lv >= 4 ? 0.55 : 0.45));
@@ -1088,15 +1150,17 @@
       '<animateTransform attributeName="gradientTransform" type="rotate" from="0 .5 .5" to="360 .5 .5" dur="8s" repeatCount="indefinite"/>' +
       '</linearGradient>';
 
-    if (mythic) defs += edgeDefs(uid + 'e', 3.2, 4.2);
+    if (mythic) defs += edgeDefs(uid + 'e', 1.6, 2.4);
     var s = '<svg class="tile lv' + Math.min(lv, 5) + (mythic ? ' mythic' : '') + '" width="' + size + '" height="' + size +
       '" viewBox="0 0 100 100" style="overflow:visible"><defs>' + defs + '</defs>';
+    // 隐藏款光晕垫在底形下面，只向外发光，不会给字母和纹样蒙一层白雾
+    if (mythic) s += edgeGlow(sh.replace('/>', ' {A}/>'), uid + 'e', 3.4, 16, 5);
     s += '<g fill="' + bgCol + '">' + sh + '</g><g clip-path="url(#' + uid + 'c)">';
     if (b && b[0] === 'd') s += '<g opacity=".3" transform="translate(50 50) scale(.9) translate(-50 -50)">' + tileDeco(b[1], lnCol, hexA(lnCol, 0.5)) + '</g>';
     if (b && b[0] === 'p') s += '<rect width="100" height="100" fill="url(#' + uid + 'p)"/>';
     s += '</g>';
     var edge = mythic ? 'url(#' + uid + 'r)' : lv >= 5 ? '#f6d77a' : lnCol;
-    if (mythic) s += edgeFlow(sh.replace('/>', ' {A}/>'), uid + 'r', uid + 'e', 3.4, 16);
+    if (mythic) s += '<g fill="none" stroke="url(#' + uid + 'r)" stroke-width="3.4">' + sh + '</g>';
     else s += '<g fill="none" stroke="' + edge + '" stroke-width="' + (lv >= 5 ? 5 : lv >= 3 ? 3.5 : 2.5) + '">' + sh + '</g>';
     if (lv >= 3) s += '<g fill="none" stroke="' + lnCol + '" stroke-width="1.2" stroke-opacity=".6" transform="translate(50 50) scale(.84) translate(-50 -50)">' + sh + '</g>';
     if (mythic) {
@@ -1112,15 +1176,23 @@
     // 字母一律用亮色实心 + 深色描边，保证在彩色底形上也有足够对比；
     // 隐藏款把彩虹挪到描边和光晕上，不再直接填在字形里
     var fg = S.fg;
-    var letterSvg = '<svg x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + gw.toFixed(1) + '" height="' + gh.toFixed(1) +
-      '" viewBox="0 0 ' + g.w + ' ' + g.h + '" overflow="visible">' +
-      '<path d="' + g.d + '" fill="' + fg + '" stroke="rgba(18,10,22,.55)" stroke-width="' + (2.2 / sc).toFixed(1) +
-      '" stroke-opacity="' + (mythic ? 0.6 : 0.9) + '"/>' +
-      (mythic ? '<path d="' + g.d + '" fill="none" stroke="url(#' + uid + 'r)" stroke-width="' + (4.8 / sc).toFixed(1) +
-        '" stroke-linejoin="round" opacity=".95"/>' : '') + '</svg>';
-    s += '<svg x="' + (x + 2).toFixed(1) + '" y="' + (y + 2.4).toFixed(1) + '" width="' + gw.toFixed(1) + '" height="' + gh.toFixed(1) +
-      '" viewBox="0 0 ' + g.w + ' ' + g.h + '" overflow="visible"><path d="' + g.d + '" fill="rgba(0,0,0,.45)"/></svg>' +
-      letterSvg + '</svg>';
+    // 未获得的隐藏款：保留底形与边框，字母换成问号
+    if (opts.q) {
+      return s + '<text x="51.5" y="70" text-anchor="middle" font-family="Georgia, serif" font-weight="700" font-size="56" fill="rgba(0,0,0,.4)">?</text>' +
+        '<text x="50" y="68" text-anchor="middle" font-family="Georgia, serif" font-weight="700" font-size="56" fill="' + fg +
+        '" stroke="rgba(18,10,22,.55)" stroke-width="2">?</text></svg>';
+    }
+    var glyphSc = sc.toFixed(4);
+    var gx = x.toFixed(1), gy = y.toFixed(1), sx = (x + 2).toFixed(1), sy = (y + 2.4).toFixed(1);
+    // 直接把字形路径放进外层 SVG（不再嵌套 <svg>）：少一层视口计算，
+    // 翻面 / 缩放时不会因为嵌套视口造成个别字母短暂消失。
+    s += '<g transform="translate(' + sx + ' ' + sy + ') scale(' + glyphSc + ')">' +
+      '<path d="' + g.d + '" fill="rgba(0,0,0,.45)"/></g>' +
+      '<g transform="translate(' + gx + ' ' + gy + ') scale(' + glyphSc + ')">' +
+      '<path d="' + g.d + '" fill="' + fg + '" stroke="rgba(18,10,22,.55)" stroke-width="' + (2.2 / sc).toFixed(2) +
+      '" stroke-opacity="' + (mythic ? 0.6 : 0.9) + '" stroke-linejoin="round"/>' +
+      (mythic ? '<path d="' + g.d + '" fill="none" stroke="url(#' + uid + 'r)" stroke-width="' + (4.8 / sc).toFixed(2) +
+        '" stroke-linejoin="round" opacity=".95"/>' : '') + '</g>' + '</svg>';
     return s;
   }
   // Initialis 式独立配色：底 / 字 / 纹 / 第二色
@@ -1198,7 +1270,7 @@
     return s;
   }
   // 在给定区域里排成若干行，让瓦片尽量大
-  function tilesHTML(word, levels, th, areaW, areaH) {
+  function tilesHTML(word, levels, th, areaW, areaH, mask) {
     var chars = word.w.toUpperCase().split('');
     var n = chars.length, gap = 6, best = { size: 0, per: n };
     for (var rows = 1; rows <= 4; rows++) {
@@ -1209,7 +1281,7 @@
     var sz = Math.floor(best.size), out = '<div class="gc-tiles" style="gap:' + gap + 'px">';
     for (var i = 0; i < n; i += best.per) {
       out += '<div class="tr">';
-      for (var j = i; j < Math.min(n, i + best.per); j++) out += typeTileSVG(chars[j], (levels && levels[j]) || 1, sz, { mythic: !!word.hid });
+      for (var j = i; j < Math.min(n, i + best.per); j++) out += typeTileSVG(chars[j], (levels && levels[j]) || 1, sz, { mythic: !!word.hid, q: !!mask });
       out += '</div>';
     }
     return out + '</div>';
@@ -1312,6 +1384,8 @@
     var cLv = cardLevel(word, levels);
     var senses = word.senses && word.senses.length ? word.senses : null;
     var cnText = senses ? senses.map(function (x) { return x.cn; }).join('；') : (word.cn || '');
+    var mask = !!opts.mask;   // 未获得的隐藏款：单词按字母数显示问号，释义只显示一个问号
+    if (mask) cnText = '?';
 
     var card = document.createElement('article');
     card.className = 'card gc tier-' + tier + ' theme-' + th.key + (word.hid ? ' gc-hid' : '') + (opts.compact ? ' sm' : '');
@@ -1336,12 +1410,13 @@
     }
 
     var lite = !!opts.lite;
+    var perf = !!opts.perf;
     var html = word.hid && !lite ? cardAuraSVG() : '';
     html += '<div class="gc-in">';
 
     html += '<div class="gc-art">' +
       (tier >= 3 && !lite ? '<span class="gc-rays"></span>' : '') +
-      tilesHTML(word, levels, th, innerW - 28, 116) +
+      tilesHTML(word, levels, th, innerW - 28, 116, mask) +
       (fimg ? '' : '<div class="gc-badge">' + lvGem(word.lvl || cLv) + '</div>' +
           '<div class="gc-tier">' + (word.hid ? 'EX' : T.code) + '</div>') +
       '</div>';
@@ -1350,13 +1425,13 @@
       ? Math.min(38, Math.floor((innerW - 24) / (word.w.length * 0.66)))
       : Math.min(30, Math.floor((innerW - 40) / (word.w.length * 0.72)));
     html += '<div class="gc-plate"><span class="plate-word" style="font-size:' + plateFs + 'px">' +
-      word.w.toLowerCase() + '</span></div>';
+      (mask ? word.w.replace(/./g, '?') : word.w.toLowerCase()) + '</span></div>';
     var wk = weaponKinds(word, levels);
 
     html += '<div class="gc-info">' +
       '<div class="gc-ph">' +
-        (word.pos ? '<b class="pos">' + word.pos + '</b>' : '') +
-        '<span class="ipa">' + (word.ph || '') + '</span>' +
+        (word.pos && !mask ? '<b class="pos">' + word.pos + '</b>' : '') +
+        '<span class="ipa">' + (mask ? '' : (word.ph || '')) + '</span>' +
       '</div>' +
       '<div class="gc-cn">' + cnText + '</div>';
 
@@ -1378,9 +1453,12 @@
     }
 
     // 列表用：去掉 SVG 动画和模糊滤镜层（隐藏款流光等），只留静态外观
+    if (lite || perf) {
+      html = html.replace(/<animate(?:Transform|Motion)?\b[^>]*\/>/g, '');
+      if (perf) card.classList.add('perf');
+    }
     if (lite) {
-      html = html.replace(/<animate(?:Transform|Motion)?\b[^>]*\/>/g, '')
-        .replace(/<g filter="url\([^)]*\)"[^>]*>[\s\S]*?<\/g>/g, '');
+      html = html.replace(/<g filter="url\([^)]*\)"[^>]*>[\s\S]*?<\/g>/g, '');
       card.classList.add('lite');
     }
     card.innerHTML = html;
@@ -1465,15 +1543,20 @@
       weaponScore += sub.dps; def += sub.def; ctl += sub.ctl;
       cover += sub.cover; multi += sub.multi; reliable += sub.reliable;
     }
-    // 字母词条只增强对应武器的实际效果；卫星词条作用于挡弹充能，不虚增攻击。
-    var traitAmp = {};
+    // 第一层：主 / 副类字母只增强对应武器；第二层：其余字母提供通用词条。
+    var traitAmp = {}, aux = {};
     traits.forEach(function (t) {
+      if (t.scope === 'aux') { aux[t.effect] = (aux[t.effect] || 0) + t.value; return; }
       traitAmp[t.kind] = (traitAmp[t.kind] || 0) + t.level;
     });
     var mainTrait = 1 + (traitAmp[wk.main] || 0) * .025;
     var subTrait = wk.sub ? 1 + (traitAmp[wk.sub] || 0) * .02 : 0;
     weaponScore = main.dps * mainTrait + (wk.sub ? (weaponScore - main.dps) * subTrait : 0);
     if (traitAmp.shield) def += traitAmp.shield * .45;
+    weaponScore *= 1 + (aux.dmg || 0) / 100;
+    reliable += (aux.crit || 0) * .01;
+    ctl += (aux.ult || 0) * .12;
+    def += (aux.guard || 0) * .12;
     var rank = g.rank;
     var factor = COMBAT_RANK[rank] || 1;
     // 以同等级下的所有武器平均表现为基准，避免单一武器把总分拉开数倍。
@@ -2052,10 +2135,13 @@
     growOf: growOf,
     powerOf: powerOf,
     powerParts: powerParts,
+    weaponEstimate: weaponEstimate,
     weaponIcon: weaponIcon,
     dominantKind: dominantKind,
     secondKind: secondKind,
     weaponKinds: weaponKinds,
+    kindOrder: kindOrder,
+    letterRoles: letterRoles,
     lvGem: lvGem,
     elemGems: elemGems,
     KINDS: KINDS,

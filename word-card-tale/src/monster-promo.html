@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>词卡物语 · 怪物图鉴宣传图</title>
+<style>
+  html, body { margin: 0; padding: 0; width: 1080px; height: 1440px; overflow: hidden; background: #0d0816; }
+  .mp {
+    position: relative; width: 1080px; height: 1440px; overflow: hidden; color: #fff;
+    background:
+      radial-gradient(ellipse 70% 45% at 50% 42%, rgba(120,60,150,.48) 0, transparent 70%),
+      linear-gradient(180deg, #1a0f2e 0%, #120a22 45%, #0b0714 100%);
+    font-family: 'PingFang SC', 'Hiragino Sans GB', sans-serif;
+  }
+  .mp-hd { position: absolute; top: 56px; left: 40px; right: 40px; text-align: center; z-index: 5; }
+  .mp-hd.solo { top: 52px; }
+  .mp-t {
+    display: inline-block; font-size: 86px; font-weight: 900; letter-spacing: 5px; line-height: 1.1;
+    background: linear-gradient(180deg, #fff7d6 0%, #ffd77a 42%, #e59a2c 58%, #ffe9a8 100%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    -webkit-text-stroke: 2.5px #3a1640;
+    filter: drop-shadow(0 5px 0 #3a1640) drop-shadow(0 12px 16px rgba(0,0,0,.65));
+  }
+  .mp-hd.solo .mp-t { font-size: 78px; }
+  .mp-s { margin-top: 16px; font-size: 32px; font-weight: 600; color: #f6e2b0; letter-spacing: 2px;
+    text-shadow: 0 3px 10px rgba(0,0,0,.7); }
+
+  .mp-ft {
+    position: absolute; bottom: 36px; left: 0; right: 0; display: flex; justify-content: center;
+    align-items: center; gap: 14px; z-index: 5;
+  }
+  .mp-ft .mark {
+    width: 52px; height: 52px; border-radius: 14px;
+    background: linear-gradient(145deg, #2a1638, #12081c);
+    border: 2px solid rgba(255,215,122,.55);
+    display: flex; align-items: center; justify-content: center;
+    color: #ffd77a; font: 900 26px/1 Georgia, serif;
+    box-shadow: 0 4px 12px rgba(0,0,0,.45);
+  }
+  .mp-ft b { font-size: 32px; font-weight: 900; letter-spacing: 5px; color: #ffe2a0; line-height: 1; }
+  .mp-ft i { display: block; margin-top: 6px; font: 600 17px/1 Didot, Georgia, serif; letter-spacing: 6px;
+    color: #c9a86a; font-style: normal; }
+
+  /* 封面：正方形格子，用宽度推高度，多塞几只 */
+  .mp-wall {
+    position: absolute; left: 36px; right: 36px; top: 210px; bottom: 108px;
+    display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px;
+    align-content: center; z-index: 2;
+  }
+  .mp-cell {
+    position: relative; width: 100%; aspect-ratio: 1; border-radius: 16px;
+    background: linear-gradient(180deg, rgba(40,24,64,.92), rgba(18,10,34,.95));
+    box-shadow: 0 0 0 2px rgba(255,255,255,.08), 0 8px 18px rgba(0,0,0,.4);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .mp-cell.landmark {
+    box-shadow: 0 0 0 2px rgba(255,215,122,.45), 0 8px 18px rgba(0,0,0,.4),
+      0 0 22px rgba(255,180,80,.18);
+  }
+  .mp-cell canvas { image-rendering: pixelated; filter: drop-shadow(0 5px 6px rgba(0,0,0,.4)); }
+
+  .mp-grid4 {
+    position: absolute; left: 24px; right: 24px; top: 160px; bottom: 148px;
+    display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr;
+    gap: 16px; z-index: 2;
+  }
+  .mp-card {
+    position: relative; border-radius: 26px; overflow: hidden;
+    background: linear-gradient(180deg, #24163c 0%, #17102a 100%);
+    box-shadow: 0 0 0 2px rgba(255,255,255,.1), 0 16px 32px rgba(0,0,0,.5);
+    display: flex; flex-direction: column; align-items: center;
+    padding: 16px 10px 18px;
+  }
+  .mp-art {
+    flex: 1; width: 100%; min-height: 0;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .mp-art canvas { image-rendering: pixelated; filter: drop-shadow(0 10px 12px rgba(0,0,0,.45)); }
+  .mp-cn { margin-top: 2px; font-size: 54px; font-weight: 900; letter-spacing: 2px; color: #fff6e0;
+    text-shadow: 0 3px 8px rgba(0,0,0,.6); line-height: 1.15; }
+  .mp-en { margin-top: 8px; font: 600 32px/1 Didot, Georgia, serif; letter-spacing: 2px; color: #c9b48a; }
+  .mp-meta { margin-top: 12px; font-size: 30px; font-weight: 700; color: #e8dcc0; opacity: .9; }
+</style>
+</head>
+<body>
+<div class="mp" id="slide"></div>
+<script src="stages.js"></script>
+<script src="monster-promo.js"></script>
+</body>
+</html>

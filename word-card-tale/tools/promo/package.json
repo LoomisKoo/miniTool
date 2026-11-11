@@ -1,0 +1,14 @@
+{
+  "name": "word-card-tale-promo",
+  "private": true,
+  "type": "module",
+  "description": "词卡物语宣传片录制工具（仅开发用，不进游戏包体）",
+  "scripts": {
+    "build": "node build.mjs",
+    "record": "node record.mjs",
+    "record:battle": "node record.mjs battle"
+  },
+  "dependencies": {
+    "playwright": "^1.65.0"
+  }
+}

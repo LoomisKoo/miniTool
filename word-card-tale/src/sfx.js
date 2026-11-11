@@ -678,10 +678,35 @@
     if (!mus.timer) mus.timer = setInterval(musicTick, 25);
   }
 
+  // 从后台切回时，iOS / Android 会把 AudioContext 挂起（state = suspended / interrupted）。
+  // 只靠 actx() 的下一次调用不够：BGM 是定时器在跑、没有新的用户点击时就不会恢复。
+  // 这里在可见性变化 / 页面恢复 / 窗口聚焦时主动 resume，并把 BGM 排程时间拉回当前时刻，
+  // 避免后台期间积累的步进在恢复瞬间一次性补播。
+  function wakeAudio() {
+    if (!ac) return;
+    try {
+      if (ac.state !== 'running') {
+        var p = ac.resume();
+        if (p && p.catch) p.catch(function () {});
+      }
+      if (mus.mode) mus.next = Math.max(mus.next, ac.currentTime + 0.08);
+    } catch (e) {}
+  }
+  try {
+    document.addEventListener('visibilitychange', function () {
+      if (!document.hidden) wakeAudio();
+    });
+    global.addEventListener('pageshow', wakeAudio);
+    global.addEventListener('focus', wakeAudio);
+    // Capacitor / Cordova 容器里切回前台会触发 resume
+    document.addEventListener('resume', wakeAudio);
+  } catch (e) {}
+
   // 首次触摸 / 点击就把音频上下文准备好（iOS 只允许在手势里创建）
   try {
     var kick = function () {
       if (on) actx();
+      wakeAudio();
       global.removeEventListener('pointerdown', kick);
       global.removeEventListener('touchstart', kick);
     };
