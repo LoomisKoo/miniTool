@@ -174,24 +174,36 @@ export function setupDay(scene, renderer) {
 
   // 半球光抬高，压住「受光惨白 / 背光死黑」的对比
   // t35：环境光略降、偏天空蓝，地面反射偏暖（受光 / 背光有冷暖之分，不再每个面一样亮 → 塑料感的主要来源之一）
-  const hemi = new THREE.HemisphereLight('#c6dcff', '#b39874', 0.64)
+  // 环境光压到 0.42：量过才知道，原来 hemi 0.64 + 环境图 IBL 占了画面亮度的 ~85%，
+  // 主光只占 ~10% —— 所有面接到的光都差不多，建筑就成了一片平涂的贴片。
+  // 环境光必须让位给主光，明暗关系才读得出来。
+  const hemi = new THREE.HemisphereLight('#c6dcff', '#b39874', 0.42)
   scene.add(hemi)
 
   // 主光降到约 1.6：立体感还在，但背光不再比受光暗一个数量级
   // t35：午后偏侧的暖阳（高度角 ~33°），强一些 → 受光面暖亮、背光面靠天光偏冷，立体感回来
-  const sun = new THREE.DirectionalLight('#ffe4bf', 2.5)
+  const sun = new THREE.DirectionalLight('#ffe4bf', 3.6)
   sun.position.set(-2_400, 2_600, 1_600)
-  // 场景里没有任何投影体（castShadow 全关），阴影图只是白白让所有受影材质做 PCF 采样 → 整体关掉
-  sun.castShadow = false
-  sun.shadow.mapSize.set(16, 16)
-  sun.shadow.camera.near = 50
-  sun.shadow.camera.far = 6_000
-  sun.shadow.camera.left = -1_800
-  sun.shadow.camera.right = 1_800
-  sun.shadow.camera.top = 1_800
-  sun.shadow.camera.bottom = -1_800
-  sun.shadow.bias = -0.0002
-  sun.shadow.normalBias = 1.2
+  // 阴影：这是「建筑像贴片」的第一号原因 —— 楼与楼之间不互相遮挡、楼投不到街上、
+  // 墙角没有暗交界，人眼就读不到体积和尺度。
+  //
+  // 但整城 5000m 全画进一张图，1 个 texel 要覆盖 2m 多，边缘全是锯齿块。
+  // 做法是只画镜头附近 1200m 见方（2048 图 → 约 0.6m/texel），并让视锥跟着镜头走
+  // （main.js 的 maybeUpdateShadow 负责搬 target，只在移动 400m 时重画一次）。
+  // ?shadows=0 可关掉，用来做 A/B 对比 / 排查
+  const SHADOW_ON = !/[?&]shadows=0/.test(location.search)
+  sun.castShadow = SHADOW_ON
+  sun.shadow.mapSize.set(2048, 2048)
+  sun.shadow.camera.near = 200
+  sun.shadow.camera.far = 5_000
+  sun.shadow.camera.left = -1_200
+  sun.shadow.camera.right = 1_200
+  sun.shadow.camera.top = 1_200
+  sun.shadow.camera.bottom = -1_200
+  // bias 太小 → 自阴影痤疮（脸上起黑点）；太大 → 阴影脱离物体（peter-panning）
+  sun.shadow.bias = -0.0004
+  sun.shadow.normalBias = 0.8
+  sun.shadow.camera.updateProjectionMatrix()
   scene.add(sun)
   scene.add(sun.target)
 
@@ -203,14 +215,19 @@ export function setupDay(scene, renderer) {
   const moon = new THREE.DirectionalLight('#c5d4f2', 0)
   moon.position.set(1_800, 2_400, -1_600)
 
-  renderer.shadowMap.enabled = false
-  renderer.shadowMap.type = THREE.PCFShadowMap
+  renderer.shadowMap.enabled = SHADOW_ON
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap
+  // 每帧重画阴影图 = 整城几何多走一遍深度。静态城不需要：
+  // 只有 maybeUpdateShadow 判定"镜头移动超过 400m"时才 needsUpdate 一次
   renderer.shadowMap.autoUpdate = false
   renderer.toneMapping = THREE.ACESFilmicToneMapping
   renderer.toneMappingExposure = 1.05
   renderer.outputColorSpace = THREE.SRGBColorSpace
 
   const env = makeEnv(renderer, '#3f86d6', '#bcd6ee', '#a8987c', true)
+  // 环境图同时充当天光 + 反射。它是最均匀的一盏灯，占比过高就会把形体抹平。
+  // 压到 0.45 保留反射和蓝天的补色，但不再压过主光。
+  scene.environmentIntensity = 0.45
   const envNight = makeEnv(renderer, '#12203c', '#1c2a46', '#2c2218')
   scene.environment = env
   return { sun, env, envNight, hemi, fill, moon, sky, skyMat, stars, starMat }

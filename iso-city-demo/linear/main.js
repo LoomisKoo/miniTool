@@ -34,6 +34,13 @@ const loading = document.getElementById('loading')
 let world = null
 try {
   world = buildWorld()
+  // 地面 / 自然带 / 城墙这些普通网格要接住建筑的投影，否则楼上投下的影子落不到街上
+  world.traverse((o) => {
+    if (!o.isMesh) return
+    o.receiveShadow = true
+    if (o.isInstancedMesh && o.castShadow === false) return
+    o.castShadow = true
+  })
   scene.add(world)
   setEnvMap(env) // 建筑运行时材质在建造后才登记
 } catch (err) {
@@ -144,12 +151,14 @@ function applyTimeOfDay(t) {
 
   hemi.color.copy(cHemi).lerp(cHemiN, t)
   hemi.groundColor.copy(cGround).lerp(cGroundN, t)
-  hemi.intensity = 0.64 - 0.39 * t // t37 白天再降环境光（0.78→0.64）、主光加强 → 受光/背光的冷暖对比拉开； 夜里环境光压得更暗，灯光/窗光对比更强（t35 白天 0.95→0.78，夜里终值不变 0.25）
-  sun.intensity = 2.5 * (1 - t) + 0.5 * t
+  hemi.intensity = 0.42 - 0.17 * t // t37 白天再降环境光（0.78→0.64）、主光加强 → 受光/背光的冷暖对比拉开； 夜里环境光压得更暗，灯光/窗光对比更强（t35 白天 0.95→0.78，夜里终值不变 0.25）
+  sun.intensity = 3.6 * (1 - t) + 0.5 * t
   sun.color.copy(cSunD).lerp(cSunN, t)
   fill.intensity = 0.38 * (1 - t) + 0.02 * t
   moon.intensity = 0
-  renderer.toneMappingExposure = 1.05 - 0.02 * t
+  // 白天把环境图压到 0.45 让主光做主；夜里回到 1.0，否则街灯/窗光没了天光托底会糊成一团黑
+  scene.environmentIntensity = 0.45 + 0.55 * t
+  renderer.toneMappingExposure = 1.12 - 0.09 * t
   starMat.opacity = Math.max(0, (t - 0.32) / 0.68)
   nightU.value = t
   applyNight(t)
@@ -695,13 +704,16 @@ function maybeUpdateShadow(force) {
   if (!force && !moved && nightOn === shNight) return
   shNight = nightOn
   if (nightOn && !force) return
-  const snap = 3600 / 2048
+  // 阴影视锥现在是 ±1200m / 2048 texel：按 texel 尺寸对齐，避免移动时阴影边缘游动
+  const snap = 2400 / 2048
   shX = Math.round(player.x / 80) * 80
   shZ = Math.round(player.z / 80) * 80
   const gx = Math.round(shX / snap) * snap
   const gz = Math.round(shZ / snap) * snap
   sun.target.position.set(gx, 0, gz)
-  sun.position.set(gx - 2_000, 1_450, gz + 1_300) // t35 午后偏侧光（高度角 ~33°，与环境图太阳同向）
+  // 与 light.js 里 sun 的初始方向保持一致（同一束光的投影方向必须和受光方向一致，
+  // 否则会出现"影子朝哪都说不清"的假感）
+  sun.position.set(gx - 2_000, 1_050, gz + 1_300)
   sun.target.updateMatrixWorld()
   renderer.shadowMap.needsUpdate = true
 }

@@ -1199,8 +1199,10 @@ export function buildBuildings(plan, seed = 77) {
   }
 
   const balcony = makePool('#ece6da', 0.08, 0.86, 30_000, 0.45)
+  balcony.struct = true
   const rail = makePool('#5a6570', 0.7, 0.35, 30_000, 0.9)
   const canopy = makePool('#2f8f8a', 0.5, 0.45, 12_000, 0.7)
+  canopy.struct = true
   const mech = makePool('#cdd4da', 0.28, 0.62, 40_000, 0.55, { lod: 0 })
   const accent = makePool('#8a949e', 0.4, 0.45, 12_000, 0.7, { lod: 0 })
   // 几何立面：层间板 / 窗台 / 竖挺 / 暗玻璃凸片
@@ -1232,6 +1234,7 @@ export function buildBuildings(plan, seed = 77) {
   })
   // 檐口 / 女儿墙压顶 / 落水管 / 空调机：把盒子楼拉出真实轮廓
   const cornice = makePool('#f6f0e4', 0.05, 0.86, 90_000, 0.32, { lod: 0 })
+  cornice.struct = true
   const pipe = makePool('#6a7078', 0.5, 0.42, 60_000, 0.7)
   const acUnit = makePool('#c4ccd4', 0.28, 0.5, 80_000, 0.55)
   const acGrill = makePool('#78828c', 0.4, 0.5, 80_000, 0.6)
@@ -1267,6 +1270,7 @@ export function buildBuildings(plan, seed = 77) {
   // 金属檐口雨棚（与布棚区分）
   const canopyPools = ['#4a4e52', '#3a3c40', '#6a6e72', '#5a4a40'].map((c) => makePool(c, 0.4, 0.5, 30_000, 0.7))
   const pillar = makePool('#f0eadf', 0.04, 0.9, 340_000, 0.3)
+  pillar.struct = true
   // 一层专用框料（与上层 dressFacade 的 sill/mull/band/pane 隔离，防抢配额）
   const stMull = makePool('#6a7078', 0.45, 0.4, 460_000, 0.7)
   const stHandle = makePool('#c0c8d0', 0.7, 0.28, 120_000, 0.9)
@@ -1312,6 +1316,7 @@ export function buildBuildings(plan, seed = 77) {
   const roofGreenPools = ROOF_GREEN.map((c) => makePool(c, 0.02, 0.95, 8_000, 0.25, { lod: 0 }))
   const roofDeckPools = ROOF_TERRACE.map((c) => makePool(c, 0.04, 0.9, 8_000, 0.35, { lod: 0 }))
   const parapet = makePool('#ece4d2', 0.08, 0.88, 40_000, 0.4, { lod: 0 })
+  parapet.struct = true
   // ── 店铺类型：招牌 / 挑灯箱 / 店内背景画 / 雨棚 各一套（一种店一个池） ──
   const planeGeo = new THREE.PlaneGeometry(1, 1)
   const shopTypes = Signs.SHOP_TYPES.map((t, i) => ({
@@ -7031,6 +7036,11 @@ export function buildBuildings(plan, seed = 77) {
     }
     if (hasCol && inst.instanceColor) inst.instanceColor.needsUpdate = true
     inst.computeBoundingSphere()
+    // 投影：只让"结构性大块"进深度图（墙体/屋顶/檐口/雨棚/阳台）。
+    // 窗台、窗套、空调、货架这些几十万件的小件不投 —— 深度图里它们只贡献亚像素噪点，
+    // 却要付一整遍顶点变换。受影则全部打开，屋檐下、雨棚下才有那条暗线。
+    inst.castShadow = !!pool.struct
+    inst.receiveShadow = true
     if (center) {
       inst.userData.chunkX = center[0]
       inst.userData.chunkZ = center[1]
