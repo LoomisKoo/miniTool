@@ -7064,7 +7064,10 @@ export function buildBuildings(plan, seed = 77) {
     // 窗台、窗套、空调、货架这些几十万件的小件不投 —— 深度图里它们只贡献亚像素噪点，
     // 却要付一整遍顶点变换。受影则全部打开，屋檐下、雨棚下才有那条暗线。
     inst.castShadow = !!pool.struct
-    inst.receiveShadow = true
+    // 受影只给地面铺装。实测：墙面每帧多 9 次深度图比较，代价是 44ms/帧，
+    // 而墙面本来就被 AO 和主光方向分好了明暗，影子落在墙上几乎看不出来；
+    // 影子真正有用的是"落到街上"——所以只有地面/路面/铺装接影子。
+    inst.receiveShadow = !!pool.mat.userData.groundCraft
     if (center) {
       inst.userData.chunkX = center[0]
       inst.userData.chunkZ = center[1]

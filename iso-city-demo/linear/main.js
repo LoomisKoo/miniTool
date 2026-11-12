@@ -1,7 +1,8 @@
 import * as THREE from 'three'
 import { W, SURFACE } from './spec.js'
 import { buildWorld } from './world.js'
-import { setupDay, tuneFog, SKY } from './light.js'
+import { setupDay, tuneFog, SKY, SHADOW_ALLOWED } from './light.js'
+import * as Mat from './mat.js'
 import { setEnvMap, allMaterials, nightU, applyNight, updateUpView, waterTime, radialTex } from './mat.js'
 import { buildHero } from './hero.js'
 import { buildCloud } from './cloud.js'
@@ -21,8 +22,8 @@ const renderer = new THREE.WebGLRenderer({
 })
 
 // 像素比：Retina 上 2.0 + MSAA 填充率太高，起步 1.25、最高 1.5（自适应只在这之间调）
-const maxDPR = Math.min(devicePixelRatio, 1.5)
-let curDPR = Math.min(devicePixelRatio, 1.25)
+const maxDPR = Math.min(devicePixelRatio, 2)
+let curDPR = Math.min(devicePixelRatio, 1.4)
 renderer.setPixelRatio(curDPR)
 renderer.setSize(innerWidth, innerHeight)
 
@@ -34,10 +35,14 @@ const loading = document.getElementById('loading')
 let world = null
 try {
   world = buildWorld()
-  // 地面 / 自然带 / 城墙这些普通网格要接住建筑的投影，否则楼上投下的影子落不到街上
+  // 地面 / 自然带 / 城墙这些普通网格要接住建筑的投影，否则楼上投下的影子落不到街上。
+  // 注意：受影是有代价的（每个片元 9 次深度图比较），所以只给地面系材质开。
   world.traverse((o) => {
     if (!o.isMesh) return
-    o.receiveShadow = true
+    const m = o.material
+    // 记下"地面系"：只有它们永远接影子；墙面的受影由阴影档位决定（高级才开）
+    o.userData.shadowGround = o.receiveShadow || !!(m && m.userData && m.userData.groundCraft)
+    o.receiveShadow = o.userData.shadowGround || o.castShadow
     if (o.isInstancedMesh && o.castShadow === false) return
     o.castShadow = true
   })
@@ -374,6 +379,35 @@ const look = new THREE.Vector3()
 const camLook = new THREE.Vector3()
 let camInit = false
 
+// ── 阴影档位：高(2048/PCF) → 中(1024) → 关。跟着帧率自动降级，卡的时候先牺牲影子而不是掉到十几帧 ──
+// 手动指定：?shadows=high|mid|off（off 时连阴影图都不建）
+const SHADOW_ARG = (location.search.match(/[?&]shadows=([a-z0-9]+)/) || [])[1]
+let shadowLvl = SHADOW_ARG === 'off' || SHADOW_ARG === '0' ? 0 : SHADOW_ARG === 'mid' ? 1 : SHADOW_ARG === 'high' ? 2 : 2
+let shadowCool = 0
+let shadowInit = true
+function applyShadowLvl() {
+  const on = SHADOW_ALLOWED && shadowLvl > 0
+  renderer.shadowMap.enabled = on
+  // 高级档：墙面也接影子（楼与楼互相遮挡，转角那条暗带）；中/低档：只有地面接，
+  // 省掉的正是最贵的那部分（满屏立面 × 每次 9 次深度比较）
+  world?.traverse((o) => {
+    if (!o.isMesh) return
+    o.receiveShadow = !!o.userData.shadowGround || (shadowLvl >= 2 && !!o.castShadow)
+  })
+  if (!sun.castShadow) return
+  const size = shadowLvl >= 2 ? 2048 : 1024
+  if (sun.shadow.mapSize.x !== size) {
+    sun.shadow.mapSize.set(size, size)
+    if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null }
+  }
+  renderer.shadowMap.needsUpdate = true
+  shX = 1e9 // 强制重画一次
+  // 阴影开关会改 program 的 define，必须让材质重编一次，否则"关掉"了还在付采样钱。
+  // 启动时不用（材质还没编译过，第一次编译就会读到最新状态）
+  if (shadowInit) shadowInit = false
+  else Mat.recompileAll()
+}
+
 // ── 自适应分辨率：滞回 + 冷却，不再每秒来回切 DPR（每切一次就是一次 resize 卡顿）──
 let dprAccT = 0
 let dprAccN = 0
@@ -388,11 +422,28 @@ function adaptDPR(dt) {
   const avg = dprAccT / dprAccN
   dprAccT = 0
   dprAccN = 0
+  // 先降阴影档位，再把分辨率往下压：影子是纯装饰，分辨率掉下去整屏都糊
+  // 降级门槛分开：高→中 只要低于 38fps；中→关 要低到 30fps 以下（影子对观感很重要，别轻易丢）
+  shadowCool -= 2
+  if (!SHADOW_ARG && shadowCool <= 0 && shadowLvl === 2 && avg > 1 / 38) {
+    shadowLvl = 1
+    shadowCool = 8
+    applyShadowLvl()
+  } else if (!SHADOW_ARG && shadowCool <= 0 && shadowLvl === 1 && avg > 1 / 30) {
+    shadowLvl = 0
+    shadowCool = 10
+    applyShadowLvl()
+  } else if (!SHADOW_ARG && shadowCool <= 0 && shadowLvl < 2 && avg < 1 / 78) {
+    shadowLvl++
+    shadowCool = 12
+    applyShadowLvl()
+  }
   if (dprCool > 0) return
   dprBad = avg > 1 / 48 ? dprBad + 1 : 0
   dprGood = avg < 1 / 85 ? dprGood + 1 : 0
   let next = curDPR
-  if (dprBad >= 2 && curDPR > 1) next = Math.max(1, +(curDPR - 0.25).toFixed(2))
+  // 下限抬到 1.25：Retina 上掉到 1.0 就是"整屏锯齿"，宁可少几帧也别掉画质
+  if (dprBad >= 2 && curDPR > 1.25) next = Math.max(1.25, +(curDPR - 0.25).toFixed(2))
   else if (dprGood >= 3 && curDPR < maxDPR) next = Math.min(maxDPR, +(curDPR + 0.25).toFixed(2))
   if (next === curDPR) return
   curDPR = next
@@ -700,12 +751,12 @@ let shZ = 1e9
 let shNight = -1
 function maybeUpdateShadow(force) {
   const nightOn = nightT > 0.6 ? 1 : 0
-  const moved = (player.x - shX) ** 2 + (player.z - shZ) ** 2 > 400 * 400
+  const moved = (player.x - shX) ** 2 + (player.z - shZ) ** 2 > 550 * 550
   if (!force && !moved && nightOn === shNight) return
   shNight = nightOn
   if (nightOn && !force) return
   // 阴影视锥现在是 ±1200m / 2048 texel：按 texel 尺寸对齐，避免移动时阴影边缘游动
-  const snap = 2400 / 2048
+  const snap = 1600 / 2048
   shX = Math.round(player.x / 80) * 80
   shZ = Math.round(player.z / 80) * 80
   const gx = Math.round(shX / snap) * snap
@@ -959,6 +1010,7 @@ addEventListener('resize', () => {
 })
 
 maybeUpdateShadow(true)
+applyShadowLvl() // 初始档位落地（含墙体是否接影）
 /** 出生点：在起点附近螺旋搜索一块空地（避开灯杆/红绿灯/树/长椅/垃圾桶/停的车/建筑刚体） */
 function clearSpot(x0, z0, r = 1.1) {
   const propClear = world?.userData?.streetLife?.userData?.propClear

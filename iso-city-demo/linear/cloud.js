@@ -36,8 +36,8 @@ function coreMaterial() {
           vec3 Vv = normalize(vViewPosition);
           float rim = pow(1.0 - clamp(abs(dot(normalize(vNormal), Vv)), 0.0, 1.0), 2.0);
           float top = smoothstep(-0.4, 0.45, vLY);
-          vec3 base = mix(vec3(0.80, 0.84, 0.92), vec3(1.0, 1.0, 0.985), top);
-          totalEmissiveRadiance += base * mix(0.52, 0.3, uNight) + vec3(1.0, 0.93, 0.8) * rim * mix(0.35, 0.55, uNight);
+          vec3 base = mix(vec3(0.94, 0.96, 1.0), vec3(1.0), top);
+          totalEmissiveRadiance += base * mix(0.85, 0.3, uNight) + vec3(1.0, 0.95, 0.86) * rim * mix(0.42, 0.55, uNight);
         }`)
   }
   return m
@@ -150,8 +150,10 @@ function puffSprites(n, noise, time, stretchU) {
         // 体积光：伪法线 + 局部高度，上亮下暗，只在团内缓变
         float nz = sqrt(max(0.0, 1.0 - r * r));
         float ny = (vUv.y - 0.5) * 2.0;
-        float shade = clamp(0.52 + vY * 1.1 + ny * 0.18 * nz + (nn - 0.5) * 0.35, 0.0, 1.0);
-        vec3 col = mix(vec3(0.80, 0.84, 0.91), vec3(1.0, 1.0, 0.99), shade);
+        // 云是「自发光的天光散射体」，不该被当成白漆球去受光：底色直接抬到 0.93，
+        // 阴面也只压到 0.9 —— 之前底部 0.80 + 混合蓝天空色的透明叠加，整团看着发灰。
+        float shade = clamp(0.60 + vY * 1.1 + ny * 0.18 * nz + (nn - 0.5) * 0.3, 0.0, 1.0);
+        vec3 col = mix(vec3(0.93, 0.95, 1.0), vec3(1.0, 1.0, 1.0), shade);
         col *= mix(1.0, 0.6, uNight);
         col += vec3(0.95, 0.85, 0.65) * 0.08 * uNight;
         gl_FragColor = vec4(col, a);

@@ -232,6 +232,8 @@ export function tactile(mat, amp = 1, box = false) {
  */
 export function groundCraft(mat, kind) {
   const K = { pave: 0, slab: 1, asphalt: 2, lawn: 3, ground: 4 }[kind] ?? 0
+  // 标记：这些是地面铺装，必须接收阴影（阴影落在地面上是整套投影最有用的部分）
+  mat.userData.groundCraft = true
   const prev = mat.onBeforeCompile
   mat.onBeforeCompile = (sh, r) => {
     if (prev) prev(sh, r)
@@ -587,6 +589,11 @@ const extras = new Set()
 /** 建筑运行时创建的材质也要吃到 IBL */
 export function registerMaterial(mat) {
   if (mat) extras.add(mat)
+}
+
+/** 全场材质重编译（阴影档位切换时用：program 的 shadowMap 开关变了，不重编不生效） */
+export function recompileAll() {
+  for (const m of allMaterials()) m.needsUpdate = true
 }
 
 export function allMaterials() {

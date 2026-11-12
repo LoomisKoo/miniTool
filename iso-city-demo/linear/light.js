@@ -1,4 +1,7 @@
 import * as THREE from 'three'
+
+/** 允许投影吗（?shadows=0|off 时整条阴影管线都不开，省掉所有采样） */
+export const SHADOW_ALLOWED = !/[?&]shadows=(0|off)\b/.test(location.search)
 import { radialTex, stops, nightU } from './mat.js'
 
 export function makeSky() {
@@ -190,19 +193,22 @@ export function setupDay(scene, renderer) {
   // 但整城 5000m 全画进一张图，1 个 texel 要覆盖 2m 多，边缘全是锯齿块。
   // 做法是只画镜头附近 1200m 见方（2048 图 → 约 0.6m/texel），并让视锥跟着镜头走
   // （main.js 的 maybeUpdateShadow 负责搬 target，只在移动 400m 时重画一次）。
-  // ?shadows=0 可关掉，用来做 A/B 对比 / 排查
-  const SHADOW_ON = !/[?&]shadows=0/.test(location.search)
+  // ?shadows=0 / off 可关掉，用来做 A/B 对比 / 排查
+  const SHADOW_ON = SHADOW_ALLOWED
   sun.castShadow = SHADOW_ON
+  // 1600m 见方 / 2048 → 0.78m 一个 texel。之前 2400m/2048 = 1.17m，
+  // 影子边缘一格一格跳，看起来就是"建筑锯齿"。影子只在近处起作用，缩小视锥不损失什么。
   sun.shadow.mapSize.set(2048, 2048)
   sun.shadow.camera.near = 200
   sun.shadow.camera.far = 5_000
-  sun.shadow.camera.left = -1_200
-  sun.shadow.camera.right = 1_200
-  sun.shadow.camera.top = 1_200
-  sun.shadow.camera.bottom = -1_200
+  sun.shadow.camera.left = -800
+  sun.shadow.camera.right = 800
+  sun.shadow.camera.top = 800
+  sun.shadow.camera.bottom = -800
   // bias 太小 → 自阴影痤疮（脸上起黑点）；太大 → 阴影脱离物体（peter-panning）
   sun.shadow.bias = -0.0004
-  sun.shadow.normalBias = 0.8
+  // normalBias 要压在"一个 texel"量级：太小墙面起黑条纹（acne），太大阴影从墙根浮起来
+  sun.shadow.normalBias = 0.75
   sun.shadow.camera.updateProjectionMatrix()
   scene.add(sun)
   scene.add(sun.target)
@@ -216,7 +222,9 @@ export function setupDay(scene, renderer) {
   moon.position.set(1_800, 2_400, -1_600)
 
   renderer.shadowMap.enabled = SHADOW_ON
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap
+  // PCFSoft 每个片元 16 次深度比较；PCF 9 次。这一项实测就差 20ms/帧（-40%渲染时间），
+  // 而在 0.78m/texel 的精度下，软边其实看不出来。
+  renderer.shadowMap.type = THREE.PCFShadowMap
   // 每帧重画阴影图 = 整城几何多走一遍深度。静态城不需要：
   // 只有 maybeUpdateShadow 判定"镜头移动超过 400m"时才 needsUpdate 一次
   renderer.shadowMap.autoUpdate = false

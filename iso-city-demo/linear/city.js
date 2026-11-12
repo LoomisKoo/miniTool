@@ -188,6 +188,7 @@ function buildRoads(plan) {
       const road = new THREE.Mesh(new THREE.BoxGeometry(W.avenueW, 0.12, z1 - z0), Mat.asphalt())
       road.position.set(x, SURFACE + 0.06, (z0 + z1) / 2)
       road.receiveShadow = true
+      road.userData.shadowGround = true
       g.add(road)
     }
   }
@@ -202,6 +203,7 @@ function buildRoads(plan) {
         const road = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, 0.12, W.streetW), Mat.asphalt())
         road.position.set((x0 + x1) / 2, SURFACE + 0.035, z) // 比大道低 2.5cm，路口不再共面闪烁
         road.receiveShadow = true
+      road.userData.shadowGround = true
         g.add(road)
       }
     }
@@ -216,6 +218,7 @@ function buildRoads(plan) {
     if (r.axis === 'z') road.position.set(r.at, SURFACE + 0.06, mid)
     else road.position.set(mid, SURFACE + 0.035, r.at)
     road.receiveShadow = true
+      road.userData.shadowGround = true
     road.name = 'innerRoad'
     g.add(road)
   }
