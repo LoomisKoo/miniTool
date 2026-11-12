@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import * as THREE from 'three'
+import { GROUND_DEPTH } from './style'
 
 // 用一张共享的径向渐变贴图代替点光源做"光晕"。
 // 夜间如果给每盏灯、每个行人、每间店铺都挂 pointLight，碎片着色器要循环几十个光源，
@@ -58,8 +59,8 @@ export function GlowDisc({
         // 和地面光池同理：路面/铺装都带斜率相关的负深度偏移，
         // 光晕只要贴着它们就会被切掉一角，这里也要往相机方向再压一次。
         polygonOffset
-        polygonOffsetFactor={-16}
-        polygonOffsetUnits={-32}
+        polygonOffsetFactor={GROUND_DEPTH.pool.polygonOffsetFactor}
+        polygonOffsetUnits={GROUND_DEPTH.pool.polygonOffsetUnits}
       />
     </mesh>
   )

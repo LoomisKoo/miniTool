@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { api, ApiError, clearToken, getToken, setToken } from './api'
 import { restoreReturnSpot, saveReturnSpot, startCityFlyIn } from './game/walker'
 import { floorLabel, unitBuilding } from './data/units'
+import { shopById } from './data/shops'
 import { music } from './audio/music'
 import type {
   AdoptedPet,
@@ -24,12 +25,15 @@ export type Panel =
   | { type: 'space'; id: string }
   | { type: 'elevator'; id: string }
   | { type: 'editor'; id: string }
+  | { type: 'stall'; id: string }
   | { type: 'favorites' }
   | { type: 'catalog' }
   | { type: 'about' }
 
 export type Screen = 'intro' | 'city' | 'interior'
 
+/** 店铺名：不知道就退回到一句中性的话，不要让界面上出现 undefined。 */
+const shopName = (id: string) => shopById[id]?.name || '沿街店铺'
 /** 对话里的一次选择（例如「带它回家」），点按后才执行。 */
 export type DialogChoice = {
   label: string
@@ -91,6 +95,12 @@ type AppState = {
   dialog: Dialog | null
   hud: Hud
   night: boolean
+  /**
+   * 室内镜头：third = 近景第三人称（默认），top = 剖切俯视。
+   * 3.3m 层高的小户型里，第三人称经常被床和柜子顶到墙上，
+   * 俯视虽然看不到脸，但"房间长什么样"一眼能看全，所以两个都留着。
+   */
+  indoorCam: 'third' | 'top'
   /** 画质档位：0 流畅 / 1 标准 / 2 精细，由帧率自适应调整，也可手动切换。 */
   quality: number
   pointerLocked: boolean
@@ -155,6 +165,7 @@ type AppState = {
   claimRations: () => Promise<void>
   setPointerLocked: (locked: boolean) => void
   toggleNight: () => void
+  setIndoorCam: (mode: 'third' | 'top') => void
   toggleMusic: () => void
   setQuality: (quality: number) => void
   showToast: (message: string) => void
@@ -297,7 +308,10 @@ export const useApp = create<AppState>((set, get) => ({
   toast: null,
   dialog: null,
   hud: { x: 0, y: 0, z: 26, yaw: 0, stamina: 1, gliding: false, flying: false, overview: false, speed: 0 },
+  // 默认蓝调时刻：滨江都市一天里最好看的那二十分钟。
+  // （之前的"深夜"是另一套配色，按 L 仍可切到黄昏/白昼。）
   night: true,
+  indoorCam: 'third',
   quality: 2,
   pointerLocked: false,
   favorites: [],
@@ -361,6 +375,8 @@ export const useApp = create<AppState>((set, get) => ({
         get().enterTarget({ kind: 'building', id, floor: floor ? Number(floor) : 1 })
       } else if (enter?.startsWith('space:')) {
         get().enterTarget({ kind: 'space', id: enter.slice(6) })
+      } else if (enter?.startsWith('shop:')) {
+        get().enterTarget({ kind: 'shop', id: enter.slice(5) })
       }
     } catch (error) {
       set({ booting: false, bootError: errorMessage(error) })
@@ -446,7 +462,9 @@ export const useApp = create<AppState>((set, get) => ({
           : '街角咖啡'
         : target.kind === 'building'
           ? `${building?.name || target.id} · ${floorLabel(floor)}`
-          : get().world?.spaces.find((s) => s.id === target.id)?.name || '个人空间')
+          : target.kind === 'shop'
+            ? shopName(target.id)
+            : get().world?.spaces.find((s) => s.id === target.id)?.name || '个人空间')
     set({
       screen: 'interior',
       interior: target.kind === 'building' ? { ...target, floor } : target,
@@ -683,8 +701,11 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   setHud: (hud) => set({ hud }),
-  toggleNight: () => {
-    // 昼夜切换要重建一批贴图和合批网格，会卡一两帧。先压一层暗幕，
+  setIndoorCam: (mode) => {
+    set({ indoorCam: mode })
+    get().showToast(mode === 'top' ? '剖切俯视 · 看得见整间屋子' : '近景跟随 · 看得到家具细节')
+  },
+  toggleNight: () => {    // 昼夜切换要重建一批贴图和合批网格，会卡一两帧。先压一层暗幕，
     // 等暗幕盖满再切，卡顿发生在幕后；切完下一帧再揭开。
     behindCurtain(() => set({ night: !get().night }))
   },

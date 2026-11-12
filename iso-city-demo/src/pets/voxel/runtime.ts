@@ -1,7 +1,7 @@
 // 城市和图鉴共用的运行时：取模型、算部件矩阵、分批构建。
 
 import * as THREE from 'three'
-import { speciesOf } from '../../catalog/species'
+import { breedSizeOf, speciesOf } from '../../catalog/species'
 import { buildVoxelPet, posePart, type PetMotion, type VoxelPet } from './build'
 import { VOXEL_DESIGNS } from './designs'
 
@@ -12,9 +12,10 @@ export function petModel(speciesId: string, breedId: string): VoxelPet {
   return buildVoxelPet(VOXEL_DESIGNS[speciesId] ?? VOXEL_DESIGNS.cat, breedId, PET_RES)
 }
 
-/** 体素单位 → 世界单位：让整只（含耳朵）正好是物种表里的身高 */
-export function petScale(speciesId: string, pet: VoxelPet) {
-  return speciesOf(speciesId).height / pet.height
+/** 体素单位 → 世界单位：让整只（含耳朵）正好是物种表里的身高 × 品种体型 */
+export function petScale(speciesId: string, pet: VoxelPet, breedId?: string) {
+  const size = breedId ? breedSizeOf(speciesId, breedId) : 1
+  return (speciesOf(speciesId).height * size) / pet.height
 }
 
 const built = new Set<string>()

@@ -2,13 +2,14 @@ import { Suspense, useEffect, useMemo, useRef } from 'react'
 import { barista } from '../data/npcs'
 import { NpcFigure } from '../scene/Npcs'
 import { NoticeBoard } from '../scene/NoticeBoard'
-import { Canvas } from '@react-three/fiber'
-import { EffectComposer, N8AO, Vignette } from '@react-three/postprocessing'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
+import { Bloom, EffectComposer, N8AO, Vignette } from '@react-three/postprocessing'
 import * as THREE from 'three'
 import { useApp } from '../store'
+import { openPetDialog } from '../pets/interact'
 import type { SpaceDetail } from '../types'
 import { cafeInterior, galleryInterior, roomInterior } from '../data/city'
-import { isUnitSpaceId, unitMetaOfSpace, unitPlanOfSpace, unitSpaceTemplate } from '../data/units'
+import { isUnitSpaceId, unitMetaOfSpace, unitPlanOfSpace, unitSpaceTemplate, ROOF_FLOOR } from '../data/units'
 import { FurnitureMesh, FURNITURE_META } from './Furniture'
 import { PlayerRig, type Collider, type Interactable } from '../scene/PlayerRig'
 import { Marker } from '../scene/Markers'
@@ -17,9 +18,16 @@ import { palettes } from '../scene/theme'
 import { ImageBasedLighting } from '../scene/lighting'
 import { makeConcreteMaps } from '../scene/pbr'
 import { BuildingInterior } from './BuildingInterior'
+import { RoofDeck } from './RoofDeck'
+import { ShopRoom } from './ShopRoom'
 import { CityBackdrop } from './CityBackdrop'
-import { Balcony, ClosedDoor, PartitionWalls, RoomWalls, roomBounds, roomBox, roomColliders, type LocalOpening } from './RoomKit'
+import { Balcony, CeilingPendant, ClosedDoor, PartitionWalls, RoomWalls, balconyRect, roomBounds, roomBox, roomColliders, sideOfPoint, useWallCut, type LocalOpening } from './RoomKit'
+import { INDOOR_STYLE, deepen, floorTone, wallTone } from './style'
 import { useUnitRoomPlan } from './UnitRoom'
+import { HomePets, homePetLive, homeSpots } from './HomePets'
+import { useHomeFeatures } from './Features'
+import { homeDevices } from '../data/features'
+import { HUNGRY_AT } from '../pets/hunger'
 import { fitFurniture, footprint } from './placement'
 
 /** 楼内户的兜底尺寸：正常情况下由楼体平面正推（floorPlanOf），这里只防详情缺失。 */
@@ -81,8 +89,8 @@ function RoomShell({
   // 纯色地板/墙面在近景里非常"塑料"，加一层低对比的程序化纹理
   // （木拼板 + 涂料颗粒），只改观感，不增加几何。
   const floorMap = useMemo(() => {
-    const tex = makeFloorTexture(floor, '#7f6f58')
-    tex.repeat.set(Math.max(2, width / 4.2), Math.max(2, depth / 4.2))
+    const tex = makeFloorTexture(floor, deepen(floor, 0.34))
+    tex.repeat.set(Math.max(2.4, width / 2.4), Math.max(2.4, depth / 2.4))
     return tex
   }, [floor, width, depth])
   useEffect(() => () => floorMap.dispose(), [floorMap])
@@ -113,25 +121,52 @@ function RoomShell({
       side={THREE.DoubleSide}
     />
   )
+
+  // 剖面：和 RoomWalls 用同一套规则——只留镜头对面那两面墙。
+  // RoomShell 是手工搭的方盒子（展厅、咖啡馆），以前四面墙加吊顶全画，
+  // iso 机位拉远之后近处的墙和整块天花板就直接糊在画面上。
+  const shell = useMemo(() => ({ W: width, D: depth, H: height, cx: 0, cz: 0 }), [width, depth, height])
+  const cutN = useWallCut('n', shell)
+  const cutN2 = useWallCut('n', shell)
+  const cutN3 = useWallCut('n', shell)
+  const cutS = useWallCut('s', shell)
+  const cutW = useWallCut('w', shell)
+  const cutE = useWallCut('e', shell)
+  const ceilingRef = useRef<THREE.Group>(null)
+  const ceilingInnerRef = useRef<THREE.Mesh>(null)
+  useFrame(({ camera }) => {
+    const show = camera.position.y < height - 0.15
+    if (ceilingRef.current) ceilingRef.current.visible = show
+    if (ceilingInnerRef.current) ceilingInnerRef.current.visible = show
+  })
   return (
     <group>
       <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
         <planeGeometry args={[width, depth]} />
-        <meshStandardMaterial map={floorMap} color="#ffffff" roughness={0.62} metalness={0.03} />
+        <meshStandardMaterial
+          map={floorMap}
+          color="#ffffff"
+          roughness={0.52}
+          metalness={0.04}
+          envMapIntensity={0.7}
+        />
       </mesh>
 
       {/* 踢脚线只在下面有一段（靠门那一侧），这里不再画第二条：
           两套踢脚线都在同一面墙上时，外表面会贴着墙面共面，走两步就闪。 */}
-      <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, height, 0]}>
-        <planeGeometry args={[width, depth]} />
-        {/* 天花板必须双面：镜头被推高到天花板以上时，单面朝下的平面会被背面剔除，
-            于是从外面直接看进房间内部（就是那张"房间悬在一片窗户中间"的截图）。 */}
-        <meshStandardMaterial color="#e3ded4" roughness={0.95} side={THREE.DoubleSide} />
-      </mesh>
+      <group ref={ceilingRef}>
+        <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, height, 0]}>
+          <planeGeometry args={[width, depth]} />
+          {/* 天花板必须双面：镜头被推高到天花板以上时，单面朝下的平面会被背面剔除，
+              于是从外面直接看进房间内部（就是那张"房间悬在一片窗户中间"的截图）。 */}
+          <meshStandardMaterial color={INDOOR_STYLE.ceiling} roughness={0.94} side={THREE.DoubleSide} />
+        </mesh>
+      </group>
       {/* 北墙不能整面铺死：
           有阳台时中间是推拉门洞，普通房间中间是窗洞。
           之前这里无条件铺了一整面墙，于是阳台和窗外的城市全被挡在墙后，
           只能从文案里读到"阳台能看见城市的立面"。 */}
+      <group ref={cutN}>
       {balcony ? null : window === 'normal' ? (
         <>
           {[
@@ -185,12 +220,12 @@ function RoomShell({
           {[-balconyOpenWidth / 2, 0, balconyOpenWidth / 2].map((x) => (
             <mesh key={x} position={[x, balconyOpenHeight / 2, -depth / 2 + 0.03]}>
               <boxGeometry args={[0.07, balconyOpenHeight, 0.09]} />
-              <meshStandardMaterial color="#5f574c" roughness={0.5} metalness={0.35} />
+              <meshStandardMaterial color={INDOOR_STYLE.frame} roughness={0.32} metalness={0.62} envMapIntensity={1.1} />
             </mesh>
           ))}
           <mesh position={[0, balconyOpenHeight, -depth / 2 + 0.03]}>
             <boxGeometry args={[balconyOpenWidth + 0.14, 0.08, 0.09]} />
-            <meshStandardMaterial color="#5f574c" roughness={0.5} metalness={0.35} />
+            <meshStandardMaterial color={INDOOR_STYLE.frame} roughness={0.32} metalness={0.62} envMapIntensity={1.1} />
           </mesh>
 
           {/* 推拉玻璃门：一扇常开，滑在左侧；门洞右半边直通阳台。
@@ -198,11 +233,12 @@ function RoomShell({
           <mesh position={[-balconyOpenWidth / 2 - balconyOpenWidth / 4 + 0.04, balconyOpenHeight / 2, -depth / 2 - 0.08]}>
             <planeGeometry args={[balconyOpenWidth / 2 - 0.06, balconyOpenHeight - 0.08]} />
             <meshStandardMaterial
-              color="#c3dbe4"
+              color={INDOOR_STYLE.glass}
               transparent
-              opacity={0.14}
-              roughness={0.08}
-              metalness={0.5}
+              opacity={0.12}
+              roughness={0.03}
+              metalness={0.62}
+              envMapIntensity={1.4}
               side={THREE.DoubleSide}
             />
           </mesh>
@@ -210,7 +246,7 @@ function RoomShell({
           {/* 阳台楼板、压边和栏杆 */}
           <mesh position={[0, -0.06, -depth / 2 - BALCONY_DEPTH / 2]} receiveShadow>
             <boxGeometry args={[slabWidth, 0.12, BALCONY_DEPTH]} />
-            <meshStandardMaterial color="#b8ab97" roughness={0.86} />
+            <meshStandardMaterial color="#c9bda9" roughness={0.78} metalness={0.05} envMapIntensity={0.7} />
           </mesh>
           <mesh position={[0, -0.14, -depth / 2 - BALCONY_DEPTH / 2]}>
             <boxGeometry args={[slabWidth - 0.1, 0.1, BALCONY_DEPTH + 0.1]} />
@@ -224,7 +260,7 @@ function RoomShell({
           ].map((rail, i) => (
             <mesh key={i} position={rail.pos}>
               <boxGeometry args={[rail.size[0], rail.size[1], rail.size[2]]} />
-              <meshStandardMaterial color="#8e9ba3" roughness={0.35} metalness={0.55} />
+              <meshStandardMaterial color={INDOOR_STYLE.frame} roughness={0.3} metalness={0.66} envMapIntensity={1.1} />
             </mesh>
           ))}
 
@@ -266,16 +302,22 @@ function RoomShell({
           ))}
         </group>
       )}
-      <mesh position={[-width / 2, height / 2, 0]} rotation={[0, Math.PI / 2, 0]}>
-        <planeGeometry args={[depth, height]} />
-        {wallMat}
-      </mesh>
-      <mesh position={[width / 2, height / 2, 0]} rotation={[0, -Math.PI / 2, 0]}>
-        <planeGeometry args={[depth, height]} />
-        {wallMat}
-      </mesh>
+      </group>
+      <group ref={cutW}>
+        <mesh position={[-width / 2, height / 2, 0]} rotation={[0, Math.PI / 2, 0]}>
+          <planeGeometry args={[depth, height]} />
+          {wallMat}
+        </mesh>
+      </group>
+      <group ref={cutE}>
+        <mesh position={[width / 2, height / 2, 0]} rotation={[0, -Math.PI / 2, 0]}>
+          <planeGeometry args={[depth, height]} />
+          {wallMat}
+        </mesh>
+      </group>
 
       {/* 南墙留出门洞，不参与渲染的部分用侧墙和门楣补齐 */}
+      <group ref={cutS}>
       <mesh position={[-(doorWidth + sideWidth) / 2, height / 2, depth / 2]} rotation={[0, Math.PI, 0]}>
         <planeGeometry args={[sideWidth, height]} />
         {wallMat}
@@ -332,20 +374,24 @@ function RoomShell({
           <meshBasicMaterial color="#d8b47c" transparent opacity={0.45} toneMapped={false} />
         </mesh>
       )}
+      </group>
 
-      {[
-        ...(balcony ? [] : [[0, 0.08, -depth / 2 + 0.045, width, 0.16, 0.08]]),
-        [-width / 2 + 0.045, 0.08, 0, 0.08, 0.16, depth],
-        [width / 2 - 0.045, 0.08, 0, 0.08, 0.16, depth],
-      ].map(([x, y, z, w, h, d], i) => (
-        <mesh key={i} position={[x, y, z]}>
-          <boxGeometry args={[w, h, d]} />
+      {/* 踢脚线跟着各自的墙走：剖掉的那两面不留一条浮在半空的贴边 */}
+      <group ref={cutW}>
+        <mesh position={[-width / 2 + 0.045, 0.08, 0]}>
+          <boxGeometry args={[0.08, 0.16, depth]} />
           <meshStandardMaterial color="#b9ad9b" roughness={0.8} />
         </mesh>
-      ))}
+      </group>
+      <group ref={cutE}>
+        <mesh position={[width / 2 - 0.045, 0.08, 0]}>
+          <boxGeometry args={[0.08, 0.16, depth]} />
+          <meshStandardMaterial color="#b9ad9b" roughness={0.8} />
+        </mesh>
+      </group>
 
       {!balcony && (
-        <group position={[0, windowY, -depth / 2 + 0.03]}>
+        <group ref={cutN3} position={[0, windowY, -depth / 2 + 0.03]}>
           {/* 窗框是四根边框，不再用一块板压在洞口上：
               中间必须是通的，窗后才看得见楼下这条街。 */}
           {[
@@ -387,18 +433,22 @@ function RoomShell({
         </group>
       )}
 
-      {!balcony &&
-        window === 'clerestory' &&
-        [-width * 0.3, -width * 0.1, width * 0.1, width * 0.3].map((x) => (
-          <mesh key={x} position={[x, height - 1.45, -depth / 2 + 0.04]}>
-            <planeGeometry args={[2.2, 1.9]} />
-            <meshBasicMaterial color="#eef3ed" toneMapped={false} />
-          </mesh>
-        ))}
+      {!balcony && window === 'clerestory' && (
+        <group ref={cutN2}>
+          {[-width * 0.3, -width * 0.1, width * 0.1, width * 0.3].map((x) => (
+            <mesh key={x} position={[x, height - 1.45, -depth / 2 + 0.04]}>
+              <planeGeometry args={[2.2, 1.9]} />
+              <meshBasicMaterial color="#eef3ed" toneMapped={false} />
+            </mesh>
+          ))}
+        </group>
+      )}
 
-      <mesh position={[0, height - 0.02, 0]} rotation={[Math.PI / 2, 0, 0]}>
+      {/* 里层吊顶压在主吊顶下面 2cm，也只在天花板可见时才画：
+          以前它无条件渲染，iso 机位一拉高，它就是一块白板盖住整间房。 */}
+      <mesh ref={ceilingInnerRef} position={[0, height - 0.02, 0]} rotation={[Math.PI / 2, 0, 0]}>
         <planeGeometry args={[width - 1, depth - 1]} />
-        <meshStandardMaterial color="#e8e2d7" roughness={1} />
+        <meshStandardMaterial color={INDOOR_STYLE.ceiling} roughness={1} />
       </mesh>
 
       {editing && (
@@ -434,17 +484,20 @@ function ArtFrame({
 }) {
   const texture = useMemo(() => makeArtTexture(palette, 1), [palette])
   const plaque = useMemo(() => makeSignTexture(title, '#5a5144'), [title])
+  // 画挂在墙上，墙被剖掉时画也得跟着消失，否则一整幅 2.5m 的画会浮在房间前面
+  const cut = useWallCut(sideOfPoint(position[0], position[2]))
   return (
-    <group position={position} rotation={rotation}>
-      <mesh position={[0, 0, -0.04]}>
-        <boxGeometry args={[2.5, 3.1, 0.08]} />
+    <group ref={cut} position={position} rotation={rotation} userData={{ noOcclude: true }}>
+      {/* 整块都在墙面前：框体往墙里埋半截，会被墙面从中间切过去 */}
+      <mesh position={[0, 0, 0.05]}>
+        <boxGeometry args={[2.5, 3.1, 0.09]} />
         <meshStandardMaterial color="#8d7757" roughness={0.55} metalness={0.15} />
       </mesh>
-      <mesh position={[0, 0, 0.02]}>
+      <mesh position={[0, 0, 0.11]}>
         <planeGeometry args={[2.2, 2.8]} />
         <meshBasicMaterial map={texture} toneMapped={false} />
       </mesh>
-      <mesh position={[0, -1.75, 0.01]}>
+      <mesh position={[0, -1.75, 0.03]}>
         <planeGeometry args={[1.35, 0.34]} />
         <meshBasicMaterial map={plaque} toneMapped={false} />
       </mesh>
@@ -633,7 +686,7 @@ function GalleryContent() {
         bounds={bounds}
         colliders={colliders}
         interactables={interactables}
-        cameraDistance={4.4}
+        cameraDistance={9.5}
         interior
       />
     </group>
@@ -685,6 +738,7 @@ function SpotLamp({ position }: { position: [number, number, number] }) {
 function CafeContent() {
   const openPlace = useApp((state) => state.openPlace)
   const exitCity = useApp((state) => state.exitCity)
+  const topDown = useApp((state) => state.indoorCam === 'top')
   const placeDetail = useApp((state) => state.placeDetail)
   const posts = placeDetail?.place.id === 'corner-cafe' ? placeDetail.posts : []
   // 玻璃亭：四面都是落地玻璃，西面正中是门
@@ -753,8 +807,15 @@ function CafeContent() {
 
   return (
     <group>
-      <RoomWalls box={cafe.box} openings={cafe.openings} wallColor="#e8ddcd" floorColor="#b99a78" ceiling="#efe4d2" />
-      <CityBackdrop buildingId="cafe" floor={1} />
+      <RoomWalls
+        box={cafe.box}
+        openings={cafe.openings}
+        wallColor={wallTone('#e8ddcd', 'cafe')}
+        floorColor={floorTone('#b99a78', 'cafe')}
+        ceiling={INDOOR_STYLE.ceiling}
+        hideCeiling={topDown}
+      />
+      <CityBackdrop buildingId="cafe" floor={1} interior />
 
       <group position={[5.6, 0, 0]}>
         <mesh position={[0, 0.52, 0]} castShadow receiveShadow>
@@ -853,7 +914,7 @@ function CafeContent() {
         bounds={bounds}
         colliders={colliders}
         interactables={interactables}
-        cameraDistance={3.3}
+        cameraDistance={8.5}
         interior
       />
     </group>
@@ -871,11 +932,15 @@ function SpaceRoom() {
   const openSpace = useApp((state) => state.openSpace)
   const startEditing = useApp((state) => state.startEditing)
   const exitCity = useApp((state) => state.exitCity)
+  const topDown = useApp((state) => state.indoorCam === 'top')
 
   const isUnitRoom = Boolean(interiorId && isUnitSpaceId(interiorId))
   // 户型尺寸不再写死：从楼体平面正推（户宽 = 面宽 / 每层户数）。
   const unit = useMemo(() => (isUnitRoom && interiorId ? unitPlanOfSpace(interiorId) : null), [isUnitRoom, interiorId])
   const plan = useUnitRoomPlan(unit)
+  // 阳台挑板的范围：PlayerRig 用它判断人是否已经走出推拉门，
+  // 从而把镜头连续地滑到肩后平视（不是切换机位模式）。
+  const balconyZone = useMemo(() => (plan?.bal ? balconyRect(plan.box, plan.bal) : null), [plan])
   const room = unit?.room
   const config = room
     ? { width: room.width, depth: room.depth, height: room.height, start: unitInterior.start }
@@ -890,7 +955,8 @@ function SpaceRoom() {
   const balcony = false
   const windowKind: 'normal' | 'clerestory' | 'none' = 'normal'
   // 加载中和加载完成必须是同一套机位参数，否则详情一到，镜头会突然拉近一次。
-  const camDistance = Math.max(2.6, Math.min(4.5, Math.min(config.width, config.depth) * 0.45))
+  // iso 机位要能装下整间房：按房间最长边给距离，小房间也要到 7m 左右才看得出整层。
+  const camDistance = Math.max(7, Math.min(13, Math.max(config.width, config.depth) * 1.3))
   const walkBounds = plan
     ? plan.bounds
     : {
@@ -925,6 +991,18 @@ function SpaceRoom() {
   const isOwner = Boolean(space && user && space.ownerId === user.id)
   const editing = Boolean(editor && isOwner)
 
+  // 这户主人的宠物：住宅户内和老式个人空间都摆出来。房主不在场时访客也能看到——
+  // 「家里有猫」本身就是这户人家的门面。
+  const adopted = useApp((state) => state.pets)
+  const homePets = useMemo(
+    () => (space?.ownerId ? adopted.filter((pet) => pet.owner.id === space.ownerId) : []),
+    [space?.ownerId, adopted],
+  )
+  const petHomes = useMemo(
+    () => homeSpots(walkBounds, homePets.length),
+    [walkBounds.minX, walkBounds.maxX, walkBounds.minZ, walkBounds.maxZ, homePets.length],
+  )
+
   useEffect(() => {
     if (interiorId && detail?.space.id !== interiorId) void openSpace(interiorId, true)
   }, [interiorId, detail?.space?.id, openSpace])
@@ -935,6 +1013,16 @@ function SpaceRoom() {
     const timer = window.setInterval(() => void openSpace(interiorId, true), 2500)
     return () => window.clearInterval(timer)
   }, [interiorId, remote, openSpace])
+
+  // 特色设施：按楼型/楼层派生，不存数据。位置、模型和交互点都在 Features.tsx 里算好。
+  const devices = useMemo(() => homeDevices(unit), [unit])
+  const featureArt = detail?.space.id === interiorId ? detail.space.art : local?.art
+  const features = useHomeFeatures(
+    plan,
+    devices,
+    featureArt ?? { title: '样板陈设', palette: 'dawn' },
+    interiorId ?? '',
+  )
 
   if (!space) {
     return (
@@ -982,8 +1070,8 @@ function SpaceRoom() {
     )
   }
 
-  const wall = editing ? editor!.wallColor : space.wallColor
-  const floor = editing ? editor!.floorColor : space.floorColor
+  const wall = wallTone(editing ? editor!.wallColor : space.wallColor, interiorId ?? space.id)
+  const floor = floorTone(editing ? editor!.floorColor : space.floorColor, interiorId ?? space.id)
   const layout = editing ? editor!.layout : space.layout
   const art = editing ? editor!.art : space.art
   const items = layout.items
@@ -1095,6 +1183,22 @@ function SpaceRoom() {
           radius: 3.0,
           action: () => openSpace(space.id),
         },
+    // 家里的宠物：常驻点不会动，交互半径给宽一点，免得它逛到角落就点不到了。
+    ...homePets.map((pet, i) => {
+      const spot = petHomes[i]
+      const home = homePetLive(pet, spot)
+      return {
+        id: `pet-${pet.id}`,
+        label: pet.nickname || home.breed,
+        hint: home.hunger < HUNGRY_AT ? '按 E 互动 · 它好像饿了' : '按 E 互动 · 它在你家里',
+        x: spot.x,
+        z: spot.z,
+        radius: 2.8,
+        action: () => openPetDialog(home),
+      }
+    }),
+    // 特色设施（画廊墙 / 唱片机 / 望远镜 / 私人影院）
+    ...features.interactables,
   ]
 
   return (
@@ -1108,10 +1212,14 @@ function SpaceRoom() {
             floorColor={floor}
             editing={editing}
             onFloorClick={floorClick}
+            hideCeiling={topDown}
           />
           <PartitionWalls walls={plan.partitions} headers={plan.headers} height={plan.box.H} />
           <ClosedDoor box={plan.box} side={plan.door.side} l={plan.door.l} />
           {plan.bal && <Balcony box={plan.box} bal={plan.bal} />}
+          {/* 房间中心挂一盏吊灯：参考图里每块区域都有一盏暖灯，
+              再配一盏弱一点的点光当"补光"，深色墙才不会整片发黑。 */}
+          {!topDown && <CeilingPendant height={plan.box.H} neck={0.42} shade={0.4} />}
           <pointLight position={[0, plan.box.H - 0.4, 0]} color="#ffe2bc" intensity={1.6} distance={Math.max(plan.box.W, plan.box.D) + 2} decay={1.6} />
         </>
       ) : (
@@ -1129,9 +1237,17 @@ function SpaceRoom() {
         />
       )}
       {meta && shellCut && (
-        <CityBackdrop buildingId={meta.buildingId} floor={meta.floor} origin={plan ? [plan.box.cx, plan.box.cz] : [0, 0]} cut={shellCut} />
+        <CityBackdrop
+          buildingId={meta.buildingId}
+          floor={meta.floor}
+          origin={plan ? [plan.box.cx, plan.box.cz] : [0, 0]}
+          cut={shellCut}
+          interior
+        />
       )}
-      {(plan ? plan.art : true) && (
+      {/* 有画廊墙的那面墙已经挂了一整排画；再挂一幅 2.2×2.8 的单幅画，
+          会正好压在最中间那幅上（以前就是两套画叠在一起）。 */}
+      {(plan ? plan.art : true) && !devices.list.includes('gallery-wall') && (
         <ArtFrame
           palette={art.palette}
           title={art.title}
@@ -1154,6 +1270,9 @@ function SpaceRoom() {
           />
         )
       })}
+
+      {homePets.length > 0 && <HomePets pets={homePets} bounds={walkBounds} />}
+      {features.nodes}
 
       <group position={[guestPos[0], 0, guestPos[1]]}>
         <mesh position={[0, 0.42, 0]} castShadow>
@@ -1221,6 +1340,7 @@ function SpaceRoom() {
         colliders={colliders}
         interactables={interactables}
         cameraDistance={camDistance}
+        balcony={balconyZone}
         interior
       />
     </group>
@@ -1239,16 +1359,28 @@ function InteriorEnvironment() {
       <fog attach="fog" args={[palette.fog, 90, 560]} />
       {/* 室内不用"太阳"投影：一盏从天花板上方照下来的平行光，会让墙和吊顶
           在地板上投出一大片斜影，看着像屋顶被掀开了。室内的明暗交给
-          环境光 + 天光 + AO，局部的阴影靠家具自身的接触暗部。 */}
-      <ambientLight intensity={0.46} />
-      <hemisphereLight args={['#f4efe4', '#7a6e60', 0.52]} />
-      <directionalLight position={[3, 9, -7]} intensity={0.75} color="#fff1d8" />
+          环境光 + 天光 + AO，局部的阴影靠家具自身的接触暗部。
+          基调偏冷（和深色墙同一色系），亮度靠地板和暖色点光找回来。 */}
+      <ambientLight intensity={night ? 0.34 : 0.52} color={night ? '#8ea2b8' : '#e8eef4'} />
+      <hemisphereLight args={[night ? '#26323f' : '#dfe9ef', '#3a3630', night ? 0.34 : 0.5]} />
+      <directionalLight
+        position={[3, 9, -7]}
+        intensity={night ? 0.42 : 0.82}
+        color={night ? '#9fb6cc' : '#fff3de'}
+      />
+      {/* 靠窗那一侧的补光：让玻璃幕墙附近的墙、地板不至于沉进阴影里 */}
+      <directionalLight
+        position={[-6, 5, 8]}
+        intensity={night ? 0.18 : 0.3}
+        color={night ? '#6f8ba6' : '#cfe4f2'}
+      />
     </>
   )
 }
 
 export function InteriorScene({ active = true }: { active?: boolean }) {
   const interior = useApp((state) => state.interior)
+  const night = useApp((state) => state.night)
   // 退出内景时 store 会把 interior 清空，但 Canvas 不能跟着卸载：
   // 每次进出都重建一遍场景、重新编译一遍材质，就是"进出建筑不流畅"的来源。
   // 这里记住最后进过的房间，退到城市时把它留在后台停帧。
@@ -1275,15 +1407,19 @@ export function InteriorScene({ active = true }: { active?: boolean }) {
           {shown.kind === 'public' && shown.id === 'gallery' && <GalleryContent />}
           {shown.kind === 'public' && shown.id === 'cafe' && <CafeContent />}
           {shown.kind === 'space' && <SpaceRoom />}
-          {shown.kind === 'building' && (
-            <BuildingInterior
-              key={`${shown.id}-${shown.floor ?? 1}-${shown.core ?? 0}-${shown.from ?? ''}`}
-              id={shown.id}
-              floor={shown.floor ?? 1}
-              core={shown.core ?? 0}
-              from={shown.from}
-            />
-          )}
+          {shown.kind === 'shop' && <ShopRoom key={shown.id} id={shown.id} />}
+          {shown.kind === 'building' &&
+            (shown.floor === ROOF_FLOOR ? (
+              <RoofDeck key={`${shown.id}-roof`} buildingId={shown.id} />
+            ) : (
+              <BuildingInterior
+                key={`${shown.id}-${shown.floor ?? 1}-${shown.core ?? 0}-${shown.from ?? ''}`}
+                id={shown.id}
+                floor={shown.floor ?? 1}
+                core={shown.core ?? 0}
+                from={shown.from}
+              />
+            ))}
         </Suspense>
         <EffectComposer stencilBuffer multisampling={0}>
           {/* 室内的廉价感一大半来自"墙和地接缝处没有变暗"。
@@ -1300,7 +1436,16 @@ export function InteriorScene({ active = true }: { active?: boolean }) {
             denoiseRadius={12}
             color="#050a12"
           />
-          <Vignette offset={0.2} darkness={0.42} eskil={false} />
+          {/* 泛光：参考图里那些"亮起来"的东西——显示器的光、灯罩、地贴边缘。
+              阈值给高一点，只抓真正的自发光，地板和墙面不会跟着糊成一片。 */}
+          <Bloom
+            intensity={night ? 0.62 : 0.34}
+            luminanceThreshold={0.92}
+            luminanceSmoothing={0.25}
+            mipmapBlur
+            radius={0.72}
+          />
+          <Vignette offset={0.2} darkness={night ? 0.5 : 0.38} eskil={false} />
         </EffectComposer>
       </Canvas>
     </div>

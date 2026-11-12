@@ -187,7 +187,7 @@ export function makeFloorTexture(base = '#c9b79a', dark = '#8f7d63') {
         ctx.stroke()
       }
     }
-    ctx.strokeStyle = 'rgba(60,45,32,0.35)'
+    ctx.strokeStyle = 'rgba(60,45,32,0.22)'
     ctx.beginPath()
     ctx.moveTo(0, row * plankH)
     ctx.lineTo(512, row * plankH)

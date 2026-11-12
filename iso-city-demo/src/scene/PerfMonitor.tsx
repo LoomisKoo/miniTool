@@ -15,7 +15,12 @@ import { useFrame, useThree } from '@react-three/fiber'
  */
 export function PerfMonitor() {
   const gl = useThree((state) => state.gl)
+  const scene = useThree((state) => state.scene)
   const box = useRef<HTMLDivElement | null>(null)
+  // 控制台排查用：window.__perf.gl / .scene
+  useEffect(() => {
+    ;(window as unknown as { __perf?: unknown }).__perf = { gl, scene }
+  }, [gl, scene])
 
   useEffect(() => {
     const el = document.createElement('div')

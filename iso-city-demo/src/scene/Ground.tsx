@@ -12,21 +12,20 @@ import {
   eastAvenue,
   insideRoad,
 } from '../data/city'
+import { estateGroundRects, type GroundRect } from '../data/infill'
 import { useApp } from '../store'
 import { makeAsphaltTexture, makePavingTexture } from './textures'
 import { makeAsphaltMaps, makeConcreteMaps, makePavingMaps, type SurfaceMaps } from './pbr'
 import { palettes, type Palette } from './theme'
+import { GROUND_DEPTH } from './style'
 
-/** 地面贴花（车道线、斑马线、井盖）都用这一组深度偏移，
-    否则与路面只差几毫米，远景必然 z-fighting 闪烁。
+/** 地面贴花（车道线、斑马线、井盖）统一用这一层深度偏移。
+ *  顺序见 style.ts 的 GROUND_DEPTH：它必须比所有路面、铺装都靠前。 */
+const DECAL = { polygonOffset: true, ...GROUND_DEPTH.marking } as const
 
-    注意贴花高度只能比沥青高 5mm 左右。抬到 6cm 以上是为了压过那些居中的
-    铺装板，代价是车道线在斜视下变成一根根浮在路面上的凸条。 */
-const DECAL = {
-  polygonOffset: true,
-  polygonOffsetFactor: -4,
-  polygonOffsetUnits: -8,
-} as const
+/** 城市底盘边长与厚度：整座城是"一块放在桌上的方块"，不是无限延伸的平面。 */
+const BOARD = 420
+const BOARD_H = 26
 
 /**
  * 铺装材质：贴图按世界坐标铺，而不是按每块板的 UV。
@@ -79,7 +78,7 @@ function pavingMaterial(
   if (look?.glow) {
     // 往中性夜蓝拉一点：铺装本身颜色够亮时几乎不变，巷子里那些
     // 刻意压暗的深色地面也不会真的黑成一块洞。
-    material.emissive = new THREE.Color(flat).lerp(new THREE.Color('#39424a'), 0.4)
+    material.emissive = new THREE.Color(flat).lerp(new THREE.Color('#3a3a40'), 0.4)
     material.emissiveIntensity = look.glow
   }
   // 有了法线/粗糙度贴图之后，材质的 roughness 要退成 1，
@@ -211,9 +210,11 @@ type SurfaceProps = {
   y?: number
   wet?: boolean
   glow?: number
+  /** 叠在广场/人行道上面的补片：同高、必须比普通铺装再靠前一层 */
+  patch?: boolean
 }
 
-function PavedSurface({ x, z, w, d, tint, line, y = 0.02, wet = false, glow = 0 }: SurfaceProps) {
+function PavedSurface({ x, z, w, d, tint, line, y = 0.02, wet = false, glow = 0, patch = false }: SurfaceProps) {
   const texture = useMemo(() => makePavingTexture(tint, line), [tint, line])
   const maps = useMemo(
     () => sharedMaps(`paving-${tint}-${line}-${wet}`, () => makePavingMaps(wet)),
@@ -235,13 +236,16 @@ function PavedSurface({ x, z, w, d, tint, line, y = 0.02, wet = false, glow = 0 
   )
   useEffect(() => () => material.dispose(), [material])
   // 铺装比沥青只高 1cm：远景里这个高差小于深度缓冲的分辨力，
-  // 斜看会闪成一条条虚线。跟 AsphaltSurface 一样在深度空间再压一次。
+  // 斜看会闪成一条条虚线。跟 AsphaltSurface 一样在深度空间再压一次——
+  // 但必须用 GROUND_DEPTH 里各自固定的层级：两层用同一个偏移时，
+  // 谁在前面取决于相机位置，街口那圈人行道边缘就会一路抖。
   useEffect(() => {
+    const depth = patch ? GROUND_DEPTH.pavingPatch : GROUND_DEPTH.paving
     material.polygonOffset = true
-    material.polygonOffsetFactor = -4
-    material.polygonOffsetUnits = -8
+    material.polygonOffsetFactor = depth.polygonOffsetFactor
+    material.polygonOffsetUnits = depth.polygonOffsetUnits
     material.needsUpdate = true
-  }, [material])
+  }, [material, patch])
   return (
     // noMerge：这套材质带自定义 shader（远景淡出），合批时会换成普通材质而失效。
     <mesh
@@ -265,6 +269,12 @@ function AsphaltSurface({
   y = 0.012,
   wet = false,
   glow = 0,
+  /**
+   * 第几层车行道（0 起）。五条路在路口互相重叠，世界坐标只差 2mm，
+   * 同一偏移值下谁在前取决于相机位置——路口那块地面就一直闪。
+   * 按这个序号取 GROUND_DEPTH.roads 里固定的一层，顺序与视角无关。
+   */
+  order = 0,
 }: {
   x: number
   z: number
@@ -274,6 +284,7 @@ function AsphaltSurface({
   y?: number
   wet?: boolean
   glow?: number
+  order?: number
 }) {
   const texture = useMemo(() => makeAsphaltTexture(color, 0.85), [color])
   const maps = useMemo(
@@ -295,12 +306,12 @@ function AsphaltSurface({
       twoScale: true,
       glow,
     })
-    // 车道之间在路口会互相重叠，靠深度偏移压住同层共面
+    const depth = GROUND_DEPTH.roads[Math.min(GROUND_DEPTH.roads.length - 1, Math.max(0, order))]
     mat.polygonOffset = true
-    mat.polygonOffsetFactor = -2
-    mat.polygonOffsetUnits = -4
+    mat.polygonOffsetFactor = depth.polygonOffsetFactor
+    mat.polygonOffsetUnits = depth.polygonOffsetUnits
     return mat
-  }, [texture, color, maps, wet, glow])
+  }, [texture, color, maps, wet, glow, order])
   useEffect(() => () => material.dispose(), [material])
   return (
     <mesh
@@ -347,12 +358,12 @@ function GlowPool({
 
   return (
     // 光池必须压在整条路面的最前面。广场、喷泉环、路面都带负的 polygonOffset
-    // （factor -2 ~ -6），那是斜率相关的深度偏移，斜着看地面时偏移量远比 2~3cm
+    // （factor -2 ~ -8），那是斜率相关的深度偏移，斜着看地面时偏移量远比 2~3cm
     // 的高差大，于是 0.055 高的光池会被广场/喷泉环的方片"抢走"深度，
     // 屏幕上就是一块被直线切掉边角的蓝色光斑。
-    // 这里抬高到 0.1，再给自己一个更强的负偏移，任何地面层都盖不住它；
+    // 这里抬高到 0.1，偏移取 GROUND_DEPTH.pool（比所有地面层都强）；
     // depthWrite 关掉，所以它只影响自己的深度测试，不会连累别的物体。
-    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[x, 0.1, z]} renderOrder={3}>
+    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[x, 0.12, z]} renderOrder={3}>
       <planeGeometry args={[r * 2, r * 2]} />
       <meshBasicMaterial
         map={texture}
@@ -362,8 +373,8 @@ function GlowPool({
         depthWrite={false}
         toneMapped={false}
         polygonOffset
-        polygonOffsetFactor={-16}
-        polygonOffsetUnits={-32}
+        polygonOffsetFactor={GROUND_DEPTH.pool.polygonOffsetFactor}
+        polygonOffsetUnits={GROUND_DEPTH.pool.polygonOffsetUnits}
       />
     </mesh>
   )
@@ -448,12 +459,82 @@ function Curbs({ palette }: { palette: Palette }) {
   )
 }
 
+/** 一类小区地面（车道 / 步道 / 草坪）合成一个 InstancedMesh，几百块只占一次 draw call */
+function GroundPatches({
+  rects,
+  y,
+  color,
+  glow,
+  roughness,
+  depth,
+}: {
+  rects: GroundRect[]
+  y: number
+  color: string
+  glow: number
+  roughness: number
+  depth: { polygonOffsetFactor: number; polygonOffsetUnits: number }
+}) {
+  const geometry = useMemo(() => new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), [])
+  const material = useMemo(
+    () =>
+      new THREE.MeshStandardMaterial({
+        color,
+        roughness,
+        metalness: 0,
+        emissive: glow > 0 ? color : '#000000',
+        emissiveIntensity: glow,
+        polygonOffset: true,
+        ...depth,
+      }),
+    [color, glow, roughness, depth],
+  )
+  const mesh = useMemo(() => {
+    const m = new THREE.InstancedMesh(geometry, material, rects.length)
+    const mat = new THREE.Matrix4()
+    rects.forEach((r, i) => {
+      mat.makeScale(r.w, 1, r.d).setPosition(r.x, y, r.z)
+      m.setMatrixAt(i, mat)
+    })
+    m.receiveShadow = true
+    m.userData.noMerge = true
+    return m
+  }, [geometry, material, rects, y])
+  useEffect(() => () => material.dispose(), [material])
+  useEffect(() => () => geometry.dispose(), [geometry])
+  return <primitive object={mesh} />
+}
+
+/** 小区地面的深度层级：都在主路之下，主路/人行道交汇处由它们盖住 */
+const ESTATE_DEPTH = {
+  lawn: { polygonOffsetFactor: -0.5, polygonOffsetUnits: -1 },
+  lane: { polygonOffsetFactor: -1, polygonOffsetUnits: -2 },
+  path: { polygonOffsetFactor: -1, polygonOffsetUnits: -3 },
+}
+
+function EstateGround({ night }: { night: boolean }) {
+  const { lanes, paths, lawns } = estateGroundRects
+  return (
+    <group>
+      <GroundPatches rects={lawns} y={0.004} color={night ? '#223026' : '#7c9a6c'} glow={night ? 0.05 : 0} roughness={0.95} depth={ESTATE_DEPTH.lawn} />
+      <GroundPatches rects={lanes} y={0.008} color={night ? '#3a3d45' : '#80858a'} glow={night ? 0.18 : 0} roughness={0.92} depth={ESTATE_DEPTH.lane} />
+      <GroundPatches rects={paths} y={0.009} color={night ? '#55585e' : '#bdbcb2'} glow={night ? 0.22 : 0} roughness={0.9} depth={ESTATE_DEPTH.path} />
+    </group>
+  )
+}
+
 export function Ground() {
   const night = useApp((state) => state.night)
   const p = night ? palettes.night : palettes.dusk
   // 夜里的地面不是靠一盏灯照亮的：满城的灯、橱窗和低云把整层空气映亮，
-  // 没有直射光的人行道/广场也应该看得清材质。用贴图原色做一点自发光，
-  // 相当于补一层最底的环境照度，不至于把地面抬成灰板。
+  // 这座夜景的地面不是"被光照亮"的，而是"被涂亮"的。
+  //
+  // StreetLights 的光斑用的是 dst * (1 + L) 的乘法混合——把地面原色乘亮。
+  // 地面底色要是黑的，乘多少还是黑的；沥青的反照率又只有 #141b22 那么深，
+  // 真实聚光灯照上去算出来也只有 4/255。所以这层自发光是夜景的地基，
+  // 不是"可选补光"：降它就是直接把地面掐灭。
+  //
+  // 想改夜间明暗，必须先换掉这套"乘法光斑 + 自发光"的地基，不能只调数值。
   const pavingGlow = night ? 0.2 : 0
   const roadGlow = night ? 0.16 : 0
 
@@ -477,18 +558,18 @@ export function Ground() {
 
   const dashes = useMemo(() => {
     const items: Array<[number, number, number, number]> = []
-    for (let z = -196; z <= 196; z += 11) {
+    for (let z = -396; z <= 396; z += 11) {
       if (z > 30 && z < 60) continue
       if (z > -108 && z < -82) continue
       items.push([0, z, 0.18, 3.4])
     }
-    for (let x = -196; x <= 196; x += 10) {
+    for (let x = -396; x <= 396; x += 10) {
       if (x > -16 && x < 16) continue
       if (x > -104 && x < -80) continue
       if (x > 80 && x < 104) continue
       items.push([x, 45, 3.4, 0.18])
     }
-    for (let x = -196; x <= 196; x += 11) {
+    for (let x = -396; x <= 396; x += 11) {
       if (x > -16 && x < 16) continue
       items.push([x, -95, 3.4, 0.16])
     }
@@ -500,7 +581,7 @@ export function Ground() {
     <group>
       {/* 城市底盘 */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
-        <planeGeometry args={[560, 560]} />
+        <planeGeometry args={[840, 840]} />
         <meshStandardMaterial
           color="#ffffff"
           map={groundTexture}
@@ -513,6 +594,8 @@ export function Ground() {
           emissiveIntensity={night ? 0.3 : 0}
         />
       </mesh>
+
+      <EstateGround night={night} />
 
       {/* 人行道：贴在车行道两侧，不是压在路中间。
           原来这几块是整条街居中铺过去的（主街 17m 宽铺在 22m 车道上），
@@ -576,43 +659,45 @@ export function Ground() {
         )),
       )}
 
-      {/* 车道。夜里下过一场雨：水膜让车灯在路上拉出长条反射。 */}
-      <AsphaltSurface x={mainStreet.x} z={mainStreet.z} w={mainStreet.w} d={mainStreet.d} color={night ? '#141b22' : '#3a4045'} y={0.012} wet={night} glow={roadGlow} />
-      <AsphaltSurface x={crossStreet.x} z={crossStreet.z} w={crossStreet.w} d={crossStreet.d} color={night ? '#141b22' : '#3a4045'} y={0.014} wet={night} glow={roadGlow} />
-      <AsphaltSurface x={southCross.x} z={southCross.z} w={southCross.w} d={southCross.d} color={night ? '#141b22' : '#3a4045'} y={0.016} wet={night} glow={roadGlow} />
-      <AsphaltSurface x={westAvenue.x} z={westAvenue.z} w={westAvenue.w} d={westAvenue.d} color={night ? '#141b22' : '#3a4045'} y={0.018} wet={night} glow={roadGlow} />
-      <AsphaltSurface x={eastAvenue.x} z={eastAvenue.z} w={eastAvenue.w} d={eastAvenue.d} color={night ? '#141b22' : '#3a4045'} y={0.02} wet={night} glow={roadGlow} />
+      {/* 车道。夜里下过一场雨：水膜让车灯在路上拉出长条反射。
+          五条路在路口重叠，靠 GROUND_DEPTH 里固定的层级分先后（order）。 */}
+      <AsphaltSurface order={0} x={mainStreet.x} z={mainStreet.z} w={mainStreet.w} d={mainStreet.d} color={night ? '#2a2c33' : p.road} y={0.012} wet={night} glow={roadGlow} />
+      <AsphaltSurface order={1} x={crossStreet.x} z={crossStreet.z} w={crossStreet.w} d={crossStreet.d} color={night ? '#2a2c33' : p.road} y={0.014} wet={night} glow={roadGlow} />
+      <AsphaltSurface order={2} x={southCross.x} z={southCross.z} w={southCross.w} d={southCross.d} color={night ? '#2a2c33' : p.road} y={0.016} wet={night} glow={roadGlow} />
+      <AsphaltSurface order={3} x={westAvenue.x} z={westAvenue.z} w={westAvenue.w} d={westAvenue.d} color={night ? '#2a2c33' : p.road} y={0.018} wet={night} glow={roadGlow} />
+      <AsphaltSurface order={4} x={eastAvenue.x} z={eastAvenue.z} w={eastAvenue.w} d={eastAvenue.d} color={night ? '#2a2c33' : p.road} y={0.02} wet={night} glow={roadGlow} />
 
       {/* 广场与巷子铺装 */}
       <PavedSurface x={plaza.x} z={plaza.z} w={plaza.w} d={plaza.d} tint={p.paving} line={p.pavingLine} glow={pavingGlow} y={0.03} />
       {/* 这几块原来横跨主街：铺装比沥青高 4~6cm，车流经过时车身会插进去，
-          斜看就是一块凸起的板。一律截到车行道外沿为止。 */}
-      <PavedSurface x={-19} z={-22} w={16} d={10} tint={p.paving} line={p.pavingLine} glow={pavingGlow} y={0.03} />
-      <PavedSurface x={alley.x} z={alley.z} w={alley.w} d={alley.d} tint={night ? '#151e2b' : '#b6bab0'} line={p.pavingLine} glow={pavingGlow} y={0.03} />
-      <PavedSurface x={13} z={alleyMouth.z} w={4} d={alleyMouth.d} tint={night ? '#151e2b' : '#b6bab0'} line={p.pavingLine} glow={pavingGlow} y={0.034} />
+          斜看就是一块凸起的板。一律截到车行道外沿为止。
+          标 patch：它们和广场同高、会压在广场上，要再靠前一层。 */}
+      <PavedSurface x={-19} z={-22} w={16} d={10} tint={p.paving} line={p.pavingLine} glow={pavingGlow} y={0.03} patch />
+      <PavedSurface x={alley.x} z={alley.z} w={alley.w} d={alley.d} tint={night ? '#2c2c31' : p.paving} line={p.pavingLine} glow={pavingGlow} y={0.03} patch />
+      <PavedSurface x={13} z={alleyMouth.z} w={4} d={alleyMouth.d} tint={night ? '#2c2c31' : p.paving} line={p.pavingLine} glow={pavingGlow} y={0.034} patch />
 
       {/* 喷泉外环：两圈只差 2mm，必须各自往深度空间压一次 */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[plazaFountain.x, 0.034, plazaFountain.z]} receiveShadow>
         <ringGeometry args={[8.2, 9.8, 72]} />
         <meshStandardMaterial
-          color={night ? '#22303f' : '#c4c8bf'}
+          color={night ? '#28323c' : '#c9ccc4'}
           roughness={0.72}
           metalness={0.22}
           polygonOffset
-          polygonOffsetFactor={-4}
-          polygonOffsetUnits={-8}
+          polygonOffsetFactor={GROUND_DEPTH.fountainInner.polygonOffsetFactor}
+          polygonOffsetUnits={GROUND_DEPTH.fountainInner.polygonOffsetUnits}
         />
       </mesh>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[plazaFountain.x, 0.036, plazaFountain.z]} receiveShadow>
         <ringGeometry args={[9.8, 10.1, 72]} />
         <meshStandardMaterial
-          color={night ? '#4d7f96' : '#a9aca2'}
+          color={night ? '#3d6478' : '#b0b3a9'}
           roughness={0.6}
           emissive={night ? '#2c6f88' : '#000000'}
           emissiveIntensity={0.9}
           polygonOffset
-          polygonOffsetFactor={-6}
-          polygonOffsetUnits={-12}
+          polygonOffsetFactor={GROUND_DEPTH.fountainOuter.polygonOffsetFactor}
+          polygonOffsetUnits={GROUND_DEPTH.fountainOuter.polygonOffsetUnits}
         />
       </mesh>
 
@@ -623,11 +708,12 @@ export function Ground() {
 
       {/* 车道线 */}
       {dashes.map(([x, z, w, d], i) => (
-        <mesh key={i} position={[x, 0.05, z]} rotation={[-Math.PI / 2, 0, 0]}>
+        <mesh key={i} position={[x, 0.078, z]} rotation={[-Math.PI / 2, 0, 0]}>
           <planeGeometry args={[w, d]} />
           {/* 标线用不透明画：半透明贴花要和地面做混合，一旦被别的透明层
-             抢先画过就会整块变暗、看起来像线被切断了 */}
-          <meshBasicMaterial color={p.roadLine} {...DECAL} />
+             抢先画过就会整块变暗、看起来像线被切断了。
+              夜里压到中灰：标线是反光漆，不是发光体。 */}
+          <meshBasicMaterial color={night ? '#8e9198' : p.roadLine} {...DECAL} />
         </mesh>
       ))}
 
@@ -649,15 +735,15 @@ export function Ground() {
         [-30, -80],
         [40, 110],
       ].map(([x, z], i) => (
-        <mesh key={i} position={[x, 0.03, z]} rotation={[-Math.PI / 2, 0, 0]}>
+        <mesh key={i} position={[x, 0.066, z]} rotation={[-Math.PI / 2, 0, 0]}>
           <circleGeometry args={[0.62, 20]} />
           <meshStandardMaterial
             color={night ? '#1b2532' : '#54585a'}
             roughness={0.75}
             metalness={0.4}
             polygonOffset
-            polygonOffsetFactor={-4}
-            polygonOffsetUnits={-8}
+            polygonOffsetFactor={GROUND_DEPTH.manhole.polygonOffsetFactor}
+            polygonOffsetUnits={GROUND_DEPTH.manhole.polygonOffsetUnits}
           />
         </mesh>
       ))}
@@ -667,7 +753,7 @@ export function Ground() {
           车流，路面本身保持干净。 */}
 
       {/* 灯下的光由 StreetLights 里的真实聚光灯负责，这里不再贴假光斑 */}
-      {night && <GlowPool x={plazaFountain.x} z={plazaFountain.z} r={13} color="#67d8ff" opacity={0.16} />}
+      {night && <GlowPool x={plazaFountain.x} z={plazaFountain.z} r={13} color="#9fd8dc" opacity={0.16} />}
     </group>
   )
 }

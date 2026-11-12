@@ -24,6 +24,7 @@ import { insideRoad } from '../data/city'
 
 function PetInteractionTag() {
   const group = useRef<THREE.Group>(null)
+  const dom = useRef<HTMLDivElement>(null)
   const label = useRef<HTMLSpanElement>(null)
   const ownership = useRef<HTMLElement>(null)
   const nameTag = useRef<HTMLDivElement>(null)
@@ -33,8 +34,13 @@ function PetInteractionTag() {
     const node = group.current
     if (!node) return
     const app = useApp.getState()
+    // 这是 drei 的 Html：DOM 浮在 canvas 上，**不跟着 group.visible 隐藏**。
+    // 以前只把 group 设成不可见，DOM 照旧渲染，于是没有宠物可提示时，
+    // 一个写着占位文字「宠物 · E」的气泡会停在原点上——那个原点正好落在
+    // 主街路口，看起来就是"马路中间飘着一个宠物气泡"。所以 DOM 要自己隐。
     if (app.panel || app.screen !== 'city') {
       node.visible = false
+      if (dom.current) dom.current.style.display = 'none'
       return
     }
     let best: (typeof live)[number] | null = null
@@ -55,6 +61,7 @@ function PetInteractionTag() {
       }
     }
     node.visible = Boolean(best)
+    if (dom.current) dom.current.style.display = best ? '' : 'none'
     if (!best) return
     // 昵称贴着宠物头顶：不同物种身高差一倍，用固定高度会让兔子头顶空一大截。
     const top = speciesOf(best.speciesId).height * best.scale
@@ -76,12 +83,15 @@ function PetInteractionTag() {
   return (
     <group ref={group} visible={false}>
       <Html center position={[0, 0, 0]} style={{ pointerEvents: 'none' }} zIndexRange={[18, 0]}>
-        <div ref={nameTag} className="pet-world-name">
-          <em ref={ownership} aria-hidden="true" />
-          <span ref={label}>宠物</span>
-        </div>
-        <div className="pet-world-e">
-          <kbd ref={hint}>E</kbd>
+        {/* 外层默认就隐藏：第一帧 useFrame 之前不能露出占位文字 */}
+        <div ref={dom} style={{ display: 'none' }}>
+          <div ref={nameTag} className="pet-world-name">
+            <em ref={ownership} aria-hidden="true" />
+            <span ref={label}>宠物</span>
+          </div>
+          <div className="pet-world-e">
+            <kbd ref={hint}>E</kbd>
+          </div>
         </div>
       </Html>
     </group>
@@ -132,6 +142,8 @@ function shadowGeometry() {
 type BreedBatch = {
   model: VoxelPet
   speciesId: string
+  /** 品种：决定体型系数（小香猪比家猪小一圈） */
+  breedId: string
   pets: number[]
   /** 与 model.parts 一一对应 */
   parts: THREE.InstancedMesh[]
@@ -177,7 +189,7 @@ function buildFlock(pets: WildPet[]): Flock {
     const parts = model.parts.map((part) => instanced(part.geometry, list.length, group))
     const blinkPart = model.parts.findIndex((part) => part.blink)
     const blink = blinkPart >= 0 ? instanced(model.parts[blinkPart].blink as THREE.BufferGeometry, list.length, group) : null
-    batches.push({ model, speciesId, pets: list, parts, blink, blinkPart })
+    batches.push({ model, speciesId, breedId, pets: list, parts, blink, blinkPart })
   }
 
   const shadows = new THREE.InstancedMesh(shadowGeometry(), shadowMaterial(), Math.max(1, pets.length))
@@ -224,8 +236,15 @@ function roamClock(t: number) {
   return { roam: cycle * walkSpan + Math.min(local, walkSpan), walking: local < walkSpan }
 }
 
-function animateFlock(flock: Flock, time: number) {
+const PET_VIEW = 90
+const _frustum = new THREE.Frustum()
+const _sphere = new THREE.Sphere()
+const _viewProj = new THREE.Matrix4()
+
+function animateFlock(flock: Flock, time: number, camera: THREE.Camera) {
   const { pets, shadows } = flock
+  _viewProj.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse)
+  _frustum.setFromProjectionMatrix(_viewProj)
   // 饱腹度每秒重算一次就够（它是小时级的慢变量），不必每帧 Date.parse 一遍。
   if (time - hungerTick > 1) {
     hungerTick = time
@@ -257,7 +276,9 @@ function animateFlock(flock: Flock, time: number) {
 
   for (const batch of flock.batches) {
     const { model } = batch
+    const baseScale = petScale(batch.speciesId, model, batch.breedId)
     const species = speciesOf(batch.speciesId)
+    let batchSeen = false
     for (let slot = 0; slot < batch.pets.length; slot++) {
       const index = batch.pets[slot]
       const pet = pets[index]
@@ -290,12 +311,21 @@ function animateFlock(flock: Flock, time: number) {
       // 跑开时动作加快
       const animTime = (time + offset) * (shy ? 1.6 : 1)
 
-      const s = petScale(pet.species, model) * pet.scale
+      const s = baseScale * pet.scale
       _pos.set(away.x, GROUND_Y, away.z)
       _q.setFromAxisAngle(_yAxis, yaw)
       _scl.set(s, s, s)
       _pet.compose(_pos, _q, _scl)
 
+      _sphere.center.copy(_pos)
+      _sphere.radius = 2
+      const seen = camera.position.distanceTo(_pos) < PET_VIEW && _frustum.intersectsSphere(_sphere)
+      batchSeen ||= seen
+
+      if (!seen) {
+        for (const mesh of batch.parts) mesh.setMatrixAt(slot, ZERO)
+        batch.blink?.setMatrixAt(slot, ZERO)
+      } else {
       partMatrices(model, walking ? 'walk' : 'idle', animTime, locals)
       const blinking = isBlinking(time + offset, index * 0.61)
       for (let k = 0; k < batch.parts.length; k++) {
@@ -306,6 +336,7 @@ function animateFlock(flock: Flock, time: number) {
         } else {
           batch.parts[k].setMatrixAt(slot, _out)
         }
+      }
       }
 
       /* 毛色：饿的时候压暗。instanceColor 在 three 里是乘到顶点色上的，
@@ -326,7 +357,8 @@ function animateFlock(flock: Flock, time: number) {
         }
       }
 
-      const r = species.height * 0.5 * pet.scale
+      // 影子按模型的世界高度算，小香猪的影子也跟着小一圈
+      const r = baseScale * model.height * 0.5 * pet.scale
       _pos.set(away.x, 0.028, away.z)
       _q.identity()
       _scl.set(r, 1, r * 0.85)
@@ -350,8 +382,14 @@ function animateFlock(flock: Flock, time: number) {
       info.adoptedAt = pet.adoptedAt ?? null
       info.hunger = hunger
     }
-    for (const mesh of batch.parts) mesh.instanceMatrix.needsUpdate = true
-    if (batch.blink) batch.blink.instanceMatrix.needsUpdate = true
+    for (const mesh of batch.parts) {
+      mesh.visible = batchSeen
+      if (batchSeen) mesh.instanceMatrix.needsUpdate = true
+    }
+    if (batch.blink) {
+      batch.blink.visible = batchSeen
+      if (batchSeen) batch.blink.instanceMatrix.needsUpdate = true
+    }
   }
   shadows.instanceMatrix.needsUpdate = true
 }
@@ -408,10 +446,10 @@ export function WildPets() {
     if (flock) disposeFlock(flock)
   }, [flock])
 
-  useFrame(() => {
+  useFrame(({ camera }) => {
     // 固定纪元：不能对 86400 取模，否则每天零点整批宠物会瞬移一次
     if (flock && !useApp.getState().panel && useApp.getState().screen === 'city') {
-      animateFlock(flock, (Date.now() - EPOCH) / 1000)
+      animateFlock(flock, (Date.now() - EPOCH) / 1000, camera)
     }
   })
 

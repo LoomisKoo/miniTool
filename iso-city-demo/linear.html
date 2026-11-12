@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="theme-color" content="#6fa6d0" />
+<title>线性超级城市</title>
+<style>
+  :root {
+    --glass: rgba(250, 252, 255, .62);
+    --glass-hi: rgba(255, 255, 255, .82);
+    --line: rgba(255, 255, 255, .55);
+    --edge: rgba(20, 34, 52, .10);
+    --ink: #142233;
+    --ink2: #4a5d72;
+    --ink3: #7c8da0;
+    --accent: #2f6fed;
+    --accent2: #e8f0ff;
+    --kbd: rgba(20, 34, 52, .07);
+    --shadow: 0 10px 30px rgba(18, 38, 66, .16), 0 1px 0 rgba(255, 255, 255, .6) inset;
+    --r: 16px;
+  }
+  body.night {
+    --glass: rgba(16, 24, 40, .58);
+    --glass-hi: rgba(28, 40, 62, .82);
+    --line: rgba(160, 190, 255, .16);
+    --edge: rgba(0, 0, 0, .3);
+    --ink: #eef3fb;
+    --ink2: #b4c2d6;
+    --ink3: #7f90a8;
+    --accent: #7aa8ff;
+    --accent2: rgba(122, 168, 255, .16);
+    --kbd: rgba(255, 255, 255, .09);
+    --shadow: 0 12px 34px rgba(0, 0, 0, .45), 0 1px 0 rgba(255, 255, 255, .06) inset;
+    background: #060c1a;
+  }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #6fa6d0; }
+  canvas { display: block; width: 100%; height: 100%; cursor: grab; touch-action: none; }
+  canvas:active { cursor: grabbing; }
+  .ui {
+    position: fixed; inset: 0; pointer-events: none; color: var(--ink);
+    font-family: -apple-system, "PingFang SC", "HarmonyOS Sans SC", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased; -webkit-user-select: none; user-select: none;
+    font-feature-settings: "tnum";
+  }
+  .glass {
+    background: var(--glass); border: 1px solid var(--line); border-radius: var(--r);
+    box-shadow: var(--shadow);
+    -webkit-backdrop-filter: blur(14px) saturate(1.5); backdrop-filter: blur(14px) saturate(1.5);
+    transition: background .4s, color .4s, border-color .4s;
+  }
+  svg.i { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+  /* 左上：品牌 */
+  #title { position: absolute; left: 20px; top: 18px; display: flex; align-items: center; gap: 12px; padding: 10px 16px 10px 10px; }
+  #title .logo {
+    width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center;
+    background: linear-gradient(140deg, #4f8cff, #7b5cff 60%, #ff7aa8); color: #fff; font-weight: 700; font-size: 17px;
+    box-shadow: 0 4px 12px rgba(79, 140, 255, .35);
+  }
+  #title b { display: block; font-size: 15px; font-weight: 650; letter-spacing: .08em; }
+  #title span { display: block; margin-top: 2px; font-size: 11.5px; color: var(--ink2); letter-spacing: .02em; }
+
+  /* 右上：按钮组 */
+  #bar { position: absolute; right: 20px; top: 18px; display: flex; gap: 8px; padding: 6px; pointer-events: auto; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 7px; height: 36px; padding: 0 14px; border-radius: 11px;
+    border: 0; background: transparent; color: var(--ink); cursor: pointer; font: inherit; font-size: 13px; font-weight: 550;
+    transition: background .18s, color .18s, transform .12s;
+  }
+  .btn:hover { background: var(--glass-hi); }
+  .btn:active { transform: scale(.97); }
+  .btn.primary { background: var(--accent); color: #fff; box-shadow: 0 4px 14px rgba(47, 111, 237, .35); }
+  body.night .btn.primary { color: #0b1424; }
+  .btn.primary:hover { filter: brightness(1.06); background: var(--accent); }
+  .btn kbd { margin-left: 2px; }
+  .btn.primary kbd { background: rgba(255, 255, 255, .22); color: inherit; border-color: transparent; }
+
+  kbd {
+    display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 6px; box-sizing: border-box;
+    border-radius: 6px; background: var(--kbd); border: 1px solid var(--edge); border-bottom-width: 2px;
+    font: 600 11px/1 ui-monospace, "SF Mono", Menlo, monospace; color: var(--ink); letter-spacing: 0;
+  }
+
+  /* 左下：状态 */
+  #hud { position: absolute; left: 20px; bottom: 20px; padding: 14px 16px; min-width: 300px; }
+  #hud .loc { display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 650; letter-spacing: .03em; }
+  #hud .loc .pin { width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; background: var(--accent2); color: var(--accent); }
+  #hud .loc small { font-size: 12px; font-weight: 500; color: var(--ink3); }
+  #hud .stats { display: grid; grid-template-columns: repeat(3, auto); gap: 6px 18px; margin-top: 10px; }
+  #hud .stat { font-size: 11px; color: var(--ink3); }
+  #hud .stat b { display: block; margin-top: 2px; font-size: 14px; font-weight: 600; color: var(--ink); }
+  #hud .foot { margin-top: 10px; padding-top: 9px; border-top: 1px solid var(--edge); display: flex; justify-content: space-between; font-size: 11px; color: var(--ink3); }
+  #hud .foot .ok { color: #2fae6a; }
+  #hud .foot .warn { color: #e0902a; }
+
+  /* 右下：键位 */
+  #help { position: absolute; right: 20px; bottom: 20px; padding: 12px 14px; font-size: 12px; color: var(--ink2); }
+  #help .grid { display: grid; grid-template-columns: auto auto; gap: 7px 18px; }
+  #help .row { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
+  #help .row span { margin-left: 4px; }
+  #help h4 { margin: 0 0 8px; font-size: 11px; font-weight: 600; letter-spacing: .12em; color: var(--ink3); display: flex; justify-content: space-between; }
+  #help.min .grid { display: none; }
+  #help.min h4 { margin: 0; }
+
+  /* 中下：模式提示 */
+  #mode {
+    position: absolute; left: 50%; bottom: 26px; transform: translate(-50%, 0);
+    display: flex; align-items: center; gap: 8px; padding: 9px 16px; border-radius: 999px;
+    font-size: 13px; font-weight: 550; letter-spacing: .04em; white-space: nowrap;
+    transition: opacity .25s, transform .25s;
+  }
+  #mode::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 4px var(--accent2); }
+  #mode[hidden] { display: flex !important; opacity: 0; transform: translate(-50%, 10px); }
+
+  /* 传送面板 */
+  #tp {
+    position: absolute; right: 20px; top: 76px; bottom: 20px; width: 340px; display: flex; flex-direction: column;
+    pointer-events: auto; overflow: hidden; transition: opacity .22s, transform .22s;
+  }
+  #tp[hidden] { display: flex !important; opacity: 0; transform: translateX(16px); pointer-events: none; }
+  #tp header { display: flex; align-items: center; justify-content: space-between; padding: 16px 16px 10px; }
+  #tp header b { font-size: 16px; font-weight: 650; letter-spacing: .06em; }
+  #tp header small { display: block; margin-top: 3px; font-size: 11.5px; color: var(--ink3); font-weight: 400; letter-spacing: 0; }
+  #tp .close { width: 32px; height: 32px; padding: 0; justify-content: center; }
+  #tp .list { flex: 1; overflow-y: auto; padding: 0 10px 14px; scrollbar-width: thin; }
+  #tp .grp { margin: 10px 6px 6px; font-size: 11px; font-weight: 600; letter-spacing: .14em; color: var(--ink3); display: flex; align-items: center; gap: 8px; }
+  #tp .grp::after { content: ""; flex: 1; height: 1px; background: var(--edge); }
+  #tp .items { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  #tp .item {
+    display: flex; align-items: center; gap: 9px; padding: 9px 10px; border-radius: 12px; cursor: pointer;
+    border: 1px solid transparent; background: transparent; color: var(--ink); font: inherit; text-align: left;
+    transition: background .15s, border-color .15s, transform .12s;
+  }
+  #tp .item:hover { background: var(--glass-hi); border-color: var(--line); }
+  #tp .item:active { transform: scale(.98); }
+  #tp .item .ic { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; font-size: 16px; background: var(--kbd); flex: none; }
+  #tp .item b { display: block; font-size: 13px; font-weight: 600; }
+  #tp .item small { display: block; margin-top: 1px; font-size: 10.5px; color: var(--ink3); }
+  #tp .item.cur { background: var(--accent2); border-color: var(--accent); }
+
+  #loading {
+    position: absolute; inset: 0; display: flex; flex-direction: column; gap: 14px; align-items: center; justify-content: center;
+    background: linear-gradient(180deg, #8dbbe0, #6fa6d0); font-size: 13px; letter-spacing: .3em; color: #fff;
+  }
+  #loading::before { content: ""; width: 28px; height: 28px; border-radius: 50%; border: 3px solid rgba(255,255,255,.35); border-top-color: #fff; animation: spin 0.9s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  [hidden] { display: none !important; }
+  @media (max-width: 900px) { #help { display: none; } #tp { width: auto; left: 20px; } }
+</style>
+</head>
+<body>
+<canvas></canvas>
+<div class="ui">
+  <div id="loading">城市建造中</div>
+  <div id="title" class="glass">
+    <div class="logo">城</div>
+    <div><b>线性超级城市</b><span>城内 5km · 双城墙 · 中央河道 · 狭长岛</span></div>
+  </div>
+  <div id="bar" class="glass">
+    <button class="btn primary" id="tpBtn" title="选择目的地瞬移">
+      <svg class="i" viewBox="0 0 24 24"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>
+      瞬移 <kbd>M</kbd>
+    </button>
+    <button class="btn" id="overBtn" title="全景俯瞰">
+      <svg class="i" viewBox="0 0 24 24"><path d="M3 7l6-3 6 3 6-3v13l-6 3-6-3-6 3z"/><path d="M9 4v13M15 7v13"/></svg>
+      全景 <kbd>V</kbd>
+    </button>
+    <button class="btn" id="nightBtn" title="昼夜切换">
+      <svg class="i" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg>
+      <span id="nightTxt">夜晚</span> <kbd>N</kbd>
+    </button>
+  </div>
+  <div id="mode" class="glass" hidden></div>
+  <div id="hud" class="glass">
+    <div class="loc"><div class="pin"><svg class="i" viewBox="0 0 24 24"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg></div><span id="hLoc">—</span><small id="hSub"></small></div>
+    <div class="stats">
+      <div class="stat">坐标<b id="hXZ">—</b></div>
+      <div class="stat">高度<b id="hH">—</b></div>
+      <div class="stat">速度<b id="hV">—</b></div>
+    </div>
+    <div class="foot"><span id="hMode">步行</span><span id="hFps">—</span></div>
+  </div>
+  <div id="help" class="glass">
+    <h4><span>操作</span><span><kbd>H</kbd> 收起</span></h4>
+    <div class="grid">
+      <div class="row"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><span>移动</span></div>
+      <div class="row"><kbd>Shift</kbd><span>奔跑 / 冲刺</span></div>
+      <div class="row"><kbd>空格</kbd><span>跳跃 · 滑翔 · 上升</span></div>
+      <div class="row"><kbd>C</kbd><span>云上下降</span></div>
+      <div class="row"><kbd>F</kbd><span>筋斗云</span></div>
+      <div class="row"><kbd>M</kbd><kbd>T</kbd><span>瞬移</span></div>
+      <div class="row"><kbd>拖动</kbd><span>转视角</span></div>
+      <div class="row"><kbd>滚轮</kbd><span>远近</span></div>
+    </div>
+  </div>
+  <div id="tp" class="glass" hidden>
+    <header>
+      <div><b>瞬移</b><small>选择目的地，立即到达</small></div>
+      <button class="btn close" id="tpClose" title="关闭 (Esc)"><svg class="i" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </header>
+    <div class="list" id="tpList"></div>
+  </div>
+</div>
+<script type="module" src="/linear/main.js"></script>
+</body>
+</html>

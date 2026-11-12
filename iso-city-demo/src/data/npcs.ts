@@ -2,6 +2,7 @@ import { buildings, insideRoad } from './city'
 import { insideBuilding } from './infill'
 import { seeded } from '../scene/theme'
 import { randomLook, type Look } from '../scene/people'
+import { stalls } from './stalls'
 
 export type NpcDef = {
   id: string
@@ -13,6 +14,11 @@ export type NpcDef = {
   /** 平时面朝的方向（弧度，绕 y），玩家走近会转过去看他。 */
   yaw: number
   look: Look
+  /**
+   * 头顶名牌对应哪个交互点。默认 `npc-${id}`；摊位摊主复用的是摊位本人的
+   * 那个交互点（点了既是对话也是摊面），所以要显式指过去。
+   */
+  actionId?: string
 }
 
 type Spec = {
@@ -129,13 +135,11 @@ export const npcs: NpcDef[] = (() => {
     const look = randomLook(rnd)
     const pos = resolve(spec)
     if (!pos) continue
-    list.push({ id: spec.id, name: spec.name, role: spec.role, lines: spec.lines, ...pos, look })
-  }
+        list.push({ id: spec.id, name: spec.name, role: spec.role, lines: spec.lines, ...pos, look })  }
   return list
 })()
 
-/** 咖啡店吧台后的店员（室内坐标系）。 */
-export const barista: NpcDef = {
+/** 咖啡店吧台后的店员（室内坐标系）。 */export const barista: NpcDef = {
   id: 'barista',
   name: '阿哲',
   role: '街角咖啡 · 咖啡师',
@@ -150,3 +154,32 @@ export const barista: NpcDef = {
   yaw: 0,
   look: randomLook(seeded('barista')),
 }
+
+/**
+ * 摊位摊主：站在柜台后面，面朝街。
+ *
+ * 只生成"NPC 摊"的摊主——玩家摊默认摊主不在，牌子上写着自助。
+ * 这些摊主不进 npcs 数组：摊位本身已经是一个交互点（对话和摊面信息都在
+ * 一起），再挂一个"对话"交互点会让玩家在柜台前选不中想要的。
+ */
+export const stallVendors: NpcDef[] = (() => {
+  const rnd = seeded('stall-vendors')
+  return stalls
+    .filter((stall) => stall.vendor.kind === 'npc')
+    .map((stall) => {
+      const back = 0.52
+      return {
+        id: `vendor-${stall.id}`,
+        name: stall.vendor.kind === 'npc' ? stall.vendor.name : '摊主',
+        role: stall.vendor.kind === 'npc' ? stall.vendor.role : `${stall.title} · 摊主`,
+        lines: stall.vendor.kind === 'npc' ? stall.vendor.lines : [],
+        x: stall.x - Math.sin(stall.yaw) * back,
+        z: stall.z - Math.cos(stall.yaw) * back,
+        yaw: stall.yaw,
+        look: randomLook(rnd),
+        // 摊主的交互点就是摊位本身那个：走近时名牌和 E 一起亮，
+        // 按下去直接开对话（NPC 摊）或摊面面板（玩家摊）。
+        actionId: `stall-${stall.id}`,
+      }
+    })
+})()

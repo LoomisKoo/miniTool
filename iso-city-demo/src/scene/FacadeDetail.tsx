@@ -91,7 +91,7 @@ export function FacadeDetail({ night }: { night: boolean }) {
 
       /* ---------- 屋顶水塔 ---------- */
       const tall = b.background ? b.h > 26 : b.h > 18
-      if (tall && !b.setback && rnd() > 0.55) {
+      if (tall && !b.setback && !b.form && rnd() > 0.55) {
         const r = 2.1 + rnd() * 0.8
         const hgt = 3.4 + rnd() * 1.6
         const tx = b.x + (rnd() - 0.5) * Math.max(0, b.w - r * 3)

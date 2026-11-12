@@ -4,12 +4,15 @@
 // 每次检测都要算距离，而且 nearby 面板只会显示一个。取最近即可。
 //
 // 交互半径 3.4m 略大于 flinch 的 2.6m——站在它不会逃跑的距离上才能观察它。
+//
+// 城里和家里共用 openPetDialog：同一只宠物在街上是「野生 / 有主人」，
+// 在户内是「在你家」，但喂食、改名、看主页这些选项没有理由写两套。
 
 import { walker } from '../game/walker'
 import { useApp, type DialogChoice } from '../store'
-import { catalogKeyOf } from '../catalog/species'
+import { askPrompt } from '../ui/Ask'
 import type { Interactable } from '../scene/PlayerRig'
-import { live } from './live'
+import { live, type LivePet } from './live'
 import { HUNGRY_AT } from './hunger'
 import { insideRoad } from '../data/city'
 
@@ -49,8 +52,8 @@ export function petInteractables(): Interactable[] {
   if (best < 0) return []
 
   const pet = live[best]
-  const lines = LINES[pet.species] ?? ['它看了你一会儿，然后转身走开了。']
-  const key = catalogKeyOf(pet.speciesId, pet.breedId)
+  // 图鉴按 raw breed id 记账：同一张卡下的色型各记各的，卡的「已发现」= 任一色型见过
+  const key = `${pet.speciesId}/${pet.breedId}`
   const name = pet.nickname || pet.breed
   const owner = pet.owner
   // 饿的宠物只用一句话传达：它是被遗忘了，不是出了故障。
@@ -73,123 +76,138 @@ export function petInteractables(): Interactable[] {
       radius: REACH,
       action: () => {
         // 记录在按下 E 的那一刻，而不是走进范围时：图鉴记的是"你观察过它"。
-        const app = useApp.getState()
-        app.recordPet(key)
-
-        // 有主人的宠物：对话里固定显示主人条，这是「查看主人信息」的入口。
-        if (owner) {
-          const own = owner.id === app.user?.id
-          const petPanel = { id: pet.id, own }
-          const petOwner = { name: owner.name, color: owner.color, since: pet.adoptedAt ?? null }
-          const openHome = () => {
-            useApp.getState().closeDialog()
-            useApp.getState().openPanel({ type: 'pet', id: pet.id })
-          }
-          const feed = async () => {
-            const ok = await useApp.getState().feedPet(pet.id)
-            if (ok) openHome()
-          }
-          // 看主页对谁都开放：喂食只是「能不能写」的门槛，不是「能不能看」的门槛。
-          // 自己的宠物平时不显示喂食（留言不需要喂，白扣一份口粮没有意义）；
-          // 只有它饿的时候才把「喂它」摆出来——那时喂食才真的有作用。
-          const choices: DialogChoice[] = own
-            ? [
-                ...(hungry
-                  ? [{ label: '喂它', note: '消耗 1 份口粮', primary: true, onClick: feed }]
-                  : []),
-                { label: '看它的主页', primary: !hungry, onClick: openHome },
-                {
-                  label: '给它改名',
-                  onClick: () => {
-                    const next = window.prompt('给它取个新名字', name)?.trim()
-                    if (next) void useApp.getState().renamePet(pet.id, next)
-                  },
-                },
-                { label: '先不打扰它', onClick: () => useApp.getState().closeDialog() },
-              ]
-            : [
-                {
-                  label: '喂它一顿',
-                  note: '消耗 1 份口粮',
-                  primary: true,
-                  onClick: feed,
-                },
-                { label: '看它的主页', onClick: openHome },
-                { label: '先不打扰它', onClick: () => useApp.getState().closeDialog() },
-              ]
-          app.openDialog({
-            name,
-            role: `主人 @${owner.name}`,
-            lines: own
-              ? [
-                  ...lines,
-                  hungry
-                    ? '它趴在常去的那个角落，没什么精神——你有一阵子没来看它了。'
-                    : '它是你的伙伴，在图鉴顶部随时能找到它。',
-                ]
-              : [
-                  ...lines,
-                  `它的主人是 @${owner.name}，平时由对方照顾。`,
-                  ...(hungry ? ['它好像已经等了很久，毛都暗下去了。'] : []),
-                ],
-            x: pet.x,
-            z: pet.z,
-            owner: petOwner,
-            pet: petPanel,
-            choices,
-          })
-          return
-        }
-
-        // 野生宠物：最后一句给出「领养 / 再陪一会儿」两个选择。
-        // 每人只能领养一只，已有宠物时直接把领养选项收起来，
-        // 不要等玩家点了再弹一个后端错误。
-        const hasPet = app.pets.length > 0
-        app.openDialog({
-          name,
-          role: `野生${pet.species}`,
-          lines: hasPet ? [...lines, '你已经有一位伙伴了，它正在城里等你。'] : lines,
-          x: pet.x,
-          z: pet.z,
-          choices: [
-            hasPet
-              ? {
-                  label: '再陪它一会儿',
-                  primary: true,
-                  onClick: () => useApp.getState().closeDialog(),
-                }
-              : {
-                  label: '带它回家（领养）',
-                  primary: true,
-                  onClick: async () => {
-                    const adopted = await useApp.getState().adoptPet({
-                      id: pet.id,
-                      speciesId: pet.speciesId,
-                      breedId: pet.breedId,
-                      scale: pet.scale,
-                      spot: pet.spot,
-                    })
-                    if (!adopted) return
-                    const user = useApp.getState().user
-                    useApp.getState().openDialog({
-                      name,
-                      role: user ? `主人 @${user.name}` : '你的宠物',
-                      lines: ['它凑近闻了闻你的手，尾巴轻轻摇了起来。', '从现在起，它会留在城里等你回来。'],
-                      x: pet.x,
-                      z: pet.z,
-                      owner: {
-                        name: user?.name ?? '你',
-                        color: user?.color ?? '#f2c86b',
-                        since: adopted.adoptedAt,
-                      },
-                      pet: { id: adopted.id, own: true },
-                    })
-                  },
-                },
-            ...(hasPet ? [] : [{ label: '再陪它一会儿', onClick: () => useApp.getState().closeDialog() }]),
-          ],
-        })
+        useApp.getState().recordPet(key)
+        openPetDialog(pet)
       },
     },
   ]
+}
+
+/** 一只宠物的一段对话。位置取传入的 pet，城里用实时坐标，家里用房间坐标。 */
+export function openPetDialog(pet: LivePet) {
+  const app = useApp.getState()
+  const lines = LINES[pet.species] ?? ['它看了你一会儿，然后转身走开了。']
+  const name = pet.nickname || pet.breed
+  const owner = pet.owner
+  const hungry = Boolean(owner) && pet.hunger < HUNGRY_AT
+
+  // 有主人的宠物：对话里固定显示主人条，这是「查看主人信息」的入口。
+  if (owner) {
+    const own = owner.id === app.user?.id
+    const petPanel = { id: pet.id, own }
+    const petOwner = { name: owner.name, color: owner.color, since: pet.adoptedAt ?? null }
+    const openHome = () => {
+      useApp.getState().closeDialog()
+      useApp.getState().openPanel({ type: 'pet', id: pet.id })
+    }
+    const feed = async () => {
+      const ok = await useApp.getState().feedPet(pet.id)
+      if (ok) openHome()
+    }
+    // 看主页对谁都开放：喂食只是「能不能写」的门槛，不是「能不能看」的门槛。
+    // 自己的宠物平时不显示喂食（留言不需要喂，白扣一份口粮没有意义）；
+    // 只有它饿的时候才把「喂它」摆出来——那时喂食才真的有作用。
+    const choices: DialogChoice[] = own
+      ? [
+          ...(hungry
+            ? [{ label: '喂它', note: '消耗 1 份口粮', primary: true, onClick: feed }]
+            : []),
+          { label: '看它的主页', primary: !hungry, onClick: openHome },
+          {
+            label: '给它改名',
+            onClick: () => {
+              void askPrompt('给它取个新名字', name, {
+                title: '给宠物改名',
+                confirmLabel: '改名',
+                placeholder: '最多 24 个字',
+              }).then((next) => {
+                const trimmed = next?.trim()
+                if (trimmed) void useApp.getState().renamePet(pet.id, trimmed)
+              })
+            },
+          },
+          { label: '先不打扰它', onClick: () => useApp.getState().closeDialog() },
+        ]
+      : [
+          {
+            label: '喂它一顿',
+            note: '消耗 1 份口粮',
+            primary: true,
+            onClick: feed,
+          },
+          { label: '看它的主页', onClick: openHome },
+          { label: '先不打扰它', onClick: () => useApp.getState().closeDialog() },
+        ]
+    app.openDialog({
+      name,
+      role: `主人 @${owner.name}`,
+      lines: own
+        ? [
+            ...lines,
+            hungry
+              ? '它趴在常去的那个角落，没什么精神——你有一阵子没来看它了。'
+              : '它是你的伙伴，在图鉴顶部随时能找到它。',
+          ]
+        : [
+            ...lines,
+            `它的主人是 @${owner.name}，平时由对方照顾。`,
+            ...(hungry ? ['它好像已经等了很久，毛都暗下去了。'] : []),
+          ],
+      x: pet.x,
+      z: pet.z,
+      owner: petOwner,
+      pet: petPanel,
+      choices,
+    })
+    return
+  }
+
+  // 野生宠物：最后一句给出「领养 / 再陪一会儿」两个选择。
+  // 每人只能领养一只，已有宠物时直接把领养选项收起来，
+  // 不要等玩家点了再弹一个后端错误。
+  const hasPet = app.pets.length > 0
+  app.openDialog({
+    name,
+    role: `野生${pet.species}`,
+    lines: hasPet ? [...lines, '你已经有一位伙伴了，它正在城里等你。'] : lines,
+    x: pet.x,
+    z: pet.z,
+    choices: [
+      hasPet
+        ? {
+            label: '再陪它一会儿',
+            primary: true,
+            onClick: () => useApp.getState().closeDialog(),
+          }
+        : {
+            label: '带它回家（领养）',
+            primary: true,
+            onClick: async () => {
+              const adopted = await useApp.getState().adoptPet({
+                id: pet.id,
+                speciesId: pet.speciesId,
+                breedId: pet.breedId,
+                scale: pet.scale,
+                spot: pet.spot,
+              })
+              if (!adopted) return
+              const user = useApp.getState().user
+              useApp.getState().openDialog({
+                name,
+                role: user ? `主人 @${user.name}` : '你的宠物',
+                lines: ['它凑近闻了闻你的手，尾巴轻轻摇了起来。', '从现在起，它会留在城里等你回来。'],
+                x: pet.x,
+                z: pet.z,
+                owner: {
+                  name: user?.name ?? '你',
+                  color: user?.color ?? '#f2c86b',
+                  since: adopted.adoptedAt,
+                },
+                pet: { id: adopted.id, own: true },
+              })
+            },
+          },
+      ...(hasPet ? [] : [{ label: '再陪它一会儿', onClick: () => useApp.getState().closeDialog() }]),
+    ],
+  })
 }

@@ -18,9 +18,9 @@ type Side = 'north' | 'south' | 'east' | 'west'
 const NORMAL: Record<Side, [number, number]> = { east: [1, 0], west: [-1, 0], north: [0, -1], south: [0, 1] }
 const YAW: Record<Side, number> = { south: 0, north: Math.PI, east: Math.PI / 2, west: -Math.PI / 2 }
 
-// 招牌颜色收窄到"城市里真会出现"的范围：暖白、琥珀、少量红与青蓝。
-// 满街品红紫绿是赛博朋克，不是街区。
-const NEON = ['#ffb46b', '#ffd9a8', '#ff8a5a', '#ff6b6b', '#8fd8ff', '#c9e8ff', '#ffe9b8']
+// 招牌颜色收窄到"城市里真会出现"的范围：暖白、琥珀、少量红。
+// 满街品红紫绿是赛博朋克，不是街区；青色会和夜色底撞色，远看只是发灰的亮点。
+const NEON = ['#ffc47e', '#ffd9a8', '#ff9a5a', '#ff6b5a']
 
 type Sign = { x: number; y: number; z: number; yaw: number; color: string; w: number; h: number }
 type Streak = { x: number; z: number; yaw: number; len: number; w: number; color: string }
@@ -151,8 +151,9 @@ export function Neon({ night }: { night: boolean }) {
       blade.setMatrixAt(i, mtx)
       mtx.compose(new THREE.Vector3(s.x, s.y, s.z), q, new THREE.Vector3(0.24, s.h + 0.14, s.w + 0.1))
       frame.setMatrixAt(i, mtx)
-      // 招牌本身也不该是全屏泛光那种亮度：调成"亮但看得清字"的程度
-      blade.setColorAt(i, color.set(s.color).multiplyScalar(night ? 0.75 : 0.5))
+      // 招牌本身也不该是全屏泛光那种亮度：调成"亮但看得清字"的程度。
+      // 0.75 时暖色招牌一动就烧成白块，压到 0.58 才留得住色相。
+      blade.setColorAt(i, color.set(s.color).multiplyScalar(night ? 0.58 : 0.42))
     })
     if (blade.instanceColor) blade.instanceColor.needsUpdate = true
 
@@ -182,8 +183,10 @@ export function Neon({ night }: { night: boolean }) {
   )
 
   useEffect(() => {
-    mats.blade.color.setScalar(night ? 0.9 : 0.5)
-    mats.streak.opacity = night ? 0.5 : 0.22
+    mats.blade.color.setScalar(night ? 0.82 : 0.5)
+    // 湿地反光是"锦上添花"的一层：0.5 时整条街的地面都在发光，
+    // 压到 0.3 之后它只在灯下出现，路面还是路面。
+    mats.streak.opacity = night ? 0.3 : 0.16
   }, [mats, night])
 
   return (

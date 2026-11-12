@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from 'react'
 import * as THREE from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
+import { STYLIZED } from './style'
 import {
   BALCONY_OUT,
   FLOOR_HEIGHT,
@@ -123,7 +124,9 @@ export function buildShell(b: UnitBuilding, cut: ShellCut | null): Record<keyof 
         }
         // 窗台板：外凸一点，掠射光下能读出窗洞的深度
         if (op.kind === 'window' || op.kind === 'stair') {
-          wallBox(parts.frame, b, side, op.a0 - 0.08, op.a1 + 0.08, y0 - 0.06, y0, -0.06, 0.12)
+          // 顶面略高于洞口下沿、进深不碰窗框：顶面与窗下墙顶面、窗框底面都不共面，
+          // 否则窗口下沿那条线一动视角就闪（z-fighting）
+          wallBox(parts.frame, b, side, op.a0 - 0.08, op.a1 + 0.08, y0 - 0.07, y0 + 0.012, -0.06, 0.09)
         }
       }
       if (cursor < s1) wallBox(parts.wall, b, side, cursor, s1, base, base + H, 0, WALL)
@@ -156,7 +159,9 @@ export function buildShell(b: UnitBuilding, cut: ShellCut | null): Record<keyof 
 
   // 屋顶 + 女儿墙
   const top = floors * H
-  const roof = new THREE.BoxGeometry(b.w, 0.3, b.d)
+  // 屋面板往里收 8cm，藏进女儿墙（厚 25cm）里：和楼同宽时侧面与外墙共面，
+  // 楼顶会出现一条来回闪的锯齿色带（z-fighting）
+  const roof = new THREE.BoxGeometry(b.w - 0.16, 0.3, b.d - 0.16)
   roof.translate(0, top + 0.15, 0)
   parts.roof.push(roof)
   for (const side of sides) {
@@ -200,8 +205,10 @@ export function UnitShell({
     const glass = new THREE.MeshStandardMaterial({
       color: night ? '#0f1a24' : '#41545e',
       roughness: 0.08,
-      metalness: 0.7,
+      metalness: STYLIZED ? 0.2 : 0.7,
       envMapIntensity: 1.3,
+      // 风格化：没开灯的窗是中性深灰玻璃，不是黑洞（夜里金属玻璃没东西可反射就是纯黑）
+      ...(STYLIZED && night ? { color: '#3a3e47', roughness: 0.45, emissive: '#22252c', emissiveIntensity: 0.8 } : {}),
     })
     const lit = new THREE.MeshStandardMaterial({
       color: night ? '#2a2016' : '#56656c',

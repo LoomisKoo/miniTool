@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { walker } from '../game/walker'
+import { STYLIZED, GROUND_DEPTH } from './style'
 
 /**
  * 路灯照明。
@@ -15,7 +16,8 @@ import { walker } from '../game/walker'
  * 昼夜切换就会卡一下。
  */
 
-const POOL = 12
+// 风格化模式下没有真实聚光灯：每盏聚光灯都会让全场受光材质逐像素多算一遍
+const POOL = STYLIZED ? 0 : 12
 /** 灯头相对灯杆的位置（Props.Lamp：横臂朝 +x）。 */
 const HEAD_X = 0.98
 const HEAD_Y = 4.75
@@ -28,8 +30,12 @@ const FAR = 58
 // 一倍多，靠光斑的柔和衰减拉开层次。
 const INTENSITY = 38
 
-/** 地面光斑的半径（米）：铺满整条街，两盏灯之间不留黑带。 */
-const POOL_R = 46
+/**
+ * 地面光斑的半径（米）。
+ * 以前 46m、铺满整条街：两盏灯之间不留暗带，结果整条街亮度均匀，读不出"一盏一盏的灯"。
+ * 夜景好看的关键恰恰是灯下亮、灯间暗，光斑沿人行道排成一串。
+ */
+const POOL_R = STYLIZED ? 7 : 18
 
 /**
  * 超过这个距离的灯头不再铺光斑 / 光锥。
@@ -81,6 +87,15 @@ const poolFragment = /* glsl */ `
   uniform float uBounce;
   void main() {
     float r = length(vUv - 0.5) * 2.0;
+  #ifdef STYLIZED
+    // 一圈边缘清楚的暖光，灯下亮、灯间暗，不随玩家距离淡出
+    float disc = 1.0 - smoothstep(0.45, 1.0, r);
+    float L = uGain * disc * disc + uBounce * (1.0 - r);
+    L *= 0.9 + vSeed * 0.2;
+    L *= 1.0 - smoothstep(220.0, 480.0, distance(vWorld, cameraPosition));
+    gl_FragColor = vec4(uColor * max(L, 0.0) * uOn, 1.0);
+    return;
+  #endif
     float rm = r * uRadius;
     // 点光源照在水平面上的照度：E = I·cosθ / d² = I·h / (h² + r²)^1.5，归一化到灯下 = 1。
     // 这条曲线天然没有边界，从灯下一直平滑衰减到远处。
@@ -118,7 +133,7 @@ const coneFragment = /* glsl */ `
   uniform float uOn;
   uniform vec3 uColor;
   void main() {
-    float a = pow(vH, 1.6) * pow(vRim, 1.5) * 0.07 * uOn;
+    float a = pow(vH, 1.6) * pow(vRim, 1.5) * CONE_ALPHA * uOn;
     gl_FragColor = vec4(uColor * a, 1.0);
   }
 `
@@ -139,9 +154,10 @@ export function StreetLights({ lamps, night }: { lamps: Array<[number, number]>;
   }, [targets])
 
   const { pools, cones, poolMat, coneMat, base, hidden } = useMemo(() => {
-    // LED 路灯：接近中性的白，只带一点点暖
-    const color = new THREE.Color('#fff6ea')
+    // 钠灯式暖橙：夜景的冷暖对比全靠它，中性白光落在蓝灰地面上只会显得更冷
+    const color = new THREE.Color('#ffb066')
     const poolMat = new THREE.ShaderMaterial({
+      defines: STYLIZED ? { STYLIZED: 1 } : {},
       vertexShader: poolVertex,
       fragmentShader: poolFragment,
       uniforms: {
@@ -152,24 +168,34 @@ export function StreetLights({ lamps, night }: { lamps: Array<[number, number]>;
         uColor: { value: color },
         uRadius: { value: POOL_R },
         uHeight: { value: HEAD_Y },
-        // 灯下最多把地面提亮一倍多：再高就是一块过曝的白斑，
-        // 而且整片地面越过 Bloom 阈值，连光晕一起糊开。
-        uGain: { value: 1.05 },
-        // 空气散射要比物理点光源衰减得更慢，才接得住两盏灯之间的路面；
-        // 夜里没有灯照的街面靠这一层底光 + 地面的自发光保持连续
-        uBounce: { value: 0.26 },
+        // 光斑变小之后中心要更亮，才能在暗底上读成一圈暖光；
+        // 乘法混合下暗沥青只会提到中等亮度，不会越过 Bloom 阈值
+        // 风格化走加法混合，直接叠一层暖色，数值要小得多
+        uGain: { value: STYLIZED ? 0.42 : 2.4 },
+        // 底光压低：灯与灯之间要留出暗带
+        uBounce: { value: STYLIZED ? 0.05 : 0.06 },
       },
       transparent: true,
       depthWrite: false,
-      // dst * (1 + src)：路灯照度乘在地面原色上，而不是叠一层光
-      blending: THREE.CustomBlending,
-      blendEquation: THREE.AddEquation,
-      blendSrc: THREE.DstColorFactor,
-      blendDst: THREE.OneFactor,
+      // 写实：dst * (1 + src)，路灯照度乘在地面原色上。
+      // 风格化：加法混合，暗沥青上也能读出一圈清楚的光斑。
+      ...(STYLIZED
+        ? { blending: THREE.AdditiveBlending }
+        : {
+            blending: THREE.CustomBlending,
+            blendEquation: THREE.AddEquation,
+            blendSrc: THREE.DstColorFactor,
+            blendDst: THREE.OneFactor,
+          }),
       polygonOffset: true,
-      polygonOffsetFactor: -2,
+      // 光池在 y=0.075，比路面只高 5cm：取 GROUND_DEPTH 里最靠前的一层，
+      // 否则斜视时会被路面的斜率深度偏移抢走深度、整圈被切掉边角。
+      polygonOffsetFactor: GROUND_DEPTH.pool.polygonOffsetFactor,
+      polygonOffsetUnits: GROUND_DEPTH.pool.polygonOffsetUnits,
     })
     const coneMat = new THREE.ShaderMaterial({
+      // 风格化：光锥更明显，没有真实灯光后靠它读出"这里有一盏灯"
+      defines: { CONE_ALPHA: STYLIZED ? '0.12' : '0.07' },
       vertexShader: coneVertex,
       fragmentShader: coneFragment,
       uniforms: { uOn: { value: 0 }, uColor: { value: color } },
@@ -325,13 +351,12 @@ export function StreetLights({ lamps, night }: { lamps: Array<[number, number]>;
           key={i}
           ref={(el) => (lights.current[i] = el)}
           position={[0, -50, 0]}
-          color="#fff6ea"
+          color="#ffb066"
           intensity={0}
           // 物理衰减：decay 2 + 不截断（distance 0），和远处光斑用的是同一条
           // h/(h²+r²)^1.5 曲线，交接处看不出切换。
-          // 角度开到接近 90°，锥角边缘落在很远处，不会切出硬边。
           distance={0}
-          angle={1.5}
+          angle={1.2}
           penumbra={1}
           decay={2}
         />

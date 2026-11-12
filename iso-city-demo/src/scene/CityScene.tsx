@@ -1,7 +1,9 @@
-import { Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Suspense, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { Sky } from '@react-three/drei'
 import { Bloom, EffectComposer, N8AO, SMAA, Vignette, wrapEffect } from '@react-three/postprocessing'
+import { SMAAPreset, type BloomEffect, type SMAAEffect } from 'postprocessing'
+import { STYLIZED } from './style'
 import * as THREE from 'three'
 import { useApp } from '../store'
 import { WALK_BOUNDS, ferrisWheel, plazaFountain, river, riverSegments, type BuildingDef } from '../data/city'
@@ -9,25 +11,38 @@ import { allBuildings as buildings } from '../data/infill'
 import { HUB_Y, boardFerris, boardSpot } from '../game/ferris'
 import { launcher, launchFireworks } from '../game/fireworks'
 import { npcs } from '../data/npcs'
+import { stallVendors } from '../data/npcs'
+import { Stalls, stallColliders, stallFront } from './Stalls'
+import { ShopFronts } from './ShopFronts'
+import { openNow, shops, shopDoor } from '../data/shops'
+import { stalls } from '../data/stalls'
 import { Npcs } from './Npcs'
 import { Fireworks } from './Fireworks'
 import { Billboards } from './Billboards'
 import { Neon } from './Neon'
 import { FacadeDetail } from './FacadeDetail'
-import { Steam } from './Steam'
 import { GradeEffect } from './GradeEffect'
-import { DistantCity } from './DistantCity'
+import { JITTER, TaaPass } from './TaaPass'
 import { StreetDetail } from './StreetDetail'
+import { StreetGate, gateColliders } from './StreetGate'
+import { PedestrianStreet, pedestrianColliders } from './PedestrianStreet'
 import { NoticeBoard, boardSpot as noticeSpot } from './NoticeBoard'
 import { CatalogBooth } from './CatalogBooth'
 import { entrancesOfBuilding, floorsOf, isUnitBuilding, unitBuilding, unitsOf } from '../data/units'
 
 import { Building, InfillBuilding } from './Building'
+import { FarCity } from './FarCity'
+import { RoofProps } from './RoofProps'
+import { PerfLog, perfMark } from './PerfLog'
 import { Ground } from './Ground'
 import { Water } from './Water'
+import { Parks, pondColliders } from './Park'
 import { FerrisWheel } from './FerrisWheel'
+import { PLAZA_STEPS, PlazaSteps } from './BuildingForms'
 import { CityProps } from './Props'
+import { Greenery } from './Greenery'
 import { Traffic } from './Traffic'
+import { Transit } from './Transit'
 import { Citizens } from './Citizens'
 import { WildPets } from '../pets/WildPets'
 import { petInteractables } from '../pets/interact'
@@ -169,17 +184,29 @@ void main() {
   vec3 d = normalize(vWorld - cameraPosition);
   float h = d.y;
 
-  // 天顶近黑，地平线只留一层很弱的城市光污染。
-  // 这几个值是线性空间的：0.02 的线性亮度约等于屏幕上的 40/255，
-  // 再高就整片发灰，夜空立刻变成阴天。
-  // 红蓝比控制在 1.4:1 以内：之前 4:1 的群青配曝光会读成"蓝紫色的幕布"，
-  // 而不是黑夜——真实夜空的蓝其实非常暗，接近黑。
-  vec3 zenith = vec3(0.0042, 0.0046, 0.0068);
-  vec3 mid = vec3(0.0082, 0.0086, 0.0112);
-  vec3 horizon = vec3(0.020, 0.018, 0.017);
-  vec3 col = mix(horizon, mid, smoothstep(0.0, 0.085, h));
-  col = mix(col, zenith, smoothstep(0.085, 0.55, h));
-  col = mix(vec3(0.004, 0.004, 0.005), col, smoothstep(-0.3, 0.0, h));
+  // 蓝调时刻（blue hour）：日落之后 20 分钟的天空。
+  //
+  // 和"深夜"是两套完全不同的东西：深夜的天比楼暗，楼是剪影；
+  // 蓝调时刻的天比楼亮，是整张画面最亮的部分，楼反而沉下去，
+  // 只有窗灯和幕墙反光在亮。真实摄影里最好看的那二十分钟就是这个状态。
+  //
+  // 所以这里的天顶不能近黑：它必须是饱和的深蓝，亮度明显高于楼群，
+  // 否则楼和天糊成一片，天际线消失——那正是之前夜景"没有吸引力"的根源。
+  // 天顶偏蓝紫而不是纯蓝：和楼体、雾的底色是一个色相，暖橙才显得突出
+  vec3 zenith = vec3(0.018, 0.026, 0.075);
+  vec3 mid = vec3(0.050, 0.060, 0.140);
+  // 地平线残留的余晖：暖橙，越靠近地平线越亮。
+  // 这一层是"有戏"的来源——冷调的天和暖调的地平线接在一起。
+#ifdef STYLIZED
+  // 风格化：地平线只是更亮一点的蓝，不要大片暖橙抢走窗灯的颜色
+  vec3 afterglow = vec3(0.10, 0.11, 0.22);
+#else
+  vec3 afterglow = vec3(0.40, 0.21, 0.16);
+#endif
+  vec3 col = mix(afterglow, mid, smoothstep(0.0, 0.16, h));
+  col = mix(col, zenith, smoothstep(0.16, 0.72, h));
+  // 地平线以下（俯视时的地面方向）：压暗，接住雾色
+  col = mix(vec3(0.026, 0.027, 0.060), col, smoothstep(-0.22, 0.0, h));
 
   // 银河带需要一份连续的天空坐标：三维方向直接投影到过天顶的平面，
   // 没有面与面的接缝，只是在天顶方向被压缩（那里本来就正对银道）。
@@ -190,9 +217,10 @@ void main() {
   float band = exp(-pow(dot(d, axis) / 0.17, 2.0));
   float dust = fbm(uv * 5.4 + 11.0);
   float dustFine = fbm(uv * 15.0 + 3.0);
+  // 蓝调时刻看不见银河：天太亮，只有最亮的一两颗星。这里压到几乎不可见，
+  // 保留代码是为了以后再加深夜色时能直接调回来。
   float mw = band * smoothstep(0.34, 0.95, dust * 0.72 + dustFine * 0.42);
-  // 银河是"比天空稍亮一点的一层灰白"，不是一条发光带
-  col += vec3(0.026, 0.028, 0.036) * mw;
+  col += vec3(0.004, 0.0045, 0.006) * mw;
 
   // ---- 星点：三层不同的尺度，银河里额外加密 ----
   float bandBoost = 1.0 + band * 1.5;
@@ -201,6 +229,8 @@ void main() {
   s += starLayer(d, 170.0, 0.038, 41.0, 1.0);
   s += starLayer(d, 95.0, 0.022, 97.0, 0.6);
   s *= bandBoost;
+  // 蓝调时刻星点几乎看不到：天比星亮。压到 12%。
+  s *= 0.12;
   // 贴近地平线的星被城市光污染和空气吃掉了
   s *= smoothstep(0.0, 0.10, h);
 
@@ -241,6 +271,7 @@ function NightSky() {
   const material = useMemo(
     () =>
       new THREE.ShaderMaterial({
+        defines: STYLIZED ? { STYLIZED: 1 } : {},
         vertexShader: NIGHT_SKY_VERT,
         fragmentShader: NIGHT_SKY_FRAG,
         uniforms: { uTime: { value: 0 } },
@@ -296,14 +327,15 @@ function SkyBridges() {
           <mesh position={[0, 1.05, 0]} material={glass}>
             <boxGeometry args={[b.len, 2.1, 2.8]} />
           </mesh>
-          {/* 灯带必须完全脱离玻璃表面，压在面上会形成一条闪烁的亮线 */}
+          {/* 灯带必须完全脱离玻璃表面，压在面上会形成一条闪烁的亮线。
+              高度给到 18cm：5cm 在远处不到一个像素，会被采样成断断续续的虚线 */}
           <mesh position={[0, 1.05, 1.47]}>
-            <boxGeometry args={[b.len * 0.96, 0.05, 0.06]} />
-            <meshBasicMaterial color="#eaf4ff" toneMapped={false} transparent opacity={0.55} />
+            <boxGeometry args={[b.len * 0.96, 0.18, 0.06]} />
+            <meshBasicMaterial color="#eaf4ff" toneMapped={false} transparent opacity={0.4} />
           </mesh>
           <mesh position={[0, 1.05, -1.47]}>
-            <boxGeometry args={[b.len * 0.96, 0.05, 0.06]} />
-            <meshBasicMaterial color="#eaf4ff" toneMapped={false} transparent opacity={0.55} />
+            <boxGeometry args={[b.len * 0.96, 0.18, 0.06]} />
+            <meshBasicMaterial color="#eaf4ff" toneMapped={false} transparent opacity={0.4} />
           </mesh>
         </group>
       ))}
@@ -331,7 +363,8 @@ const GradeEffectNode = wrapEffect(GradeEffect)
  *   - 画质档 0 关闭 AO，只保留抗锯齿、Bloom 和调色。
  */
 function CheapAo({ night, quality }: { night: boolean; quality: number }) {
-  if (quality === 0) return null
+  // 风格化：AO 是整条链最贵的一环，而且墙角的噪点灰会把干净的色块弄脏
+  if (quality === 0 || STYLIZED) return null
   return (
     <N8AO
       aoRadius={1.1}
@@ -348,6 +381,93 @@ function CheapAo({ night, quality }: { night: boolean; quality: number }) {
   )
 }
 
+/**
+ * TAA 的注入点：拿相机、逐帧抖动投影，再把 pass 对象塞进 composer。
+ *
+ * 只能作为 EffectComposer 的直接子节点（`<primitive>` 会被 composer 的
+ * useEffect 认成 Pass 并按顺序挂上），而且要排在最前面——它要读的是
+ * RenderPass 刚画完的 HDR 颜色和深度，交给后面的 SMAA / Bloom / 调色。
+ *
+ * 抖动放在 useFrame 优先级 0.9：composer 是 1，所以一定在它之前执行；
+ * 而相机的近裁剪面、雾距这些每帧 updateProjectionMatrix 的改动都会带上
+ * camera.view，抖动不会被子系统覆盖掉。
+ */
+function TemporalAA({ resetKey }: { resetKey: string }) {
+  const camera = useThree((state) => state.camera) as THREE.PerspectiveCamera
+  const gl = useThree((state) => state.gl)
+  const pass = useMemo(() => new TaaPass(camera), [camera])
+  const frame = useRef(0)
+  const size = useMemo(() => new THREE.Vector2(), [])
+  // 上一帧的机位/朝向：相机停住时不再推进抖动序列。
+  // 抖动本来是为了让移动中的细线在时间上超采样；静止时继续换采样点，
+  // 只会让 88% 历史 + 12% 当前帧的混合永远收敛不了，画面就一直"呼吸"。
+  // 冻住序列之后，静止画面的 TAA 会在大约七八帧内收敛成一张图。
+  const lastPos = useRef(new THREE.Vector3(1e9, 0, 0))
+  const lastQuat = useRef(new THREE.Quaternion())
+
+  useEffect(() => {
+    pass.sceneCamera = camera
+    pass.reset()
+    return () => {
+      camera.clearViewOffset()
+    }
+  }, [pass, camera])
+
+  // 进楼 / 出楼、镜头运镜结束这些时刻，上一帧的画面和这一帧对不上
+  useEffect(() => {
+    pass.reset()
+  }, [pass, resetKey])
+
+  useEffect(() => () => pass.dispose(), [pass])
+
+  useFrame(() => {
+    // 0.1mm / 1e-6 弧度以内视为静止。PlayerRig 的机位是 lerp 逼近目标，
+    // 真正停下后会收敛到亚微米级，不会一直更新。
+    const moved =
+      camera.position.distanceToSquared(lastPos.current) > 1e-8 ||
+      1 - Math.abs(camera.quaternion.dot(lastQuat.current)) > 1e-12
+    lastPos.current.copy(camera.position)
+    lastQuat.current.copy(camera.quaternion)
+    if (moved) frame.current++
+
+    const j = JITTER[frame.current % JITTER.length]
+    gl.getDrawingBufferSize(size)
+    camera.setViewOffset(size.x, size.y, j[0], j[1], size.x, size.y)
+  }, 0.9)
+
+  return <primitive object={pass} />
+}
+
+/**
+ * 把画质档位落到后处理的真实开销上。
+ *
+ * 必须是 composer 的子节点：composer 是按「子节点挂载后」的 R3F group 去
+ * 收 Effect 的，写在 CityScene 里的 useEffect 会在 Defer 真正挂载之前就
+ * 跑完，那时 ref 还是 null，档位就丢了。
+ */
+function PostQuality({
+  quality,
+  smaa,
+  bloom,
+}: {
+  quality: number
+  smaa: RefObject<SMAAEffect>
+  bloom: RefObject<BloomEffect>
+}) {
+  useEffect(() => {
+    const q = Math.max(0, Math.min(2, quality))
+    // 写实模式下 HIGH 那 16 步太贵，收益也看不出来，封顶在 MEDIUM。
+    smaa.current?.applyPreset(
+      [SMAAPreset.LOW, SMAAPreset.MEDIUM, SMAAPreset.HIGH][STYLIZED ? q : Math.min(q, 1)],
+    )
+    const pass = bloom.current?.mipmapBlurPass
+    // 级数变了会重建 mip 链的 render target，只在切档时发生一次。
+    if (pass) pass.levels = [4, 6, 8][q]
+  }, [quality, smaa, bloom])
+
+  return null
+}
+
 /** 昼夜两套参数，但只有一条调色管线：曝光、曲线、对比全部在 GradeEffect 里。 */
 function Grade({ night }: { night: boolean }) {
   // exposure 是亮度唯一的入口。gl.toneMappingExposure 在后处理开启时不生效
@@ -356,27 +476,39 @@ function Grade({ night }: { night: boolean }) {
   // 所以夜空的近黑不会被抬成灰底，暗色物体也不会被压成纯黑。
   const params = night
     ? {
-        exposure: 1.26,
-        contrast: 1.13,
-        saturation: 1.06,
-        pivot: 0.42,
-        lift: 0.13,
+        // 夜里曝光只负责"让窗亮到能读"，不能再往上抬：
+        // 抬曝光会把楼体一起抬起来，剪影就没了。
+        // 1.0 的问题是整座城都沉进了黑：俯视时能看到楼，但看不到街道、屋顶、
+        // 广场这些"城市的部分"，画面只剩一片窗点。抬到 1.3 让街面进一档，
+        // 靠下面的 contrast + lift 控制才不会糊。
+        exposure: 1.0,
+        contrast: 1.16,
+        saturation: 1.08,
+        pivot: 0.38,
+        // 天变亮之后，暗部本身就有形了，lift 可以收一点，
+        // 否则刚做出来的明暗层次会被抬黑抹平。
+        lift: 0.09,
         // 夜间整体压冷一档：月光是冷光源，而冷色不该出现在中高亮度上
         // （那是路灯的暖色地盘）。只动 4%，配合下面的冷暖分离，
         // 让「夜」是一个色温而不是一个亮度。
-        balance: [0.98, 1.0, 1.045] as [number, number, number],
+        balance: [0.99, 1.0, 1.02] as [number, number, number],
         // 招牌、车灯、橱窗是低色度但高亮的，Bloom 会把它们摊成灰白；
         // vibrance 正好补这一侧，比全局加饱和更不容易脏。
-        vibrance: 0.2,
-        shadow: [0.85, 0.96, 1.14] as [number, number, number],
-        highlight: [1.06, 1.01, 0.96] as [number, number, number],
+        vibrance: 0.26,
+        // 分离色调：暗部推向蓝紫，高光推向暖橙——冷底暖光的最后一道保险
+        // 暗部只偏一点：推到 1.16 时大面积地面被染成饱和的亮蓝，像塑料
+        shadow: [0.97, 0.97, 1.04] as [number, number, number],
+        highlight: [1.08, 1.0, 0.92] as [number, number, number],
       }
     : {
-        exposure: 1.0,
-        contrast: 1.06,
-        saturation: 1.05,
-        pivot: 0.46,
-        lift: 0.1,
+        // 白天的曝光必须明显高于夜晚。
+        // 之前是 0.9（比夜里的 1.16 还低），所以切到白天只会换天空颜色，
+        // 画面亮度根本没变——这就是"白天也像夜里"的直接原因。
+        exposure: 1.35,
+        contrast: 1.1,
+        saturation: 1.08,
+        pivot: 0.5,
+        lift: 0.05,
         // 白天要克制：日光的暖已经由太阳颜色给过了，这里只补 2%，
         // 否则橙调的墙会在过曝区连成一片。
         balance: [1.02, 1.0, 0.985] as [number, number, number],
@@ -384,7 +516,38 @@ function Grade({ night }: { night: boolean }) {
         shadow: [0.97, 1.0, 1.04] as [number, number, number],
         highlight: [1.04, 1.01, 0.97] as [number, number, number],
       }
+  if (STYLIZED && night) {
+    // 暗部不再往蓝推：路面、空地、没开灯的窗这些大面积暗色会被推成 #090D1E 那种
+    // 蓝黑，整城发脏。冷暖只留一点高光偏暖，暗部保持中性。
+    // ACES 的脚部会把暗部压掉一半，再叠 1.16 的对比，砖墙就沉成黑块：
+    // 风格化夜景走低对比、略提曝光，靠光色和受光面分层，而不是靠明暗反差
+    Object.assign(params, {
+      // 曝光抬一档：上面把天光压回可读档位之后，画面还需要一点整体亮度，
+      // 否则楼体虽然是暗的，屋顶/人行道/草地的材质也读不出来。
+      exposure: 1.12,
+      contrast: 1.08,
+      // 饱和度与 vibrance 都收一档：底图压暗之后再把低饱和的墙/树往上推，
+      // 整城会重新回到"黄绿功能色"。夜景的颜色应该来自光源本身，
+      // 而不是把每个物体都染得更艳。
+      saturation: 1.0,
+      balance: [1.0, 1.0, 1.0],
+      shadow: [1.0, 1.0, 1.0],
+      // 高光不再整体推暖：所有中高亮的面（标线、人行道、墙）都会被染黄。
+      // 暖色只来自光源本身（窗、路灯）。
+      highlight: [1.0, 1.0, 1.0],
+      vibrance: 0.14,
+      // lift 抬一点点：暗部不要压成纯黑，否则背光的楼、树、地面是一团黑。
+      lift: 0.07,
+    })
+  }
   return <GradeEffectNode key={night ? 'n' : 'd'} {...params} />
+}
+
+const PERF_COUNTS = {
+  楼总数: buildings.length,
+  程序化楼: buildings.filter((b) => b.background).length,
+  小区楼: buildings.filter((b) => b.form === 'estate').length,
+  沿街楼: buildings.filter((b) => b.background && b.form !== 'estate').length,
 }
 
 export function ExposureSync({ value }: { value: number }) {
@@ -412,7 +575,8 @@ export function AdaptiveFog({ color, near, far }: { color: string; near: number;
     const fog = scene.fog as THREE.Fog | null
     if (!fog) return
     const height = Math.max(0, camera.position.y - 6)
-    const want = 1 + THREE.MathUtils.smoothstep(height, 16, 110) * 4.5
+    const want =
+      1 + THREE.MathUtils.smoothstep(height, 16, 110) * 4.5 + THREE.MathUtils.smoothstep(height, 110, 480) * 8
     zoom.current = THREE.MathUtils.damp(zoom.current, want, 3, Math.min(rawDelta, 0.05))
     fog.near = near * zoom.current
     fog.far = far * zoom.current
@@ -545,18 +709,28 @@ export function Environment({
   const p = night ? palettes.night : palettes.dusk
   // IBL 接管了大部分环境光，剩下的半球光只补一点点地面反弹，
   // 否则环境光叠两遍，暗部会灰成一片、对比全丢。
-  // 夜间也要有基础照度：城市有几十万盏灯在往上打光，天空里是有光的。
-  // 压太狠的结果是楼体一片黑、只剩发光招牌，细节全丢。
-  const hemi = p.hemiIntensity * (night ? 0.8 : 0.4)
-  const ambient = p.ambient * (night ? 0.5 : 0.45)
+  //
+  // 昼夜是两套完全不同的配光逻辑：
+  //   白天 —— 太阳是主光（2.4），天光只让阴影里有色，
+  //           整张画面走高调，暗部只留在窗内和楼底。
+  //   夜里 —— 没有主光；窗光是唯一的高亮，楼体必须退成剪影。
+  // 之前两套都用"环境光撑亮度"，结果是白天平光、夜里中灰，
+  // 而且五路光源叠加正好也是 46ms/帧的主要来源。
+  const hemi = p.hemiIntensity
+  const ambient = p.ambient
   const ibl = (
     <ImageBasedLighting
-      mood={night ? 'night' : 'dusk'}
-      // 夜间 HDR 是郊外星空，偏蓝；给足环境反射，楼体的材质才读得出来。
-      // 但别给满：0.75 会把楼墙整体刷成灰蓝，夜空一暗下来，
-      // 城市和天空就分不开了。0.62 保留反射，同时让楼体沉下去。
-      intensity={night ? 0.62 : 0.48}
-      rotation={night ? 1.1 : 2.35}
+      // 蓝调时刻要用"有天空内容"的 HDR，不能用郊外星空那张：
+      // 幕墙是金属度 0.93、粗糙度 0.1 的镜面，它反射的就是这张环境图。
+      // 以前夜里挂的是星空（几乎全黑），于是整座城的玻璃反射出来是一片黑，
+      // 高层唯一的美感来源（反射天空）等于被关掉了。
+      // 换成城市环境图之后，幕墙会映出天空和周围楼群的亮度。
+      mood={night ? 'city' : 'dusk'}
+      // 夜里借的是一张白昼城市 HDR（为了让幕墙有东西可反射），
+      // 它的漫反射对朝上的面就是"白天的天空"：给到 1.0 时屋顶、广场
+      // 在俯视下全部过曝。夜里的环境反射只留给幕墙，强度必须很低。
+      intensity={night ? 0.14 : 0.3}
+      rotation={night ? 2.1 : 2.35}
     />
   )
   if (night) {
@@ -569,8 +743,9 @@ export function Environment({
         <hemisphereLight args={[p.hemiSky, p.hemiGround, hemi]} />
         <ambientLight intensity={ambient} />
         <SunRig palette={p} extent={shadowExtent} follow={shadowFollow} center={shadowCenter} />
-        {/* 冷色补光，让背光面不糊成一片。白天同样挂着（亮度 0），保持灯的数量不变 */}
-        <directionalLight position={[120, 80, 140]} intensity={0.3} color="#c9a888" />
+        {/* 冷色补光，让背光面不糊成一片。白天同样挂着（亮度 0），保持灯的数量不变。
+            夜里压到 0.08：它和月光、天光、环境光加起来才是"楼是剪影"的天敌。 */}
+        <directionalLight position={[120, 80, 140]} intensity={night ? 0.08 : 0} color="#c9a888" />
       </>
     )
   }
@@ -582,13 +757,16 @@ export function Environment({
         <Sky
           distance={1200}
           // 太阳高度角不能太低：贴地平线时 Preetham 的太阳项会趋近无穷，
-          // 高光过曝成一片白，太阳本体反而被压成黑块
-          sunPosition={[95, 75, -150]}
-          turbidity={4.2}
-          rayleigh={1.1}
+          // 高光过曝成一片白，太阳本体反而被压成黑块。
+          // 46° 那套参数算出来的地平线是橙的，橙色占满画面上部，
+          // 城市就退成剪影——那是日落，不是白天。抬到 ~43° 的近正午，
+          // 天空读成蓝色，楼顶也才吃得到直射光。
+          sunPosition={[110, 150, -150]}
+          turbidity={2.1}
+          rayleigh={0.55}
           // 前向散射（mieDirectionalG）越接近 1，太阳附近越会出现巨大的光晕
-          mieCoefficient={0.005}
-          mieDirectionalG={0.85}
+          mieCoefficient={0.002}
+          mieDirectionalG={0.8}
         />
       )}
       {sky && <AdaptiveFog color={p.fog} near={p.fogNear} far={p.fogFar} />}
@@ -616,10 +794,31 @@ export function Environment({
  * 注意：autoUpdate 只在这一个地方改。以前片头那段和进城恢复各写一次，
  * 现在两个 owner 都交给这里，行为不再依赖挂载顺序。
  */
-const SHADOW_INTERVAL = 0.09
+// 0.09s 相当于 11Hz：转视角时每 11 帧就撞上一帧"整城重画一遍深度图"，
+// 体感是持续的顿挫。0.18s（约 5.5Hz）把这一帧的占比压到原来一半，
+// 而软阴影边缘本来就看不出落后一帧：人走在街上，影子晚 0.18s 追上。
+const SHADOW_INTERVAL = 0.18
+/** 远景时阴影刷新再降频：高空俯视下人和车只有几个像素，阴影晚几帧看不出来。 */
+const SHADOW_INTERVAL_FAR = 0.6
+
+/**
+ * 远景隐藏：相机离玩家超过 limit 时整组不渲染。
+ * 行人、NPC、摊位在高空俯视下只有几个像素，却要占骨骼动画和几百次 draw call。
+ */
+function FarHide({ limit, children }: { limit: number; children: ReactNode }) {
+  const camera = useThree((state) => state.camera)
+  const group = useRef<THREE.Group>(null)
+  useFrame(() => {
+    if (!group.current) return
+    const show = camera.position.distanceTo(walker.position) < limit
+    if (group.current.visible !== show) group.current.visible = show
+  })
+  return <group ref={group}>{children}</group>
+}
 
 function ShadowBudget() {
   const gl = useThree((state) => state.gl)
+  const camera = useThree((state) => state.camera)
   const screen = useApp((state) => state.screen)
   const acc = useRef(0)
 
@@ -644,12 +843,59 @@ function ShadowBudget() {
     // 这段时间一次都不刷（那几十毫秒一帧的卡顿主要就是这块）。
     if (screen === 'intro') return
     acc.current += Math.min(rawDelta, 0.25)
-    if (acc.current < SHADOW_INTERVAL) return
+    const far = camera.position.distanceTo(walker.position) > 120
+    if (acc.current < (far ? SHADOW_INTERVAL_FAR : SHADOW_INTERVAL)) return
     acc.current = 0
     gl.shadowMap.needsUpdate = true
+    perfMark('shadow')
   })
 
   return null
+}
+
+/**
+ * 近裁剪面随相机高度外推。
+ *
+ * 深度精度大约按 距离² / near 变差：near 0.45 时，200m 外两个相距 2cm 的面
+ * （招牌 / 装饰板贴在墙上）已经分不清前后，视角一动就来回闪（z-fighting）。
+ * 跟随视角时保持 0.45，拉远到总览后最近的物体也在几十米外，near 推到
+ * 几米完全看不出裁剪，精度却能提高一个数量级。
+ */
+function AdaptiveNear() {
+  const camera = useThree((state) => state.camera) as THREE.PerspectiveCamera
+  useFrame(() => {
+    // 按相机到玩家的距离而不是高度：飞到高楼旁边时相机也很高，但离墙很近
+    const dist = camera.position.distanceTo(walker.position)
+    const want = THREE.MathUtils.clamp((dist - 8) * 0.05, 0.45, 30)
+    // far 也跟着走：贴地时保持 1100，拉远才放大。far/near 比值一大，
+    // 墙面和贴在墙上的檐口、壁柱就会深度打架，整面楼闪烁
+    const wantFar = THREE.MathUtils.clamp(dist + 900, 1100, 2000)
+    if (Math.abs(want - camera.near) / camera.near < 0.08 && Math.abs(wantFar - camera.far) < 40) return
+    camera.near = want
+    camera.far = wantFar
+    camera.updateProjectionMatrix()
+  })
+  return null
+}
+
+/**
+ * 冻结静态楼的矩阵：程序化楼有六百多栋、一万多个节点，从不移动，
+ * 但 three.js 默认每帧都要把它们的矩阵重算一遍（被远景隐藏的也照算）。
+ * 算一次之后关掉自动更新，渲染时整棵子树直接跳过。
+ * 楼是分批挂载的，所以每次扫描都要检查有没有新挂上来、还没冻结的子节点；
+ * 有的话整栋强制重算一次再冻结，否则新节点的世界矩阵会停在单位矩阵。
+ */
+function freezeStatic(root: THREE.Object3D) {
+  let fresh = false
+  root.traverse((o) => {
+    if (o.matrixWorldAutoUpdate) fresh = true
+  })
+  if (!fresh) return
+  root.updateMatrixWorld(true)
+  root.traverse((o) => {
+    o.matrixAutoUpdate = false
+    o.matrixWorldAutoUpdate = false
+  })
 }
 
 /**
@@ -676,10 +922,14 @@ function BuildingLodController() {
     // 可见性时都 traverse 整个城市场景。
     if (frame.current % 32 === 0) {
       const next: THREE.Object3D[] = []
+      const roots: THREE.Object3D[] = []
       scene.traverse((object) => {
         if (object.userData.buildingDetailLod) next.push(object)
+        if (object.userData.hlod) roots.push(object)
       })
       lodNodes.current = next
+      for (const root of roots) freezeStatic(root)
+      perfMark('lod')
     }
 
     camera.getWorldPosition(cameraPosition)
@@ -738,7 +988,7 @@ function StablePointLights({ night }: { night: boolean }) {
       {/* 摩天轮轮毂：彩灯只是自发光，不给场景照度，没有这盏灯钢结构夜里全黑 */}
       <pointLight
         position={[ferrisWheel.x, HUB_Y, ferrisWheel.z]}
-        color="#8fd7ff"
+        color="#ffd9a8"
         intensity={night ? 220 : 0}
         distance={95}
         decay={2}
@@ -746,7 +996,7 @@ function StablePointLights({ night }: { night: boolean }) {
       {/* 广场喷泉的水下灯 */}
       <pointLight
         position={[plazaFountain.x, 2.2, plazaFountain.z]}
-        color="#63d8f5"
+        color="#8fd0d8"
         intensity={night ? 16 : 0}
         distance={22}
         decay={2}
@@ -767,13 +1017,18 @@ function PlayerLamp() {
 }
 
 /**
- * 图鉴亭落在广场东侧的空地上。
+ * 图鉴亭从广场东侧挪到了河岸东步道背后的草地。
+ *
+ * 广场是城市原点、最开阔的一块地，亭子立在旁边会把广场的视线切掉一半；
+ * 而且广场现在一个摊位都不摆，留白就是它最好的状态。河岸这边是遛宠物的
+ * 地方（桥东滨水、背后是河），图鉴亭放这儿才对得上用途。
  *
  * `noticeSpot` 本来就是"避开喷泉、车道和楼"的落点求解器，留言板在用它，
  * 这里直接复用——放一个会撞墙的亭子比放一块牌子难得多。
  */
-const CATALOG_SPOT = noticeSpot(plazaFountain.x + 9.5, plazaFountain.z + 4.5)
-const CATALOG_YAW = Math.atan2(plazaFountain.x - CATALOG_SPOT[0], plazaFountain.z - CATALOG_SPOT[1])
+const CATALOG_SPOT = noticeSpot(28, 61)
+/** 朝河（+Z）：站在北岸草坡上翻图鉴，背后是城市。 */
+const CATALOG_YAW = 0
 /** 亭子正面（玩家站的位置）：光环和提示放这里，不要塞进台基底下。 */
 const CATALOG_FRONT = {
   x: CATALOG_SPOT[0] + Math.sin(CATALOG_YAW) * 1.9,
@@ -792,7 +1047,20 @@ export function CityScene({ active = true }: { active?: boolean }) {
   const perf = import.meta.env.DEV && new URLSearchParams(window.location.search).has('perf')
   const enterTarget = useApp((state) => state.enterTarget)
   const openPlace = useApp((state) => state.openPlace)
+  const screen = useApp((state) => state.screen)
   const p = night ? palettes.night : palettes.dusk
+
+  // 后处理的 quality 旋钮。以前 QualityTuner 降档只改 N8AO 的采样数，
+  // 而风格化模式下 CheapAo 直接返回 null、OSM 场景又没挂，所以降档等于没降：
+  // 判定说"太慢"，负载却一动不动，档位就这么一直卡在 2，掉帧也没人救。
+  //
+  // 这里改的两项都只改 uniform / pass 数，不重建着色器程序，也不重建调色：
+  //  - SMAA 搜索步长（HIGH 16 步 / MEDIUM 8 / LOW 4）：两次全屏，是这条链里
+  //    最稳定的填充成本；
+  //  - Bloom 的 MIP 级数（8 / 6 / 4）：每一级都是一次全屏降采样 + 升采样。
+  // 两者只影响边缘锐度和光晕半径，色调一条都没动。
+  const smaaRef = useRef<SMAAEffect>(null)
+  const bloomRef = useRef<BloomEffect>(null)
 
   const colliders = useMemo<Collider[]>(() => {
     const list: Collider[] = buildings.flatMap(collidersOfBuilding)
@@ -816,6 +1084,12 @@ export function CityScene({ active = true }: { active?: boolean }) {
       minY: 0,
       maxY: 2.7,
     })
+    // 摊位：柜台和货箱挡人，客人那一侧留空
+    list.push(...stallColliders())
+    // 街口牌坊的柱子：横跨主街的两根，玩家不该穿过去
+    list.push(...gateColliders())
+    // 步行街两侧的商铺排（走道之外全是实体）
+    list.push(...pedestrianColliders())
     return list
   }, [])
 
@@ -870,6 +1144,54 @@ export function CityScene({ active = true }: { active?: boolean }) {
       action: boardFerris,
     })
     list.push({
+      id: 'boat-stop-west',
+      label: '河岸游船',
+      hint: '按 E 登船 · 前往东岸码头',
+      x: -31.5,
+      z: 68,
+      radius: 4.2,
+      action: () => {
+        walker.position.set(38, 0.1, 68)
+        useApp.getState().showToast('游船抵达东岸码头')
+      },
+    })
+    list.push({
+      id: 'boat-stop-east',
+      label: '河岸游船',
+      hint: '按 E 登船 · 前往西岸码头',
+      x: 38,
+      z: 68,
+      radius: 4.2,
+      action: () => {
+        walker.position.set(-31.5, 0.1, 68)
+        useApp.getState().showToast('游船抵达西岸码头')
+      },
+    })
+    list.push({
+      id: 'tram-stop-west',
+      label: '观光电车站',
+      hint: '按 E 上车 · 前往东岸街市',
+      x: -72,
+      z: -24,
+      radius: 4.2,
+      action: () => {
+        walker.position.set(72, 0.1, 28)
+        useApp.getState().showToast('观光电车抵达东岸街市')
+      },
+    })
+    list.push({
+      id: 'tram-stop-east',
+      label: '观光电车站',
+      hint: '按 E 上车 · 前往西岸街区',
+      x: 72,
+      z: 28,
+      radius: 4.2,
+      action: () => {
+        walker.position.set(-72, 0.1, -24)
+        useApp.getState().showToast('观光电车抵达西岸街区')
+      },
+    })
+    list.push({
       id: 'catalog-booth',
       label: '宠物图鉴',
       hint: '按 E 翻阅图鉴',
@@ -889,6 +1211,44 @@ export function CityScene({ active = true }: { active?: boolean }) {
         radius: 6,
         action: () =>
           useApp.getState().openDialog({ name: npc.name, role: npc.role, lines: npc.lines, x: npc.x, z: npc.z }),
+      })
+    }
+    // 1 楼沿街店铺：交互点放在门外 1.1m，和街上的入口标记同一个位置
+    for (const shop of shops) {
+      const door = shopDoor(shop)
+      list.push({
+        id: `shop-${shop.id}`,
+        label: shop.name,
+        hint: `${openNow(shop) ? '营业中' : '现在打烊'} · ${shop.hours}`,
+        x: door.x,
+        z: door.z,
+        radius: 3.0,
+        action: () => enterTarget({ kind: 'shop', id: shop.id }),
+      })
+    }
+    // 街边小摊：NPC 摊按 E 聊两句，玩家摊打开摊面面板
+    for (const stall of stalls) {
+      const front = stallFront(stall)
+      const npc = stall.vendor
+      list.push({
+        id: `stall-${stall.id}`,
+        label: npc.kind === 'npc' ? `${npc.name} · ${stall.title}` : `${stall.title} · ${npc.name}`,
+        hint:
+          npc.kind === 'npc'
+            ? `${stall.category} · 按 E 聊两句`
+            : `${stall.category} · 摊主不在，按 E 看看摊子`,
+        // 判定点放摊位中心、半径 3.4：客人从哪个方向靠近都算数。
+        // 以前判定点在柜前，绕到摊子侧面或背后名牌就不亮了。
+        x: stall.x,
+        z: stall.z,
+        radius: 3.4,
+        action: () => {
+          if (npc.kind === 'npc') {
+            useApp.getState().openDialog({ name: npc.name, role: npc.role, lines: npc.lines, x: front.x, z: front.z })
+          } else {
+            useApp.getState().openPanel({ type: 'stall', id: stall.id })
+          }
+        },
       })
     }
     if (launcher) {
@@ -926,12 +1286,18 @@ export function CityScene({ active = true }: { active?: boolean }) {
         frameloop={active ? 'always' : 'never'}
         // 阴影不跟画质档走：关掉阴影会让整座城突然变亮一档，
         // 档位跳动时画面就会「闪一下」。档位只降后处理采样数（见 AO 那段）。
-        shadows="soft"
+        // soft = PCFSoftShadowMap，每个像素做 16 次双线性采样；
+        // percentage = PCFShadowMap，只有 9 次。画面几乎看不出差别，
+        // 但它是片元着色器里最贵的一段循环（阴影要在每个受光材质里采样）。
+        shadows="percentage"
         // 像素比固定：dpr 一变，整块 canvas 的绘制缓冲和后处理链的 render
         // target 都要重建，重建的那几帧尺寸对不上，画面会既模糊又叠着上一帧。
-        // 而且实测这一刀无效：片头从 1.25 降到 0.85，填充量减半，
-        // 帧时间只从 84ms 变成 75ms——说明瓶颈不在像素填充。
-        dpr={1.25}
+        // 1.25 时 1920 宽的窗口要画 2400×1350 = 324 万像素，
+        // 而整条管线是"逐像素光照"（PBR + IBL + 3 盏点光 + 阴影采样），
+        // 帧时间和像素数几乎成正比：1.0 直接省掉 36% 的填充量。
+        // 风格化：Retina 屏上 dpr 1 等于半分辨率渲染再放大，锯齿台阶翻倍、细线时有时无。
+        // 省下的 AO / 聚光灯开销用来换 1.5 倍分辨率。
+        dpr={STYLIZED ? Math.min(window.devicePixelRatio || 1, 1.25) : 1}
         camera={{ fov: 62, near: 0.45, far: 1100, position: [0, 4, 34] }}
         // stencil：角色被遮挡时的剪影靠模板缓冲区分"被别的东西挡住"和"自己挡自己"
         // antialias 关掉：真正的抗锯齿是后处理里的 SMAA，EffectComposer
@@ -964,10 +1330,17 @@ export function CityScene({ active = true }: { active?: boolean }) {
           <Stagger name="base">
             <Ground />
             <Water />
+            <Parks night={night} />
           </Stagger>
           <Stagger name="ferris">
             <FerrisWheel />
           </Stagger>
+          <Stagger name="plaza-steps">
+            <PlazaSteps night={night} />
+          </Stagger>
+          <PerfLog counts={PERF_COUNTS} />
+          <FarCity defs={buildings} night={night} />
+          <RoofProps defs={buildings} night={night} />
           {buildings.map((building) =>
             building.background ? (
               <Stagger key={building.id} name="infill">
@@ -988,30 +1361,42 @@ export function CityScene({ active = true }: { active?: boolean }) {
           <Stagger name="facade">
             <FacadeDetail night={night} />
           </Stagger>
-          <Stagger name="steam">
-            <Steam night={night} />
-          </Stagger>
-          <Stagger name="distant">
-            <DistantCity night={night} />
-          </Stagger>
           <Stagger name="bridges">
             <SkyBridges />
           </Stagger>
           {/* CityProps 不套 Stagger：它内部的街具各自分批，但路灯（一批聚光灯）
               必须在首帧就挂上——聚光灯数量一变，整城材质又要重编译一次。 */}
           <CityProps />
+          <Stagger name="greenery">
+            <Greenery night={night} />
+          </Stagger>
           <Stagger name="street">
             <StreetDetail night={night} />
+            <StreetGate night={night} />
+          </Stagger>
+          <Stagger name="pedestrian">
+            <PedestrianStreet night={night} />
           </Stagger>
           <Stagger name="traffic">
             <Traffic />
+            <Transit />
           </Stagger>
-          <Stagger name="citizens">
-            <Citizens />
+          <FarHide limit={110}>
+            <Stagger name="citizens">
+              <Citizens />
+            </Stagger>
+            <Stagger name="stalls">
+              <Stalls />
+            </Stagger>
+          </FarHide>
+          <Stagger name="shopfronts">
+            <ShopFronts />
           </Stagger>
-          <Stagger name="npcs">
-            <Npcs list={npcs} />
-          </Stagger>
+          <FarHide limit={110}>
+            <Stagger name="npcs">
+              <Npcs list={[...npcs, ...stallVendors]} />
+            </Stagger>
+          </FarHide>
           <Stagger name="notices">
             {world?.places
               .filter((place) => place.id !== 'gallery-lobby' && place.id !== 'corner-cafe')
@@ -1076,9 +1461,28 @@ export function CityScene({ active = true }: { active?: boolean }) {
               />
             ))}
 
+          {/* 1 楼店铺的门头：一块牌子 + 门口一束暖光，和楼栋入口分开 */}
+          {shops.map((shop) => {
+            const door = shopDoor(shop)
+            return (
+              <group key={`shop-${shop.id}`}>
+                <EntrancePortal x={door.x} z={door.z} color="#ffce9a" strength={0.55} />
+                <Marker
+                  x={door.x}
+                  z={door.z}
+                  y={2.05}
+                  title={shop.name}
+                  subtitle={shop.blurb}
+                  tone="space"
+                  actionId={`shop-${shop.id}`}
+                  onOpen={() => enterTarget({ kind: 'shop', id: shop.id })}
+                />
+              </group>
+            )
+          })}
+
           {buildings
-            .filter((building) => !building.background)
-            .filter((building) => isUnitBuilding(building.id) || (building.target && building.entranceAt))
+            .filter((building) => !building.background)            .filter((building) => isUnitBuilding(building.id) || (building.target && building.entranceAt))
             .map((building) => {
               if (isUnitBuilding(building.id)) {
                 return (
@@ -1137,6 +1541,7 @@ export function CityScene({ active = true }: { active?: boolean }) {
           <StaticMerge version={night ? 2 : 1} />
           <ScenePrewarm />
           <ShadowBudget />
+          <AdaptiveNear />
           <WildPets />
           <QualityTuner />
           {import.meta.env.DEV && perf && <PerfMonitor />}
@@ -1144,6 +1549,7 @@ export function CityScene({ active = true }: { active?: boolean }) {
           <PlayerRig
             colliders={[
               ...colliders,
+              ...pondColliders,
               {
                 minX: plazaFountain.x - plazaFountain.r - 0.3,
                 maxX: plazaFountain.x + plazaFountain.r + 0.3,
@@ -1151,6 +1557,14 @@ export function CityScene({ active = true }: { active?: boolean }) {
                 maxZ: plazaFountain.z + plazaFountain.r + 0.3,
                 minY: 0,
                 maxY: 4,
+              },
+              {
+                minX: PLAZA_STEPS.x - PLAZA_STEPS.w / 2 - 0.5,
+                maxX: PLAZA_STEPS.x + PLAZA_STEPS.w / 2 + 0.5,
+                minZ: PLAZA_STEPS.z - PLAZA_STEPS.d / 2,
+                maxZ: PLAZA_STEPS.z + PLAZA_STEPS.d / 2,
+                minY: 0,
+                maxY: PLAZA_STEPS.rise * PLAZA_STEPS.count,
               },
             ]}
             bounds={{ minX: -WALK_BOUNDS, maxX: WALK_BOUNDS, minZ: -WALK_BOUNDS, maxZ: WALK_BOUNDS }}
@@ -1170,9 +1584,15 @@ export function CityScene({ active = true }: { active?: boolean }) {
           stencilBuffer
           multisampling={0}
         >
+          {/* 时间抗锯齿，必须排第一位：它读 RenderPass 刚画完的 HDR 颜色和深度。
+              细小线条的锯齿在这里解决，后面的 SMAA 只补几何边缘的漏网之鱼。 */}
+          <TemporalAA resetKey={`${screen}:${active}`} />
           {/* 窗框、楼层线、灯带这类细长几何在移动时是典型的边缘走样；
-              SMAA 只在边缘做形态学抗锯齿，比全程 4x MSAA 便宜得多。 */}
-          <SMAA />
+              SMAA 只在边缘做形态学抗锯齿，比全程 4x MSAA 便宜得多。
+              移动端修复过一次：multisampling={4} 在这条 half-float 链上
+              在 Apple GPU 上直接把上下文顶掉了（整屏黑），别再加回去。
+              preset 只当"上限"，实际档位由下面的 PostQuality 按 quality 调。 */}
+          <SMAA ref={smaaRef as never} preset={STYLIZED ? SMAAPreset.HIGH : SMAAPreset.MEDIUM} />
           {/* 环境光遮蔽：墙角、树根、车底、雨棚下面本来就该更暗。
               没有它，所有物体都像"浮"在地面上，这是廉价感最大的来源之一。
               用 N8AO 而不是 SSAO：SSAO 的采样半径只有几厘米、点位几乎重合，
@@ -1180,20 +1600,31 @@ export function CityScene({ active = true }: { active?: boolean }) {
               半径按米级给，暗部是连续的。 */}
           <CheapAo night={night} quality={quality} />
           <Bloom
+            ref={bloomRef}
             // 阈值别太松：只有真正亮的灯和橱窗才该晕开，
             // 否则整城像隔着一层毛玻璃，什么细节都糊掉。
             // 路灯照亮的路面只该亮，不该发光——阈值压在灯头亮度之上。
-            luminanceThreshold={night ? 0.85 : 0.86}
-            luminanceSmoothing={0.25}
-            intensity={night ? 0.42 : 0.26}
+            // 抬到 0.92：招牌贴图的画法已经自带硬边光晕，再让 Bloom 摊一遍
+            // 就等于把字糊两层。
+            // 风格化：只让真正的发光体（窗、招牌）有一圈紧的晕，半径收小，不糊成雾
+            luminanceThreshold={STYLIZED ? (night ? 0.8 : 0.95) : night ? 0.92 : 0.9}
+            luminanceSmoothing={STYLIZED ? 0.08 : 0.18}
+            intensity={STYLIZED ? (night ? 0.32 : 0.12) : night ? 0.3 : 0.2}
             mipmapBlur
-            radius={0.72}
+            radius={STYLIZED ? 0.38 : 0.58}
           />
           {/* 唯一的调色：曝光 + 胶片曲线 + 冷暖分离 + 对比 + 抬黑。
               亮度/对比/饱和都收在这一个 pass 里，不再叠加 BrightnessContrast
               和 HueSaturation——叠两层的结果是调一个、另一个跟着变。 */}
           <Grade night={night} />
-          <Vignette offset={0.3} darkness={night ? 0.5 : 0.5} eskil={false} />
+          {/* 挂在这里（而不是 CityScene 里）：它必须等 SMAA / Bloom 真正
+              实例化之后才能改参数，见 PostQuality 的注释。 */}
+          <PostQuality quality={quality} smaa={smaaRef} bloom={bloomRef} />
+          {/* 画框：把边缘压暗一圈，视线才会落在画面中心。
+             但 canvas 上面还有一层 CSS 的 .vignette-soft 遮罩，两层叠起来
+              就是"圆形光圈"——俯视全城时四周全是黑的。着色器这层只留
+              极轻的一档，边缘压暗交给 CSS 那一层统一做。 */}
+          <Vignette offset={0.52} darkness={night ? 0.08 : 0.28} eskil={false} />
         </EffectComposer>
         )}
         </Defer>

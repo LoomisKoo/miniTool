@@ -1,9 +1,12 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
+import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { BALCONY_OUT, DOOR, WALL, type BalconySpan, type Opening, type Rect, type Side } from '../data/units'
 import type { Collider } from '../scene/PlayerRig'
+import { walker } from '../game/walker'
 import { makeFloorTexture, makeWallTexture } from '../scene/textures'
+import { INDOOR_STYLE, deepen } from './style'
 
 /**
  * 室内的"墙 + 洞口"工具。户内和电梯厅都用它：
@@ -53,6 +56,55 @@ export function sideLength(box: RoomBox, side: Side) {
   return side === 'n' || side === 's' ? box.W : box.D
 }
 
+/** 一面墙上连续的一段空墙（沿墙坐标，原点在墙中点）。 */
+export type WallRun = { side: Side; center: number; len: number }
+
+/** 洞口/隔墙两边各留的空：画挂到边上会贴着墙角或隔墙。 */
+const RUN_EDGE = 0.3
+/** 太短的一段不值得挂东西。 */
+const RUN_MIN = 2.0
+
+/**
+ * 每面墙上真正能挂东西的连续段。
+ *
+ * 只避开洞口是不够的：户内隔墙（卧室墙）会从中间把一面墙劈开，
+ * 以前画廊墙按整面墙等距排四幅，画就直接穿过隔墙了。
+ * 这里把洞口和贴着这面墙的隔墙都算成"被占掉"，返回剩下的段。
+ */
+export function freeWallRuns(
+  box: RoomBox,
+  openings: LocalOpening[],
+  partitions: Array<{ minX: number; maxX: number; minZ: number; maxZ: number }> = [],
+): WallRun[] {
+  const runs: WallRun[] = []
+  for (const side of SIDES) {
+    const half = sideLength(box, side) / 2
+    const busy: Array<[number, number]> = []
+    for (const o of openings) if (o.side === side) busy.push([o.l0 - RUN_EDGE, o.l1 + RUN_EDGE])
+    for (const w of partitions) {
+      const touches =
+        side === 'n'
+          ? w.minZ <= -box.D / 2 + 0.4
+          : side === 's'
+            ? w.maxZ >= box.D / 2 - 0.4
+            : side === 'w'
+              ? w.minX <= -box.W / 2 + 0.4
+              : w.maxX >= box.W / 2 - 0.4
+      if (!touches) continue
+      busy.push(side === 'n' || side === 's' ? [w.minX - RUN_EDGE, w.maxX + RUN_EDGE] : [w.minZ - RUN_EDGE, w.maxZ + RUN_EDGE])
+    }
+    busy.sort((p, q) => p[0] - q[0])
+    let cursor = -half
+    for (const [a, b] of busy) {
+      const end = Math.min(a, half)
+      if (end - cursor > 0.2) runs.push({ side, center: (cursor + end) / 2, len: end - cursor })
+      cursor = Math.max(cursor, Math.min(b, half))
+    }
+    if (half - cursor > 0.2) runs.push({ side, center: (cursor + half) / 2, len: half - cursor })
+  }
+  return runs.filter((r) => r.len >= RUN_MIN).sort((a, b) => b.len - a.len)
+}
+
 /** 墙上一点（沿墙 l、离墙面往室内 inward）对应的局部坐标。 */
 export function wallPoint(box: RoomBox, side: Side, l: number, inward = 0): [number, number] {
   switch (side) {
@@ -78,6 +130,13 @@ export function yawToward(dx: number, dz: number) {
 }
 
 const SIDES: Side[] = ['n', 's', 'e', 'w']
+
+/** 两面墙净距小于这个值（且另一向明显更长）就当作走廊。 */
+const NARROW_SPAN = 4.8
+/** 长短比达到这个值才算走廊，方正的小房间不算。 */
+const CORRIDOR_RATIO = 1.7
+/** 镜头的横向偏移占比低于这个值（≈27°）就算"顺着这条轴看"。 */
+const ALONG_SIN = 0.45
 
 /** 一面墙扣掉洞口后剩下的块：墙垛（整层高）+ 洞口下的窗台墙 + 洞口上的过梁。 */
 function wallPieces(len: number, H: number, ops: LocalOpening[]) {
@@ -126,14 +185,207 @@ function boxOnWall(box: RoomBox, side: Side, l0: number, l1: number, y0: number,
   return g
 }
 
+type WallPart = {
+  side: Side
+  wall: THREE.BufferGeometry | null
+  frame: THREE.BufferGeometry | null
+  glass: THREE.BufferGeometry | null
+  skirt: THREE.BufferGeometry | null
+}
+
+/**
+ * 剖面要摘掉哪些墙。
+ *
+ * 普通房间：x 轴摘一面、z 轴摘一面，永远是"朝着镜头的那两面"，
+ * 结果和相机距离无关，不会出现"四面墙都在"的中间态。
+ *
+ * 走廊（酒店内廊、板楼楼梯间，净宽 2.4~3.2m）要另算：那两面墙本来就挨得很近，
+ * 顺着走廊走的时候镜头基本平行于它们，几乎看不到墙面，只剩一点点厚度；
+ * 这时再摘掉近的那面，走廊就只剩一面墙挂在那儿，另一侧直接漏成空地。
+ * 所以窄向的两面墙在"顺着看"时都留着，只切掉近头那面端墙——就是一条剖开的走廊。
+ * 反过来横着看走廊（镜头在侧边）时必须切，否则近侧那面 2.8m 高的墙会把地面全挡死。
+ */
+export function cutSides(box: RoomBox, p: THREE.Vector3) {
+  // 室内场景的坐标系原点就是房间中心（CityBackdrop 用 box.cx/cz 反算城市位置），
+  // 所以这里直接和 0 比，不要用 box.cx / box.cz（那是楼栋坐标）。
+  const lateral = Math.hypot(p.x, p.z) || 1
+  // 镜头几乎顺着 z / x 轴看：横向偏移占全长不到 45%，约 27° 以内
+  const alongZ = Math.abs(p.x) / lateral < ALONG_SIN
+  const alongX = Math.abs(p.z) / lateral < ALONG_SIN
+  // 窄向 + 另一向明显更长 = 走廊。方正的小房间不算，它的近墙照样要摘。
+  const corridorX = box.W < NARROW_SPAN && box.D > box.W * CORRIDOR_RATIO
+  const corridorZ = box.D < NARROW_SPAN && box.W > box.D * CORRIDOR_RATIO
+  const keepX = corridorX && alongZ
+  const keepZ = corridorZ && alongX
+  return {
+    n: !keepZ && p.z <= 0,
+    s: !keepZ && p.z > 0,
+    w: !keepX && p.x <= 0,
+    e: !keepX && p.x > 0,
+  } as Record<Side, boolean>
+}
+
+/** 相机在房间中心的正对角线上时，两面都判断为"近"，取其一即可。 */
+export function wallHiddenAt(side: Side, _box: RoomBox | undefined, p: THREE.Vector3) {
+  return cutSides(_box ?? { W: 0, D: 0, H: 0, cx: 0, cz: 0 }, p)[side]
+}
+
+/**
+ * 挂在墙上的东西（画框、幕布）也要跟着那面墙一起藏。
+ * 不然剖面把墙摘掉之后，画还浮在空气里。
+ */
+/** 墙上一点 (x,z) 属于哪一面墙（室内坐标原点 = 房间中心）。 */
+export function sideOfPoint(x: number, z: number): Side {
+  return Math.abs(x) >= Math.abs(z) ? (x < 0 ? 'w' : 'e') : z < 0 ? 'n' : 's'
+}
+
+export function useWallCut(side: Side, box?: RoomBox) {
+  const camera = useThree((state) => state.camera)
+  const ref = useRef<THREE.Group>(null)
+  useFrame(() => {
+    if (ref.current) ref.current.visible = !wallHiddenAt(side, box, camera.position)
+  })
+  return ref
+}
+
+/**
+ * 阳台的剖面。
+ *
+ * 阳台不能直接用 useWallCut：人一走到阳台上，镜头必然越过那面外墙，
+ * "近侧墙"判定成立，整组阳台（挑板 + 玻璃栏板 + 扶手）会被一起摘掉，
+ * 结果就是站在半空里——地板和围墙全没了。
+ *
+ * 所以这里加一个条件：**人还在屋里**时才按近侧摘掉（那是为了避免半透玻璃
+ * 在镜头前糊成一层雾），人已经站到阳台上了就一律保留。
+ */
+export function useBalconyCut(bal: BalconySpan, box: RoomBox) {
+  const camera = useThree((state) => state.camera)
+  const ref = useRef<THREE.Group>(null)
+  useFrame(() => {
+    if (!ref.current) return
+    const p = walker.position
+    const r = balconyRect(box, bal)
+    // 门口那一小段也算"在阳台上"：跨门槛时不能闪一下
+    const m = 0.6
+    const standing = p.x > r.minX - m && p.x < r.maxX + m && p.z > r.minZ - m && p.z < r.maxZ + m
+    // 正上方俯视（室内的"俯视"机位）：横向偏移几乎为 0，近侧判定会随机命中，
+    // 阳台就会莫名其妙消失。这种机位下阳台一直留着。
+    const overhead = Math.hypot(camera.position.x, camera.position.z) < 1.5
+    ref.current.visible = standing || overhead || !wallHiddenAt(bal.side, box, camera.position)
+  })
+  return ref
+}
+
+/**
+ * 剖面墙：镜头跑到哪面墙的外侧，就把那面墙（连同它的窗套、玻璃、踢脚线）摘掉。
+ *
+ * iso 视角下房间只有几米宽，镜头必然站在墙外。以前四面墙和吊顶永远显示，
+ * 于是默认机位只能压得很近——再拉远就被墙挡死，房间里永远是个特写。
+ * 这里不靠 React 状态：每帧比较相机位置和四面墙的平面，带 0.25m 死区，
+ * 贴着墙转视角时不会闪。窗外的城市照旧从保留的那两面墙的洞口看出去。
+ */
+function CutawayWalls({
+  box,
+  wallMap,
+  ceilingColor,
+  hideCeiling,
+  parts,
+}: {
+  box: RoomBox
+  wallMap: THREE.Texture
+  ceilingColor: string
+  hideCeiling: boolean
+  parts: WallPart[]
+}) {
+  const camera = useThree((state) => state.camera)
+  const groups = useRef<Partial<Record<Side, THREE.Group | null>>>({})
+  const slab = useRef<THREE.Mesh>(null)
+
+  useFrame(() => {
+    const p = camera.position
+    for (const side of SIDES) {
+      const node = groups.current[side]
+      if (node) node.visible = !wallHiddenAt(side, box, p)
+    }
+    // 吊顶：镜头高过墙顶就必须收掉，否则俯视全是白板
+    if (slab.current) slab.current.visible = !hideCeiling && p.y < box.H - 0.1
+  })
+
+  return (
+    <group>
+      {parts.map((part) => (
+        <group
+          key={part.side}
+          ref={(node) => {
+            groups.current[part.side] = node
+          }}
+        >
+          {part.wall && (
+            <mesh geometry={part.wall} receiveShadow>
+              <meshStandardMaterial
+                map={wallMap}
+                color="#ffffff"
+                roughness={0.9}
+                metalness={0.02}
+                envMapIntensity={0.55}
+                side={THREE.DoubleSide}
+              />
+            </mesh>
+          )}
+          {part.skirt && (
+            <mesh geometry={part.skirt}>
+              <meshStandardMaterial color={INDOOR_STYLE.skirting} roughness={0.62} metalness={0.12} />
+            </mesh>
+          )}
+          {/* 踢脚线上沿的一条细灯带：深色墙在剖面视角里最容易糊成一片，
+              这一条冷光把墙脚勾出来，也是参考图里最明显的"室内通电"的信号。
+              借用踢脚线几何，只压扁 y 方向，不增加顶点。 */}
+          {part.skirt && (
+            <mesh geometry={part.skirt} position={[0, 0.118, 0]} scale={[1, 0.22, 1]}>
+              <meshBasicMaterial color={INDOOR_STYLE.neon} transparent opacity={0.5} toneMapped={false} />
+            </mesh>
+          )}
+          {part.frame && (
+            <mesh geometry={part.frame} castShadow>
+              <meshStandardMaterial
+                color={INDOOR_STYLE.frame}
+                roughness={0.34}
+                metalness={0.62}
+                envMapIntensity={0.9}
+              />
+            </mesh>
+          )}
+          {part.glass && (
+            <mesh geometry={part.glass}>
+              <meshStandardMaterial
+                color={INDOOR_STYLE.glass}
+                transparent
+                opacity={INDOOR_STYLE.glassOpacity}
+                roughness={0.03}
+                metalness={0.62}
+                envMapIntensity={1.4}
+                depthWrite={false}
+              />
+            </mesh>
+          )}
+        </group>
+      ))}
+      <mesh ref={slab} rotation={[Math.PI / 2, 0, 0]} position={[0, box.H, 0]}>
+        <planeGeometry args={[box.W, box.D]} />
+        <meshStandardMaterial color={ceilingColor} roughness={0.95} side={THREE.DoubleSide} />
+      </mesh>    </group>
+  )
+}
+
 export function RoomWalls({
   box,
   openings,
   wallColor,
   floorColor,
-  ceiling = '#e6e1d7',
+  ceiling = INDOOR_STYLE.ceiling,
   onFloorClick,
   editing,
+  hideCeiling = false,
 }: {
   box: RoomBox
   openings: LocalOpening[]
@@ -142,25 +394,38 @@ export function RoomWalls({
   ceiling?: string
   onFloorClick?: (x: number, z: number) => void
   editing?: boolean
+  /** 剖切俯视：天花板要收掉，否则镜头只能看到一块白板 */
+  hideCeiling?: boolean
 }) {
+  // 四面墙分开成四份几何：iso 剖面要把靠近镜头的那两面摘掉，
+  // 合批成一整块就只能整层一起消失（以前这就是"穿墙什么都看不见"的来源）。
   const walls = useMemo(() => {
-    const parts: THREE.BufferGeometry[] = []
+    const out = {} as Record<Side, THREE.BufferGeometry | null>
     for (const side of SIDES) {
       const ops = openings.filter((o) => o.side === side)
-      for (const [l0, l1, y0, y1] of wallPieces(sideLength(box, side), box.H, ops)) {
-        parts.push(placePlane(box, side, l0, l1, y0, y1, 3.2))
-      }
+      const parts = wallPieces(sideLength(box, side), box.H, ops).map(([l0, l1, y0, y1]) =>
+        placePlane(box, side, l0, l1, y0, y1, 3.2),
+      )
+      out[side] = parts.length ? mergeGeometries(parts, false) : null
+      for (const g of parts) g.dispose()
     }
-    const merged = mergeGeometries(parts, false)
-    for (const g of parts) g.dispose()
-    return merged
+    return out
   }, [box, openings])
-  useEffect(() => () => walls?.dispose(), [walls])
+  useEffect(
+    () => () => {
+      for (const side of SIDES) walls[side]?.dispose()
+    },
+    [walls],
+  )
 
   // 窗洞里的玻璃与窗框：只画外墙上的洞（门、电梯另画）
   const glazing = useMemo(() => {
-    const glass: THREE.BufferGeometry[] = []
-    const frame: THREE.BufferGeometry[] = []
+    const glass = {} as Record<Side, THREE.BufferGeometry[]>
+    const frame = {} as Record<Side, THREE.BufferGeometry[]>
+    for (const side of SIDES) {
+      glass[side] = []
+      frame[side] = []
+    }
     const t = 0.07
     // 玻璃落在外墙厚度中间偏外，和楼壳上邻居家的玻璃同一个深度
     const g0 = WALL - 0.2
@@ -168,51 +433,60 @@ export function RoomWalls({
     for (const o of openings) {
       if (o.kind === 'door' || o.kind === 'elevator') continue
       const { side, l0, l1, y0, y1 } = o
+      const glassOf = glass[side]
+      const frameOf = frame[side]
       if (o.kind === 'balcony') {
         // 推拉门：一扇固定在左半边，右半边推开，人能走出去
         const mid = (l0 + l1) / 2
-        glass.push(boxOnWall(box, side, l0, mid, y0, y1, g0, g1))
-        frame.push(boxOnWall(box, side, mid - 0.03, mid + 0.03, y0, y1, g0 - 0.04, g1 + 0.04))
+        glassOf.push(boxOnWall(box, side, l0, mid, y0, y1, g0, g1))
+        frameOf.push(boxOnWall(box, side, mid - 0.03, mid + 0.03, y0, y1, g0 - 0.04, g1 + 0.04))
       } else if (o.kind === 'entry') {
         // 门厅玻璃门：两侧固定扇，中间 1.8m 是门
         const mid = (l0 + l1) / 2
-        glass.push(boxOnWall(box, side, l0, mid - 0.9, y0, y1, g0, g1))
-        glass.push(boxOnWall(box, side, mid + 0.9, l1, y0, y1, g0, g1))
-        glass.push(boxOnWall(box, side, mid - 0.9, mid + 0.9, y0, y1, g0 - 0.06, g1 - 0.06))
+        glassOf.push(boxOnWall(box, side, l0, mid - 0.9, y0, y1, g0, g1))
+        glassOf.push(boxOnWall(box, side, mid + 0.9, l1, y0, y1, g0, g1))
+        glassOf.push(boxOnWall(box, side, mid - 0.9, mid + 0.9, y0, y1, g0 - 0.06, g1 - 0.06))
       } else {
-        glass.push(boxOnWall(box, side, l0, l1, y0, y1, g0, g1))
-        const n = o.kind === 'store' ? Math.max(1, Math.round((l1 - l0) / 2.2)) : l1 - l0 > 1.6 ? 2 : 1
+        glassOf.push(boxOnWall(box, side, l0, l1, y0, y1, g0, g1))
+        const n = o.kind === 'store' ? Math.max(1, Math.round((l1 - l0) / 2.2)) : Math.max(1, Math.round((l1 - l0) / 1.15))
         for (let i = 1; i < n; i++) {
           const a = l0 + ((l1 - l0) * i) / n
-          frame.push(boxOnWall(box, side, a - 0.03, a + 0.03, y0, y1, g0 - 0.04, g1 + 0.04))
+          frameOf.push(boxOnWall(box, side, a - 0.03, a + 0.03, y0, y1, g0 - 0.04, g1 + 0.04))
         }
       }
-      frame.push(boxOnWall(box, side, l0, l0 + t, y0, y1, g0 - 0.06, g1 + 0.02))
-      frame.push(boxOnWall(box, side, l1 - t, l1, y0, y1, g0 - 0.06, g1 + 0.02))
-      frame.push(boxOnWall(box, side, l0, l1, y1 - t, y1, g0 - 0.06, g1 + 0.02))
-      frame.push(boxOnWall(box, side, l0, l1, y0, y0 + t, g0 - 0.06, g1 + 0.02))
+      frameOf.push(boxOnWall(box, side, l0, l0 + t, y0, y1, g0 - 0.06, g1 + 0.02))
+      frameOf.push(boxOnWall(box, side, l1 - t, l1, y0, y1, g0 - 0.06, g1 + 0.02))
+      frameOf.push(boxOnWall(box, side, l0, l1, y1 - t, y1, g0 - 0.06, g1 + 0.02))
+      frameOf.push(boxOnWall(box, side, l0, l1, y0, y0 + t, g0 - 0.06, g1 + 0.02))
       // 室内窗台板
       if (o.kind === 'window' || o.kind === 'stair') {
-        frame.push(boxOnWall(box, side, l0 - 0.08, l1 + 0.08, y0 - 0.04, y0, -0.18, 0.06))
+        frameOf.push(boxOnWall(box, side, l0 - 0.08, l1 + 0.08, y0 - 0.04, y0, -0.18, 0.06))
       }
     }
     const merge = (list: THREE.BufferGeometry[]) => (list.length ? mergeGeometries(list, false) : null)
-    const out = { glass: merge(glass), frame: merge(frame) }
-    for (const g of [...glass, ...frame]) g.dispose()
+    const out = { glass: {} as Record<Side, THREE.BufferGeometry | null>, frame: {} as Record<Side, THREE.BufferGeometry | null> }
+    for (const side of SIDES) {
+      out.glass[side] = merge(glass[side])
+      out.frame[side] = merge(frame[side])
+      for (const g of [...glass[side], ...frame[side]]) g.dispose()
+    }
     return out
   }, [box, openings])
   useEffect(
     () => () => {
-      glazing.glass?.dispose()
-      glazing.frame?.dispose()
+      for (const side of SIDES) {
+        glazing.glass[side]?.dispose()
+        glazing.frame[side]?.dispose()
+      }
     },
     [glazing],
   )
 
   const wallMap = useMemo(() => makeWallTexture(wallColor), [wallColor])
+  // 板缝色由地板色自己派生：换一套色板时木纹不会突然变成另一个色系
   const floorMap = useMemo(() => {
-    const tex = makeFloorTexture(floorColor, '#7f6f58')
-    tex.repeat.set(Math.max(2, box.W / 4.2), Math.max(2, box.D / 4.2))
+    const tex = makeFloorTexture(floorColor, deepen(floorColor, 0.34))
+    tex.repeat.set(Math.max(2.4, box.W / 2.4), Math.max(2.4, box.D / 2.4))
     return tex
   }, [floorColor, box.W, box.D])
   useEffect(
@@ -225,8 +499,9 @@ export function RoomWalls({
 
   // 踢脚线：每面墙沿着墙垛走，门洞和落地洞口处断开
   const skirting = useMemo(() => {
-    const parts: THREE.BufferGeometry[] = []
+    const out = {} as Record<Side, THREE.BufferGeometry | null>
     for (const side of SIDES) {
+      const parts: THREE.BufferGeometry[] = []
       const ops = openings.filter((o) => o.side === side && o.y0 < 0.1)
       const len = sideLength(box, side)
       let cursor = -len / 2
@@ -235,50 +510,43 @@ export function RoomWalls({
         cursor = Math.max(cursor, o.l1)
       }
       if (len / 2 - cursor > 0.05) parts.push(boxOnWall(box, side, cursor, len / 2, 0, 0.12, -IN - 0.04, -IN))
+      out[side] = parts.length ? mergeGeometries(parts, false) : null
+      for (const g of parts) g.dispose()
     }
-    const merged = parts.length ? mergeGeometries(parts, false) : null
-    for (const g of parts) g.dispose()
-    return merged
+    return out
   }, [box, openings])
-  useEffect(() => () => skirting?.dispose(), [skirting])
+  useEffect(
+    () => () => {
+      for (const side of SIDES) skirting[side]?.dispose()
+    },
+    [skirting],
+  )
 
   return (
     <group>
       <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
         <planeGeometry args={[box.W, box.D]} />
-        <meshStandardMaterial map={floorMap} color="#ffffff" roughness={0.62} metalness={0.03} />
+        <meshStandardMaterial
+          map={floorMap}
+          color="#ffffff"
+          roughness={0.46}
+          metalness={0.04}
+          envMapIntensity={0.95}
+        />
       </mesh>
-      <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, box.H, 0]}>
-        <planeGeometry args={[box.W, box.D]} />
-        <meshStandardMaterial color={ceiling} roughness={0.95} side={THREE.DoubleSide} />
-      </mesh>
-      {walls && (
-        <mesh geometry={walls} receiveShadow>
-          <meshStandardMaterial map={wallMap} color="#ffffff" roughness={0.94} side={THREE.DoubleSide} />
-        </mesh>
-      )}
-      {skirting && (
-        <mesh geometry={skirting}>
-          <meshStandardMaterial color="#b9ad9b" roughness={0.8} />
-        </mesh>
-      )}
-      {glazing.frame && (
-        <mesh geometry={glazing.frame} castShadow>
-          <meshStandardMaterial color="#5f5a52" roughness={0.5} metalness={0.4} />
-        </mesh>
-      )}
-      {glazing.glass && (
-        <mesh geometry={glazing.glass}>
-          <meshStandardMaterial
-            color="#cfe1e8"
-            transparent
-            opacity={0.12}
-            roughness={0.05}
-            metalness={0.5}
-            depthWrite={false}
-          />
-        </mesh>
-      )}
+      <CutawayWalls
+        box={box}
+        wallMap={wallMap}
+        ceilingColor={ceiling}
+        hideCeiling={hideCeiling}
+        parts={SIDES.map((side) => ({
+          side,
+          wall: walls[side],
+          frame: glazing.frame[side],
+          glass: glazing.glass[side],
+          skirt: skirting[side],
+        }))}
+      />
       {editing && (
         <>
           <gridHelper args={[Math.min(box.W, box.D) - 0.5, 14, '#a49174', '#c0b29a']} position={[0, 0.03, 0]} />
@@ -309,7 +577,7 @@ export function PartitionWalls({
   walls,
   headers = [],
   height,
-  color = '#e7e2d8',
+  color = INDOOR_STYLE.wallAlt,
 }: {
   walls: Array<{ minX: number; maxX: number; minZ: number; maxZ: number }>
   /** 门洞上方的过梁：门洞不该是一条通到天花板的缝。 */
@@ -342,6 +610,59 @@ export function PartitionWalls({
           <meshStandardMaterial color={color} roughness={0.94} />
         </mesh>
       ))}
+    </group>
+  )
+}
+
+/**
+ * 吊灯：一根细吊杆 + 金属锥形灯罩 + 暖光盘。
+ * 参考图里每块区域的上方都挂着一盏，是房间里最直接的"暖色点"。
+ * 只做视觉，不参与碰撞；挂在天花板下面，不会挡家具。
+ */
+export function CeilingPendant({
+  x = 0,
+  z = 0,
+  height,
+  neck = 0.5,
+  shade = 0.42,
+}: {
+  x?: number
+  z?: number
+  height: number
+  /** 吊杆长度 */
+  neck?: number
+  /** 灯罩半径 */
+  shade?: number
+}) {
+  const y = height - neck
+  return (
+    <group position={[x, 0, z]}>
+      <mesh position={[0, height - 0.01, 0]}>
+        <cylinderGeometry args={[shade * 0.2, shade * 0.2, 0.02, 16]} />
+        <meshStandardMaterial color={INDOOR_STYLE.skirting} roughness={0.5} metalness={0.4} />
+      </mesh>
+      <mesh position={[0, height - neck / 2, 0]}>
+        <cylinderGeometry args={[0.012, 0.012, neck, 6]} />
+        <meshStandardMaterial color={INDOOR_STYLE.metal} roughness={0.35} metalness={0.7} />
+      </mesh>
+      {/* 灯罩：外深内亮，DoubleSide 才能从下面看到发光的那一面 */}
+      <mesh position={[0, y, 0]}>
+        <cylinderGeometry args={[shade * 0.42, shade, shade * 0.62, 24, 1, true]} />
+        <meshStandardMaterial
+          color="#2a3138"
+          emissive="#ffc47a"
+          emissiveIntensity={0.55}
+          side={THREE.DoubleSide}
+          roughness={0.5}
+          metalness={0.35}
+        />
+      </mesh>
+      {/* 灯芯：一块朝下的暖光圆盘，Bloom 会把它带出一圈光晕 */}
+      <mesh position={[0, y - shade * 0.3, 0]} rotation={[Math.PI / 2, 0, 0]}>
+        <circleGeometry args={[shade * 0.46, 20]} />
+        <meshBasicMaterial color="#ffe0ab" toneMapped={false} side={THREE.DoubleSide} />
+      </mesh>
+      <pointLight position={[0, y - 0.12, 0]} color="#ffd39a" intensity={2.1} distance={5.4} decay={2} />
     </group>
   )
 }
@@ -409,8 +730,9 @@ export function ClosedDoor({
     </group>
   )
 
+  const cut = useWallCut(side, box)
   return (
-    <group position={[x, 0, z]} rotation={[0, inwardYaw(side), 0]}>
+    <group ref={cut} position={[x, 0, z]} rotation={[0, inwardYaw(side), 0]}>
       {/* 门芯：填满洞口和整个墙厚，两侧墙面之间不再有缝 */}
       <mesh position={[0, h / 2, -WALL / 2]} receiveShadow>
         <boxGeometry args={[w - 0.01, h - 0.01, depth]} />
@@ -480,16 +802,21 @@ export function Balcony({ box, bal }: { box: RoomBox; bal: BalconySpan }) {
     return [l0 + 0.6, l1 - 0.6].map((l) => wallPoint(box, bal.side, l, -(WALL + 0.45)))
   }, [box, bal])
 
+  // 阳台挑在近处这面墙上时整组摘掉：栏杆玻璃是半透明的，
+  // 留在画面里就是一层雾挡在房间前面。
+  // 但如果人自己已经走到阳台上了，就绝不能摘——否则脚下没有板、身边没有栏板。
+  const cut = useBalconyCut(bal, box)
+
   return (
-    <group>
+    <group ref={cut}>
       <mesh geometry={geo.slab} receiveShadow>
-        <meshStandardMaterial color="#b8ab97" roughness={0.86} />
+        <meshStandardMaterial color="#c9bda9" roughness={0.78} metalness={0.05} envMapIntensity={0.7} />
       </mesh>
       <mesh geometry={geo.rail}>
-        <meshStandardMaterial color="#5f5a52" roughness={0.4} metalness={0.5} />
+        <meshStandardMaterial color={INDOOR_STYLE.frame} roughness={0.3} metalness={0.66} envMapIntensity={1.1} />
       </mesh>
       <mesh geometry={geo.glass}>
-        <meshStandardMaterial color="#a9c3cb" roughness={0.1} metalness={0.4} transparent opacity={0.4} depthWrite={false} />
+        <meshStandardMaterial color={INDOOR_STYLE.glass} roughness={0.04} metalness={0.6} envMapIntensity={1.5} transparent opacity={0.15} depthWrite={false} />
       </mesh>
       {plants.map(([x, z], i) => (
         <group key={i} position={[x, 0, z]}>

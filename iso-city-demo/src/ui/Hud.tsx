@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import { useApp } from '../store'
 import { cityShareUrl, copyText } from '../util'
 import { toggleFlight, toggleOverview, walker } from '../game/walker'
+import { ZONE_LABEL, zoneAnchors } from '../data/stalls'
 
 const DIRS = ['北', '西北', '西', '西南', '南', '东南', '东', '东北']
 
@@ -90,6 +91,8 @@ export function Hud() {
   const world = useApp((state) => state.world)
   const hud = useApp((state) => state.hud)
   const night = useApp((state) => state.night)
+  const indoorCam = useApp((state) => state.indoorCam)
+  const setIndoorCam = useApp((state) => state.setIndoorCam)
   const musicOn = useApp((state) => state.musicOn)
   const toggleMusic = useApp((state) => state.toggleMusic)
   const pointerLocked = useApp((state) => state.pointerLocked)
@@ -121,6 +124,14 @@ export function Hud() {
   }, [hintSeen, screen])
 
   const area = useMemo(() => {
+    // 市集分区比地点更具体：站在西岸、码头、东岸的时候直接报市集名，
+    // 不然走到城外那几个市集只会显示"微光城区 · 主街"。
+    let zone: { name: string; distance: number } | null = null
+    for (const anchor of zoneAnchors) {
+      const distance = Math.hypot(anchor.x - hud.x, anchor.z - hud.z)
+      if (!zone || distance < zone.distance) zone = { name: ZONE_LABEL[anchor.zone], distance }
+    }
+    if (zone && zone.distance < 24) return zone.name
     const places = world?.places || []
     let best: { name: string; distance: number } | null = null
     for (const place of places) {
@@ -149,6 +160,8 @@ export function Hud() {
       url = cityShareUrl({ enter: interior.id })
     } else if (interior?.kind === 'building') {
       url = cityShareUrl({ enter: `building:${interior.id}@${interior.floor ?? 1}` })
+    } else if (interior?.kind === 'shop') {
+      url = cityShareUrl({ enter: `shop:${interior.id}` })
     } else {
       url = cityShareUrl()
     }
@@ -183,6 +196,17 @@ export function Hud() {
         </div>
 
         <div className="hud-tools">
+          {screen === 'interior' && (
+            <button
+              className={`hud-round ${indoorCam === 'top' ? 'on' : ''}`}
+              aria-pressed={indoorCam === 'top'}
+              onClick={() => setIndoorCam(indoorCam === 'top' ? 'third' : 'top')}
+              title="切换室内镜头"
+              aria-label="切换室内镜头"
+            >
+              <Icon name="drone" />
+            </button>
+          )}
           {screen === 'city' && (
             <button
               className={`hud-round ${hud.overview ? 'on' : ''}`}
@@ -202,7 +226,7 @@ export function Hud() {
             aria-pressed={night}
             onClick={() => {
               toggleNight()
-              showToast(night ? '已切换为黄昏' : '已切换为夜间')
+              showToast(night ? '已切换为白天' : '已切换为夜间')
             }}
             title="昼夜 (L)"
             aria-label="切换昼夜"

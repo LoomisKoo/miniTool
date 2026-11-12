@@ -3162,3 +3162,257 @@ select:focus-visible,
 .about-hero {
   display: grid;
 }
+
+/* ============================================================
+   自绘下拉与确认卡片
+   ------------------------------------------------------------
+   系统原生的 <select> 列表、confirm / prompt 弹窗由操作系统绘制，
+   字体、圆角、背景都和这套玻璃界面无关，所以这里全部自绘。
+   ============================================================ */
+
+.ui-select-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  height: 42px;
+  padding: 0 13px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--ui-radius-control);
+  background: rgba(0, 0, 0, 0.22);
+  color: #fff;
+  font-family: var(--ui-font);
+  font-size: 13.5px;
+  letter-spacing: 0;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 180ms var(--ui-ease),
+    background 180ms var(--ui-ease),
+    box-shadow 180ms var(--ui-ease);
+}
+
+.ui-select-trigger > span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.ui-select-trigger > svg {
+  flex: none;
+  width: 12px;
+  height: 8px;
+  color: rgba(255, 255, 255, 0.6);
+  transition: transform 220ms var(--ui-ease);
+}
+
+.ui-select-trigger:hover {
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.ui-select-trigger.open {
+  border-color: rgba(10, 132, 255, 0.6);
+  background: rgba(0, 0, 0, 0.26);
+  box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.14);
+}
+
+.ui-select-trigger.open > svg {
+  transform: rotate(180deg);
+}
+
+.ui-select-menu {
+  position: fixed;
+  z-index: 260;
+  max-height: 264px;
+  padding: 6px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  background: rgba(24, 28, 36, 0.92);
+  backdrop-filter: blur(40px) saturate(1.8);
+  -webkit-backdrop-filter: blur(40px) saturate(1.8);
+  box-shadow: var(--ui-shadow-2), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  animation: ui-sheet-in 180ms var(--ui-ease-out) both;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+}
+
+.ui-select-menu button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ui-text);
+  font-family: var(--ui-font);
+  font-size: 13.5px;
+  letter-spacing: 0;
+  text-align: left;
+  cursor: pointer;
+  transition: background 140ms var(--ui-ease);
+}
+
+.ui-select-menu button:hover {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.ui-select-menu button:active {
+  background: rgba(255, 255, 255, 0.11);
+}
+
+.ui-select-menu button.on {
+  background: rgba(10, 132, 255, 0.18);
+  color: #fff;
+}
+
+.ui-select-check {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  color: var(--ui-accent);
+  opacity: 0;
+}
+
+.ui-select-menu button.on .ui-select-check {
+  opacity: 1;
+}
+
+/* ---------- 确认 / 输入卡片 ---------- */
+
+.ask-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 250;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(4, 6, 10, 0.5);
+  backdrop-filter: blur(18px) saturate(1.05);
+  -webkit-backdrop-filter: blur(18px) saturate(1.05);
+  animation: ui-backdrop-in 200ms var(--ui-ease) both;
+}
+
+.ask-card {
+  width: min(380px, 100%);
+  padding: 22px 22px 18px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 22px;
+  background: rgba(24, 28, 36, 0.92);
+  backdrop-filter: blur(48px) saturate(1.8);
+  -webkit-backdrop-filter: blur(48px) saturate(1.8);
+  box-shadow: var(--ui-shadow-3), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  color: var(--ui-text);
+  animation: ui-sheet-in 260ms var(--ui-spring) both;
+}
+
+.ask-card h3 {
+  margin: 0 0 8px;
+  font-family: var(--ui-font);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.014em;
+  color: #fff;
+}
+
+.ask-card p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ui-text-2);
+}
+
+.ask-input {
+  width: 100%;
+  height: 42px;
+  margin-top: 14px;
+  padding: 0 13px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--ui-radius-control);
+  outline: none;
+  background: rgba(0, 0, 0, 0.22);
+  color: #fff;
+  font-family: var(--ui-font);
+  font-size: 13.5px;
+  transition:
+    border-color 180ms var(--ui-ease),
+    background 180ms var(--ui-ease),
+    box-shadow 180ms var(--ui-ease);
+}
+
+.ask-input::placeholder {
+  color: rgba(230, 238, 247, 0.36);
+}
+
+.ask-input:focus {
+  border-color: rgba(10, 132, 255, 0.6);
+  background: rgba(0, 0, 0, 0.26);
+  box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.14);
+}
+
+.ask-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.ask-btn {
+  height: 38px;
+  padding: 0 16px;
+  border: 1px solid var(--ui-line);
+  border-radius: 11px;
+  background: var(--ui-surface);
+  color: var(--ui-text-2);
+  font-family: var(--ui-font);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background 160ms var(--ui-ease),
+    transform 120ms var(--ui-ease);
+}
+
+.ask-btn:hover {
+  background: var(--ui-surface-2);
+}
+
+.ask-btn:active {
+  transform: scale(0.97);
+}
+
+.ask-btn.primary {
+  border-color: transparent;
+  background: var(--ui-accent);
+  color: #fff;
+  font-weight: 600;
+}
+
+.ask-btn.primary:hover {
+  background: #2b93ff;
+}
+
+.ask-btn.primary.danger {
+  background: var(--ui-red);
+}
+
+.ask-btn.primary.danger:hover {
+  background: #ff5c52;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ask-backdrop,
+  .ask-card,
+  .ui-select-menu {
+    animation: none;
+  }
+
+  .ui-select-trigger > svg {
+    transition: none;
+  }
+}

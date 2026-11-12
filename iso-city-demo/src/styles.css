@@ -1260,6 +1260,36 @@ kbd {
   gap: 8px;
 }
 
+/* 同一张卡下的毛色/花纹变体：合并在一个条目里，点开切换模型 */
+.catalog-variants {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 12px 0 0;
+}
+
+.catalog-variant {
+  padding: 5px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  background: transparent;
+  color: rgba(246, 241, 230, 0.6);
+  font-size: 11px;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.catalog-variant:hover {
+  color: rgba(246, 241, 230, 0.9);
+  border-color: rgba(255, 255, 255, 0.28);
+}
+
+.catalog-variant.on {
+  color: #1d2429;
+  background: rgba(246, 241, 230, 0.9);
+  border-color: transparent;
+}
+
 .catalog-facts span {
   display: flex;
   flex-direction: column;
@@ -3920,6 +3950,14 @@ body {
     linear-gradient(180deg, rgba(1, 6, 11, 0.4), transparent 20%, transparent 74%, rgba(1, 6, 11, 0.5));
 }
 
+/* 城市俯瞰：这块 DOM 遮罩叠在 canvas 上面，是一张居中的径向渐变，
+   和着色器的暗角（Vignette 后处理）叠加之后，画面就成了
+   "只有中间一圈亮"——俯视全城时四周的街区直接被吃掉。
+   城市视角只要极弱的一层压边，保留画框感，不再承担曝光。 */
+.vignette-soft {
+  background: radial-gradient(140% 130% at 50% 45%, transparent 72%, rgba(1, 6, 11, 0.16) 100%);
+}
+
 .grain {
   opacity: 0.035;
   mix-blend-mode: screen;
@@ -6336,13 +6374,20 @@ kbd {
 .hud-top {
   position: fixed;
   z-index: 20;
-  top: 20px;
-  left: 20px;
-  right: 20px;
+  /* 顶部留白跟着安全区走：刘海屏、全屏浏览器里固定的 20px 会顶到屏幕边缘，
+     按钮上半截被裁掉。这里以 24px 起步，再叠上 safe-area。 */
+  top: max(24px, env(safe-area-inset-top, 0px) + 12px);
+  left: max(20px, env(safe-area-inset-left, 0px) + 12px);
+  right: max(20px, env(safe-area-inset-right, 0px) + 12px);
   display: flex;
   align-items: center;
   justify-content: space-between;
+  /* 窗口一窄（手机、IDE 里的浏览器面板），左边地名胶囊 + 右边六个圆钮
+     加起来会超过一屏宽，尾部按钮就被推到屏幕外。允许换行：放不下时
+     工具组整体掉到第二行右侧，什么都不裁掉。 */
+  flex-wrap: wrap;
   gap: 12px;
+  row-gap: 8px;
   pointer-events: none;
 }
 
@@ -6354,6 +6399,8 @@ kbd {
   display: flex;
   align-items: center;
   gap: 11px;
+  /* 地名太长时先压窄它，别把右边的工具组挤出屏幕 */
+  flex: none;
   height: 54px;
   padding: 0 16px 0 14px;
   border-radius: 999px;
@@ -6421,6 +6468,10 @@ kbd {
   display: flex;
   align-items: center;
   gap: 2px;
+  /* 换行后单独落在一行时也贴右，不会跑到左边的地名下面 */
+  margin-left: auto;
+  flex: none;
+  justify-content: flex-end;
   padding: 7px;
   border-radius: 999px;
   border: 1px solid var(--ui-line);
@@ -6797,9 +6848,10 @@ kbd {
     padding: 0 20px;
   }
   .hud-top {
-    top: 14px;
-    left: 14px;
-    right: 14px;
+    top: max(18px, env(safe-area-inset-top, 0px) + 10px);
+    left: max(14px, env(safe-area-inset-left, 0px) + 10px);
+    right: max(14px, env(safe-area-inset-right, 0px) + 10px);
+    row-gap: 6px;
   }
   .hud-loc {
     height: 48px;
@@ -8377,6 +8429,33 @@ kbd {
   color: rgba(18, 24, 32, 0.6);
 }
 
+/* 天台：和住宅层区分开，用一条暖色上边框，像电梯面板上单独一颗按钮 */
+.elevator-floor.roof {
+  border-color: rgba(242, 200, 107, 0.34);
+  background: rgba(242, 200, 107, 0.09);
+}
+
+.elevator-floor.roof b {
+  color: #f7dba4;
+}
+
+.elevator-floor.roof:hover {
+  background: rgba(242, 200, 107, 0.16);
+  border-color: rgba(242, 200, 107, 0.5);
+}
+
+.elevator-floor.roof.on,
+.elevator-floor.roof.on b {
+  color: #121820;
+}
+
+.elevator-note {
+  margin: 10px 0 0;
+  font: 400 11px/1.6 var(--ui-font);
+  color: rgba(226, 234, 243, 0.55);
+  letter-spacing: 0.02em;
+}
+
 .elevator-foot {
   display: flex;
   align-items: center;
@@ -8591,4 +8670,60 @@ body::after {
 }
 body.night-switching::after {
   opacity: 1;
+}
+
+/* 街边小摊面板：一张价目表 + 同区的其他摊。用主题变量，昼夜两套都跟得上。 */
+.stall-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.stall-items li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+}
+
+.stall-item-name {
+  font-weight: 600;
+}
+
+.stall-item-price {
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.stall-item-note {
+  grid-column: 1 / -1;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--ink-soft);
+  opacity: 0.72;
+}
+
+.stall-note {
+  margin: 12px 0 0;
+  color: var(--ink-soft);
+  font-style: italic;
+  line-height: 1.7;
+}
+
+.stall-more {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.stall-rule {
+  margin: 14px 0 0;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--ink-soft);
+  opacity: 0.75;
 }

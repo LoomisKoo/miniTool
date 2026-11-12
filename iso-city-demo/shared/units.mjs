@@ -13,6 +13,15 @@
 /** 层高。 */
 export const FLOOR_HEIGHT = 3.3
 
+/**
+ * 天台的"楼层号"。
+ *
+ * 天台不是一层住宅，也没有户型平面，但它必须走电梯那一套（选层、返回、
+ * 分享链接里的 @floor），所以给它一个远超真实层数的哨兵值。
+ * 所有依赖 layoutOf() 的地方都要先判断 == ROOF_FLOOR 再算平面。
+ */
+export const ROOF_FLOOR = 10000
+
 /** 生成空间的版本号：服务端用它判断是否需要给已有数据库补楼内户。 */
 export const UNIT_SEED_VERSION = 11
 
@@ -674,6 +683,7 @@ export function entrancesOf(building) {
 }
 
 export function floorLabel(floor) {
+  if (floor === ROOF_FLOOR) return 'RF'
   return floor < 0 ? `B${-floor}` : `${floor}F`
 }
 
@@ -766,49 +776,61 @@ export function isUnitSpaceId(spaceId) {
 // 可认领户的样板陈设：用确定性 hash 从几套布局里挑，保证每次启动一致。
 // ---------------------------------------------------------------------------
 
-const WALLS = ['#e9e0d2', '#e4ded2', '#dfe4dd', '#e6dccf', '#dcd8cf']
-const FLOORS = ['#c3ae95', '#b7b2a6', '#bfa98d', '#a9a08d', '#cbbd9e']
+// 深灰蓝墙 + 亮暖木地板：和 src/indoor/style.ts 的 INDOOR_STYLE 保持一致。
+// 剖切视角下墙面要退后、地板和家具要亮起来，所以对比放在这两者之间。
+// 墙色比上一版多几种（灰绿、灰紫、深海），整栋楼不会全是同一种蓝灰。
+const WALLS = [
+  '#3b4551',
+  '#414d5a',
+  '#37424c',
+  '#3a4450',
+  '#2f3a44',
+  '#3a4a4a',
+  '#44405a',
+  '#44505d',
+]
+const FLOORS = ['#dca569', '#d79c5e', '#e0ad74', '#c9a074', '#d19a5c', '#b08356', '#d9c8a8']
 const ARTS = ['dawn', 'coast', 'meadow', 'signal', 'night', 'clay']
 
 const LAYOUTS = {
   home: [
-    ['rug', 0, 0.2, 0, '#b7a58e'],
-    ['sofa', 0, -2.2, 0, '#6f7f74'],
-    ['table', 0, 0.3, 0, '#8a6a4b'],
-    ['shelf', -4.3, -2.4, Math.PI / 2, '#9a7d5d'],
-    ['plant', 4.2, -2.6, 0, '#587a58'],
-    ['bed', 3.0, 2.4, -Math.PI / 2, '#8c9a92'],
+    ['rug', 0, 0.2, 0, '#7a5cd8'],
+    ['sofa', 0, -2.2, 0, '#4d7f8c'],
+    ['table', 0, 0.3, 0, '#8a6440'],
+    ['shelf', -4.3, -2.4, Math.PI / 2, '#8a6440'],
+    ['plant', 4.2, -2.6, 0, '#4f8a4a'],
+    ['bed', 3.0, 2.4, -Math.PI / 2, '#5f8fa0'],
   ],
   studio: [
-    ['rug', 0, 0.4, 0, '#a9a397'],
-    ['desk', 0, -2.8, 0, '#7d6a52'],
-    ['chair', 0, -1.5, 0, '#8e7d65'],
-    ['shelf', -4.3, 0.2, Math.PI / 2, '#6d5b47'],
-    ['plant', 4.2, -2.8, 0, '#557456'],
-    ['lamp', 4.2, 2.6, 0, '#c9a15c'],
+    ['rug', 0, 0.4, 0, '#2fa172'],
+    ['desk', 0, -2.8, 0, '#8a6440'],
+    ['chair', 0, -1.5, 0, '#c9a838'],
+    ['shelf', -4.3, 0.2, Math.PI / 2, '#7a5a3c'],
+    ['plant', 4.2, -2.8, 0, '#4f8a4a'],
+    ['lamp', 4.2, 2.6, 0, '#c9a86e'],
   ],
   gallery: [
-    ['rug', 0, 0.2, 0, '#cfc7bb'],
+    ['rug', 0, 0.2, 0, '#3b7ec9'],
     ['pedestal', -2.4, -1.4, 0, '#ded8cc'],
     ['pedestal', 2.4, -1.8, 0, '#ded8cc'],
-    ['bench', 0, 2.4, 0, '#7c6a55'],
-    ['plant', 4.2, -3.0, 0, '#597a57'],
+    ['bench', 0, 2.4, 0, '#8a6440'],
+    ['plant', 4.2, -3.0, 0, '#4f8a4a'],
   ],
   music: [
-    ['rug', 0, 0.4, 0, '#6f746c'],
-    ['speaker', -2.6, -2.7, 0.22, '#3f4543'],
-    ['speaker', 2.6, -2.7, -0.22, '#3f4543'],
-    ['desk', 3.8, 1.2, -Math.PI / 2, '#7d6a52'],
-    ['shelf', -4.3, 0.4, Math.PI / 2, '#6d5b47'],
-    ['chair', 2.4, 1.6, 1.2, '#8e7d65'],
+    ['rug', 0, 0.4, 0, '#c9553f'],
+    ['speaker', -2.6, -2.7, 0.22, '#3a434a'],
+    ['speaker', 2.6, -2.7, -0.22, '#3a434a'],
+    ['desk', 3.8, 1.2, -Math.PI / 2, '#8a6440'],
+    ['shelf', -4.3, 0.4, Math.PI / 2, '#7a5a3c'],
+    ['chair', 2.4, 1.6, 1.2, '#c9a838'],
   ],
   collection: [
-    ['rug', 0, 0.3, 0, '#b3ada1'],
-    ['shelf', -4.3, -1.8, Math.PI / 2, '#8a7458'],
-    ['shelf', -4.3, 1.8, Math.PI / 2, '#8a7458'],
+    ['rug', 0, 0.3, 0, '#d98a35'],
+    ['shelf', -4.3, -1.8, Math.PI / 2, '#8a6440'],
+    ['shelf', -4.3, 1.8, Math.PI / 2, '#8a6440'],
     ['pedestal', 0, -1.4, 0, '#ded8cc'],
     ['pedestal', 2.6, 0.8, 0, '#ded8cc'],
-    ['bench', 0, 2.7, 0, '#7c6a55'],
+    ['bench', 0, 2.7, 0, '#8a6440'],
   ],
 }
 

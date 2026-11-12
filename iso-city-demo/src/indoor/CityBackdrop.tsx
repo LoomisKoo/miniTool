@@ -1,4 +1,5 @@
-import { useMemo } from 'react'
+import { useMemo, useRef } from 'react'
+import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { useApp } from '../store'
 import {
@@ -21,6 +22,7 @@ import { FLOOR_HEIGHT, unitBuilding } from '../data/units'
 import { SkyDome } from '../scene/osm/SkyDome'
 import { palettes, bodyColor, type Palette } from '../scene/theme'
 import { UnitShell, type ShellCut } from '../scene/UnitShell'
+import { playerView } from '../scene/PlayerRig'
 import { Water } from '../scene/Water'
 import { FerrisWheel } from '../scene/FerrisWheel'
 import { Building, InfillBuilding } from '../scene/Building'
@@ -72,6 +74,7 @@ export function CityBackdrop({
   origin = [0, 0],
   cut = null,
   minDist = 0,
+  interior = false,
 }: {
   buildingId: string
   floor: number
@@ -81,11 +84,28 @@ export function CityBackdrop({
   cut?: ShellCut | null
   /** 剔掉太近的邻居。 */
   minDist?: number
+  /**
+   * 站在房间里看（不是从街上或阳台看）。
+   *
+   * 剖切之后近处的两面墙被摘掉，如果窗外整座城还在，房间四周就会糊一圈
+   * 邻居家的楼板、玻璃和街面，"干净地显示这一间"就无从谈起。
+   * 所以室内视角只保留天空和远处天际线；脚下的地面、马路、本栋楼壳，
+   * 以及近处那圈楼，都要等镜头降下来（真的走到阳台上）才出现。
+   */
+  interior?: boolean
 }) {
   const night = useApp((state) => state.night)
   const palette = night ? palettes.night : palettes.dusk
   const center = buildingById[buildingId]
   const unitDef = unitBuilding(buildingId)
+  const nearWorld = useRef<THREE.Group>(null)
+
+  // 只有"真的走到阳台上往外看"才放出近景城市；室内 iso 机位下整组收起来，
+  // 房间干净地悬在天空里，四周不会冒出别人家的楼板、玻璃和街面。
+  useFrame(() => {
+    if (!interior || !nearWorld.current) return
+    nearWorld.current.visible = playerView.onBalcony
+  })
 
   const baseY = -(Math.max(1, floor) - 1) * FLOOR_HEIGHT
   const ox = (center?.x ?? 0) + origin[0]
@@ -109,26 +129,35 @@ export function CityBackdrop({
 
   if (!center) return null
 
+  // 室内视角：近处那一圈楼（含本栋楼壳）和地面都收进 nearWorld，
+  // 只有镜头降到阳台高度（平视城市）时才显示。远处天际线一直留着，
+  // 从玻璃/落地窗看出去仍然有城市，但不会糊到房间轮廓外面。
+  const NEAR = 55
   const real = neighbours.slice(0, REAL_LIMIT)
+  const realNear = interior ? real.filter(({ dist }) => dist <= NEAR) : real
+  const realFar = interior ? real.filter(({ dist }) => dist > NEAR) : []
   const far = neighbours.slice(REAL_LIMIT)
 
   return (
     <>
-      {cut && unitDef && (
-        <group position={[-origin[0], baseY, -origin[1]]}>
-          <UnitShell building={unitDef} body={center.body} palette={palette} cut={cut} shadows={false} />
-        </group>
-      )}
+      <SkyDome
+        night={night}
+        horizon={palette.fog}
+        zenith={palette.sky}
+        sunDir={palette.sunPos}
+        sunColor={palette.sun}
+        sunGain={night ? 2.4 : 1.1}
+      />
 
-      <group>
-        <SkyDome
-          night={night}
-          horizon={palette.fog}
-          zenith={palette.sky}
-          sunDir={palette.sunPos}
-          sunColor={palette.sun}
-          sunGain={night ? 2.4 : 1.1}
-        />
+      {/* 近景：本栋楼壳、地面、马路、广场，以及 55m 以内的楼。
+          室内视角下整组收起来（镜头降到阳台高度才显示），
+          房间因此干净地悬在一片天空里，四周不会冒出别人家的楼板和玻璃。 */}
+      <group ref={nearWorld}>
+        {cut && unitDef && (
+          <group position={[-origin[0], baseY, -origin[1]]}>
+            <UnitShell building={unitDef} body={center.body} palette={palette} cut={cut} shadows={false} />
+          </group>
+        )}
 
         {/* 地面：楼层的世界高度差直接折算成负 Y。
             必须用会吃光的 Standard 材质：室内这套灯光会让它亮起来，
@@ -203,7 +232,7 @@ export function CityBackdrop({
         <group position={[-ox, baseY - 0.05, -oz]}>
           <Water />
           <FerrisWheel />
-          {real.map(({ def }) =>
+          {realNear.map(({ def }) =>
             LANDMARK_IDS.has(def.id) ? (
               <Building key={def.id} def={def} />
             ) : (
@@ -211,13 +240,17 @@ export function CityBackdrop({
             ),
           )}
         </group>
+      </group>
 
-        {/* 远处一圈：雾色块，撑起天际线 */}
-        <group position={[-ox, baseY - 0.05, -oz]}>
-          {far.map(({ def }) => (
-            <FarBlock key={def.id} def={def} palette={palette} />
-          ))}
-        </group>
+      {/* 远处一圈：雾色块 + 55m 外的楼体，撑起天际线。
+          这一圈始终显示：从玻璃和落地窗看出去仍然有城市轮廓。 */}
+      <group position={[-ox, baseY - 0.05, -oz]}>
+        {realFar.map(({ def }) =>
+          LANDMARK_IDS.has(def.id) ? <Building key={def.id} def={def} /> : <InfillBuilding key={def.id} def={def} />,
+        )}
+        {far.map(({ def }) => (
+          <FarBlock key={def.id} def={def} palette={palette} />
+        ))}
       </group>
     </>
   )

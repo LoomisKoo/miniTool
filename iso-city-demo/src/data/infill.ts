@@ -3,7 +3,6 @@ import {
   alleyMouth,
   buildings,
   cedarLane,
-  CITY_BOUNDS,
   crossStreet,
   eastAvenue,
   mainStreet,
@@ -14,11 +13,13 @@ import {
   westAvenue,
   river,
   riverSegments,
+  ROW_BODIES,
   ferrisWheel,
   walkerRoutes,
   type BuildingDef,
   type BuildingStyle,
 } from './city'
+import { pedReserved } from './pedestrian'
 
 // 程序化街区。
 //
@@ -49,9 +50,17 @@ function rng(seed: number) {
   }
 }
 
-const STYLES: BuildingStyle[] = ['stone', 'brick', 'metal', 'stone', 'brick', 'glass']
+// 砖和石材占大头：一城玻璃幕墙就是"钢筋水泥"，老城的气质来自砖楼
+const STYLES: BuildingStyle[] = ['brick', 'brick', 'stone', 'brick', 'stone', 'metal', 'brick', 'glass']
+
+/** 广告屏街区：主街与横街交汇的那一段，招牌集中在一处才有"时代广场"的密度。 */
+function inBillboardDistrict(x: number, z: number) {
+  return Math.abs(x - mainStreet.x) < 62 && z > crossStreet.z - 40 && z < crossStreet.z + 24
+}
 const BODIES = ['#c9d2da', '#c4ccd6', '#d0d5d2', '#b9c4cf', '#cdd3d8', '#b3bfc9', '#bcc6cd']
 const TRIMS = ['#8e9dac', '#7f8f9f', '#95a09f', '#8394a4', '#8f9fae', '#97a3ae']
+/** 老公寓墙色；风格化模式下会按哈希落到不同的砖色/石色色调上 */
+const WALKUP_BODIES = ['#9a7b6a', '#a08572', '#8d6e5e', '#b09a86', '#7f6656', '#a3907e', '#94776a', '#8a7465', '#b5a089', '#9c8270']
 
 /** 不可建设：广场、巷子、喷泉与已有建筑。道路由沿街布置本身避开。 */
 function reservedRects(): Rect[] {
@@ -66,6 +75,8 @@ function reservedRects(): Rect[] {
     // 河面、河岸步道、码头、摩天轮都不许建楼
     rectOf(river.x, river.z + 2, 320, river.d + 26, 2),
     rectOf(ferrisWheel.x, ferrisWheel.z + 3, 42, 18, 2),
+    // 南岸广场：胶囊形商场 + 一圈广场，不许程序化街区插进来
+    { x0: pedReserved.x0, x1: pedReserved.x1, z0: pedReserved.z0, z1: pedReserved.z1 },
   ]
   // 车行道本身也不可建设。“沿街布置”本来就会让楼退到路外，但地图两端
   // 和路口的边界情况会漏：有几栋街屋正好压在主街和南横街上，车流从楼里
@@ -106,53 +117,110 @@ function nearIntersection(axis: 'x' | 'z', along: number) {
   return crossings.some((c) => Math.abs(along - c) < 13)
 }
 
+/** 沿街楼和居民小区能排到的范围（城市外缘，比原来的 CITY_BOUNDS 大一圈）。 */
+export const INFILL_EDGE = 385
+
+/** 稳定的整数哈希：同一路段 / 同一小区拿到同一组参数。 */
+function hashKey(s: string) {
+  let h = 2166136261
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i)
+    h = Math.imul(h, 16777619)
+  }
+  return h >>> 0
+}
+
+type Theme = { style: BuildingStyle; form: BuildingDef['form']; h: number; body: string; trim: string }
+
+/**
+ * 路段主题：同一条街、同一侧、同一段（约 70m）的楼共用风格、高度和墙色。
+ * 真实街区是一排一排建起来的，一段街的楼大致同高同材质；
+ * 每栋各自随机，整条街就是"大小不一、乱"。
+ */
+function segmentTheme(key: string, core: number): Theme {
+  const r = rng(hashKey(key))
+  const pick = r()
+  const body = BODIES[Math.floor(r() * BODIES.length)]
+  const trim = TRIMS[Math.floor(r() * TRIMS.length)]
+  // 外圈（离中心 150m 以外）是老街坊：联排小楼、旧仓库、老公寓为主
+  if (core < 0.12) {
+    if (pick < 0.34) return { style: 'brick', form: 'rowhouse', h: 1.2 + (3 + Math.round(r())) * 3.3, body, trim }
+    if (pick < 0.5) return { style: 'brick', form: 'warehouse', h: 10 + Math.round(r() * 3), body, trim }
+    if (pick < 0.8) return { style: 'brick', form: 'walkup', h: 17 + Math.round(r() * 3) * 3.3, body, trim }
+  }
+  if (pick < 0.5) return { style: 'brick', form: 'walkup', h: 17 + Math.round(r() * 3) * 3.3, body, trim }
+  if (pick < 0.8) return { style: 'stone', form: undefined, h: Math.round(22 + core * 12 + r() * 8), body, trim }
+  return { style: r() < 0.5 ? 'metal' : 'glass', form: undefined, h: Math.round(30 + core * 26 + r() * 10), body, trim }
+}
+
 export function generateInfill(): BuildingDef[] {
   const out: BuildingDef[] = []
   const blocked = reservedRects()
   const rand = rng(20261023)
-  const limit = CITY_BOUNDS - 14
+  const limit = INFILL_EDGE - 10
+  let streetCount = 0
 
-  for (const street of STREETS) {
+  STREETS.forEach((street, si) => {
     for (const side of [-1, 1]) {
       let along = -limit
       while (along < limit) {
-        const w = 10 + Math.round(rand() * 10)
-        const d = 11 + Math.round(rand() * 8)
-        const step = w + 1.4 + rand() * 2.6
+        // 先按下一段的主题定开间：联排小楼一户 7~9m 紧挨着，仓库 20m 以上
+        const preT = along + 7
+        const preCore = 1 - Math.min(1, Math.hypot(street.axis === 'z' ? street.center : preT, street.axis === 'z' ? preT : street.center) / 170)
+        const preForm = segmentTheme(`${si}:${side}:${Math.floor((preT + 400) / 70)}`, preCore).form
+        // 开间宽度收窄到 12~16m：一排楼的体量接近，街墙才整齐
+        const w =
+          preForm === 'rowhouse'
+            ? 7 + Math.round(rand() * 2)
+            : preForm === 'warehouse'
+              ? 20 + Math.round(rand() * 6)
+              : 12 + Math.round(rand() * 4)
+        const d = preForm === 'rowhouse' ? 11 + Math.round(rand() * 2) : 13 + Math.round(rand() * 4)
+        const step = w + (preForm === 'rowhouse' ? 0.3 : 2 + rand() * 1.5)
         const t = along + w / 2
         along += step
 
         if (nearIntersection(street.axis, t)) continue
-        // 留一些空隙，街墙不至于整齐得像贴图
-        if (rand() < 0.08) continue
-        if (out.length >= 84) break
+        if (preForm !== 'rowhouse' && rand() < 0.06) continue
+        if (streetCount >= 300) break
 
-        // 建筑中心在街道中心线外侧：人行道 + 半个进深
         const out1 = street.center + side * (street.half + d / 2)
         const x = street.axis === 'z' ? out1 : t
         const z = street.axis === 'z' ? t : out1
         const ww = street.axis === 'z' ? d : w
         const dd = street.axis === 'z' ? w : d
-        // 退让时是真的把楼改窄：以前只缩小判定用的地块，楼还是原尺寸，
-        // 于是"没有重叠"的两栋楼在场景里只剩 1m 的缝。
-        // pad 要给足：街屋之间至少留 7m，加上阳台挑出也有 4m 以上。
         let bw = dd
-        let lot = rectOf(x, z, ww, bw, 3.5)
+        // 联排小楼一户挨一户，不留 3.5m 的楼间距
+        const pad = preForm === 'rowhouse' ? 0.1 : 3.5
+        let lot = rectOf(x, z, ww, bw, pad)
         if (blocked.some((r) => overlaps(lot, r))) {
-          // 主地块被占，退一步试试更窄的街屋
           bw = Math.max(8, dd * 0.62)
-          lot = rectOf(x, z, ww, bw, 3.5)
+          lot = rectOf(x, z, ww, bw, pad)
           if (blocked.some((r) => overlaps(lot, r))) continue
         }
 
-        const style = STYLES[Math.floor(rand() * STYLES.length)]
-        // 越靠近城市中心越高，外围压成低矮的街墙
         const core = 1 - Math.min(1, Math.hypot(x, z) / 170)
-        // 整体拔高：真实街区的楼高远大于路宽，街道才有"峡谷"的包围感
-        const base = 16 + core * 34
-        const h = Math.round(base + rand() * (24 + core * 62))
+        const theme = segmentTheme(`${si}:${side}:${Math.floor((preT + 400) / 70)}`, preCore)
+        let { style, form } = theme
+        // 同一段里只有很小的高差（±1 层），屋顶线连成一条；联排小楼层数一户一样
+        let h = form === 'rowhouse' ? theme.h : Math.round(theme.h + (rand() - 0.5) * 3.3)
+        // 老公寓和联排小楼同高同款，但一栋一个墙色：真实街道是一户户刷的
+        const body =
+          form === 'rowhouse'
+            ? ROW_BODIES[Math.floor(rand() * ROW_BODIES.length)]
+            : form === 'walkup'
+              ? WALKUP_BODIES[Math.floor(rand() * WALKUP_BODIES.length)]
+              : theme.body
+        if (inBillboardDistrict(x, z)) {
+          form = 'billboard'
+          h = Math.max(h, 24)
+          style = style === 'glass' ? 'stone' : style
+        } else if (core > 0.45 && style === 'stone' && rand() < 0.14) {
+          // 装饰艺术塔楼：多级退台 + 尖塔，是天际线的主角
+          form = 'deco'
+          h = Math.round(70 + rand() * 40)
+        }
 
-        // 临街面：竖街看 x 方向，横街看 z 方向
         const facing =
           street.axis === 'z'
             ? side > 0
@@ -172,75 +240,101 @@ export function generateInfill(): BuildingDef[] {
           h,
           facing,
           style,
-          body: BODIES[Math.floor(rand() * BODIES.length)],
-          trim: TRIMS[Math.floor(rand() * TRIMS.length)],
+          body,
+          trim: theme.trim,
           roof: 'plain',
           background: true,
-          balconies: style === 'brick' && rand() > 0.55,
-          setback: h > 48 && rand() > 0.45,
-          taper: rand() > 0.75 ? 0.1 : 0,
+          setback: !form && h > 48,
+          form,
         })
         blocked.push(lot)
+        streetCount++
       }
-      if (out.length >= 84) break
     }
-    if (out.length >= 84) break
-  }
+  })
 
-  // 外圈：沿城市边界再排一圈楼，走出主街时视线有落点，城市不会突然断在空地上。
-  const edge = CITY_BOUNDS - 12
-  for (const side of [-1, 1]) {
-    for (const horizontal of [false, true]) {
-      let along = -edge
-      while (along < edge) {
-        if (out.length >= 86) break
-        const w = 16 + Math.round(rand() * 20)
-        const d = 14 + Math.round(rand() * 16)
-        const t = along + w / 2
-        along += w + 2 + rand() * 3
+  out.push(...generateEstates(blocked, out.length))
+  return out
+}
 
-        const x = horizontal ? t : side * (edge + d / 2)
-        const z = horizontal ? side * (edge + d / 2) : t
-        const ww = horizontal ? w : d
-        const dd = horizontal ? d : w
-        // 外圈同样留出 MIN_GAP：判定地块放大，楼本身不再缩水
-        const lot = rectOf(x, z, ww, dd, 3.5)
-        if (blocked.some((r) => overlaps(lot, r))) continue
+const ESTATE_CELL = 52
+/** 街区半宽：52m 格子四周各让出 4m，相邻街区之间是 8m 的小区路 + 人行道 */
+const ESTATE_BLOCK = ESTATE_CELL / 2 - 4
+/** 小区楼总数上限：每栋楼都有独立的立面材质，再多帧率扛不住 */
+const ESTATE_MAX = 300
+/** 小区网格里每一格：built=false 的格子是留出来的绿地 */
+const estateCells: Array<{ cx: number; cz: number; built: boolean }> = []
 
-        const style = STYLES[Math.floor(rand() * STYLES.length)]
-        const h = 48 + Math.round(rand() * 92)
-        // 外圈楼的临街面朝向城内
-        const facing =
-          horizontal
-            ? side > 0
-              ? 'north'
-              : 'south'
-            : side > 0
-              ? 'west'
-              : 'east'
-
+/**
+ * 居民街区：空地按 52m 网格铺行列式小区——南北两排板楼，山墙之间留 6m，
+ * 两排之间是宅间院子。楼间距按防火与日照间距排，而不是一栋挨一栋贴死。
+ */
+function generateEstates(blocked: Rect[], startId: number): BuildingDef[] {
+  const out: BuildingDef[] = []
+  const CELL = ESTATE_CELL
+  const B = ESTATE_BLOCK
+  const edge = INFILL_EDGE - 6
+  for (let cx = -edge + CELL / 2; cx <= edge - CELL / 2; cx += CELL) {
+    for (let cz = -edge + CELL / 2; cz <= edge - CELL / 2; cz += CELL) {
+      const r = rng(hashKey(`estate:${cx}:${cz}`))
+      // 留一些街区做街心公园，城市不至于被楼铺满
+      if (r() < 0.16 || out.length >= ESTATE_MAX) {
+        estateCells.push({ cx, cz, built: false })
+        continue
+      }
+      const before = out.length
+      const dN = 12 + Math.round(r() * 2)
+      const dS = 12 + Math.round(r() * 2)
+      // 楼与楼山墙之间至少 6m（多层住宅防火间距），拆开的两栋之间留出一条宅间路
+      const gap = 6
+      type Lot = { x: number; z: number; w: number; d: number; facing: BuildingDef['facing'] }
+      const lots: Lot[] = []
+      // 行列式：南北各一排板楼，中间约 20m 是宅间院子（≈ 楼高，满足日照间距）。
+      // 不再在东西两边夹楼：那样四角贴死、院子被四面 5~8 层楼围成天井。
+      // 每排一半概率拆成两栋，屋顶线才有高低错落
+      for (const [side, depth] of [[-1, dN], [1, dS]] as const) {
+        const z = cz + side * (B - depth / 2)
+        const facing = side < 0 ? 'north' : 'south'
+        if (r() < 0.5) {
+          lots.push({ x: cx, z, w: B * 2, d: depth, facing })
+        } else {
+          const split = (r() - 0.5) * 12
+          const wl = B + split - gap / 2
+          const wr = B - split - gap / 2
+          lots.push({ x: cx - B + wl / 2, z, w: wl, d: depth, facing })
+          lots.push({ x: cx + B - wr / 2, z, w: wr, d: depth, facing })
+        }
+      }
+      // 同一街区的楼间距已在上面排好，只和街区外的禁区比
+      const placed: Rect[] = []
+      for (const l of lots) {
+        if (out.length >= ESTATE_MAX) break
+        const lot = rectOf(l.x, l.z, l.w, l.d, 0.6)
+        if (blocked.some((b) => overlaps(lot, b))) continue
+        // 4~6 层：两排楼相距约 20m，再高就挡光
+        const floors = 4 + Math.floor(r() * 3)
         out.push({
-          id: `infill-${out.length}`,
-          name: '街区',
-          x,
-          z,
-          w: ww,
-          d: dd,
-          h,
-          facing,
-          style,
-          body: BODIES[Math.floor(rand() * BODIES.length)],
-          trim: TRIMS[Math.floor(rand() * TRIMS.length)],
+          id: `infill-${startId + out.length}`,
+          name: '居民楼',
+          x: l.x,
+          z: l.z,
+          w: l.w,
+          d: l.d,
+          h: Math.round(3.4 + floors * 3.3),
+          facing: l.facing,
+          style: r() < 0.72 ? 'brick' : 'stone',
+          body: WALKUP_BODIES[Math.floor(r() * WALKUP_BODIES.length)],
+          trim: TRIMS[Math.floor(r() * TRIMS.length)],
           roof: 'plain',
           background: true,
-          setback: rand() > 0.45,
-          taper: rand() > 0.6 ? 0.12 : 0,
+          form: 'estate',
         })
-        blocked.push(lot)
+        placed.push(lot)
       }
+      blocked.push(...placed)
+      estateCells.push({ cx, cz, built: out.length > before })
     }
   }
-
   return out
 }
 
@@ -248,6 +342,7 @@ export const infill = generateInfill()
 
 /** 沿新街区临街面生成的街灯位置（每第三栋一盏），补足街道尺度细节。 */
 export const infillLamps: Array<[number, number]> = infill
+  .filter((b) => b.form !== 'estate')
   .filter((_, i) => i % 3 === 0)
   .map((b) => {
     const sideX = b.facing === 'east' || b.facing === 'west'
@@ -259,6 +354,102 @@ export const infillLamps: Array<[number, number]> = infill
 
 /** 手写地标 + 程序化外围街区的完整楼表。车流和碰撞都按这张表避让。 */
 export const allBuildings: BuildingDef[] = [...buildings, ...infill]
+
+// ---------------------------------------------------------------------------
+// 小区地面：内部车道、宅间步道、草坪
+// ---------------------------------------------------------------------------
+//
+// 小区格子里原来只有底盘颜色，俯视时大片地面是一整块深色。这里按 52m 网格
+// 补上小区路网：街区四周是车道（相邻两格共用），车道内侧贴一圈人行道，
+// 围合院子里铺草坪；没建楼的格子整块是街心公园。
+
+export type GroundRect = { x: number; z: number; w: number; d: number }
+
+/** 河、广场、摩天轮这些自带地面的区域：小区地面一律不许压上去 */
+const specialAreas: Rect[] = [
+  rectOf(plaza.x, plaza.z, plaza.w, plaza.d, 1),
+  rectOf(plazaFountain.x, plazaFountain.z, plazaFountain.r * 2, plazaFountain.r * 2, 2),
+  rectOf(alley.x, alley.z, alley.w, alley.d, 1),
+  rectOf(alleyMouth.x, alleyMouth.z, alleyMouth.w, alleyMouth.d, 1),
+  rectOf(cedarLane.x, cedarLane.z, cedarLane.w, cedarLane.d, 1),
+  rectOf(river.x, river.z + 2, 340, river.d + 26, 1),
+  rectOf(ferrisWheel.x, ferrisWheel.z + 3, 42, 18, 1),
+  { x0: pedReserved.x0, x1: pedReserved.x1, z0: pedReserved.z0, z1: pedReserved.z1 },
+]
+
+/** 沿 axis 方向、宽 2*half 的一条带子，去掉被挡住的部分 */
+function clipStrip(axis: 'x' | 'z', offset: number, half: number, lo: number, hi: number, rects: Rect[], minLen: number): Interval[] {
+  const hits: Interval[] = []
+  for (const r of rects) {
+    const a0 = axis === 'x' ? r.x0 : r.z0
+    const a1 = axis === 'x' ? r.x1 : r.z1
+    const o0 = axis === 'x' ? r.z0 : r.x0
+    const o1 = axis === 'x' ? r.z1 : r.x1
+    if (o1 <= offset - half || o0 >= offset + half) continue
+    if (a1 <= lo || a0 >= hi) continue
+    hits.push([Math.max(lo, a0), Math.min(hi, a1)])
+  }
+  hits.sort((p, q) => p[0] - q[0])
+  const out: Interval[] = []
+  let cursor = lo
+  for (const [h0, h1] of hits) {
+    if (h0 - cursor >= minLen) out.push([cursor, h0])
+    cursor = Math.max(cursor, h1)
+  }
+  if (hi - cursor >= minLen) out.push([cursor, hi])
+  return out
+}
+
+function estateGround() {
+  const lanes: GroundRect[] = []
+  const paths: GroundRect[] = []
+  const lawns: GroundRect[] = []
+  const solid: Rect[] = [...allBuildings.map((b) => rectOf(b.x, b.z, b.w, b.d, 0.05)), ...specialAreas]
+  const half = ESTATE_CELL / 2
+  const B = ESTATE_BLOCK
+  const strip = (list: GroundRect[], axis: 'x' | 'z', offset: number, width: number, lo: number, hi: number, minLen: number) => {
+    for (const [a, b] of clipStrip(axis, offset, width / 2, lo, hi, solid, minLen)) {
+      const len = b - a
+      const mid = (a + b) / 2
+      list.push(axis === 'x' ? { x: mid, z: offset, w: len, d: width } : { x: offset, z: mid, w: width, d: len })
+    }
+  }
+  const boundaries = new Set<string>()
+  for (const { cx, cz, built } of estateCells) {
+    if (!built) {
+      // 街心公园只铺中间一块草，四周留水泥地：46m 一整块绿在俯视下太抢
+      const size = 28
+      const lawn = rectOf(cx, cz, size, size)
+      if (!specialAreas.some((r) => overlaps(lawn, r))) lawns.push({ x: cx, z: cz, w: size, d: size })
+      continue
+    }
+    // 四周车道，相邻格子共用一条；横竖两组在路口重叠，同色同层，看不出接缝
+    for (const z of [cz - half, cz + half]) {
+      const key = `x:${z}:${cx}`
+      if (boundaries.has(key)) continue
+      boundaries.add(key)
+      strip(lanes, 'x', z, 6, cx - half - 3, cx + half + 3, 6)
+    }
+    for (const x of [cx - half, cx + half]) {
+      const key = `z:${x}:${cz}`
+      if (boundaries.has(key)) continue
+      boundaries.add(key)
+      strip(lanes, 'z', x, 6, cz - half - 3, cz + half + 3, 6)
+    }
+    // 人行道：贴着街区外沿一圈，压在车道内侧
+    const sw = 1.8
+    const o = B + 0.1 + sw / 2
+    strip(paths, 'x', cz - o, sw, cx - o - sw / 2, cx + o + sw / 2, 3)
+    strip(paths, 'x', cz + o, sw, cx - o - sw / 2, cx + o + sw / 2, 3)
+    strip(paths, 'z', cx - o, sw, cz - o + sw / 2, cz + o - sw / 2, 3)
+    strip(paths, 'z', cx + o, sw, cz - o + sw / 2, cz + o - sw / 2, 3)
+    // 围合院子：草坪铺在楼底下也看不见，所以直接按院子最大可能的尺寸铺
+    lawns.push({ x: cx, z: cz, w: B * 2 - 22, d: B * 2 - 22 })
+  }
+  return { lanes, paths, lawns }
+}
+
+export const estateGroundRects = estateGround()
 
 /** 点位是否落在某栋楼的平面内（道具摆位用）。 */
 export function insideBuilding(x: number, z: number, pad = 0): boolean {

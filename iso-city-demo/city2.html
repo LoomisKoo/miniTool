@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="theme-color" content="#0d1030" />
+<title>微光城区 · LUMEN DISTRICT 700</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0d1030; }
+  canvas { display: block; width: 100%; height: 100%; cursor: grab; touch-action: none; }
+  canvas:active { cursor: grabbing; }
+  .ui {
+    position: fixed; inset: 0; pointer-events: none; color: #e8eef4;
+    font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
+    -webkit-user-select: none; user-select: none;
+  }
+  #title {
+    position: absolute; left: 26px; top: 22px; line-height: 1.5;
+  }
+  #title b { display: block; font-size: 15px; letter-spacing: .22em; font-weight: 600; }
+  #title span { font-size: 11px; letter-spacing: .1em; color: #8fa4b8; }
+  #looks {
+    position: absolute; right: 24px; top: 22px; display: flex; gap: 6px; pointer-events: auto;
+  }
+  #looks button {
+    border: 1px solid rgba(160,190,215,.28); background: rgba(16,24,32,.55); color: #b9cada;
+    padding: 6px 12px; border-radius: 2px; font-size: 11px; letter-spacing: .12em; cursor: pointer;
+    font-family: inherit; transition: background .15s, color .15s, border-color .15s;
+  }
+  #looks button:hover { background: rgba(30,44,58,.8); color: #e8eef4; }
+  #looks button.on { background: #d8e2ea; color: #121a22; border-color: #d8e2ea; }
+  #prompt {
+    position: absolute; left: 50%; bottom: 92px; transform: translateX(-50%);
+    padding: 8px 18px; border: 1px solid rgba(230,240,250,.24); background: rgba(10,16,22,.62);
+    font-size: 12px; letter-spacing: .14em; white-space: nowrap; border-radius: 2px;
+  }
+  #indoor {
+    position: absolute; left: 50%; top: 26px; transform: translateX(-50%);
+    font-size: 12px; letter-spacing: .2em; color: #ffd9a2;
+  }
+  #help {
+    position: absolute; left: 26px; bottom: 22px; font-size: 11px; line-height: 1.9;
+    color: #7f93a6; letter-spacing: .06em;
+  }
+  #help em { font-style: normal; color: #b9cada; }
+  #mode {
+    position: absolute; left: 50%; bottom: 56px; transform: translateX(-50%);
+    font-size: 11px; letter-spacing: .16em; color: #cfe0f0;
+    padding: 5px 14px; border-radius: 2px; background: rgba(10,16,22,.5);
+  }
+  /* 暗角：和「雨夜便利店」一样的取景压边 */
+  #vignette {
+    position: absolute; inset: 0; pointer-events: none;
+    background:
+      radial-gradient(58% 52% at 50% 48%, rgba(0,0,0,0) 55%, rgba(3,6,11,.42) 88%, rgba(3,6,11,.62) 100%);
+  }
+  #loading {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: #0d1030; font-size: 12px; letter-spacing: .3em; color: #8fa4b8;
+  }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<div class="ui">
+  <div id="vignette"></div>
+  <div id="title">
+    <b>微光城区</b>
+    <span>700 × 700 m · 1:1</span>
+  </div>
+  <div id="looks">
+    <button data-look="night" class="on">夜</button>
+    <button data-look="rain">雨</button>
+    <button data-look="day">晴</button>
+  </div>
+  <div id="indoor" hidden></div>
+  <div id="mode" hidden></div>
+  <div id="prompt" hidden></div>
+  <div id="help">
+    <em>W A S D</em> 行走 · <em>Shift</em> 奔跑 · <em>空格</em> 跳跃 / 空中按住滑翔 · <em>拖动</em> 转视角 · <em>滚轮 / [ ]</em> 远近<br />
+    <em>F</em> 筋斗云（空格升 · C 降 · 空中再按一次收起即滑翔落地） · <em>V</em> 全局视野 · <em>E</em> 进出门
+  </div>
+  <div id="loading">正在构筑城市</div>
+</div>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.161.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.161.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module" src="./city2/main.js"></script>
+</body>
+</html>

@@ -9,6 +9,7 @@ import { cabinFloor, ferris, ferrisExit } from '../game/ferris'
 import { hitsDynamic, pushOut } from '../game/bodies'
 import { OcclusionFade } from './OcclusionFade'
 import { attachSilhouette } from './silhouette'
+import { scope, leaveScope } from '../indoor/scope'
 
 export type Collider = {
   minX: number
@@ -49,12 +50,28 @@ type Props = {
   liveInteractables?: () => Interactable[]
   cameraDistance?: number
   interior?: boolean
+  /**
+   * 阳台挑板的范围（房间局部坐标）。
+   * 走出去时镜头从"整层端在手里看"连续滑回肩后平视，而不是切换机位模式：
+   * 二元切换会在门槛上反复横跳，也会把剖切状态一起抖出来。
+   */
+  balcony?: { minX: number; maxX: number; minZ: number; maxZ: number } | null
 }
 
 const PLAYER_RADIUS = 0.42
 const CAM_MIN = 2.6
-const CAM_MAX = 210
-const INTERIOR_CAM_MAX = 9
+const CAM_MAX = 630
+const INTERIOR_CAM_MAX = 13
+/** 室内默认的 iso 俯角：整间房摊在画面里，还能看出墙的高度。 */
+const ISO_PITCH = 0.58
+/** 真正贴近的第三人称：小于这个距离才做墙体收线（iso 机位本来就站在墙外）。 */
+const PULL_IN_UNDER = 6
+/** 阳台机位：贴着肩后的距离 + 接近平视的俯仰，越过栏杆才看得到城市。 */
+const BALCONY_DIST = 3.4
+const BALCONY_PITCH = 0.1
+/** 室内机位收到墙前多少米、最近能收到多近。 */
+const CAM_SKIN = 0.3
+const CAM_MIN_INTERIOR = 1.0
 const PIVOT_HEIGHT = 1.46
 /** lean 组的枢轴在髋部，body 要抵消这段高度；每帧写 position 时必须带上它。 */
 const BODY_BASE = -0.94
@@ -118,28 +135,67 @@ function supportAt(x: number, z: number, colliders: Collider[], fromY: number) {
   return top
 }
 
-function segmentBox(origin: THREE.Vector3, dir: THREE.Vector3, c: Collider) {
-  const minY = c.minY ?? 0
-  const maxY = c.maxY ?? 100
-  const boxMin = [c.minX - 0.2, minY, c.minZ - 0.2]
-  const boxMax = [c.maxX + 0.2, maxY, c.maxZ + 0.2]
-  const o = [origin.x, origin.y, origin.z]
-  const d = [dir.x, dir.y, dir.z]
-  let tmin = 0
-  let tmax = 1
-  for (let i = 0; i < 3; i++) {
-    if (Math.abs(d[i]) < 1e-6) {
-      if (o[i] < boxMin[i] || o[i] > boxMax[i]) return null
-    } else {
-      let t1 = (boxMin[i] - o[i]) / d[i]
-      let t2 = (boxMax[i] - o[i]) / d[i]
-      if (t1 > t2) [t1, t2] = [t2, t1]
-      tmin = Math.max(tmin, t1)
-      tmax = Math.min(tmax, t2)
-      if (tmin > tmax) return null
+/**
+ * 射线与轴对齐盒子的最近命中距离（只认盒子外进盒内、且在 maxT 之内）。
+ * 退化成"点已经在盒子里"时返回 -1：那种情况不是"相机穿墙"，不该被收线处理。
+ */
+function hitBox(
+  ox: number,
+  oy: number,
+  oz: number,
+  dx: number,
+  dy: number,
+  dz: number,
+  c: Collider,
+  maxT: number,
+) {
+  let t0 = 0
+  let t1 = maxT
+  const slab = (o: number, d: number, min: number, max: number) => {
+    if (Math.abs(d) < 1e-6) return o >= min && o <= max
+    let a = (min - o) / d
+    let b = (max - o) / d
+    if (a > b) {
+      const t = a
+      a = b
+      b = t
     }
+    if (a > t0) t0 = a
+    if (b < t1) t1 = b
+    return t0 <= t1
   }
-  return tmin
+  if (!slab(ox, dx, c.minX, c.maxX)) return -1
+  if (!slab(oy, dy, c.minY ?? 0, c.maxY ?? 100)) return -1
+  if (!slab(oz, dz, c.minZ, c.maxZ)) return -1
+  return t0 > 0.001 ? t0 : -1
+}
+
+/**
+ * 室内机位收线：人物到机位连一条线段，撞墙就把机位收到墙前。
+ *
+ * 街上故意不做这件事——贴到墙角时镜头一收，人就变成后脑勺特写。
+ * 但室内不一样：房间只有几米宽，镜头一穿出外墙，看到的就是整层楼壳的内侧，
+ * 而 OcclusionFade 也救不了：四面墙是合批的一整块网格，淡它等于整层墙一起消失。
+ * 相机标记为 camera:false 的体量（家具）不参与，贴着柜子转视角不会被顶。
+ */
+function pullCameraIn(from: THREE.Vector3, to: THREE.Vector3, colliders: Collider[]) {
+  const dx = to.x - from.x
+  const dy = to.y - from.y
+  const dz = to.z - from.z
+  const len = Math.hypot(dx, dy, dz)
+  if (len < 1e-3) return
+  const nx = dx / len
+  const ny = dy / len
+  const nz = dz / len
+  let best = len
+  for (const c of colliders) {
+    if (c.camera === false) continue
+    const t = hitBox(from.x, from.y, from.z, nx, ny, nz, c, best)
+    if (t > 0 && t < best) best = t
+  }
+  if (best >= len) return
+  const d = Math.max(CAM_MIN_INTERIOR, best - CAM_SKIN)
+  to.set(from.x + nx * d, from.y + ny * d, from.z + nz * d)
 }
 
 /** 旋转体：给躯干、大腿这类"上粗下细"的部位一个有曲线感的形状。
@@ -343,11 +399,12 @@ function HoverRig({ visible }: { visible: boolean }) {
   const cloudMat = useMemo(
     () =>
       new THREE.MeshStandardMaterial({
-        color: '#ffffff',
+        // 纯白 + 自发光在夜里会顶过 Bloom 阈值，整团云晕成一个白球
+        color: '#e4e9ef',
         roughness: 0.98,
         metalness: 0,
         emissive: '#cfe4f4',
-        emissiveIntensity: 0.22,
+        emissiveIntensity: 0.06,
         transparent: true,
       }),
     [],
@@ -379,8 +436,9 @@ function HoverRig({ visible }: { visible: boolean }) {
       fragmentShader: PUFF_FRAG,
       uniforms: {
         map: { value: puffTexture() },
-        uTop: { value: new THREE.Color('#fffaf2') },
-        uBottom: { value: new THREE.Color('#c9d8e6') },
+        // 水汽不吃光照，直接输出颜色：接近纯白时夜里会比整座城都亮
+        uTop: { value: new THREE.Color('#dfe3e8') },
+        uBottom: { value: new THREE.Color('#a4b2c0') },
       },
       transparent: true,
       depthWrite: false,
@@ -599,6 +657,15 @@ const prefersReducedMotion = () =>
   typeof window.matchMedia === 'function' &&
   window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
+/**
+ * 当前是不是站在阳台上。
+ *
+ * 室内剖切之后四周是空的，城市只在"真的走到阳台上往外看"时才该出现；
+ * 这个判断 PlayerRig 每帧已经在算了，这里直接摊出来给 CityBackdrop 读，
+ * 省得再往 store 里塞一个每帧都会变的 React 状态。
+ */
+export const playerView = { onBalcony: false }
+
 export function PlayerRig({
   start,
   startYaw = 0,
@@ -608,11 +675,15 @@ export function PlayerRig({
   liveInteractables,
   cameraDistance = 5.6,
   interior = false,
+  balcony = null,
 }: Props) {
   const { camera } = useThree()
   const interiorRef = useRef(interior)
   interiorRef.current = interior
   const flying = useApp((state) => state.hud.flying)
+  const indoorCam = useApp((state) => state.indoorCam)
+  // 剖切俯视只在室内生效：街道上本来就该是第三人称
+  const topDown = interior && indoorCam === 'top'
   const model = useRef<THREE.Group>(null)
   // 被楼、树、车挡住的部分画一层半透明剪影，任何时候都知道人在哪
   useEffect(() => {
@@ -638,6 +709,10 @@ export function PlayerRig({
   const stance = useRef(-0.012)
   const accumulator = useRef(0)
   const nearAccumulator = useRef(0)
+  /** 上一帧人是否站在阳台挑板上：给进出各留一段余量，站在门槛上不会来回触发。 */
+  const onBalcony = useRef(false)
+  /** 0 = 室内机位，1 = 阳台机位；每帧阻尼过渡，所以镜头的移动本身是动画。 */
+  const balconyBlend = useRef(0)
   const camReady = useRef(false)
   const fovReady = useRef(false)
   const baseFov = useRef(62)
@@ -664,6 +739,8 @@ export function PlayerRig({
   const flyVec = useRef(new THREE.Vector3())
   const target = useRef(new THREE.Vector3())
   const pivot = useRef(new THREE.Vector3())
+  /** 房间中心（室内场景都摆在原点）：iso 机位的构图支点。 */
+  const roomCenter = useRef(new THREE.Vector3(0, 0.9, 0))
   const forward = useRef(new THREE.Vector3())
   const right = useRef(new THREE.Vector3())
 
@@ -820,8 +897,24 @@ export function PlayerRig({
     }
     keys.clear()
     camReady.current = false
+    // 换房间/换个出生点时把阳台过渡归零，别把上一处的机位带进新房间
+    onBalcony.current = false
+    balconyBlend.current = 0
     if (model.current) model.current.rotation.y = startYaw + Math.PI
   }, [start?.[0], start?.[1], startYaw, interior, cameraDistance])
+
+  // 室内镜头切换：放在 start 之后，进门时才不会被 cameraDistance 覆盖回近景
+  useEffect(() => {
+    if (!interior) return
+    if (topDown) {
+      walker.pitch = 0.92
+      walker.camTarget = 11
+    } else {
+      // 默认就是 iso 俯视：房间整间落在画面里。拉近到 6m 以内才回到肩后第三人称。
+      walker.pitch = ISO_PITCH
+      walker.camTarget = cameraDistance
+    }
+  }, [topDown, interior, cameraDistance])
 
   useEffect(() => {
     const onMove = (event: MouseEvent) => {
@@ -831,10 +924,12 @@ export function PlayerRig({
       walker.pitch = THREE.MathUtils.clamp(walker.pitch + event.movementY * 0.0022, -0.7, 1.36)
     }
     const onWheel = (event: WheelEvent) => {
-      if (!document.pointerLockElement) return
       // 城市和室内的 PlayerRig 同时挂着：不在当前场景的那个别动相机距离，
       // 否则室内的上限会把城里的镜头也夹死在近处。
       if (interiorRef.current !== (useApp.getState().screen === 'interior')) return
+      // 室内不强制指针锁定：鼠标停在画布上直接滚就能拉远拉近。
+      // 城市里仍要求先锁定，否则滚轮会顺手把页面也滚了。
+      if (!document.pointerLockElement && !(interiorRef.current && event.target instanceof HTMLCanvasElement)) return
       event.preventDefault()
       // 按 deltaY 连续缩放：传统滚轮一格约 1.09 倍，触控板则是细密的小步，
       // 单次事件最大不超过 1.12 倍，避免一搓就到总览。
@@ -869,13 +964,18 @@ export function PlayerRig({
   useFrame((state, rawDelta) => {
     const dt = Math.min(rawDelta, 0.05)
     const app = useApp.getState()
+    // 出了房间就松开望远镜：观景是室内设施，带到街上会一直顶着窄视野。
+    if (scope.active && !interiorRef.current) leaveScope()
     const paused = app.panel !== null || app.screen === 'intro'
-    if (interior) {
+    // walker 是全局的，城市和室内两个 PlayerRig 同时挂着：
+    // 只有真正处在室内时才夹室内上限，否则城市里的镜头会被拽回 13m 以内。
+    if (interior && app.screen === 'interior') {
       walker.flying = false
       walker.overview = false
       // 室内最远只能拉到 INTERIOR_CAM_MAX：超过 22 会进入"远景"模式、关掉墙体避让，
       // 镜头直接穿出房间，看到的就是楼壳里那堵灰墙。
-      walker.camTarget = THREE.MathUtils.clamp(walker.camTarget, CAM_MIN, INTERIOR_CAM_MAX)
+      // 剖切俯视是例外：它必须在墙顶之上，所以上限放到 16。
+      walker.camTarget = THREE.MathUtils.clamp(walker.camTarget, CAM_MIN, topDown ? 16 : INTERIOR_CAM_MAX)
     }
     const sprint = keys.has('shift')
     const fwdInput = (keys.has('w') ? 1 : 0) - (keys.has('s') ? 1 : 0)
@@ -1219,7 +1319,34 @@ export function PlayerRig({
 
     // ---------- 摄像机 ----------
     walker.camDist = damp(walker.camDist, walker.camTarget, 7)
-    const dist = walker.camDist
+
+    // 阳台：跨过门洞时把镜头从俯视滑到肩后平视。
+    // 只混合"俯仰 + 距离"，不动任何剖切/吊顶状态，所以来回走既不会跳也不会闪。
+    if (balcony) {
+      // 进：越过外墙皮 0.05m 就算出去了；出：退回墙内 0.4m 才收回室内机位
+      const margin = onBalcony.current ? 0.4 : -0.05
+      const { x, z } = walker.position
+      onBalcony.current =
+        x > balcony.minX - margin &&
+        x < balcony.maxX + margin &&
+        z > balcony.minZ - margin &&
+        z < balcony.maxZ + margin
+    } else {
+      onBalcony.current = false
+    }
+    playerView.onBalcony = onBalcony.current
+    balconyBlend.current = damp(balconyBlend.current, onBalcony.current ? 1 : 0, 5.5)
+    const balMix = balconyBlend.current
+    // 只压"从上面往下看"的那一头：玩家本来就在往上看时不去改他的俯仰，
+    // 也不去动 yaw，所以鼠标随时还能自己转头。
+    const pitch =
+      balMix > 0.001
+        ? THREE.MathUtils.lerp(walker.pitch, Math.min(walker.pitch, BALCONY_PITCH), balMix)
+        : walker.pitch
+    const dist =
+      balMix > 0.001
+        ? THREE.MathUtils.lerp(walker.camDist, THREE.MathUtils.clamp(walker.camDist, CAM_MIN, BALCONY_DIST), balMix)
+        : walker.camDist
     const far = !interior && dist > 22
     const shoulder = far ? 0 : 0.34
     overviewBlend.current = damp(overviewBlend.current, walker.overview ? 1 : 0, 4.5)
@@ -1233,13 +1360,27 @@ export function PlayerRig({
       overviewCenter.current.set(0, 8, 0)
       pivot.current.lerp(overviewCenter.current, overviewBlend.current * 0.92)
     }
-    const cosPitch = Math.cos(walker.pitch)
+    // 室内 iso：支点往房间中心拉一把（房间就摆在原点），
+    // 人才不会把整间房带得满屏漂，房间始终是构图的主体。
+    // 必须放在算机位之前：支点变了，机位和视线要一起跟着走。
+    if (interior && !topDown) {
+      const k = THREE.MathUtils.clamp((dist - 3.5) / 4, 0, 1) * 0.6
+      if (k > 0.001) pivot.current.lerp(roomCenter.current, k)
+    }
+    const cosPitch = Math.cos(pitch)
     desired.current.set(
       pivot.current.x + Math.sin(walker.yaw) * cosPitch * dist,
-      pivot.current.y + Math.sin(walker.pitch) * dist + 0.2,
+      pivot.current.y + Math.sin(pitch) * dist + 0.2,
       pivot.current.z + Math.cos(walker.yaw) * cosPitch * dist,
     )
     desired.current.y = Math.max(0.7, desired.current.y)
+
+    // 室内机位不许穿出墙。街道、剖切俯视和阳台都跳过：
+    // 街上镜头必须和人保持固定距离；俯视本来就要求站到墙顶之上；
+    // 阳台上本来就在墙外，收线会把镜头顶回门洞里，把看城市的角度吃掉。
+    if (interior && !topDown && !scope.active && balMix < 0.5 && dist < PULL_IN_UNDER) {
+      pullCameraIn(pivot.current, desired.current, colliders)
+    }
 
     // 片头运镜：缓慢环绕，进入城市后立即交还玩家镜头。
     // 这里不做过渡：切场景时镜头必须是"切过去"，不能扫一段。
@@ -1286,29 +1427,11 @@ export function PlayerRig({
       }
     }
 
-    const ray = desired.current.clone().sub(pivot.current)
-    let nearest = 1
-    // 片头机位在城市外围，做墙体避让只会把镜头拽回地面。
-    if (!far && intro < 0.02 && !flyState.active) {
-      for (const collider of colliders) {
-        if (collider.camera === false) continue
-        const hit = segmentBox(pivot.current, ray, collider)
-        if (hit !== null && hit > 0 && hit < nearest) nearest = hit
-      }
-    }
-    const blockedByWall = nearest < 1
-    if (blockedByWall) {
-      // 停在墙前 0.6m：近裁剪面有 0.45m，只差 4% 的距离时镜头的视锥已经
-      // 插进墙里，屏幕上就是"看到楼里面"
-      const len = Math.max(ray.length(), 1e-3)
-      const keep = Math.max(0.06, nearest - 0.6 / len)
-      desired.current.copy(pivot.current).add(ray.multiplyScalar(keep))
-    }
-
+    // 不做墙体避让：镜头与人物的相对位置必须恒定。
+    // 以前贴到墙角时，射线一撞墙就把机位往前收，人会突然被推成后脑勺特写。
+    // 挡视线的物件交给 OcclusionFade 淡出，距离只由滚轮决定。
     if (!camReady.current) {
       camReady.current = true
-      camera.position.copy(desired.current)
-    } else if (blockedByWall) {
       camera.position.copy(desired.current)
     } else {
       camera.position.lerp(desired.current, 1 - Math.exp(-18 * dt))
@@ -1344,6 +1467,16 @@ export function PlayerRig({
       }
     }
 
+    // 望远镜：相机直接挪到眼睛位置看向落点，角色模型藏起来——
+    // 观景是"凑上去看"，背后还留着一个人影会很出戏。
+    if (scope.active) {
+      camera.position.set(pivot.current.x, pivot.current.y + 0.14, pivot.current.z)
+      target.current.copy(scope.target)
+      if (model.current) model.current.visible = false
+    } else if (model.current) {
+      model.current.visible = true
+    }
+
     camera.lookAt(target.current)
     // 气泡（drei Html）用 matrixWorldInverse 投影，它要等渲染时才刷新；
     // 不在这里立即更新，气泡就总是按上一帧的相机摆位，人一动就抖。
@@ -1354,7 +1487,8 @@ export function PlayerRig({
       baseFov.current +
       (sprint && walker.speed > 6.4 && !far && intro < 0.02 ? 6 : 0) +
       (walker.overview ? 10 : 0) -
-      (far && !walker.overview ? 6 : 0)
+      (far && !walker.overview ? 6 : 0) -
+      (scope.active ? 38 : 0)
     if (!fovReady.current) {
       // 每个场景的 Canvas 初始 fov 不一样，切场景时直接对齐，避免一次轻微推镜。
       fovReady.current = true

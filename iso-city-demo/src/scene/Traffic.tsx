@@ -36,7 +36,7 @@ const CAR_Y = 0.02
 // 光锥和尾灯光斑都按米缩放，所以是单位平面
 const BEAM_PLANE = new THREE.PlaneGeometry(1, 1)
 
-const CAR_COLORS = ['#9fb2c4', '#c9d5df', '#6d8194', '#a9b6c2', '#5f7486', '#b7c2cb', '#8a9dad']
+/** 车身色从 theme 取：夜/黄昏各一套，混进白、银、酒红，别让整条街都是灰蓝。 */
 
 function tinted(geo: THREE.BufferGeometry, color: string) {
   const c = new THREE.Color(color)
@@ -116,21 +116,39 @@ function flatten(parts: THREE.BufferGeometry[]) {
   return merged
 }
 
+/** 车轮：轮胎 + 亮银轮毂盘 + 五根深色辐条 + 中心盖。
+    以前只有一个光秃秃的圆柱，远看就是贴在车侧的黑色圆片。 */
 function wheel(position: [number, number, number], tire: string, rim: string) {
   const parts = [
     (() => {
-      const geo = new THREE.CylinderGeometry(0.36, 0.36, 0.24, 18)
+      const geo = new THREE.CylinderGeometry(0.32, 0.32, 0.22, 22)
       geo.rotateZ(Math.PI / 2)
       geo.translate(...position)
       return tinted(geo, tire)
     })(),
+    // 轮毂盘：比轮胎略宽，从侧面看才有金属面
     (() => {
-      const geo = new THREE.CylinderGeometry(0.21, 0.21, 0.255, 16)
+      const geo = new THREE.CylinderGeometry(0.205, 0.205, 0.235, 20)
       geo.rotateZ(Math.PI / 2)
       geo.translate(...position)
       return tinted(geo, rim)
     })(),
+    // 中心盖
+    (() => {
+      const geo = new THREE.CylinderGeometry(0.065, 0.065, 0.25, 12)
+      geo.rotateZ(Math.PI / 2)
+      geo.translate(...position)
+      return tinted(geo, tire)
+    })(),
   ]
+  // 五根辐条：从轮心向外，压在轮毂盘上，侧面才看得出这是个轮子
+  for (let i = 0; i < 5; i++) {
+    const spoke = new THREE.BoxGeometry(0.245, 0.30, 0.055)
+    spoke.translate(0, 0.16, 0)
+    spoke.rotateX((i / 5) * Math.PI * 2)
+    spoke.translate(...position)
+    parts.push(tinted(spoke, tire))
+  }
   return flatten(parts)
 }
 
@@ -141,10 +159,10 @@ function wheel(position: [number, number, number], tire: string, rim: string) {
  * 飞行时朝下喷射。
  */
 const NOZZLES: Array<[number, number]> = [
-  [-0.66, 1.24],
-  [0.66, 1.24],
-  [-0.66, -1.26],
-  [0.66, -1.26],
+  [-0.44, 1.08],
+  [0.44, 1.08],
+  [-0.44, -1.12],
+  [0.44, -1.12],
 ]
 
 type CarGeometries = {
@@ -162,74 +180,121 @@ function buildGeometries(palette: Palette): CarGeometries {
   if (cached) return cached
 
   const night = palette.key === 'night'
-  const wheelColor = night ? '#090e13' : '#1b1f21'
-  const rimColor = night ? '#93a3b0' : '#c6cfd2'
-  const trimColor = night ? '#111922' : '#252c2f'
+  const wheelColor = night ? '#141a20' : '#22282c'
+  const rimColor = night ? '#a3b2bd' : '#c8d1d4'
+  const trimColor = night ? '#151d24' : '#2a3134'
+  const darkColor = night ? '#0b1116' : '#191c1e'
+  const chrome = night ? '#9fb0bc' : '#c4cdd0'
+  const plate = night ? '#cfd8d3' : '#e6ece7'
 
-  const W = 1.86
+  const W = 1.78
 
   /* ---------------- 车身 ----------------
-     参考图那台车的设计语言全是直线和折面：车头一片极低的楔形、腰线一路
-     上扬、车尾收成鸭尾。所以轮廓一个贝塞尔都不用，硬折角 + 小倒角就是
-     它想要的切面感。 */
+     比例按真实三厢车重新画：机盖、腰线、车顶、后备厢各有明确高差，
+     座舱不再是压在车身上的一块黑玻璃。下缘在前后轮位置向上拱出轮拱
+     开口——以前是在车侧贴一圈黑色圆盘假装轮拱，半径 0.46 的实心圆
+     把整只轮子盖住，所以侧面看只剩两个黑胶盘。 */
   const body = extrudeProfile(
     [
-      [2.36, 0.24], // 车头尖端，离地很低
-      [2.30, 0.42], // 前唇上翻
-      [2.02, 0.50], // 机盖前缘
-      [1.26, 0.56], // 机盖
-      [0.76, 0.62], // 风挡根部（腰线在这里断开，往上是座舱）
-      [-1.40, 0.70], // 后甲板
-      [-1.94, 0.76], // 鸭尾上翘
-      [-2.18, 0.60], // 尾板
-      [-2.24, 0.38],
-      [-2.14, 0.22],
-      [-1.78, 0.18], // 平底板
-      [1.88, 0.18],
+      // 上缘：车头 → 机盖 → 腰线 → 车尾
+      [2.18, 0.36], // 车头最前
+      [2.22, 0.50], // 前保险杠上翻
+      [2.12, 0.64], // 机盖前缘
+      [1.95, 0.70],
+      [1.45, 0.76], // 机盖后部
+      [0.90, 0.82], // 风挡根部
+      [-1.28, 0.84], // 腰线
+      [-1.78, 0.90], // 后备厢盖
+      [-2.02, 0.86], // 尾板上沿
+      [-2.14, 0.66],
+      [-2.18, 0.46], // 后保险杠
+      [-2.06, 0.30],
+      [-1.90, 0.20], // 车底后
+      // 下缘：后轮拱（向上拱出的开口）
+      [-1.80, 0.20],
+      [-1.74, 0.38],
+      [-1.64, 0.55],
+      [-1.52, 0.66],
+      [-1.40, 0.70],
+      [-1.28, 0.66],
+      [-1.16, 0.55],
+      [-1.06, 0.38],
+      [-1.00, 0.20],
+      // 底边
+      [1.00, 0.20],
+      // 前轮拱
+      [1.06, 0.38],
+      [1.16, 0.55],
+      [1.28, 0.66],
+      [1.40, 0.70],
+      [1.52, 0.66],
+      [1.64, 0.55],
+      [1.74, 0.38],
+      [1.80, 0.20],
+      // 前唇下沿
+      [1.98, 0.20],
+      [2.10, 0.26],
     ],
     W,
-    0.055,
+    0.045,
     1,
   )
 
-  // 后轮拱外扩，正侧面看才有"臀"
-  const haunches = [-1, 1].map((s) =>
-    box([0.1, 0.3, 1.34], [s * 0.93, 0.44, -1.28]),
-  )
-  const paintMerged = flatten([body, ...haunches])
+  const paintParts = [
+    body,
+    // 车顶盖：同色车顶把座舱破成「前风挡 / 车顶 / 后风挡」三段
+    box([1.52, 0.05, 1.04], [0, 1.30, -0.24]),
+    // 后视镜壳（支臂在 trim 里）
+    box([0.07, 0.10, 0.16], [-0.965, 0.89, 0.60]),
+    box([0.07, 0.10, 0.16], [0.965, 0.89, 0.60]),
+  ]
+  const paintMerged = flatten(paintParts)
 
-  /* 座舱：一整片深色玻璃穹顶，宽度比车身窄一圈，
-     留下明显的肩线台阶——参考图里那道折线就是它。 */
+  /* 座舱：整片深色玻璃 + 上面那层同色车顶。宽度比车身窄一圈，
+     肩线台阶就是 A/C 柱的位置。 */
   const canopy = extrudeProfile(
     [
-      [0.80, 0.58],
-      [-0.04, 1.04],
-      [-0.66, 1.05],
-      [-1.46, 0.70],
-      [-1.46, 0.58],
+      [0.88, 0.74],
+      [0.34, 1.26],
+      [-0.80, 1.28],
+      [-1.36, 0.76],
     ],
-    1.44,
-    0.05,
+    1.58,
+    0.035,
     2,
   )
 
-  const trimParts = [
-    // 侧裙：把车身下缘压成一条暗色带
-    tinted(box([1.9, 0.1, 3.1], [0, 0.21, 0]), trimColor),
-    // 前铲
-    tinted(box([1.8, 0.09, 0.36], [0, 0.2, 2.12]), trimColor),
-    // 后扩散器 + 竖鳍
-    tinted(box([1.74, 0.26, 0.36], [0, 0.3, -2.04]), trimColor),
-    tinted(box([0.06, 0.2, 0.38], [-0.5, 0.28, -2.02]), trimColor),
-    tinted(box([0.06, 0.2, 0.38], [0, 0.28, -2.02]), trimColor),
-    tinted(box([0.06, 0.2, 0.38], [0.5, 0.28, -2.02]), trimColor),
-    // 车头黑色进气缝
-    tinted(box([1.24, 0.11, 0.07], [0, 0.33, 2.31]), trimColor),
-    // 后视镜：细支臂 + 小镜片
-    tinted(box([0.16, 0.035, 0.05], [-0.94, 0.74, 0.56]), trimColor),
-    tinted(box([0.16, 0.035, 0.05], [0.94, 0.74, 0.56]), trimColor),
-    tinted(box([0.12, 0.07, 0.14], [-1.02, 0.76, 0.56]), trimColor),
-    tinted(box([0.12, 0.07, 0.14], [1.02, 0.76, 0.56]), trimColor),
+  const trimParts: THREE.BufferGeometry[] = [
+    // 侧裙
+    tinted(box([0.05, 0.08, 1.90], [-0.925, 0.24, 0]), trimColor),
+    tinted(box([0.05, 0.08, 1.90], [0.925, 0.24, 0]), trimColor),
+    // 前唇 + 下格栅
+    tinted(box([1.54, 0.09, 0.26], [0, 0.255, 2.02]), trimColor),
+    tinted(box([0.98, 0.16, 0.06], [0, 0.435, 2.22]), darkColor),
+    // 前车牌
+    tinted(box([0.42, 0.10, 0.02], [0, 0.305, 2.20]), plate),
+    // 后扩散器 + 三片竖鳍
+    tinted(box([1.46, 0.13, 0.16], [0, 0.255, -2.06]), darkColor),
+    tinted(box([0.05, 0.15, 0.17], [-0.46, 0.27, -2.06]), trimColor),
+    tinted(box([0.05, 0.15, 0.17], [0, 0.27, -2.06]), trimColor),
+    tinted(box([0.05, 0.15, 0.17], [0.46, 0.27, -2.06]), trimColor),
+    // 门把手
+    tinted(box([0.025, 0.035, 0.16], [-0.932, 0.70, 0.26]), chrome),
+    tinted(box([0.025, 0.035, 0.16], [0.932, 0.70, 0.26]), chrome),
+    tinted(box([0.025, 0.035, 0.16], [-0.932, 0.70, -0.52]), chrome),
+    tinted(box([0.025, 0.035, 0.16], [0.932, 0.70, -0.52]), chrome),
+    // 窗下沿镀铬条 + B 柱
+    tinted(box([0.02, 0.022, 1.92], [-0.833, 0.805, -0.20]), chrome),
+    tinted(box([0.02, 0.022, 1.92], [0.833, 0.805, -0.20]), chrome),
+    tinted(box([0.02, 0.50, 0.07], [-0.836, 1.05, -0.18]), darkColor),
+    tinted(box([0.02, 0.50, 0.07], [0.836, 1.05, -0.18]), darkColor),
+    // 后视镜支臂 + 镜片
+    tinted(box([0.10, 0.028, 0.04], [-0.90, 0.89, 0.60]), trimColor),
+    tinted(box([0.10, 0.028, 0.04], [0.90, 0.89, 0.60]), trimColor),
+    tinted(box([0.02, 0.075, 0.14], [-1.005, 0.89, 0.60]), chrome),
+    tinted(box([0.02, 0.075, 0.14], [1.005, 0.89, 0.60]), chrome),
+    // 车顶鲨鱼鳍
+    tinted(box([0.10, 0.055, 0.20], [0, 1.35, -0.66]), trimColor),
     // 喷口外壳：四个朝下的短筒
     ...NOZZLES.map(([x, z]) => {
       const geo = new THREE.CylinderGeometry(0.17, 0.2, 0.1, 14, 1, true)
@@ -237,26 +302,38 @@ function buildGeometries(palette: Palette): CarGeometries {
       return tinted(geo, trimColor)
     }),
   ]
-  for (const [x, z] of [
-    [-0.86, 1.42],
-    [0.86, 1.42],
-    [-0.86, -1.36],
-    [0.86, -1.36],
-  ] as const) {
-    // 轮拱阴影：贴在车身外侧的一圈暗色薄片，轮子因此像嵌进翼子板里
-    const arch = new THREE.CylinderGeometry(0.46, 0.46, 0.012, 20)
-    arch.rotateZ(Math.PI / 2)
-    arch.translate(Math.sign(x) * 1.02, 0.38, z)
-    trimParts.push(tinted(arch, wheelColor))
-    trimParts.push(wheel([x, 0.36, z], wheelColor, rimColor))
+
+  // 排气管：两根从扩散器下面探出来
+  for (const s of [-1, 1]) {
+    const pipe = new THREE.CylinderGeometry(0.048, 0.048, 0.16, 12)
+    pipe.rotateX(Math.PI / 2)
+    pipe.translate(s * 0.45, 0.28, -2.12)
+    trimParts.push(tinted(pipe, chrome))
+  }
+
+  for (const s of [-1, 1]) {
+    for (const z of [1.40, -1.40]) {
+      // 轮井内衬：深色筒壁，轮拱开口里不会直接透出街景
+      const well = new THREE.CylinderGeometry(0.345, 0.345, 0.40, 18, 1, true)
+      well.rotateZ(Math.PI / 2)
+      well.translate(s * 0.73, 0.34, z)
+      trimParts.push(tinted(well, darkColor))
+      trimParts.push(wheel([s * 0.72, 0.34, z], wheelColor, rimColor))
+    }
   }
   const trim = flatten(trimParts)
 
   const lightParts = [
-    // 车头一整条极细的灯带（参考图正面就是一道横缝）
-    tinted(box([1.58, 0.05, 0.1], [0, 0.455, 2.26]), '#dff4ff'),
+    // 车头贯穿日行灯
+    tinted(box([1.30, 0.045, 0.05], [0, 0.615, 2.18]), '#eaf7ff'),
+    // 两颗主灯
+    tinted(box([0.34, 0.11, 0.06], [-0.62, 0.55, 2.21]), '#d6efff'),
+    tinted(box([0.34, 0.11, 0.06], [0.62, 0.55, 2.21]), '#d6efff'),
     // 车尾贯穿灯带
-    tinted(box([1.62, 0.06, 0.07], [0, 0.56, -2.17]), '#ff5a4e'),
+    tinted(box([1.32, 0.055, 0.05], [0, 0.80, -2.10]), '#ff4a3c'),
+    // 尾部竖向灯
+    tinted(box([0.09, 0.17, 0.04], [-0.65, 0.70, -2.16]), '#d4352d'),
+    tinted(box([0.09, 0.17, 0.04], [0.65, 0.70, -2.16]), '#d4352d'),
     // 喷口内胆：不飞的时候也是一圈冷光
     ...NOZZLES.map(([x, z]) => tinted(box([0.26, 0.02, 0.26], [x, 0.05, z]), '#8fe6ff')),
   ]
@@ -437,7 +514,7 @@ export function Traffic() {
           lane,
           t: ((c + 0.35) / count) * span + (i * 13) % 40,
           speed: lane.speed * (0.85 + ((i * 7) % 10) / 24),
-          color: CAR_COLORS[i % CAR_COLORS.length],
+          color: palette.car[i % palette.car.length],
           // 隔一台带一套喷口：车道上看过去是"起落交织"，不会整条街一起升空
           flyable: i % 3 !== 1,
           // 相位错开，任何时刻都有两三台在天上
@@ -450,7 +527,7 @@ export function Traffic() {
       }
     }
     return list
-  }, [clearLanes])
+  }, [clearLanes, palette])
 
   const count = cars.length
 
@@ -480,10 +557,11 @@ export function Traffic() {
 
   const materials = useMemo(
     () => ({
-      paint: new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.18, metalness: 0.72, envMapIntensity: 1.35 }),
+      paint: new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.22, metalness: 0.58, envMapIntensity: 1.25 }),
       // 座舱玻璃单独一份材质：车漆可以带金属颗粒，玻璃必须接近镜面
-      glass: new THREE.MeshStandardMaterial({ color: '#0b141b', roughness: 0.06, metalness: 0.95, envMapIntensity: 1.6 }),
-      trim: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.42, metalness: 0.45 }),
+      glass: new THREE.MeshStandardMaterial({ color: '#16242e', roughness: 0.07, metalness: 0.95, envMapIntensity: 1.6 }),
+      // DoubleSide：轮井是开口圆筒，单面会让内壁被剔掉
+      trim: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5, metalness: 0.4, side: THREE.DoubleSide }),
       lights: new THREE.MeshBasicMaterial({ vertexColors: true, toneMapped: false }),
       // 喷焰：加色混合 + 顶点色淡出，普通混合会在空中糊成一团灰
       plume: new THREE.MeshBasicMaterial({
@@ -628,7 +706,7 @@ export function Traffic() {
       }
       if (tailRef.current) {
         // 尾灯：只在车尾后一点点，小、低、红，不参与照亮路面
-        dummy.position.set(dummy.position.x - fx * 1.55, 0.045, dummy.position.z - fz * 1.55)
+        dummy.position.set(dummy.position.x - fx * 1.95, 0.045, dummy.position.z - fz * 1.95)
         dummy.rotation.set(-Math.PI / 2, yaw, 0)
         dummy.scale.set(2.6, 2.0, 1)
         dummy.updateMatrix()
@@ -639,9 +717,9 @@ export function Traffic() {
 
       const body = bodies.current[i]
       if (body) {
-        // 车身沿行进方向长 4.7m、横向宽 2.1m，按车头朝向决定哪一边是长度
-        const along = car.lane.axis === 'z' ? 2.35 : 1.05
-        const across = car.lane.axis === 'z' ? 1.05 : 2.35
+        // 车身沿行进方向长 4.4m、横向宽 1.9m，按车头朝向决定哪一边是长度
+        const along = car.lane.axis === 'z' ? 2.2 : 0.95
+        const across = car.lane.axis === 'z' ? 0.95 : 2.2
         placeBody(body, dummy.position.x, dummy.position.z, across, along)
         // 飞起来的车只占空中那一段：站在地上的人会从它下面走过去
         body.minY = car.lift > 0.05 ? y - 0.35 : 0

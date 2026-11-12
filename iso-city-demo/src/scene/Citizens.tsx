@@ -37,7 +37,7 @@ export function Citizens() {
   const people = useMemo<Person[]>(() => {
     const rnd = seeded('citizens-v4')
     const list: Person[] = []
-    const total = 20
+    const total = 30
     for (let i = 0; i < total; i++) {
       const route = pedestrianRoutes[i % pedestrianRoutes.length]
       const span =

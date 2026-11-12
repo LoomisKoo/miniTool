@@ -17,6 +17,18 @@ import { alreadyUploaded, buildQueueIdle } from './buildQueue'
 
 const CHUNK = 120
 
+/**
+ * 合批后的静态件是否降级成 Lambert（逐顶点光照）。
+ *
+ * 开着：帧时间从 46ms 降到 20ms 量级，代价是静态件没有金属反射
+ * 和粗糙度渐变，玻璃看起来是一块平色板。
+ * 关掉：回到逐像素 PBR，画面更"真"，但 M1 Pro 上只有 21fps。
+ *
+ * 需要高光/反射的东西（幕墙、车漆、金属杆件）本来就没进这个分支——
+ * 楼体走 facade 的自定义 shader，车流和行人是 dynamic 不合批。
+ */
+const FLAT_LIGHT = true
+
 type Bucket = {
   material: THREE.Material
   geos: THREE.BufferGeometry[]
@@ -118,6 +130,32 @@ function classify(source: THREE.Material): { key: string; baked: THREE.Material 
     const params: THREE.MeshBasicMaterialParameters = { ...shared }
     if (map) params.map = map
     created = new THREE.MeshBasicMaterial(params)
+  } else if (FLAT_LIGHT) {
+    // 合批后的静态件一律走 Lambert（逐顶点光照），不再走 Standard（逐像素 PBR）。
+    //
+    // 这是帧时间最大的一刀。实测把场景里 6907 个受光网格换成无光照材质，
+    // 帧时间从 46.6ms 掉到 16.7ms——也就是说三分之二的时间花在
+    // "每个像素算一遍 IBL + 3 盏点光 + PCF 阴影"上。
+    //
+    // Lambert 在顶点上算一次光照、像素上只做插值，成本差一个数量级。
+    // 视觉上损失的是金属反射和粗糙度渐变，但夜景本来就把这些压成了剪影，
+    // 而参考那种城市模型的"干净"恰恰来自没有反射和渐变。
+    const params: THREE.MeshLambertMaterialParameters = {
+      color: 0xffffff,
+      vertexColors: true,
+      transparent: source.transparent,
+      opacity: source.opacity,
+      blending: source.blending,
+      depthWrite: source.depthWrite,
+      side: source.side,
+      toneMapped: source.toneMapped,
+      emissive: std.emissive,
+      emissiveIntensity: std.emissiveIntensity,
+    }
+    if (map) params.map = map
+    if (std.alphaTest) params.alphaTest = std.alphaTest
+    if (std.emissiveMap) params.emissiveMap = std.emissiveMap
+    created = new THREE.MeshLambertMaterial(params)
   } else {
     const params: THREE.MeshStandardMaterialParameters = {
       ...shared,
@@ -135,7 +173,7 @@ function classify(source: THREE.Material): { key: string; baked: THREE.Material 
     if (std.metalnessMap) params.metalnessMap = std.metalnessMap
     if (std.roughnessMap) params.roughnessMap = std.roughnessMap
     // 法线贴图以前在合并时被丢掉，合批后的楼体、路面细节直接退化成
-    // 一块平色；这里连强度一起带上。
+    // 一块平色；Lambert 不支持法线贴图，这里只在 Standard 分支带上。
     if (std.normalMap) params.normalMap = std.normalMap
     const standard = new THREE.MeshStandardMaterial(params)
     if (std.normalMap) standard.normalScale.copy(std.normalScale)

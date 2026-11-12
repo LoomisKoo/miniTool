@@ -27,6 +27,9 @@ export default defineConfig({
     rollupOptions: {
       input: {
         city: resolve(process.cwd(), 'city.html'),
+        city2: resolve(process.cwd(), 'city2.html'),
+        linear: resolve(process.cwd(), 'linear.html'),
+        block: resolve(process.cwd(), 'block.html'),
       },
     },
   },

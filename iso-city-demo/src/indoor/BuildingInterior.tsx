@@ -13,20 +13,26 @@ import {
   type UnitInfo,
 } from '../data/units'
 import { CityBackdrop } from './CityBackdrop'
+import { Lounge, loungeInteractable } from './Lounge'
+import { ShopBacks, shopBlockers } from './ShopBack'
 import {
   ClosedDoor,
   RoomWalls,
   doorOpening,
+  freeWallRuns,
   inwardYaw,
   localAlong,
   roomBounds,
   roomBox,
   roomColliders,
   toLocalOpening,
+  useWallCut,
   wallPoint,
   yawToward,
   type RoomBox,
 } from './RoomKit'
+import { wallDecor, type WallSpan } from './WallDecor'
+import { floorTone, wallTone } from './style'
 
 /**
  * 门厅 / 电梯厅 / 走廊：就是楼层平面里 halls[core] 那个矩形。
@@ -64,11 +70,15 @@ function Plaque({
   const tex = useMemo(() => makeSignTexture(text, '#242b31'), [text])
   useEffect(() => () => tex.dispose(), [tex])
   const [x, z] = wallPoint(box, side, l, out)
+  // 门牌挂在这面墙上，墙被剖掉时它也得跟着走，否则会浮在空气里挡视线
+  const cut = useWallCut(side, box)
   return (
-    <mesh position={[x, y, z]} rotation={[0, inwardYaw(side), 0]}>
-      <planeGeometry args={[w, w * 0.375]} />
-      <meshBasicMaterial map={tex} toneMapped={false} />
-    </mesh>
+    <group ref={cut}>
+      <mesh position={[x, y, z]} rotation={[0, inwardYaw(side), 0]}>
+        <planeGeometry args={[w, w * 0.375]} />
+        <meshBasicMaterial map={tex} toneMapped={false} />
+      </mesh>
+    </group>
   )
 }
 
@@ -88,6 +98,7 @@ export function BuildingInterior({
   const enterTarget = useApp((state) => state.enterTarget)
   const openElevator = useApp((state) => state.openElevator)
   const exitCity = useApp((state) => state.exitCity)
+  const indoorCam = useApp((state) => state.indoorCam)
 
   const plan = useMemo(() => {
     if (!building) return null
@@ -126,14 +137,15 @@ export function BuildingInterior({
       openings,
       start,
       bounds: roomBounds(box, null),
-      colliders: roomColliders(box, openings, null),
+      colliders: [...roomColliders(box, openings, null), ...(floor === 1 ? shopBlockers(id, hall.rect, box) : [])],
       elevatorSpot: spot(elevator.side, elevator.l, 0.8),
       exitSpot: exit ? spot(exit.side, exit.l, 0.8) : null,
     }
   }, [building, floor, core, from])
 
-  const interactables = useMemo<Interactable[]>(() => {
-    if (!plan) return []
+  const interactables = useMemo<Interactable[]>(() => {    if (!plan) return []
+    // 青年公寓一楼大堂里的公共客厅：整栋楼共用，摆在大堂另一头
+    const lounge = floor === 1 && id === 'south-east' ? loungeInteractable(plan.box, plan.elevatorSpot) : null
     return [
       ...plan.doors.map((d) => {
         const p = wallPoint(plan.box, d.side, d.l, 0.6)
@@ -156,6 +168,7 @@ export function BuildingInterior({
         radius: 2.2,
         action: () => openElevator(id),
       },
+      ...(lounge ? [lounge] : []),
       ...(plan.exitSpot
         ? [
             {
@@ -170,7 +183,20 @@ export function BuildingInterior({
           ]
         : []),
     ]
-  }, [plan, enterTarget, openElevator, exitCity, id])
+  }, [plan, enterTarget, openElevator, exitCity, id, floor])
+
+  // 门厅 / 走廊的墙面软装：门、电梯、出口都占着墙，扣掉之后再铺。
+  // 走廊本来就窄，所以这里只贴墙、不落地，不会让通道更难走。
+  const decor = useMemo(() => {
+    if (!plan) return null
+    const walls = freeWallRuns(plan.box, plan.openings)
+    const used: WallSpan[] = [
+      ...plan.doors.map((d) => ({ side: d.side, a0: d.l - 0.95, a1: d.l + 0.95 })),
+      { side: plan.elevator.side, a0: plan.elevator.l - 1.0, a1: plan.elevator.l + 1.0 },
+      ...(plan.exit ? [{ side: plan.exit.side, a0: plan.exit.l - 1.1, a1: plan.exit.l + 1.1 }] : []),
+    ]
+    return wallDecor(plan.box, walls, used, `hall-${id}-${floor}-${core}`)
+  }, [plan, id, floor, core])
 
   if (!building || !plan) return null
   const { box } = plan
@@ -183,8 +209,9 @@ export function BuildingInterior({
       <RoomWalls
         box={box}
         openings={plan.openings}
-        wallColor={lobby ? '#e4ddd0' : '#ded8cd'}
-        floorColor={lobby ? '#c9c1b2' : '#b3a58f'}
+        wallColor={wallTone(lobby ? '#e4ddd0' : '#ded8cd', `${id}-${floor}`)}
+        floorColor={floorTone(lobby ? '#c9c1b2' : '#b3a58f', `${id}-${floor}`)}
+        hideCeiling={indoorCam === 'top'}
       />
 
       {plan.doors.map((d) => {
@@ -234,6 +261,11 @@ export function BuildingInterior({
         />
       )}
 
+      {/* 青年公寓的大堂里有一间公共客厅；住户照片挂在墙上 */}
+      {lobby && id === 'south-east' && <Lounge box={box} lift={plan.elevatorSpot} floor={floor} />}
+      {floor === 1 && <ShopBacks buildingId={id} box={box} />}
+      {decor}
+
       {/* 吸顶灯：沿长向均匀排 */}
       {Array.from({ length: lights }).map((_, i) => {
         const t = (i + 0.5) / lights - 0.5
@@ -256,6 +288,7 @@ export function BuildingInterior({
           floor={floor}
           origin={[box.cx, box.cz]}
           cut={{ floor, owner: `h:${Math.min(core, layoutOf(building, floor).halls.length - 1)}` }}
+          interior
         />
       )}
 
@@ -265,7 +298,7 @@ export function BuildingInterior({
         bounds={plan.bounds}
         colliders={plan.colliders}
         interactables={interactables}
-        cameraDistance={Math.max(2.6, Math.min(4.0, Math.min(box.W, box.D) * 0.9))}
+        cameraDistance={Math.max(6, Math.min(12, Math.max(box.W, box.D) * 1.05))}
         interior
       />
     </group>

@@ -2,6 +2,8 @@ import { useEffect, useMemo } from 'react'
 import * as THREE from 'three'
 import { buildings, crossStreet, mainStreet, southCross, insideRoad } from '../data/city'
 import { seeded, nightFill } from './theme'
+import { GROUND_DEPTH } from './style'
+import { shops } from '../data/shops'
 
 /**
  * 街面细节：这些都是"真实街区"一眼就能看出来的东西，缺了街就只剩柏油和楼。
@@ -110,8 +112,12 @@ export function StreetDetail({ night }: { night: boolean }) {
 
     /* ---------- 雨棚：临街商铺 ---------- */
     const awnings: Item[] = []
+    // 有 1F 店铺的楼不再随机挂通用雨棚：店家的雨棚在 ShopFronts 里按业态单独做，
+    // 两层雨棚叠在一起会互相穿模。
+    const shopBuildings = new Set(shops.map((s) => s.buildingId))
     for (const b of buildings) {
       if (b.background || b.balconies || b.h < 8) continue
+      if (shopBuildings.has(b.id)) continue
       const side = b.entranceSide || b.facing
       if (!side) continue
       if (rnd() > 0.5) continue
@@ -174,7 +180,7 @@ export function StreetDetail({ night }: { night: boolean }) {
       // 夜里没有可反射的亮面，金属度越高越黑，整根柱子直接糊成一个黑洞。
       // 降金属度、把基色抬到能吃到环境光的中灰，再补一层夜间自发光。
       steel: new THREE.MeshStandardMaterial({ color: '#5c6268', roughness: 0.55, metalness: 0.45, ...nightFill(night) }),
-      band: new THREE.MeshBasicMaterial({ color: night ? '#e6e2d8' : '#d8d2c2', toneMapped: false }),
+      band: new THREE.MeshBasicMaterial({ color: night ? '#7d7768' : '#d8d2c2', toneMapped: true }),
       signFace: new THREE.MeshStandardMaterial({ color: '#1f2e36', roughness: 0.55, metalness: 0.25, ...nightFill(night) }),
       signText: new THREE.MeshBasicMaterial({ color: '#d7e2e8', toneMapped: false }),
       cloth: new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.88 }),
@@ -186,16 +192,28 @@ export function StreetDetail({ night }: { night: boolean }) {
         depthWrite: false,
         toneMapped: false,
         opacity: 0.3,
+        // 门店溢光照在人行道上，比铺装就高 8mm：它是加色、不写深度的光晕，
+        // 统一取最靠前的 pool 层，斜视时才不会被铺装的斜率偏移整片切掉。
+        polygonOffset: true,
+        polygonOffsetFactor: GROUND_DEPTH.pool.polygonOffsetFactor,
+        polygonOffsetUnits: GROUND_DEPTH.pool.polygonOffsetUnits,
       }),
       paint: new THREE.MeshBasicMaterial({
-        color: night ? '#c3bfb0' : '#f0ebdc',
+        // 标线是反光材料，不是自发光体：夜里它只是比沥青亮一档，
+        // 绝对不能到"发光"那一档，否则整条街最亮的东西是斑马线。
+        // 之前 night 用 #c3bfb0 + toneMapped:false，等于绕过曝光直接输出近白。
+        // 白漆在夜里是中性偏冷的灰，带暖的 #6d685c 叠上调色会读成土黄
+        color: night ? '#8e9198' : '#f0ebdc',
         // 不透明：透明贴花一旦和地面/光斑层的绘制顺序打架，
         // 整块标线会突然变暗，读起来就是"斑马线被切掉一截"
         transparent: false,
+        toneMapped: true,
+        // 路面各层带 -2 ~ -20 的斜率深度偏移，斜看时比 8cm 高差还大，会把斑马线
+        // 盖掉一截，而且边界随相机角度（也就是随人物）移动。这里取
+        // GROUND_DEPTH.marking：比所有路面、铺装、喷泉环都靠前。
         polygonOffset: true,
-        polygonOffsetFactor: -8,
-        polygonOffsetUnits: -16,
-        toneMapped: false,
+        polygonOffsetFactor: GROUND_DEPTH.marking.polygonOffsetFactor,
+        polygonOffsetUnits: GROUND_DEPTH.marking.polygonOffsetUnits,
       }),
     }),
     [night],
@@ -237,7 +255,7 @@ export function StreetDetail({ night }: { night: boolean }) {
     const crosswalks = instanced(
       new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2),
       materials.paint,
-      stripes.map((s) => ({ pos: [s.x, 0.054, s.z] as [number, number, number], scale: [s.w, 1, s.d] as [number, number, number] })),
+      stripes.map((s) => ({ pos: [s.x, 0.082, s.z] as [number, number, number], scale: [s.w, 1, s.d] as [number, number, number] })),
     )
     const all = [pole, band, signPole, signFace, signBar, awning, valance, bikeLane, crosswalks, spillMesh]
     all.forEach((m) => {

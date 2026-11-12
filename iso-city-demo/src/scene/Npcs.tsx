@@ -54,7 +54,7 @@ export function NpcFigure({ def, shadows = true, actionId }: { def: NpcDef; shad
       <group ref={root} position={[def.x, 0, def.z]} rotation={[0, def.yaw, 0]} userData={{ dynamic: true }}>
         <PersonMesh geo={geo} limbs={limbs} shadows={shadows} />
       </group>
-      <PromptTag x={def.x} y={2.25} z={def.z} text={`${def.name} · 对话`} actionId={actionId ?? `npc-${def.id}`} />
+      <PromptTag x={def.x} y={2.25} z={def.z} text={def.name} actionId={actionId ?? def.actionId ?? `npc-${def.id}`} />
     </>
   )
 }

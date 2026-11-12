@@ -1,8 +1,13 @@
 // 物种与品种（图鉴、刷新、城里渲染共用）。
 //
 // 形象来自体素图纸 src/pets/voxel/designs.ts：每个物种一个模板，品种 = 换色 +
-// 特征组合（折耳、短腿、卷尾、花纹……）。这里只补图鉴需要的元数据：名字、
+// 特征组合（折耳、短腿、卷尾、长鼻……）。这里只补图鉴需要的元数据：名字、
 // 出现权重、在城里的身高。新增品种只改 designs.ts。
+//
+// 图鉴的硬规则：**一张卡 = 一种长得不一样的动物**。
+// 只有毛色不同的（黑松鼠、白化刺猬、棕浣熊……）不单独成卡，它们共用同一个
+// catalogId，作为同一张卡下的色型；图鉴详情里可以切换查看。
+// 单靠换色撑不起一张卡，这也是 designs.ts 里每个品种都要有自己的骨架的原因。
 //
 // 稀有度不手写：图鉴上的星数直接由「每小时能在街上遇到几只」推出来
 // （物种出现权重 × 品种权重 ÷ 总权重 × 每小时刷新池容量）。这样调权重、
@@ -20,12 +25,14 @@ export type Breed = {
   name: string
   /** 现实原型 + 城市观察的品种专属简介 */
   description: string
-  /** 图鉴归属：颜色/花纹变体会归并到同一个品种条目 */
+  /** 图鉴归属：色型/花纹变体会归并到同一个品种条目 */
   catalogId: string
   /** 出现权重，默认 1 */
   weight?: number
   /** 主毛色：缩略图还没渲染出来时的色块 */
   swatch: string
+  /** 品种整体尺寸（小香猪这类天生小一号的品种 < 1） */
+  size: number
   /** 稀有度，由 perHour 推出来 */
   rarity: Rarity
   /** 一小时里平均能遇到几只 */
@@ -222,6 +229,18 @@ const BREED_DESCRIPTIONS: Record<string, string> = {
   'sheep-goat': '现实档案：山羊短毛、瘦身、向后弯的长角，下巴有一撮胡须。城市观察：它会站起来够树篱上最嫩的那几片叶子。',
   'hedgehog-brown': '现实档案：刺猬背上是一整层朝外支棱的棘刺，吻尖、腿短，受惊时会卷成一个球。城市观察：它只在路灯照不到的角落活动。',
   'raccoon-grey': '现实档案：浣熊的前爪非常灵活，几乎什么都能打开；眼睛上一道黑色面罩，尾巴一圈一圈。城市观察：它认识城里每一个没盖严的垃圾桶。',
+  // 以下都是同一张卡下的色型：网格不变，只是毛色/花纹换了颜色
+  'raccoon-albino': '白化个体：面罩淡成浅米色，尾环只剩一圈淡淡的影子。夜里更像一块被灯照到的石头。',
+  'raccoon-dark': '黑化个体：通体近黑，只有眼睛反着黄光。晚上几乎只能看见两点反光在移动。',
+  'raccoon-gold': '金色个体：毛色偏金黄，面罩仍是深色。站在暖灯下时整只都在发光。',
+  'raccoon-brown': '棕色个体：底毛偏棕，面罩深褐，环纹比灰浣熊柔和。常出现在旧砖墙一带。',
+  'hedgehog-albino': '白化个体：刺是奶白色，只有鼻尖留一点粉。夜里比普通刺猬更像一块石头。',
+  'hedgehog-dark': '黑化个体：刺壳几乎全黑，刺尖只有一点点浅色。蹲在柏油路上完全看不出轮廓。',
+  'hedgehog-ginger': '橘褐个体：刺壳像一颗烤过的栗子，刺尖是浅杏色。',
+  'hedgehog-grey': '灰色个体：灰白的刺配浅色刺尖，最像「一团带刺的雾」。',
+  'squirrel-black': '黑化个体：通体近黑，尾巴像一面深色的旗。城里一旦出现，往往整片街区都是它的后代。',
+  'squirrel-albino': '白化个体：纯白配红眼，在草地上像一小团反光的雪，白天反而更显眼。',
+  'pig-boar-grey': '灰色个体：灰褐的底毛配更深的鬃毛，獠牙偏白。和常见野猪是同一副骨架。',
 }
 
 const CATALOG_META: Record<string, { id: string; name: string; description?: string }> = {
@@ -249,48 +268,52 @@ const CATALOG_META: Record<string, { id: string; name: string; description?: str
   'bunny-grey': { id: 'bunny-house', name: '家兔' },
   'bunny-black': { id: 'bunny-house', name: '家兔' },
   'bunny-lop': { id: 'bunny-lop', name: '垂耳兔' },
-  'bunny-dutch': { id: 'bunny-dutch', name: '荷兰兔' },
+  'bunny-dutch': { id: 'bunny-house', name: '荷兰兔' },
   'bunny-lion': { id: 'bunny-lion', name: '狮子兔', description: '脸颊和脖子围着一圈长毛，像戴了个毛领子。羊毛出在兔身上这句话，大概是从它这来的。' },
   'bunny-angora': { id: 'bunny-angora', name: '安哥拉兔', description: '全身毛量拉满，远看是一团会动的白棉花。城市观察：它走路时像在把地面擦干净。' },
-  'panda-classic': { id: 'panda', name: '大熊猫' },
-  'panda-brown': { id: 'panda', name: '大熊猫' },
-  'panda-grey': { id: 'panda-grey', name: '灰白熊猫', description: '黑的部分换成冷灰，像一张褪色的旧照片。现实里这类色型在秦岭种群里偶尔出现。' },
-  'panda-albino': { id: 'panda-albino', name: '白化熊猫', description: '通体近白，只有眼圈和肩带留下一圈浅浅的轮廓。野生记录里极其罕见。' },
-  'panda-red': { id: 'panda-red', name: '红棕熊猫', description: '棕红色的肩带配奶油色底毛，是棕色熊猫里更深的一档。' },
+  'panda-classic': { id: 'panda', name: '大熊猫', description: '现实档案：大熊猫原产中国，主要以竹子为食，行动从容。城市观察：它出现时，连最吵的街角都会安静几秒。' },
+  'panda-brown': { id: 'panda', name: '棕色熊猫' },
+  'panda-grey': { id: 'panda', name: '灰白熊猫' },
+  'panda-albino': { id: 'panda', name: '白化熊猫' },
+  'panda-red': { id: 'panda', name: '红棕熊猫' },
   'fox-red': { id: 'fox-red', name: '赤狐', description: '现实档案：赤狐分布广泛，聪明、警觉，尾巴蓬松。城市观察：它会在街区边缘等待人群散开。' },
   'fox-arctic': { id: 'fox-arctic', name: '北极狐', description: '现实档案：北极狐生活在寒冷地区，冬季毛色会变浅。城市观察：它像一片从远方雪原飘来的安静影子。' },
   'fox-fennec': { id: 'fox-fennec', name: '耳廓狐', description: '现实档案：耳廓狐原产北非，巨大的耳朵帮助它散热和捕捉声音。城市观察：它能先听见拐角后的霓虹灯嗡鸣。' },
   'fox-cross': { id: 'fox-cross', name: '十字狐', description: '赤狐的黑化变种，背脊和肩上一道深色十字纹。夜里几乎只剩一双眼睛在动。' },
   'fox-silver': { id: 'fox-silver', name: '银狐', description: '毛色接近炭灰，尾尖仍是白的。名字来自毛干中段的银白色环带。' },
-  'fox-grey': { id: 'fox-grey', name: '灰狐', description: '比赤狐小一圈的灰色个体，胸前一条浅色围兜，尾巴上有一条深色纵纹。' },
-  'squirrel-red': { id: 'squirrel-red', name: '红松鼠', description: '耳尖一撮长毛，尾巴几乎和身体一样大、能绕过背卷起来。松鼠里最有辨识度的一种。' },
+  'fox-grey': { id: 'fox-grey', name: '灰狐', description: '现实档案：灰狐比赤狐小一圈，身子更矮，耳朵小而圆，尾巴上一条深色纵纹。城市观察：它不走大路，只在墙根的阴影里移动。' },
+  'squirrel-red': { id: 'squirrel-red', name: '红松鼠', description: '耳尖一撮长毛，尾巴几乎和身体一样大、能绕过后背卷到头顶。松鼠里最有辨识度的一种。' },
   'squirrel-grey': { id: 'squirrel-grey', name: '灰松鼠', description: '没有耳簇，身子更长，尾巴像一把大刷子垂在身后。城市公园里最常见的那种。' },
   'squirrel-chipmunk': { id: 'squirrel-chipmunk', name: '花栗鼠', description: '背上五道纵纹、脸上两条过眼纹，尾巴短而竖起。比松鼠小一圈，胆子却大得多。' },
-  'squirrel-black': { id: 'squirrel-black', name: '黑松鼠', description: '通体近黑、尾巴像一面深色的旗。城市里一旦出现，往往整片街区都是它的后代。' },
-  'squirrel-albino': { id: 'squirrel-albino', name: '白化松鼠', description: '纯白配红眼，在草地上像一小团反光的雪。白天出现反而更显眼。' },
-  'squirrel-rock': { id: 'squirrel-rock', name: '岩松鼠', description: '尾巴短、体型圆，常年贴着石阶和矮墙走。不爬树，捡的是地上的东西。' },
-  'pig-house': { id: 'pig', name: '家猪', description: '桶形身子、扁平鼻子盘、往前耷拉的大耳朵，头和背几乎齐平。嗅觉比狗还灵敏。' },
-  'pig-boar': { id: 'pig', name: '野猪' },
-  'pig-black': { id: 'pig-black', name: '黑猪', description: '一身短黑毛配粉鼻盘，耳朵耷拉得比家猪更彻底。' },
-  'pig-white': { id: 'pig-white', name: '白猪', description: '粉白底、浅色鼻盘，最容易被画成卡通猪的那种配色。' },
-  'pig-mini': { id: 'pig-mini', name: '小香猪', description: '黑头白身、耳朵立着，体型只有家猪一半。城里有人把它当宠物养。' },
-  'pig-boar-grey': { id: 'pig-boar-grey', name: '灰野猪', description: '灰褐色的野猪个体，鬃毛比常见的更深，獠牙偏白。' },
-  'sheep-wool': { id: 'sheep', name: '绵羊', description: '一整团羊毛配一张小小的深色脸，脸从毛里往前探出来，四条细腿藏在毛底下。' },
-  'sheep-goat': { id: 'sheep', name: '山羊' },
-  'sheep-blacknose': { id: 'sheep-blacknose', name: '黑鼻羊', description: '奶油色的羊毛配一张纯黑的脸和耳朵，对比强到像两种动物拼在一起。' },
-  'sheep-merino': { id: 'sheep-merino', name: '美利奴羊', description: '羊毛更细更密，脸是浅褐色的。一身的毛卷得几乎看不出四肢。' },
-  'sheep-alpine': { id: 'sheep-alpine', name: '高山山羊', description: '白身灰脸、腿脚利落，最擅长站在别人不敢站的地方。' },
-  'sheep-brown-goat': { id: 'sheep-brown-goat', name: '棕山羊', description: '棕黄的短毛配深色四肢，角和胡须都比山羊更长一些。' },
+  'squirrel-black': { id: 'squirrel-grey', name: '黑松鼠' },
+  'squirrel-albino': { id: 'squirrel-grey', name: '白化松鼠' },
+  'squirrel-rock': { id: 'squirrel-rock', name: '岩松鼠', description: '耳朵圆、尾巴短，体型滚圆，常年贴着石阶和矮墙走。不爬树，捡的是地上的东西。' },
+  'pig-house': { id: 'pig-house', name: '家猪', description: '现实档案：桶形身子、扁平鼻盘、往前耷拉的大耳朵，头和背几乎齐平。城市观察：它把每一块松动的砖都拱开看看。' },
+  'pig-boar': { id: 'pig-boar', name: '野猪', description: '现实档案：吻部细长前突、脊背上一道竖立的硬鬃，嘴边长出向上翘的獠牙。城市观察：它走路不紧不慢，路过的人自动绕开。' },
+  'pig-black': { id: 'pig-black', name: '黑猪', description: '现实档案：太湖猪一类，肚皮松垂、脸颊下垂、耳朵大得盖住眼睛，鼻子短而微微上翘。城市观察：它走两步就要停下喘一口气。' },
+  'pig-white': { id: 'pig-white', name: '白猪', description: '现实档案：长白猪一类，身子被拉得很长，腿高、耳朵向前折，鼻梁和背连成一条直线。城市观察：它步子大，拱土的动作却很轻。' },
+  'pig-mini': { id: 'pig-mini', name: '小香猪', description: '现实档案：迷你猪的身子又矮又圆，只有家猪一半长，耳朵立着，鼻盘像一枚小纽扣。城市观察：有人把它当宠物牵着走。' },
+  'pig-boar-grey': { id: 'pig-boar', name: '灰野猪' },
+  'sheep-wool': { id: 'sheep-wool', name: '绵羊', description: '现实档案：一整团羊毛配一张小小的深色脸，脸从毛里往前探出来，细腿藏在毛底下。城市观察：它慢悠悠地啃过整条人行道边的草。' },
+  'sheep-goat': { id: 'sheep-goat', name: '山羊', description: '现实档案：短毛、瘦身、角向后弯，下巴有一撮胡须，耳朵横向支棱。城市观察：它会站起来够树篱上最嫩的那几片叶子。' },
+  'sheep-blacknose': { id: 'sheep-blacknose', name: '黑鼻羊', description: '奶油色的羊毛一直垂到蹄子上，配一张纯黑的脸、两只长长的垂耳。对比强到像两种动物拼在一起。' },
+  'sheep-merino': { id: 'sheep-merino', name: '美利奴羊', description: '羊毛更细更密，卷成一粒粒小团，脸是浅褐色的。一身的毛卷得几乎看不出四肢。' },
+  'sheep-alpine': { id: 'sheep-alpine', name: '高山山羊', description: '腿长、站得高，角从头顶向后扫出一大圈，胸前和腹下垂着长长的毛帘。最擅长站在别人不敢站的地方。' },
+  'sheep-brown-goat': { id: 'sheep-brown-goat', name: '棕山羊', description: '身子敦实、胸宽，一对宽耳朵一直垂到下颌以下，鼻梁微微拱起，角短而粗。' },
   'hedgehog-brown': { id: 'hedgehog', name: '刺猬', description: '低矮的圆拱壳上长满朝外支棱的尖刺，浅色的吻尖、短短的腿。' },
-  'hedgehog-albino': { id: 'hedgehog-albino', name: '白化刺猬', description: '刺是奶白色的，只有鼻尖还留一点粉。夜里比普通的刺猬更像一块石头。' },
-  'hedgehog-dark': { id: 'hedgehog-dark', name: '黑刺猬', description: '刺壳几乎全黑，刺尖只有一点点浅色。蹲在柏油路上完全看不出轮廓。' },
-  'hedgehog-ginger': { id: 'hedgehog-ginger', name: '橘刺猬', description: '刺壳偏橘褐，刺尖是浅杏色，像一颗烤过的栗子。' },
-  'hedgehog-grey': { id: 'hedgehog-grey', name: '灰刺猬', description: '灰白的刺配浅色刺尖，是最像"一团带刺的雾"的那种。' },
-  'raccoon-grey': { id: 'raccoon', name: '浣熊', description: '横过眼睛的黑色面罩和一圈一圈的尾巴。前爪灵活到几乎什么都能打开。' },
-  'raccoon-albino': { id: 'raccoon-albino', name: '白化浣熊', description: '面罩淡成浅米色，尾巴的环纹只剩一圈淡淡的影子。' },
-  'raccoon-dark': { id: 'raccoon-dark', name: '黑化浣熊', description: '通体近黑，只有眼睛反着黄光。晚上只看得见两条竖着的反光。' },
-  'raccoon-gold': { id: 'raccoon-gold', name: '金浣熊', description: '毛色偏金黄，面罩仍然是深色的。在暖灯下几乎整只都在发光。' },
-  'raccoon-brown': { id: 'raccoon-brown', name: '棕浣熊', description: '棕色底毛、深褐面罩，环纹比灰浣熊更柔和。' },
+  'hedgehog-albino': { id: 'hedgehog', name: '白化刺猬' },
+  'hedgehog-dark': { id: 'hedgehog', name: '黑刺猬' },
+  'hedgehog-ginger': { id: 'hedgehog', name: '橘刺猬' },
+  'hedgehog-grey': { id: 'hedgehog', name: '灰刺猬' },
+  'hedgehog-eared': { id: 'hedgehog-eared', name: '大耳猬', description: '现实档案：耳朵大得从刺壳两侧支出来，吻部明显拉长，刺比普通刺猬稀疏而长。城市观察：它会在花坛边先竖起耳朵听很久，再决定往哪走。' },
+  'hedgehog-pygmy': { id: 'hedgehog-pygmy', name: '四趾刺猬', description: '现实档案：体型只有普通刺猬的一半多一点，刺短而密，耳朵小到几乎埋进壳里，吻部也短。城市观察：它整只蜷起来时，比一片落叶大不了多少。' },
+  'raccoon-grey': { id: 'raccoon', name: '浣熊', description: '横过眼睛的黑色面罩和一圈一圈横纹的尾巴。前爪灵活到几乎什么都能打开。' },
+  'raccoon-albino': { id: 'raccoon', name: '白化浣熊' },
+  'raccoon-dark': { id: 'raccoon', name: '黑化浣熊' },
+  'raccoon-gold': { id: 'raccoon', name: '金浣熊' },
+  'raccoon-brown': { id: 'raccoon', name: '棕浣熊' },
+  'raccoon-coati': { id: 'raccoon-coati', name: '长鼻浣熊', description: '现实档案：吻部细长、能向前上方翘起，尾巴竖直像一根旗杆，耳朵小而圆贴在头侧。城市观察：它把鼻子探进每个缝里，比浣熊更像个搜查员。' },
+  'raccoon-kinkajou': { id: 'raccoon-kinkajou', name: '蜜熊', description: '现实档案：脸圆、吻短、耳朵大而朝前，尾巴能卷住树枝倒挂，脸上没有浣熊那道面罩。城市观察：它最常出现的地方是树冠和雨棚的边沿。' },
 }
 
 export const SPECIES: Species[] = (() => {
@@ -313,6 +336,7 @@ export const SPECIES: Species[] = (() => {
         catalogId: CATALOG_META[b.id]?.id ?? b.id,
         weight: b.weight,
         swatch: b.palette?.fur ?? design.palette.fur,
+        size: b.size ?? 1,
         rarity: rarityOf(perHour),
         perHour,
       }
@@ -334,6 +358,11 @@ export function breedOf(speciesId: string, breedId: string): Breed {
 }
 
 export const BREED_COUNT = SPECIES.reduce((sum, s) => sum + s.breeds.length, 0)
+
+/** 品种体型系数：小香猪、四趾刺猬这种天生小一号的品种 < 1，城里按它缩放 */
+export function breedSizeOf(speciesId: string, breedId: string) {
+  return breedOf(speciesId, breedId).size
+}
 
 export function catalogBreedsOf(species: Species) {
   const unique = new Map<string, Breed>()

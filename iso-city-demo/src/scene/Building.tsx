@@ -4,9 +4,11 @@ import type { BuildingDef } from '../data/city'
 import { useApp } from '../store'
 import { makeGrainTexture, makeShopWindowTexture, makeSignTexture } from './textures'
 import { bodyColor, nightFill, palettes, seeded, type Palette } from './theme'
-import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
+import { STYLIZED } from './style'
+import { mergeGeometries, toCreasedNormals } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { GlowDisc } from './GlowDisc'
 import { createFacadeMaterial } from './facade'
+import { FacadeWindows } from './FacadeWindows'
 import {
   entrancesOfBuilding,
   isUnitBuilding,
@@ -14,29 +16,55 @@ import {
   type UnitBuilding,
 } from '../data/units'
 import { UnitShell } from './UnitShell'
+import { ShopFrontage } from './ShopFrontage'
+import {
+  CrownBand,
+  DecoSpire,
+  FireEscape,
+  LedWall,
+  LoadingDoors,
+  RowhouseFront,
+  SawtoothRoof,
+  WalkupCornice,
+} from './BuildingForms'
+import { farEligible } from './FarCity'
+import {
+  ROOF_COLORS_DAY,
+  ROOF_COLORS_NIGHT,
+  facadeInset,
+  hipRoofGeometry,
+  isPitched,
+  massOutline,
+  roofOverhang,
+} from './mass'
 
 type Props = { def: BuildingDef }
 
-/** 切角八边形体量：把方盒子四个角削掉，剪影立刻不再是"四四方方"。
-    所有窗框仍贴在四个正面上，所以不影响窗户布置。 */
+/**
+ * 切角八边形体量：把方盒子四个角削掉，剪影立刻不再是"四四方方"。
+ * 所有窗框仍贴在四个正面上，所以不影响窗户布置。
+ *
+ * 每个转角再倒一个圆角、顶边再倒一道斜边：绝对锐利的直角是"白模感"的来源，
+ * 倒角会在边上接住一条细高光，楼体立刻有体积、不再像钢筋水泥的硬盒子。
+ * 法线按折角平滑（toCreasedNormals）：圆角内部连续，墙面与顶面的直角仍是硬的。
+ */
 function massGeometry(w: number, d: number, h: number, chamfer: number) {
-  const cw = w / 2
-  const cd = d / 2
-  const c = Math.max(0.4, Math.min(chamfer, Math.min(cw, cd) * 0.42))
-  const shape = new THREE.Shape()
-  shape.moveTo(-cw + c, -cd)
-  shape.lineTo(cw - c, -cd)
-  shape.lineTo(cw, -cd + c)
-  shape.lineTo(cw, cd - c)
-  shape.lineTo(cw - c, cd)
-  shape.lineTo(-cw + c, cd)
-  shape.lineTo(-cw, cd - c)
-  shape.lineTo(-cw, -cd + c)
-  shape.closePath()
-  const geo = new THREE.ExtrudeGeometry(shape, { depth: h, bevelEnabled: false, steps: 1 })
+  // 轮廓（切角 + 转角圆角）和远景壳子共用同一份，切面位置必须一致
+  const shape = massOutline(w, d, chamfer)
+  const bevel = Math.min(0.32, h * 0.22)
+  const geo = new THREE.ExtrudeGeometry(shape, {
+    depth: Math.max(0.01, h - bevel * 2),
+    steps: 1,
+    curveSegments: 3,
+    bevelEnabled: true,
+    bevelThickness: bevel,
+    bevelSize: bevel,
+    bevelOffset: -bevel,
+    bevelSegments: 2,
+  })
+  geo.translate(0, 0, bevel)
   geo.rotateX(-Math.PI / 2)
-  geo.computeVertexNormals()
-  return geo
+  return toCreasedNormals(geo, Math.PI / 5)
 }
 
 /** 共用的屋顶颗粒贴图：几十栋楼共用一张，不额外占显存。 */
@@ -74,7 +102,12 @@ function RoofDeck({
   const mat = useMemo(
     () =>
       new THREE.MeshStandardMaterial({
-        color: night ? '#7d8a92' : '#9a9a91',
+        // 俯视时屋顶占画面一大半：浅灰屋顶会比墙还亮，整城像一盘白色积木。
+        // 压成深石板蓝，亮的只留窗和灯。
+        // 风格化夜景反过来：屋顶被月光照成浅蓝紫，是画面里最亮的大面，
+        // 深砖墙 + 亮窗夹在中间，明暗才拉得开。
+        // 饱和度要很低：再叠上偏冷的天光，#6b6a8c 这种就会亮成一片宝蓝紫
+        color: night ? (STYLIZED ? '#5f5e68' : '#46484f') : '#9a9a91',
         map: roofTexture(),
         roughness: 0.97,
         metalness: 0.02,
@@ -82,7 +115,8 @@ function RoofDeck({
         // 打亮的。那部分光属于环境光，走 envMapIntensity（IBL），
         // 以前用 emissive 假装是环境光，结果屋顶的亮度和别处不是一个来源，
         // 怎么调都读起来"不对劲"。
-        envMapIntensity: night ? 1.7 : 1,
+        // 和远景壳子（FarCity 的材质 1.05）对齐，否则远近切换时屋顶亮度跳一档
+        envMapIntensity: 1.05,
       }),
     [night],
   )
@@ -117,7 +151,7 @@ function Parapet({
       new THREE.MeshStandardMaterial({
         // 夜里不要用 trim 的 #2d2d2e：女儿墙全黑就看不出屋顶边界，
         // 相邻的楼从高处看会连成一整片。稍亮一档的混凝土色负责勾轮廓。
-        color: palette.key === 'night' ? '#49525a' : palette.trim,
+        color: palette.key === 'night' ? (STYLIZED ? '#6c6b74' : '#55565e') : palette.trim,
         roughness: 0.72,
         metalness: 0.3,
       }),
@@ -140,11 +174,58 @@ function Parapet({
   )
 }
 
+/** 多层楼（≤ PITCHED_MAX_H）改用坡屋顶：俯视时一片深蓝坡顶是街区"有人住"的第一印象。
+ *  这几样和远景壳子共用（mass.ts），两边轮廓必须一致。 */
+
+function PitchedRoof({
+  width,
+  depth,
+  palette,
+  variant = 0,
+  eave = [0.55, 0.55],
+}: {
+  width: number
+  depth: number
+  palette: Palette
+  variant?: number
+  /** 两个方向的挑檐，联排小楼的共墙方向是 0，见 mass.ts 的 roofOverhang */
+  eave?: [number, number]
+}) {
+  const [ex, ez] = eave
+  const geo = useMemo(() => hipRoofGeometry(width, depth, ex, ez), [width, depth, ex, ez])
+  useEffect(() => () => geo.dispose(), [geo])
+  const night = palette.key === 'night'
+  const k = variant % ROOF_COLORS_NIGHT.length
+  return (
+    <mesh geometry={geo} position={[0, 0.05, 0]} castShadow receiveShadow>
+      {/* 深石板蓝：和暖色墙面、暖窗形成冷暖对比，是地图类夜景的主色之一 */}
+      {/* 饱和度要低：#3c4878 这种纯蓝在夜里会亮成一块宝蓝，像塑料玩具 */}
+      {/* 风格化：屋顶跟墙走暖灰褐，蓝屋顶在冷色天光下会被照成一块宝蓝 */}
+      <meshStandardMaterial
+        color={night ? (STYLIZED ? ROOF_COLORS_NIGHT[k] : '#3b4256') : STYLIZED ? ROOF_COLORS_DAY[k] : '#67708a'}
+        roughness={0.82}
+        envMapIntensity={0.6}
+      />
+    </mesh>
+  )
+}
+
 function Roof({ def, width, depth, top, palette }: { def: BuildingDef; width: number; depth: number; top: number; palette: Palette }) {
+  if (isPitched(def)) {
+    return (
+      <group position={[0, top, 0]}>
+        <PitchedRoof width={width} depth={depth} palette={palette} eave={roofOverhang(def)} />
+      </group>
+    )
+  }
+  return <FlatRoof def={def} width={width} depth={depth} top={top} palette={palette} />
+}
+
+function FlatRoof({ def, width, depth, top, palette }: { def: BuildingDef; width: number; depth: number; top: number; palette: Palette }) {
   // 夜里屋顶不是黑的：天光和周围更高的楼把光打下来，防水层、碎石、设备都看得见。
   // 原来压到 #16222f（线性 ~0.008），俯视时整片屋顶就是一块纯黑。
   const night = palette.key === 'night'
-  const metal = night ? '#7d8f9c' : '#9b9b92'
+  const metal = night ? '#5c5f68' : '#9b9b92'
   // 屋顶上的构件统一走这一组光照参数。
   // 不用 emissive 假装环境光：屋顶接不到直射光，但会被天空辉光和周边楼的
   // 反射照到，那属于环境光，靠 envMapIntensity 拿。
@@ -288,8 +369,8 @@ function Balconies({ def, width, depth, palette }: { def: BuildingDef; width: nu
 /** 檐口：两三层向外叠出的石材线脚。真实建筑最有辨识度的轮廓细节，
     也是"方盒子"和"建筑"之间最省成本的一道分界。 */
 function Cornice({ width, depth, y, palette }: { width: number; depth: number; y: number; palette: Palette }) {
-  const stone = palette.key === 'night' ? '#3a4d60' : '#cdd3d2'
-  const shadow = palette.key === 'night' ? '#22303f' : '#9aa4a6'
+  const stone = palette.key === 'night' ? (STYLIZED ? '#55504b' : '#3a4d60') : '#cdd3d2'
+  const shadow = palette.key === 'night' ? (STYLIZED ? '#3b3733' : '#22303f') : '#9aa4a6'
   return (
     <group position={[0, y, 0]}>
       <mesh position={[0, -0.06, 0]} castShadow>
@@ -334,6 +415,8 @@ function Skin({
   seed: number
 }) {
   const geo = useMemo(() => {
+    // 风格化：壁柱 / 竖挺在 75m 内才显示，走近时整栋楼就像罩上了一圈栏杆
+    if (STYLIZED) return null
     const parts: THREE.BufferGeometry[] = []
     const box = (w: number, h: number, d: number, x: number, y: number, z: number) => {
       const g = new THREE.BoxGeometry(w, h, d, 1, 1, 1)
@@ -397,7 +480,8 @@ function Skin({
   if (!geo) return null
 
   return (
-    <mesh geometry={geo} castShadow receiveShadow userData={{ noMerge: true }}>
+    // 竖挺只有 11~34cm：远处不到一个像素，SMAA 修不了，只会在"有/无"之间闪，交给远景降级隐藏
+    <mesh geometry={geo} castShadow receiveShadow userData={{ noMerge: true, buildingDetailLod: true }}>
       <meshStandardMaterial
         color={palette.trim}
         roughness={style === 'glass' ? 0.42 : 0.72}
@@ -644,6 +728,17 @@ function PlainBuilding({ def }: Props) {
     return Math.min(Math.min(bodyW, bodyD) * (base + rnd() * 0.05), 3.4)
   }, [def.id, def.style, bodyW, bodyD])
 
+  // 窗格要退到转角圆角的切线以内，否则最边上那一列会被圆弧切掉半扇
+  const edgeInset = useMemo(() => facadeInset(bodyW, bodyD, chamfer), [bodyW, bodyD, chamfer])
+  const bodyBase = def.setback ? 4.4 : 3.6
+  // 临街面一定有窗；侧墙按种子留山墙，街区看着才不像四面都开满窗的模型
+  const blank: 'x' | 'z' | 'none' =
+    seeded(def.id + '-gable')() > 0.4
+      ? def.entranceSide === 'east' || def.entranceSide === 'west'
+        ? 'z'
+        : 'x'
+      : 'none'
+
 
   // 程序化立面：窗户、窗台、楼层线与夜间灯光都在着色器里算完，
   // 一栋楼只剩这一个材质 / 一次 draw call。
@@ -659,19 +754,13 @@ function PlainBuilding({ def }: Props) {
         night: palette.key === 'night',
         width: def.setback ? def.w * 0.86 : def.w,
         depth: def.setback ? def.d * 0.86 : def.d,
-        height: Math.max(4, def.h - (def.setback ? 5.6 : 0)),
-        base: def.setback ? 4.4 : 3.6,
-        inset: chamfer + 0.5,
-        // 临街面一定有窗；背面按种子留山墙，街区看着才不像四面都开满窗的模型
-        blank:
-          seeded(def.id + '-gable')() > 0.55
-            ? def.entranceSide === 'east' || def.entranceSide === 'west'
-              ? 'z'
-              : 'x'
-            : 'none',
+        height: bodyH,
+        base: bodyBase,
+        inset: edgeInset,
+        blank,
         seed: seeded(def.id + '-facade')(),
       }),
-    [baseColor, def.style, def.id, def.w, def.d, def.h, def.setback, palette],
+    [baseColor, def.style, def.id, bodyW, bodyD, bodyH, bodyBase, blank, palette, edgeInset],
   )
   useEffect(() => () => bodyMaterial.dispose(), [bodyMaterial])
 
@@ -686,13 +775,22 @@ function PlainBuilding({ def }: Props) {
   // 店面整组离墙 16cm：原来贴墙 10cm 时，店面玻璃/门框背面正好和墙面共面，
   // 走动时那条接缝会闪成一条亮线。
   const offset = 0.16
-  const accent = def.accent || palette.ar
+  // 每栋楼的识别色：只给"入口"用一处，不再满楼描边。
+  // 以前这个色会同时出现在裙房灯带、雨棚底、屋顶光环、竖向光缝上，
+  // 一栋楼自己就有五六道发光边，远景看就是一张荧光网格。
+  const accent = def.accent || palette.glowWarm
 
   const mass = useMemo(
     () => massGeometry(bodyW, bodyD, bodyH, chamfer),
     [bodyW, bodyH, chamfer],
   )
   useEffect(() => () => mass.dispose(), [mass])
+
+  const podiumMass = useMemo(
+    () => massGeometry(def.w, def.d, Math.max(0.5, podium), 0.6),
+    [def.w, def.d, podium],
+  )
+  useEffect(() => () => podiumMass.dispose(), [podiumMass])
 
   // 轮廓线也要跟着切角体量走，否则会在削掉的墙角外侧悬空。
   const outline = useMemo(() => {
@@ -706,21 +804,13 @@ function PlainBuilding({ def }: Props) {
   )
   useEffect(() => () => cap.dispose(), [cap])
 
-  const roofLine = useMemo(() => {
-    const geo = new THREE.BoxGeometry(bodyW + 0.4, 0.5, bodyD + 0.4)
-    const edges = new THREE.EdgesGeometry(geo)
-    geo.dispose()
-    return edges
-  }, [bodyW, bodyD])
-
   useEffect(() => () => outline?.dispose(), [outline])
 
   return (
     <group position={[def.x, 0, def.z]}>
       {def.setback && (
         <>
-          <mesh position={[0, podium / 2, 0]} castShadow receiveShadow>
-            <boxGeometry args={[baseW, podium, baseD]} />
+          <mesh geometry={podiumMass} castShadow receiveShadow>
             <meshStandardMaterial
               // 裙房顶是俯视时看得见的大面：夜里原来是 #20303f，
               // 一整块深蓝黑，和旁边有屋面的楼对比特别脏
@@ -737,11 +827,6 @@ function PlainBuilding({ def }: Props) {
             <RoofDeck width={baseW} depth={baseD} night={night} y={0.06} inset={0.5} />
             <Parapet width={baseW} depth={baseD} palette={palette} height={0.55} thickness={0.28} />
           </group>
-          {/* 裙房顶的 AR 灯带 */}
-          <mesh position={[0, podium - 0.06, baseD / 2 + 0.055]}>
-            <boxGeometry args={[baseW * 0.96, 0.06, 0.06]} />
-            <meshBasicMaterial color={accent} toneMapped={false} transparent opacity={palette.key === 'night' ? 0.85 : 0.35} />
-          </mesh>
         </>
       )}
 
@@ -754,6 +839,18 @@ function PlainBuilding({ def }: Props) {
         // 自定义 shader 不能被合批（合批会换成普通材质）
         userData={{ noMerge: true }}
       />
+      <group position={[0, podium, 0]}>
+        <FacadeWindows
+          style={def.style}
+          width={bodyW}
+          depth={bodyD}
+          height={bodyH}
+          base={bodyBase}
+          inset={edgeInset}
+          blank={blank}
+          wall={baseColor}
+        />
+      </group>
 
       <group userData={{ buildingDetailLod: true, landmark: Boolean(def.landmark) }}>
         {def.balconies && <Balconies def={def} width={bodyW} depth={bodyD} palette={palette} />}
@@ -795,7 +892,11 @@ function PlainBuilding({ def }: Props) {
             换成有灯槽 / 货架 / 柜台的内景贴图，门口才像一间开着的店。 */}
         <mesh position={[0, 2.0, 0.115]}>
           <planeGeometry args={[faceWidth - 1.4, 2.85]} />
-          <meshBasicMaterial map={shopWindow} toneMapped={false} color={palette.key === 'night' ? '#ffffff' : '#8d979d'} />
+          <meshBasicMaterial
+            map={STYLIZED ? null : shopWindow}
+            toneMapped={false}
+            color={palette.key === 'night' ? (STYLIZED ? '#ffcf8f' : '#ffffff') : '#8d979d'}
+          />
         </mesh>
         {/* 门框与门 */}
         <mesh position={[0, 1.5, 0.14]}>
@@ -842,20 +943,14 @@ function PlainBuilding({ def }: Props) {
         </mesh>
         <mesh position={[0, 3.66, 1.2]} rotation={[-Math.PI / 2, 0, 0]}>
           <planeGeometry args={[Math.min(faceWidth * 0.78, 7.6), 2.4]} />
-          <meshBasicMaterial color={accent} transparent opacity={0.4} toneMapped={false} />
+          {/* 雨棚底面只该有一条暖光，不该是一整块发光板。
+              原来 0.4 的青色叠加面在夜里读成"荧光蓝雨棚"。 */}
+          <meshBasicMaterial color={palette.glowWarm} transparent opacity={0.18} toneMapped={false} />
         </mesh>
         <mesh position={[0, 3.6, 0.24]}>
           <boxGeometry args={[Math.min(faceWidth * 0.82, 8), 0.09, 0.07]} />
           <meshBasicMaterial color={palette.glowWarm} toneMapped={false} />
         </mesh>
-        {palette.key === 'night' && (
-          <>
-            <mesh position={[0, 4.1, 0.2]}>
-              <boxGeometry args={[faceWidth * 0.86, 0.05, 0.05]} />
-              <meshBasicMaterial color={accent} toneMapped={false} transparent opacity={0.8} />
-            </mesh>
-          </>
-        )}
         {signTexture && (
           <mesh position={[0, 4.85, 0.22]}>
             <planeGeometry args={[Math.min(faceWidth * 0.72, 7.4), 1.8]} />
@@ -871,154 +966,39 @@ function PlainBuilding({ def }: Props) {
           </>
         )}
         </group>
+      </group>
 
-        <Plinth width={bodyW} depth={bodyD} palette={palette} />
-        <Cornice width={bodyW} depth={bodyD} y={def.h - 0.9} palette={palette} />
+      {/* 屋顶、檐口、压顶是剪影的一部分，不能进远景降级：
+          俯视时整座城都在 75m 外，进了降级组就等于屋顶永远是光板。
+          手写楼只有二十几栋，常亮的开销可以忽略。 */}
+      <Plinth width={bodyW} depth={bodyD} palette={palette} />
+      <Cornice width={bodyW} depth={bodyD} y={def.h - 0.9} palette={palette} />
 
-        <Roof def={def} width={bodyW} depth={bodyD} top={def.h} palette={palette} />
+      <Roof def={def} width={bodyW} depth={bodyD} top={def.h} palette={palette} />
 
-        {/* 顶部压边：跟着切角走，才不会在削角处露出一个方角 */}
-        <mesh position={[0, podium + bodyH - 0.08, 0]} geometry={cap}>
-          <meshStandardMaterial color={palette.trim} roughness={0.5} metalness={0.45} />
-        </mesh>
+      {/* 顶部压边：跟着切角走，才不会在削角处露出一个方角 */}
+      <mesh position={[0, podium + bodyH - 0.08, 0]} geometry={cap}>
+        <meshStandardMaterial color={palette.trim} roughness={0.5} metalness={0.45} />
+      </mesh>
 
+      <group userData={{ buildingDetailLod: true, landmark: Boolean(def.landmark) }}>
         {/* 轮廓线只留给地标：普通楼体在移动时这条细亮线会闪成"漏光" */}
         {outline && def.landmark && (
           <lineSegments position={[0, podium, 0]} geometry={outline}>
-            <lineBasicMaterial
-              color={accent}
-              transparent
-              opacity={0.4}
-              toneMapped={false}
-            />
+            <lineBasicMaterial color={palette.glowWarm} transparent opacity={0.28} toneMapped={false} />
           </lineSegments>
         )}
 
-        {palette.key === 'night' && (
-          <group position={[0, def.h + 1.2, 0]}>
-            <mesh position={[bodyW * 0.36, 0, bodyD * 0.36]}>
-              <sphereGeometry args={[0.28, 10, 10]} />
-              <meshBasicMaterial color={accent} toneMapped={false} />
-            </mesh>
-            <mesh position={[bodyW * 0.36, 0, bodyD * 0.36]} rotation={[-Math.PI / 2, 0, 0]}>
-              <ringGeometry args={[0.5, 0.62, 20]} />
-              <meshBasicMaterial color={accent} transparent opacity={0.4} toneMapped={false} side={THREE.DoubleSide} />
-            </mesh>
-          </group>
-        )}
-
-        {/* 屋顶一圈 AR 光环，俯瞰时勾勒出城市轮廓 */}
-        {palette.key === 'night' && (
-          <lineSegments position={[0, def.h + 0.35, 0]} geometry={roofLine}>
-            <lineBasicMaterial color={accent} transparent opacity={def.landmark ? 0.75 : 0.45} toneMapped={false} />
-          </lineSegments>
-        )}
-
-        {/* 楼体竖向光缝（少量） */}
-        {def.landmark && (
-          <>
-            {[-1, 1].map((s) => (
-              <mesh key={s} position={[s * (bodyW / 2 + 0.06), podium + bodyH / 2, bodyD / 2 * 0.3]}>
-                <boxGeometry args={[0.05, bodyH * 0.72, 0.05]} />
-                <meshBasicMaterial color={accent} transparent opacity={0.5} toneMapped={false} />
-              </mesh>
-            ))}
-          </>
+        {/* 屋顶标志物：以前每栋楼顶都有一颗青色信标 + 一圈光环 + 一圈轮廓线，
+            俯瞰时整城是一张发光的网格。参考那种城市模型里，屋顶是"实体"，
+            发光只属于街道层。这里只留地标楼的一盏暖白航空障碍灯。 */}
+        {palette.key === 'night' && def.landmark && (
+          <mesh position={[bodyW * 0.36, def.h + 1.2, bodyD * 0.36]}>
+            <sphereGeometry args={[0.2, 8, 8]} />
+            <meshBasicMaterial color="#ff8a6a" toneMapped={false} />
+          </mesh>
         )}
       </group>
-    </group>
-  )
-}
-
-/**
- * 屋顶检修设备：空调外机、水箱、楼梯间。
- *
- * 从高处看，没有任何构件的屋顶只是一块平板；相邻两栋楼同样高时，
- * 两块平板直接连成一整片，看起来就是"楼合并了"。放几组设备之后，
- * 每栋楼的屋顶边界、进深关系立刻分开。
- */
-function RoofGear({
-  seedKey,
-  width,
-  depth,
-  palette,
-}: {
-  seedKey: string
-  width: number
-  depth: number
-  palette: Palette
-}) {
-  const units = useMemo(() => {
-    const rnd = seeded(seedKey)
-    const night = palette.key === 'night'
-    const count = width * depth > 260 ? 3 : width * depth > 140 ? 2 : 1
-    const list: Array<{ x: number; z: number; w: number; h: number; d: number; kind: number }> = []
-    for (let i = 0; i < count; i++) {
-      // 贴着屋面内侧随机摆，留出 1.5m 检修通道，不要压到女儿墙
-      const maxX = Math.max(0.6, width / 2 - 2.4)
-      const maxZ = Math.max(0.6, depth / 2 - 2.4)
-      list.push({
-        x: (rnd() * 2 - 1) * maxX,
-        z: (rnd() * 2 - 1) * maxZ,
-        w: 1.6 + rnd() * 2.4,
-        h: 0.9 + rnd() * 1.1,
-        d: 1.4 + rnd() * 2.0,
-        kind: rnd() > 0.78 ? 1 : 0,
-      })
-    }
-    return { list, night }
-  }, [seedKey, width, depth, palette.key])
-
-  const body = useMemo(
-    () =>
-      new THREE.MeshStandardMaterial({
-        color: units.night ? '#8b98a2' : '#a9b0b2',
-        roughness: 0.68,
-        metalness: 0.28,
-        // 屋顶设备被天空辉光和邻楼反射照亮，那属于环境光，走 envMapIntensity。
-        // 以前用自发光补，等于自己给自己打光，和周围屋面不是一个来源。
-        envMapIntensity: units.night ? 1.6 : 1,
-      }),
-    [units.night],
-  )
-  const dark = useMemo(
-    () =>
-      new THREE.MeshStandardMaterial({
-        color: units.night ? '#5c6771' : palette.trim,
-        roughness: 0.6,
-        metalness: 0.4,
-        envMapIntensity: units.night ? 1.6 : 1,
-      }),
-    [palette.trim, units.night],
-  )
-  useEffect(
-    () => () => {
-      body.dispose()
-      dark.dispose()
-    },
-    [body, dark],
-  )
-
-  return (
-    <group position={[0, 0.22, 0]}>
-      {units.list.map((u, i) => (
-        <group key={i} position={[u.x, 0, u.z]}>
-          <mesh position={[0, u.h / 2, 0]} castShadow receiveShadow material={body}>
-            <boxGeometry args={[u.w, u.h, u.d]} />
-          </mesh>
-          {u.kind === 1 ? (
-            // 水箱：圆筒 + 顶盖，剪影比第二个方盒子好认
-            <mesh position={[0, u.h + 0.9, 0]} castShadow material={body}>
-              <cylinderGeometry args={[Math.min(u.w, u.d) * 0.42, Math.min(u.w, u.d) * 0.42, 1.8, 12]} />
-            </mesh>
-          ) : (
-            // 外机格栅：顶上压一块深色板，俯视时有一道明显的暗边
-            <mesh position={[0, u.h + 0.06, 0]} castShadow material={dark}>
-              <boxGeometry args={[u.w * 0.94, 0.12, u.d * 0.94]} />
-            </mesh>
-          )}
-        </group>
-      ))}
     </group>
   )
 }
@@ -1032,30 +1012,65 @@ export function InfillBuilding({ def }: Props) {
   const wall = useMemo(() => bodyColor(def.body, palette), [def.body, palette])
   const lightsOn = palette.key === 'night'
 
+  // 砖楼和居民楼是直角：切角面上排不了窗，转角会露出一条没窗的异色墙
   const chamfer = useMemo(
-    () => Math.min(Math.min(def.w, def.d) * 0.07, 2.6),
-    [def.w, def.d],
+    () =>
+      def.form === 'walkup' || def.form === 'estate' || def.form === 'rowhouse' || def.form === 'warehouse'
+        ? 0.4
+        : Math.min(Math.min(def.w, def.d) * 0.07, 2.6),
+    [def.w, def.d, def.form],
   )
 
   // 退台：高楼的 78% 处收一次，上段更窄。真实高层几乎都有这个层次。
-  const stepped = def.setback && def.h > 44
+  const stepped = !def.form && def.setback && def.h > 44
   const tiers = useMemo(() => {
+    if (def.form === 'deco') {
+      // 装饰艺术塔楼：四级退台，越往上越瘦，顶上再立一根尖塔
+      const steps: Array<[number, number]> = [
+        [0.5, 1],
+        [0.7, 0.78],
+        [0.85, 0.58],
+        [1, 0.4],
+      ]
+      let y0 = 0
+      return steps.map(([cut, k]) => {
+        const t = { y0, y1: Math.round(def.h * cut), w: def.w * k, d: def.d * k }
+        y0 = t.y1
+        return t
+      })
+    }
     if (!stepped) return [{ y0: 0, y1: def.h, w: def.w, d: def.d }]
     const cut = def.h * 0.76
     return [
       { y0: 0, y1: cut, w: def.w, d: def.d },
       { y0: cut, y1: def.h, w: def.w * 0.8, d: def.d * 0.8 },
     ]
-  }, [stepped, def.h, def.w, def.d])
+  }, [stepped, def.form, def.h, def.w, def.d])
 
   // 每段的体量、压顶、材质
   const parts = useMemo(
     () =>
       tiers.map((t) => {
         const c = Math.min(chamfer, Math.min(t.w, t.d) * 0.4)
+        // 窗格退到转角圆角的切线以内：只让出切角量不够，圆角还会再吃掉
+        // 最多 0.64c，最边上一列窗就会被圆弧裁掉
+        const inset = facadeInset(t.w, t.d, c)
+        const base = (def.form === 'rowhouse' ? 0 : def.style === 'glass' ? 4.2 : 3.4) - t.y0
+        // 侧墙（垂直于临街面）：多层楼贴着邻楼建，侧墙基本是不开窗的山墙；
+        // 只有少数街角楼两面临街。高楼独立成栋，一半四面开窗
+        const lowRise = def.form === 'walkup' || def.form === 'estate' || def.form === 'rowhouse' || def.form === 'warehouse'
+        const blank: 'x' | 'z' | 'none' =
+          seeded(def.id + '-gable')() > (lowRise ? 0.15 : 0.45)
+            ? def.facing === 'east' || def.facing === 'west'
+              ? 'z'
+              : 'x'
+            : 'none'
         return {
           tier: t,
           chamfer: c,
+          inset,
+          base,
+          blank,
           mass: massGeometry(t.w, t.d, t.y1 - t.y0, c),
           cap: massGeometry(t.w + 0.24, t.d + 0.24, 0.18, c + 0.1),
           material: createFacadeMaterial({
@@ -1071,15 +1086,10 @@ export function InfillBuilding({ def }: Props) {
             height: t.y1 - t.y0,
             // 首层留给店面；上段用负的 base 接着下段的楼层继续排，
             // 不会在退台处出现半层错位
-            base: (def.style === 'glass' ? 4.2 : 3.4) - t.y0,
-            inset: c + 0.5,
-            // 背街一面留作山墙
-            blank:
-              seeded(def.id + '-gable')() > 0.45
-                ? def.facing === 'east' || def.facing === 'west'
-                  ? 'z'
-                  : 'x'
-                : 'none',
+            // 联排小楼没有店面，首层也住人，窗从地面那层就开始排
+            base,
+            inset,
+            blank,
             seed: seeded(def.id + '-facade')(),
           }),
         }
@@ -1106,15 +1116,24 @@ export function InfillBuilding({ def }: Props) {
     x: facing === 'east' ? frontDepth : facing === 'west' ? -frontDepth : 0,
     z: facing === 'south' ? frontDepth : facing === 'north' ? -frontDepth : 0,
   }
-  const shopW = Math.min(span * 0.8, 11)
-  const hasShop = useMemo(() => seeded(def.id + '-shop')() > 0.2, [def.id])
-  const shopWindow = useMemo(
-    () => makeShopWindowTexture(lightsOn, Math.floor(seeded(def.id + '-shopwin')() * 4)),
-    [def.id, lightsOn],
+  // 店面尽量占满整个临街面：商业街的连续性来自"一间挨着一间"，
+  // 只在中间开 11m 的口子，两侧各留 4m 实墙，走过去就断成一节一节。
+  // 两端要让开切角 + 转角圆角，否则店面会飘出墙面之外。
+  // 用和立面窗格同一个 inset，店面和最外一列窗才不会互相错位。
+  const edgeInset = parts.length > 0 ? parts[0].inset : facadeInset(def.w, def.d, chamfer)
+  const shopW = Math.max(3, Math.min(span - edgeInset * 2, 26))
+  // 以前 20% 的楼没有首层店面，街上就会突然出现一段没有灯的实墙。
+  // 现在只留极少数例外，保证整条街的店面是连着的。
+  // 居民小区不临街开店
+  const hasShop = useMemo(
+    () =>
+      def.form !== 'estate' && def.form !== 'rowhouse' && def.form !== 'warehouse' && seeded(def.id + '-shop')() > 0.05,
+    [def.id, def.form],
   )
+  const roofVariant = useMemo(() => Math.floor(seeded(def.id + '-roof')() * 16), [def.id])
 
   return (
-    <group position={[def.x, 0, def.z]}>
+    <group position={[def.x, 0, def.z]} userData={farEligible(def) ? { hlod: def.id } : undefined}>
       {parts.map((p, i) => {
         const tierH = p.tier.y1 - p.tier.y0
         const isTop = i === parts.length - 1
@@ -1127,21 +1146,50 @@ export function InfillBuilding({ def }: Props) {
               receiveShadow
               userData={{ noMerge: true }}
             />
-            <Cornice width={p.tier.w} depth={p.tier.d} y={tierH - 0.85} palette={palette} />
+            <FacadeWindows
+              style={def.style}
+              width={p.tier.w}
+              depth={p.tier.d}
+              height={tierH}
+              base={p.base}
+              inset={p.inset}
+              blank={p.blank}
+              wall={wall}
+            />
+            {def.form === 'walkup' || def.form === 'estate' ? (
+              <WalkupCornice width={p.tier.w} depth={p.tier.d} y={tierH} />
+            ) : (
+              <Cornice width={p.tier.w} depth={p.tier.d} y={tierH - 0.85} palette={palette} />
+            )}
+            {def.form === 'deco' && <CrownBand width={p.tier.w} depth={p.tier.d} y={tierH - 1.4} night={lightsOn} />}
             <mesh position={[0, tierH - 0.09, 0]} geometry={p.cap}>
               <meshStandardMaterial color={palette.trim} roughness={0.6} metalness={0.3} />
             </mesh>
             {/* 屋面：压顶板只是一圈檐口，屋顶本身要有卷材颗粒，
                 否则俯视时每栋楼都是一块黑色平板，相邻的楼还会糊成一整片。 */}
+            {isTop && isPitched(def) ? (
+              <group position={[0, tierH, 0]}>
+                <PitchedRoof
+                  width={p.tier.w}
+                  depth={p.tier.d}
+                  palette={palette}
+                  variant={def.form === 'rowhouse' ? roofVariant : 0}
+                  eave={roofOverhang(def)}
+                />
+              </group>
+            ) : (
+            <>
             <RoofDeck width={p.tier.w} depth={p.tier.d} night={lightsOn} y={tierH + 0.22} />
             <group position={[0, tierH, 0]}>
               <Parapet width={p.tier.w} depth={p.tier.d} palette={palette} height={0.9} thickness={0.26} />
-              {isTop && (
-                <group userData={{ buildingDetailLod: true, landmark: Boolean(def.landmark) }}>
-                  <RoofGear seedKey={`${def.id}-gear`} width={p.tier.w} depth={p.tier.d} palette={palette} />
-                </group>
+              {isTop && def.form === 'warehouse' && (
+                <SawtoothRoof width={p.tier.w} depth={p.tier.d} night={lightsOn} seed={def.id} />
               )}
+              {isTop && def.form === 'deco' && <DecoSpire width={p.tier.w} height={def.h} night={lightsOn} />}
+              {/* 水塔、空调机组统一在 RoofProps 里实例化绘制，不再按楼挂载 */}
             </group>
+            </>
+            )}
             <group userData={{ buildingDetailLod: true, landmark: Boolean(def.landmark) }}>
               <Skin
                 width={p.tier.w}
@@ -1165,40 +1213,56 @@ export function InfillBuilding({ def }: Props) {
           rotation={[0, rotation, 0]}
           userData={{ buildingDetailLod: true, landmark: Boolean(def.landmark) }}
         >
-          {/* 店面推离墙面 0.2m：勒脚比墙面外凸 0.15m，贴太近会被它挡住 */}
-          <mesh position={[0, 1.75, 0.2]}>
-            <boxGeometry args={[shopW, 3.3, 0.14]} />
-            <meshStandardMaterial
-              color={lightsOn ? '#0d1723' : '#3f4d57'}
-              roughness={0.1}
-              metalness={0.78}
-              emissive={palette.glowWarm}
-              emissiveIntensity={lightsOn ? 0.16 : 0.04}
+          {/* 首层商铺带：分间橱窗 + 雨棚 + 发光店招 + 竖招。
+              以前这里只有一块暗玻璃和大雨棚，整条街没有一处亮着的招牌。 */}
+          <ShopFrontage width={shopW} palette={palette} night={lightsOn} seed={def.id} />
+        </group>
+      )}
+
+      {def.form === 'walkup' && (
+        <group
+          position={[front.x, 0, front.z]}
+          rotation={[0, rotation, 0]}
+          userData={{ buildingDetailLod: true, landmark: Boolean(def.landmark) }}
+        >
+          <FireEscape
+            span={span}
+            height={def.h}
+            seed={def.id}
+            style={def.style}
+            inset={parts[0].inset}
+            base={def.style === 'glass' ? 4.2 : 3.4}
+            night={lightsOn}
+          />
+        </group>
+      )}
+      {(def.form === 'rowhouse' || def.form === 'warehouse') && (
+        <group
+          position={[front.x, 0, front.z]}
+          rotation={[0, rotation, 0]}
+          userData={{ buildingDetailLod: true, landmark: Boolean(def.landmark) }}
+        >
+          {def.form === 'rowhouse' ? (
+            <RowhouseFront span={span} style={def.style} inset={parts[0].inset} seed={def.id} night={lightsOn} />
+          ) : (
+            <LoadingDoors span={span} seed={def.id} night={lightsOn} />
+          )}
+        </group>
+      )}
+      {/* 广告墙不进远景降级：它是远看时城市颜色的主要来源 */}
+      {def.form === 'billboard' && (
+        <group position={[front.x, 0, front.z]} rotation={[0, rotation, 0]}>
+          <LedWall span={span - edgeInset * 2} height={def.h} seed={def.id} night={lightsOn} />
+          {/* 转角那一面也挂一列，招牌要从两条街上都看得见 */}
+          <group position={[span / 2, 0, -frontDepth]} rotation={[0, Math.PI / 2, 0]}>
+            <LedWall
+              span={frontDepth * 2 - edgeInset * 2}
+              height={def.h}
+              seed={def.id + '-side'}
+              night={lightsOn}
+              density={0.7}
             />
-          </mesh>
-          {/* 橱窗内景：一张贴图就是"店里"，比一块加色矩形干净得多 */}
-          <mesh position={[0, 1.7, 0.36]}>
-            <planeGeometry args={[shopW * 0.86, 2.6]} />
-            <meshBasicMaterial
-              map={shopWindow}
-              toneMapped={false}
-              color={lightsOn ? '#ffffff' : '#8d979d'}
-            />
-          </mesh>
-          {/* 雨棚 + 灯带 */}
-          <mesh position={[0, 3.62, 0.95]} castShadow>
-            <boxGeometry args={[shopW + 0.4, 0.16, 1.9]} />
-            <meshStandardMaterial color={palette.trim} roughness={0.55} metalness={0.35} />
-          </mesh>
-          <mesh position={[0, 3.5, 1.88]}>
-            <boxGeometry args={[shopW + 0.2, 0.05, 0.06]} />
-            <meshBasicMaterial
-              color={def.style === 'glass' ? palette.glass : palette.ar}
-              transparent
-              opacity={lightsOn ? 0.8 : 0.28}
-              toneMapped={false}
-            />
-          </mesh>
+          </group>
         </group>
       )}
     </group>

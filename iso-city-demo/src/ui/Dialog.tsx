@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useApp } from '../store'
 import { walker } from '../game/walker'
+import { askPrompt } from './Ask'
 
 function sinceText(iso: string | null) {
   if (!iso) return ''
@@ -69,9 +70,14 @@ export function Dialog() {
         event.preventDefault()
         const petId = dialog.pet.id
         const current = dialog.name
-        const next = window.prompt('给它取个新名字', current)
-        const name = next?.trim()
-        if (name && name !== current) void choose(-1, async () => void (await renamePet(petId, name)))
+        void askPrompt('给它取个新名字', current, {
+          title: '给宠物改名',
+          confirmLabel: '改名',
+          placeholder: '最多 24 个字',
+        }).then((next) => {
+          const name = next?.trim()
+          if (name && name !== current) void choose(-1, async () => void (await renamePet(petId, name)))
+        })
         return
       }
       if (!list?.length) return

@@ -54,7 +54,7 @@ function Launcher() {
   )
 }
 
-export function Fireworks() {
+export function Fireworks({ showLauncher = true }: { showLauncher?: boolean }) {
   const sparks = useRef<Spark[]>([])
   const shells = useRef<Shell[]>([])
   const flash = useRef<THREE.PointLight>(null)
@@ -171,7 +171,7 @@ export function Fireworks() {
 
   return (
     <group>
-      <Launcher />
+      {showLauncher && <Launcher />}
       <points geometry={geometry} material={material} frustumCulled={false} renderOrder={30} />
       <pointLight ref={flash} distance={90} decay={1.6} intensity={0} />
     </group>

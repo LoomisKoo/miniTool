@@ -173,6 +173,8 @@ export type Favorite = {
 export type InteriorRef =
   | { kind: 'public'; id: 'gallery' | 'cafe' }
   | { kind: 'space'; id: string }
+  /** 1 楼沿街店铺：id 是 data/shops.ts 里的店铺 id。 */
+  | { kind: 'shop'; id: string }
   | { kind: 'building'; id: string; floor?: number; core?: number; from?: string }
 
 export type NearbyInfo = {

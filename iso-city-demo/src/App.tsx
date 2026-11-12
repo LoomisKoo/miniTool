@@ -9,6 +9,7 @@ import { PanelBoundary } from './ui/PanelBoundary'
 import { Dialog } from './ui/Dialog'
 import { Intro } from './ui/Intro'
 import { Toast } from './ui/Toast'
+import { Asker } from './ui/Ask'
 import { music } from './audio/music'
 
 export default function App() {
@@ -63,7 +64,7 @@ export default function App() {
       <div className={inCity ? 'scene-layer scene-asleep' : 'scene-layer'}>
         <InteriorScene active={!inCity} />
       </div>
-      <div className="vignette" />
+      <div className={inCity ? 'vignette vignette-soft' : 'vignette'} />
       <div className="grain" />
 
       {screen === 'intro' && <Intro />}
@@ -75,6 +76,7 @@ export default function App() {
         <Dialog />
       </PanelBoundary>
       <Toast />
+      <Asker />
 
       {!booted && screen !== 'intro' && (
         <div className="boot-mask">

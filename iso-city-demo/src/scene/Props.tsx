@@ -154,8 +154,8 @@ function Lamp({
         <boxGeometry args={[0.56, 0.16, 0.32]} />
         {/* 白天灯是关着的：以前白天也自发光 + 泛光，远看一排排"小太阳" */}
         <meshStandardMaterial
-          color={palette.key === 'night' ? '#f6f8ff' : '#cfd3cf'}
-          emissive="#eef2ff"
+          color={palette.key === 'night' ? '#ffe2b8' : '#cfd3cf'}
+          emissive="#ffc27a"
           emissiveIntensity={palette.key === 'night' ? 2.2 : 0}
           roughness={0.4}
         />
@@ -164,7 +164,7 @@ function Lamp({
       {lit && palette.key === 'night' && (
         <mesh position={[0.98, 4.755, 0]} rotation={[Math.PI / 2, 0, 0]}>
           <planeGeometry args={[0.5, 0.26]} />
-          <meshBasicMaterial color="#f4f7ff" toneMapped={false} />
+          <meshBasicMaterial color="#ffd49a" toneMapped={false} />
         </mesh>
       )}
     </group>
@@ -280,7 +280,7 @@ function Fountain({ palette }: { palette: Palette }) {
       })}
       {palette.key === 'night' && (
         <>
-          <GlowDisc position={[0, 0.66, 0]} size={r * 6} color="#63d8f5" opacity={0.16} />
+          <GlowDisc position={[0, 0.66, 0]} size={r * 6} color="#8fd0d8" opacity={0.16} />
           {/* 水下那盏点光在 CityScene 的 StablePointLights 里，理由同上 */}
           <mesh position={[0, 0.62, 0]} rotation={[-Math.PI / 2, 0, 0]}>
             <ringGeometry args={[r + 0.05, r + 0.25, 48]} />
@@ -288,52 +288,6 @@ function Fountain({ palette }: { palette: Palette }) {
           </mesh>
         </>
       )}
-    </group>
-  )
-}
-
-function StringLights({ palette }: { palette: Palette }) {
-  const strands = useMemo(
-    () =>
-      [-16, -2, 12].map((z) => {
-        const points = [
-          new THREE.Vector3(15.2, 4.4, z),
-          new THREE.Vector3(19, 3.6, z + 1.2),
-          new THREE.Vector3(23, 3.5, z),
-          new THREE.Vector3(26.8, 4.3, z + 0.8),
-        ]
-        return new THREE.CatmullRomCurve3(points)
-      }),
-    [],
-  )
-  const bulbColors = useMemo(
-    () => [palette.glowWarm, palette.glowCyan, palette.glowWarm, '#ffd9a6'],
-    [palette],
-  )
-  return (
-    <group>
-      {strands.map((curve, si) => (
-        <group key={si}>
-          <mesh>
-            <tubeGeometry args={[curve, 24, 0.014, 4, false]} />
-            <meshBasicMaterial color={palette.key === 'night' ? '#1d2a36' : '#494b45'} />
-          </mesh>
-          {Array.from({ length: 7 }).map((_, i) => {
-            const point = curve.getPoint((i + 1) / 8)
-            return (
-              <mesh key={i} position={[point.x, point.y - 0.08, point.z]}>
-                <sphereGeometry args={[0.075, 8, 8]} />
-                <meshStandardMaterial
-                  color={bulbColors[i % bulbColors.length]}
-                  emissive={bulbColors[i % bulbColors.length]}
-                  emissiveIntensity={3.2}
-                  toneMapped={false}
-                />
-              </mesh>
-            )
-          })}
-        </group>
-      ))}
     </group>
   )
 }
@@ -502,9 +456,6 @@ export function CityProps() {
       </Stagger>
       <Stagger name="props:water">
         <Fountain palette={palette} />
-      </Stagger>
-      <Stagger name="props:wire">
-        <StringLights palette={palette} />
       </Stagger>
       <Stagger name="props:furniture">
         <StreetFurniture />

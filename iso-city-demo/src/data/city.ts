@@ -27,6 +27,14 @@ export type BuildingDef = {
   background?: boolean
   accent?: string
   taper?: number
+  /**
+   * 背景楼的造型（只对 background 楼生效）：
+   * walkup 砖砌老公寓（深色檐口 + 屋顶水塔 + 消防梯），
+   * deco 多级退台的装饰艺术塔楼（顶上一根尖塔），
+   * billboard 临街面铺满 LED 广告屏的商业楼，
+   * estate 居民小区楼（同一小区高度、颜色、朝向统一，坡屋顶、无底商）。
+   */
+  form?: 'walkup' | 'deco' | 'billboard' | 'estate' | 'rowhouse' | 'warehouse'
   /** 规划器挪过位置（只做记录，渲染与逻辑不依赖它）。 */
   lotShifted?: boolean
 }
@@ -35,12 +43,16 @@ export type BuildingDef = {
 // 外围增加第二圈街区（西岸大道 / 南横街 / 东岸大道），让城市有真正的纵深可走。
 export const CITY_BOUNDS = 148
 
+/** 联排小楼的外墙色：奶油、鼠尾草绿、灰蓝、陶土、芥末黄、砖红、薄荷、雾粉 */
+export const ROW_BODIES = ['#d9c7a3', '#93a68a', '#7d8ea3', '#b97a5a', '#c9a24e', '#9c5544', '#8fb3a5', '#c9978f']
+
 // 可行走范围比 CITY_BOUNDS 大一圈：外围还有一圈街区，原来 ±148 的边界
 // 正好切在这些楼的外墙内侧，走到城边就撞上一堵看不见的墙。
 // 路面也一并拉到 ROUND_END，车行道才能真正通到外圈的楼。
-export const WALK_BOUNDS = 196
+// 城市外扩：沿街楼和居民小区排到 ±385（见 infill.ts 的 INFILL_EDGE）
+export const WALK_BOUNDS = 392
 /** 五条车行道的半长。 */
-const ROAD_HALF = 200
+const ROAD_HALF = 400
 
 export const buildings: BuildingDef[] = [
   {
@@ -63,7 +75,7 @@ export const buildings: BuildingDef[] = [
     target: { kind: 'public', id: 'gallery' },
     entranceLabel: '光盒美术馆',
     entranceUse: '公共展厅 · 可进入',
-    accent: '#8fd8e8',
+    accent: '#ffd4a2',
   },
   {
     id: 'riverside',
@@ -107,7 +119,7 @@ export const buildings: BuildingDef[] = [
     target: { kind: 'space', id: 'sound-room' },
     entranceLabel: '声场唱片',
     entranceUse: 'B1 · 静音工作室',
-    accent: '#8fe0d6',
+    accent: '#ffe0b8',
   },
   {
     id: 'cafe',
@@ -154,9 +166,9 @@ export const buildings: BuildingDef[] = [
     x: -116,
     z: -132,
     background: true,
-    w: 26,
-    d: 26,
-    h: 92,
+    w: 34,
+    d: 34,
+    h: 58,
     style: 'glass',
     body: '#7fa3b6',
     trim: '#4f7186',
@@ -166,10 +178,11 @@ export const buildings: BuildingDef[] = [
     landmark: true,
     sign: 'LUMEN',
     signColor: '#0d2733',
-    accent: '#8fe8ff',
+    accent: '#ffcf9c',
   },
   {
     id: 'office-east',
+    form: 'deco',
     name: '东岸办公楼',
     x: 96,
     z: -110,
@@ -217,6 +230,7 @@ export const buildings: BuildingDef[] = [
   },
   {
     id: 'east-north',
+    form: 'walkup',
     name: '东仓',
     x: 118,
     z: -76,
@@ -263,6 +277,7 @@ export const buildings: BuildingDef[] = [
   },
   {
     id: 'west-market',
+    form: 'walkup',
     name: '西岸市场',
     x: -128,
     z: 18,
@@ -350,6 +365,7 @@ export const buildings: BuildingDef[] = [
   },
   {
     id: 'east-mall',
+    form: 'billboard',
     name: '东岸商场',
     x: 126,
     z: 20,
@@ -367,13 +383,14 @@ export const buildings: BuildingDef[] = [
   },
   {
     id: 'south-tower',
+    form: 'deco',
     name: '回声塔',
     x: -20,
     z: -140,
     background: true,
-    w: 30,
-    d: 30,
-    h: 104,
+    w: 38,
+    d: 38,
+    h: 64,
     style: 'glass',
     body: '#7b9cb2',
     trim: '#4c6f86',
@@ -383,7 +400,7 @@ export const buildings: BuildingDef[] = [
     landmark: true,
     sign: 'ECHO',
     signColor: '#0b2431',
-    accent: '#a8f0ff',
+    accent: '#ffdcae',
   },
   {
     id: 'old-station',
@@ -434,6 +451,7 @@ export const buildings: BuildingDef[] = [
   },
   {
     id: 'north-block',
+    form: 'walkup',
     name: '北街公寓',
     x: 132,
     z: -104,
@@ -864,16 +882,16 @@ export type Lane = {
 }
 
 export const lanes: Lane[] = [
-  { axis: 'z', offset: -8.4, dir: 1, from: -196, to: 196, speed: 11 },
-  { axis: 'z', offset: -3.2, dir: 1, from: -196, to: 196, speed: 14 },
-  { axis: 'z', offset: 3.2, dir: -1, from: -196, to: 196, speed: 13 },
-  { axis: 'z', offset: 8.4, dir: -1, from: -196, to: 196, speed: 10 },
-  { axis: 'x', offset: 40.4, dir: -1, from: -196, to: 196, speed: 12 },
-  { axis: 'x', offset: 49.6, dir: 1, from: -196, to: 196, speed: 12 },
-  { axis: 'x', offset: -99.6, dir: 1, from: -196, to: 196, speed: 10 },
-  { axis: 'x', offset: -90.4, dir: -1, from: -196, to: 196, speed: 10 },
-  { axis: 'z', offset: -88.5, dir: 1, from: -190, to: 190, speed: 9 },
-  { axis: 'z', offset: 88.5, dir: -1, from: -190, to: 190, speed: 9 },
+  { axis: 'z', offset: -8.4, dir: 1, from: -396, to: 396, speed: 11 },
+  { axis: 'z', offset: -3.2, dir: 1, from: -396, to: 396, speed: 14 },
+  { axis: 'z', offset: 3.2, dir: -1, from: -396, to: 396, speed: 13 },
+  { axis: 'z', offset: 8.4, dir: -1, from: -396, to: 396, speed: 10 },
+  { axis: 'x', offset: 40.4, dir: -1, from: -396, to: 396, speed: 12 },
+  { axis: 'x', offset: 49.6, dir: 1, from: -396, to: 396, speed: 12 },
+  { axis: 'x', offset: -99.6, dir: 1, from: -396, to: 396, speed: 10 },
+  { axis: 'x', offset: -90.4, dir: -1, from: -396, to: 396, speed: 10 },
+  { axis: 'z', offset: -88.5, dir: 1, from: -392, to: 392, speed: 9 },
+  { axis: 'z', offset: 88.5, dir: -1, from: -392, to: 392, speed: 9 },
 ]
 
 /** 行人：主街 / 横街人行道与广场环形步道。 */
@@ -892,6 +910,15 @@ export const walkerRoutes: WalkerRoute[] = [
   { kind: 'circle', cx: -27, cz: 6, r: 11.2, speed: 0.26, dir: -1 },
   { kind: 'line', axis: 'z', offset: -82.2, from: -100, to: 130, speed: 1.3, dir: 1 },
   { kind: 'line', axis: 'x', offset: 62, from: -100, to: 100, speed: 1.2, dir: -1 },
+  // 南岸广场：商场里外廊上逛店的人（沿长轴来回走，避开中庭栏杆）
+  { kind: 'line', axis: 'z', offset: 38, from: 132, to: 172, speed: 0.85, dir: 1 },
+  { kind: 'line', axis: 'z', offset: 38, from: 138, to: 170, speed: 0.7, dir: -1 },
+  { kind: 'line', axis: 'z', offset: 62, from: 132, to: 172, speed: 0.8, dir: -1 },
+  { kind: 'line', axis: 'z', offset: 62, from: 136, to: 168, speed: 0.75, dir: 1 },
+  { kind: 'line', axis: 'z', offset: 50, from: 136, to: 168, speed: 0.65, dir: 1 },
+  // 广场西侧那条进场道
+  { kind: 'line', axis: 'z', offset: 19.6, from: 124, to: 180, speed: 0.9, dir: 1 },
+  { kind: 'line', axis: 'z', offset: 17.4, from: 128, to: 176, speed: 0.8, dir: -1 },
 ]
 
 export const galleryInterior = {

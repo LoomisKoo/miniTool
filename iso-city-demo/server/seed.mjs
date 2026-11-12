@@ -129,12 +129,12 @@ export const spaces = [
       '一扇朝北的窗，能看见微光塔的塔尖。适合一个人住，也适合把朋友叫来。现在还是城市的样板陈设。',
     building: '河岸公寓 · 07F',
     template: 'home',
-    wallColor: '#e9e0d2',
-    floorColor: '#c3ae95',
+    wallColor: '#3d4652',
+    floorColor: '#d7a26c',
     art: { title: '北窗的光', palette: 'dawn' },
     layout: {
       items: [
-        item('rl-rug', 'rug', 0, 0.4, 0, '#b7a58e'),
+        item('rl-rug', 'rug', 0, 0.4, 0, '#6f5bd6'),
         item('rl-sofa', 'sofa', 0, -1.7, 0, '#6f7f74'),
         item('rl-table', 'table', 0, 0.7, 0, '#8a6a4b'),
         item('rl-shelf', 'shelf', -3.7, -2.7, 0, '#9a7d5d'),
@@ -153,12 +153,12 @@ export const spaces = [
       '美术馆二层的白盒子空间，天光均匀。适合挂一组画，或把正在做的东西摊开给人看。',
     building: '光盒美术馆 · 2F',
     template: 'gallery',
-    wallColor: '#f1ede5',
-    floorColor: '#d7d0c4',
+    wallColor: '#37424b',
+    floorColor: '#d9c8b0',
     art: { title: '低处的云', palette: 'coast' },
     layout: {
       items: [
-        item('lg-rug', 'rug', 0, 0.2, 0, '#cfc7bb'),
+        item('lg-rug', 'rug', 0, 0.2, 0, '#3d7fb8'),
         item('lg-ped1', 'pedestal', -2.6, -1.4, 0, '#ded8cc'),
         item('lg-ped2', 'pedestal', 2.4, -1.8, 0, '#ded8cc'),
         item('lg-bench', 'bench', 0, 2.4, 0, '#7c6a55'),
@@ -175,8 +175,8 @@ export const spaces = [
       '唱片店后面的小房间，墙上贴满吸音毡。低音不会漏到街上，适合听一张完整的专辑。',
     building: '声场唱片 · B1',
     template: 'music',
-    wallColor: '#d9d5cc',
-    floorColor: '#8f8a80',
+    wallColor: '#333c46',
+    floorColor: '#8a7a68',
     art: { title: '低频信号', palette: 'signal' },
     layout: {
       items: [

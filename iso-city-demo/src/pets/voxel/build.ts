@@ -57,6 +57,8 @@ export type BreedDef = {
   weight?: number
   palette?: Partial<Palette>
   traits?: Traits
+  /** 品种整体缩放：小香猪这类天生小一号的品种用 0.7 左右，缺省 1 */
+  size?: number
 }
 
 export type VoxelBody = {

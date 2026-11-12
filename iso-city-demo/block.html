@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="theme-color" content="#8eb6d4" />
+<title>街角 · 五种楼</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #8eb6d4; }
+  canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+  body { --ink: #16202b; --muted: #3c5164; --panel: rgba(244,248,252,.78); --line: rgba(22,32,43,.14); }
+  body.night { --ink: #e8eef6; --muted: #a8b8c8; --panel: rgba(10,16,26,.62); --line: rgba(232,238,246,.16); background: #070b16; }
+  .ui {
+    position: fixed; inset: 0; pointer-events: none;
+    font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
+    color: var(--ink); -webkit-user-select: none; user-select: none;
+  }
+  #title { position: absolute; left: 24px; top: 20px; line-height: 1.45; }
+  #title b { display: block; font-size: 15px; letter-spacing: .22em; font-weight: 600; }
+  #title span { font-size: 11px; letter-spacing: .06em; color: var(--muted); }
+  #cycle {
+    position: absolute; right: 24px; top: 22px; pointer-events: auto; cursor: pointer;
+    border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+    padding: 8px 14px; border-radius: 2px; font: inherit; font-size: 12px; letter-spacing: .16em;
+  }
+  #cycle:hover { filter: brightness(1.05); }
+  #help {
+    position: absolute; left: 24px; bottom: 20px;
+    font-size: 11px; line-height: 1.8; color: var(--muted);
+  }
+  #help em { font-style: normal; color: var(--ink); }
+  #act {
+    position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%);
+    font-size: 12px; letter-spacing: .14em; color: var(--ink);
+    padding: 6px 14px; background: var(--panel); border-radius: 2px;
+  }
+  #act:empty { display: none; }
+  #list {
+    position: absolute; right: 24px; bottom: 20px; text-align: right;
+    font-size: 11px; line-height: 1.75; color: var(--muted);
+  }
+  #list b { font-weight: 600; color: var(--ink); letter-spacing: .06em; }
+</style>
+</head>
+<body>
+<canvas></canvas>
+<div class="ui">
+  <div id="title">
+    <b>街角样本</b>
+    <span id="mode">白天 · 街上可走</span>
+  </div>
+  <button id="cycle" type="button">切换黑夜</button>
+  <div id="act"></div>
+  <div id="help">
+    <em>WASD</em> 走 · <em>Shift</em> 跑 · <em>空格</em> 跳，按住滑翔 · <em>F</em> 飞行<br />
+    <em>点击</em> 转向 · <em>滚轮</em> 远近 · <em>V</em> 总览 · <em>N</em> 昼夜 · <em>ESC</em> 返回
+  </div>
+  <div id="list">
+    <div><b>星光商店</b> · 便利店街角</div>
+    <div><b>岭南骑楼</b> · 4 层</div>
+    <div><b>翠园板楼</b> · 12 层</div>
+    <div><b>竖肋写字楼</b> · 16 层</div>
+    <div><b>缺口塔楼</b> · 26 层</div>
+    <div><b>蓝玻璃塔 / 双塔</b> · 17 / 22 层</div>
+    <div><b>红砖旧宅 / 光华大厦</b> · 5 / 12 层</div>
+    <div><b>拉面 · 书店 · 洗衣 · 居酒屋</b></div>
+  </div>
+</div>
+<script type="module" src="/block/main.js"></script>
+</body>
+</html>

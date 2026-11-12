@@ -8,11 +8,17 @@ import { petThumb } from '../catalog/thumb3d'
 import { voxelMaterial } from '../pets/voxel/build'
 import { partMatrices, petModel, petScale } from '../pets/voxel/runtime'
 import { HUNGRY_AT, hungerLabel, hungerOf } from '../pets/hunger'
+import { homeDevices, featureSummary, featureInfo, buildingZone, ZONE_LABEL } from '../data/features'
+import { roofAllowsFireworks } from '../game/roof'
+import { unitPlanOfSpace } from '../data/units'
 import type { FurnitureType, PetDetail, Post, SpaceDetail } from '../types'
 import { api } from '../api'
 import { cityShareUrl, copyText, mediaGradient, playSoundPlaceholder, relativeTime } from '../util'
 import { FURNITURE_META } from '../indoor/Furniture'
-import { floorLabel, floorList, floorsOf, unitBuilding, unitsOf } from '../data/units'
+import { floorLabel, floorList, floorsOf, ROOF_FLOOR, unitBuilding, unitsOf } from '../data/units'
+import { ZONE_BLURB as STALL_ZONE_BLURB, ZONE_LABEL as STALL_ZONE_LABEL, stallById, stalls } from '../data/stalls'
+import { askConfirm } from './Ask'
+import { Select } from './Select'
 
 export const TEMPLATE_LABELS: Record<string, string> = {
   home: '个人小屋',
@@ -24,8 +30,8 @@ export const TEMPLATE_LABELS: Record<string, string> = {
 }
 
 const TEMPLATE_OPTIONS = Object.keys(TEMPLATE_LABELS)
-const WALL_COLORS = ['#f1ece3', '#e8ddcd', '#dfe4dd', '#d9d3c6', '#c9d0cb', '#c7b7a3', '#b9c2c6', '#d7c1ae']
-const FLOOR_COLORS = ['#c9b79f', '#b99a78', '#b7b2a6', '#8f8b82', '#a9a08d', '#cbbd9e', '#7e7a70', '#d6c9b4']
+const WALL_COLORS = ['#3b4551', '#414d5a', '#37424c', '#2f3a44', '#3a4a4a', '#44405a', '#44505d', '#4a5260']
+const FLOOR_COLORS = ['#dca569', '#d79c5e', '#e0ad74', '#c9a074', '#d19a5c', '#b08356', '#d9c8a8', '#8a7a5e']
 const FURNITURE_COLORS = ['#8c9a92', '#6f7f74', '#b48c65', '#9a7d5d', '#c9a15c', '#587a58', '#7f6a86', '#3f4543', '#d8cfbf', '#b06b4f']
 const ART_OPTIONS = [
   { id: 'dawn', label: '晨雾' },
@@ -368,7 +374,12 @@ function PostItem({
         <button
           disabled={reportedIds.includes(post.id)}
           onClick={() => {
-            if (window.confirm('确认举报这条内容？累计 3 次举报会自动隐藏。')) void reportPost(post.id)
+            void askConfirm('确认举报这条内容？累计 3 次举报会自动隐藏。', {
+              title: '举报这条内容',
+              confirmLabel: '举报',
+            }).then((ok) => {
+              if (ok) void reportPost(post.id)
+            })
           }}
         >
           {reportedIds.includes(post.id) ? '已举报' : '⚑ 举报'}
@@ -377,7 +388,13 @@ function PostItem({
           <button
             className="danger"
             onClick={() => {
-              if (window.confirm('删除这条留言？此操作不可撤销。')) void deletePost(post.id)
+              void askConfirm('删除这条留言？此操作不可撤销。', {
+                title: '删除留言',
+                confirmLabel: '删除',
+                danger: true,
+              }).then((ok) => {
+                if (ok) void deletePost(post.id)
+              })
             }}
           >
             删除
@@ -562,6 +579,8 @@ function SpacePanel({ id }: { id: string }) {
 
   const isOwner = Boolean(user && space.ownerId === user.id)
   const unclaimed = !space.ownerId
+  // 特色设施按楼型/楼层派生：面板上让访客一眼看到这户比别人多什么
+  const devices = homeDevices(unitPlanOfSpace(space.id))
 
   return (
     <Modal
@@ -578,6 +597,11 @@ function SpacePanel({ id }: { id: string }) {
           <span className="pill soft">{space.postCount} 条留言</span>
           <span className="pill soft">{space.visitCount} 次访问</span>
           <span className="pill soft">{space.layout.items.length} 件陈设</span>
+          {devices.list.length > 0 && (
+            <span className="pill soft" title={devices.list.map((id) => featureInfo(id).blurb).join('；')}>
+              {featureSummary(devices)}
+            </span>
+          )}
         </div>
         <div className="detail-strip-actions">
           <button
@@ -622,7 +646,12 @@ function SpacePanel({ id }: { id: string }) {
                 className="primary-btn small"
                 disabled={Boolean(claimedElsewhere)}
                 onClick={() => {
-                  if (window.confirm('确认认领这间空间？每位访客同时只能拥有一间。')) void claimSpace(space.id)
+                  void askConfirm('确认认领这间空间？每位访客同时只能拥有一间。', {
+                    title: '认领空间',
+                    confirmLabel: '认领',
+                  }).then((ok) => {
+                    if (ok) void claimSpace(space.id)
+                  })
                 }}
               >
                 {claimedElsewhere ? `你已认领「${otherSpaceName || '另一间'}」` : '认领这间空间'}
@@ -638,7 +667,13 @@ function SpacePanel({ id }: { id: string }) {
               <button
                 className="mini-btn danger"
                 onClick={() => {
-                  if (window.confirm('确认放弃这间空间？布置会保留，但其他人可以接手。')) void releaseSpace(space.id)
+                  void askConfirm('确认放弃这间空间？布置会保留，但其他人可以接手。', {
+                    title: '放弃空间',
+                    confirmLabel: '放弃',
+                    danger: true,
+                  }).then((ok) => {
+                    if (ok) void releaseSpace(space.id)
+                  })
                 }}
               >
                 放弃空间
@@ -783,16 +818,15 @@ function EditorPanel() {
                   onChange={(event) => patch({ description: event.target.value })}
                 />
               </label>
-              <label className="field">
+              <div className="field">
                 <span>用途模板</span>
-                <select value={editor.template} onChange={(event) => patch({ template: event.target.value })}>
-                  {TEMPLATE_OPTIONS.map((key) => (
-                    <option key={key} value={key}>
-                      {TEMPLATE_LABELS[key]}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                <Select
+                  value={editor.template}
+                  ariaLabel="用途模板"
+                  options={TEMPLATE_OPTIONS.map((key) => ({ value: key, label: TEMPLATE_LABELS[key] }))}
+                  onChange={(next) => patch({ template: next })}
+                />
+              </div>
 
               <div className="field">
                 <span>墙面颜色</span>
@@ -1142,6 +1176,9 @@ function ElevatorPanel({ id }: { id: string }) {
 
   if (!building) return null
   const floors = floorList(building) as number[]
+  // 住宅三栋有开放天台；酒店是设备层，声场/中巷是创意工作室，不上人。
+  const roofOpen = building.type !== 'corridor' || building.id === 'south-east'
+  const allowsFireworks = roofAllowsFireworks(building.id)
 
   return (
     <Modal
@@ -1171,7 +1208,22 @@ function ElevatorPanel({ id }: { id: string }) {
             <span>{floor === 1 ? '大堂' : floor < 0 ? '地下' : '住宅'}</span>
           </button>
         ))}
+        {/* 天台：住宅楼才有。酒店和工作室的屋顶是设备层，不开放。 */}
+        {roofOpen && (
+          <button
+            className={`elevator-floor roof ${current === ROOF_FLOOR ? 'on' : ''}`}
+            onClick={() => setFloor(ROOF_FLOOR)}
+          >
+            <b>RF</b>
+            <span>天台</span>
+          </button>
+        )}
       </div>
+      {roofOpen && (
+        <p className="elevator-note">
+          天台是整栋楼住户共用的{allowsFireworks ? '，夜里可以放烟花（每天 3 轮）' : '，老街区安静区，不放烟花'}。
+        </p>
+      )}
       <div className="elevator-foot">
         <span className="empty-note">每层 {unitsOf(building)} 户 · 共 {floorsOf(building)} 层</span>
         <button className="mini-btn" onClick={exitCity}>
@@ -1243,19 +1295,33 @@ function CatalogPanel() {
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
 
   const seenSet = useMemo(() => new Set(seen), [seen])
-  const total = useMemo(() => SPECIES.reduce((sum, species) => sum + species.breeds.length, 0), [])
+  // 一张卡 = 一个 catalogId：只有毛色不同的色型合并在同一张卡里，不重复计数
+  const total = useMemo(() => SPECIES.reduce((sum, species) => sum + catalogBreedsOf(species).length, 0), [])
   const found = useMemo(
-    () => SPECIES.reduce((sum, species) => sum + species.breeds.filter((b) => seen.includes(`${species.id}/${b.id}`)).length, 0),
-    [seen],
+    () =>
+      SPECIES.reduce(
+        (sum, species) =>
+          sum +
+          catalogBreedsOf(species).filter((card) =>
+            species.breeds.some((b) => b.catalogId === card.catalogId && seenSet.has(`${species.id}/${b.id}`)),
+          ).length,
+        0,
+      ),
+    [seenSet],
   )
+  const [previewId, setPreviewId] = useState<string | null>(null)
   const selected = useMemo(() => {
     if (!selectedKey) return null
     for (const species of SPECIES) {
-      const breed = catalogBreedsOf(species).find((item) => catalogKeyOf(species.id, item.id) === selectedKey)
-      if (breed) return { species, breed }
+      const card = catalogBreedsOf(species).find((item) => catalogKeyOf(species.id, item.id) === selectedKey)
+      if (!card) continue
+      const variants = species.breeds.filter((b) => b.catalogId === card.catalogId)
+      const seenVariant = variants.find((b) => seenSet.has(`${species.id}/${b.id}`))
+      return { species, breed: card, variants, seenVariant }
     }
     return null
-  }, [selectedKey])
+  }, [selectedKey, seenSet])
+  const shown = selected ? (selected.variants.find((b) => b.id === previewId) ?? selected.seenVariant ?? selected.breed) : null
 
   const rarityColor = selected ? RARITY_COLOR[selected.breed.rarity] : ''
 
@@ -1267,7 +1333,7 @@ function CatalogPanel() {
       onClose={closePanel}
       wide
     >
-      {selected && (
+      {selected && shown && (
         <section
           className="about-card"
           style={{ marginBottom: 20, borderColor: `${rarityColor}55` }}
@@ -1285,19 +1351,19 @@ function CatalogPanel() {
                 placeItems: 'center',
               }}
             >
-              {thumbs[selectedKey!] ? (
+              {thumbs[`${selected.species.id}/${shown.id}`] ? (
                 <img
-                  src={thumbs[selectedKey!]}
-                  alt={selected.breed.name}
+                  src={thumbs[`${selected.species.id}/${shown.id}`]}
+                  alt={shown.name}
                   style={{ width: '100%', height: '100%', objectFit: 'contain' }}
                 />
               ) : (
-                <span style={{ width: '54%', height: '54%', borderRadius: '50%', background: selected.breed.swatch }} />
+                <span style={{ width: '54%', height: '54%', borderRadius: '50%', background: shown.swatch }} />
               )}
             </div>
             <div style={{ minWidth: 0 }}>
               <span className="card-label">{selected.species.name} · {selected.breed.name}</span>
-              <h3 style={{ margin: '4px 0 6px' }}>{selected.breed.name}</h3>
+              <h3 style={{ margin: '4px 0 6px' }}>{shown.name}</h3>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', fontSize: 11 }}>
                 <span style={{ color: rarityColor }}>
                   {RARITY_LABEL[selected.breed.rarity]} {starsOf(selected.breed)}
@@ -1307,14 +1373,38 @@ function CatalogPanel() {
               </div>
             </div>
           </div>
+          {selected.variants.length > 1 && (
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
+              {selected.variants.map((variant) => {
+                const met = seenSet.has(`${selected.species.id}/${variant.id}`)
+                const on = variant.id === shown.id
+                return (
+                  <button
+                    key={variant.id}
+                    className="mini-btn"
+                    style={{ opacity: on ? 1 : 0.7, padding: '4px 9px', fontSize: 11 }}
+                    onClick={() => setPreviewId(variant.id)}
+                  >
+                    {met ? variant.name : '？？？'}
+                  </button>
+                )
+              })}
+            </div>
+          )}
           <p className="hint-line" style={{ margin: '12px 0 0' }}>{selected.species.description}</p>
           <p className="hint-line" style={{ margin: '6px 0 0' }}>
-            {seenSet.has(selectedKey!) ? '你已经在城市里见过它。' : '还没有在城市里遇见它。'}
+            {shown.description}
+          </p>
+          <p className="hint-line" style={{ margin: '6px 0 0' }}>
+            {selected.seenVariant ? '你已经在城市里见过它。' : '还没有在城市里遇见它。'}
           </p>
         </section>
       )}
       {SPECIES.map((species) => {
-        const speciesFound = species.breeds.filter((b) => seenSet.has(`${species.id}/${b.id}`)).length
+        const cards = catalogBreedsOf(species)
+        const speciesFound = cards.filter((card) =>
+          species.breeds.some((b) => b.catalogId === card.catalogId && seenSet.has(`${species.id}/${b.id}`)),
+        ).length
         return (
           <section key={species.id} style={{ marginBottom: 20 }}>
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8 }}>
@@ -1326,7 +1416,7 @@ function CatalogPanel() {
                 </span>
               </b>
               <span style={{ fontSize: 11, color: '#8ea0b5' }}>
-                {speciesFound} / {species.breeds.length}
+                {speciesFound} / {cards.length}
               </span>
             </div>
             <div
@@ -1336,21 +1426,28 @@ function CatalogPanel() {
                 gap: 8,
               }}
             >
-              {species.breeds.map((breed) => {
-                const key = `${species.id}/${breed.id}`
-                const known = seenSet.has(key)
-                const url = thumbs[key]
+              {cards.map((card) => {
+                const key = `${species.id}/${card.catalogId}`
+                const variants = species.breeds.filter((b) => b.catalogId === card.catalogId)
+                const seenVariant = variants.find((b) => seenSet.has(`${species.id}/${b.id}`))
+                const shown = seenVariant ?? card
+                const known = !!seenVariant
+                const url = thumbs[`${species.id}/${shown.id}`]
                 return (
                   <figure
-                    key={breed.id}
+                    key={card.catalogId}
                     style={{ margin: 0, cursor: 'pointer' }}
                     role="button"
                     tabIndex={0}
-                    aria-label={`查看${breed.name}详情`}
-                    onClick={() => setSelectedKey(key)}
+                    aria-label={`查看${card.name}详情`}
+                    onClick={() => {
+                      setPreviewId(null)
+                      setSelectedKey(key)
+                    }}
                     onKeyDown={(event) => {
                       if (event.key === 'Enter' || event.key === ' ') {
                         event.preventDefault()
+                        setPreviewId(null)
                         setSelectedKey(key)
                       }
                     }}
@@ -1369,7 +1466,7 @@ function CatalogPanel() {
                       {url ? (
                         <img
                           src={url}
-                          alt={known ? breed.name : ''}
+                          alt={known ? card.name : ''}
                           style={{
                             width: '100%',
                             height: '100%',
@@ -1384,7 +1481,7 @@ function CatalogPanel() {
                             width: '54%',
                             height: '54%',
                             borderRadius: '50%',
-                            background: known ? breed.swatch : 'rgba(255,255,255,0.12)',
+                            background: known ? shown.swatch : 'rgba(255,255,255,0.12)',
                           }}
                         />
                       )}
@@ -1398,7 +1495,7 @@ function CatalogPanel() {
                         color: known ? '#e8eef5' : '#5c6b7c',
                       }}
                     >
-                      {breed.name}
+                      {card.name}
                     </figcaption>
                   </figure>
                 )
@@ -1515,22 +1612,32 @@ function CatalogPanelV2() {
   const thumbs = useCatalogThumbs()
   const first = catalogKeyOf(SPECIES[0].id, catalogBreedsOf(SPECIES[0])[0].id)
   const [selectedKey, setSelectedKey] = useState(first)
+  const [variantId, setVariantId] = useState<string | null>(null)
   const seenSet = useMemo(() => new Set(seen), [seen])
   const selected = useMemo(() => {
     for (const species of SPECIES) {
-      const breed = catalogBreedsOf(species).find((item) => catalogKeyOf(species.id, item.id) === selectedKey)
-      if (breed) return { species, breed }
+      const card = catalogBreedsOf(species).find((item) => catalogKeyOf(species.id, item.id) === selectedKey)
+      if (!card) continue
+      const variants = species.breeds.filter((b) => b.catalogId === card.catalogId)
+      const seenVariant = variants.find((b) => seenSet.has(`${species.id}/${b.id}`))
+      return { species, card, variants, seenVariant }
     }
     return null
-  }, [selectedKey])
+  }, [selectedKey, seenSet])
   const total = SPECIES.reduce((sum, species) => sum + catalogBreedsOf(species).length, 0)
   const found = SPECIES.reduce(
-    (sum, species) => sum + catalogBreedsOf(species).filter((b) => seenSet.has(catalogKeyOf(species.id, b.id))).length,
+    (sum, species) =>
+      sum +
+      catalogBreedsOf(species).filter((card) =>
+        species.breeds.some((b) => b.catalogId === card.catalogId && seenSet.has(`${species.id}/${b.id}`)),
+      ).length,
     0,
   )
 
   if (!selected) return null
-  const rarityColor = RARITY_COLOR[selected.breed.rarity]
+  // 同一张卡下的色型（黑松鼠 / 灰松鼠……）共享架子，详情里点色型切换模型
+  const shown = selected.variants.find((b) => b.id === variantId) ?? selected.seenVariant ?? selected.card
+  const rarityColor = RARITY_COLOR[selected.card.rarity]
 
   return (
     <Modal
@@ -1569,26 +1676,32 @@ function CatalogPanelV2() {
               <div className="catalog-list-head">
                 <b>{species.name}</b>
               </div>
-              {catalogBreedsOf(species).map((breed) => {
-                const key = catalogKeyOf(species.id, breed.id)
-                const thumbKey = `${species.id}/${breed.id}`
-                const known = seenSet.has(key)
+              {catalogBreedsOf(species).map((card) => {
+                const key = catalogKeyOf(species.id, card.id)
+                const variants = species.breeds.filter((b) => b.catalogId === card.catalogId)
+                const seenVariant = variants.find((b) => seenSet.has(`${species.id}/${b.id}`))
+                const shownVariant = seenVariant ?? card
+                const thumbKey = `${species.id}/${shownVariant.id}`
+                const known = !!seenVariant
                 return (
                   <button
                     key={key}
                     className={`catalog-list-item ${key === selectedKey ? 'selected' : ''}`}
-                    onClick={() => setSelectedKey(key)}
+                    onClick={() => {
+                      setVariantId(null)
+                      setSelectedKey(key)
+                    }}
                   >
                     <span
                       className="catalog-list-thumb"
                       style={{ backgroundImage: thumbs[thumbKey] ? `url(${thumbs[thumbKey]})` : undefined }}
                     >
-                      {!thumbs[thumbKey] && <i style={{ background: known ? breed.swatch : 'rgba(255,255,255,0.12)' }} />}
+                      {!thumbs[thumbKey] && <i style={{ background: known ? shownVariant.swatch : 'rgba(255,255,255,0.12)' }} />}
                     </span>
                     <span>
-                      <b>{breed.name}</b>
+                      <b>{card.name}</b>
                       <em className="catalog-item-rarity">
-                        <span style={{ color: RARITY_COLOR[breed.rarity] }}>{starsOf(breed)}</span>
+                        <span style={{ color: RARITY_COLOR[card.rarity] }}>{starsOf(card)}</span>
                       </em>
                       <em>{known ? '已发现' : '未发现'}</em>
                     </span>
@@ -1601,28 +1714,47 @@ function CatalogPanelV2() {
 
         <section className="catalog-detail">
           <CatalogPetViewer
-            key={selectedKey}
+            key={`${selectedKey}/${shown.id}`}
             speciesId={selected.species.id}
-            breedId={selected.breed.id}
+            breedId={shown.id}
           />
           <div className="catalog-detail-copy">
             <div className="catalog-detail-title">
               <div>
-                <span className="card-label">{selected.species.name} · {selected.species.kind === 'wild' ? '野生' : '宠物'}</span>
+                <span className="card-label">
+                  {selected.species.name} · {selected.species.kind === 'wild' ? '野生' : '宠物'}
+                  {selected.variants.length > 1 ? ` · ${selected.variants.length} 种色型` : ''}
+                </span>
                 <h3>
-                  {selected.breed.name}{' '}
-                  <strong style={{ color: rarityColor }}>{starsOf(selected.breed)}</strong>
+                  {shown.name}{' '}
+                  <strong style={{ color: rarityColor }}>{starsOf(selected.card)}</strong>
                 </h3>
               </div>
             </div>
-            <p>{selected.breed.description}</p>
+            {selected.variants.length > 1 && (
+              <div className="catalog-variants">
+                {selected.variants.map((variant) => {
+                  const met = seenSet.has(`${selected.species.id}/${variant.id}`)
+                  return (
+                    <button
+                      key={variant.id}
+                      className={`catalog-variant ${variant.id === shown.id ? 'on' : ''}`}
+                      onClick={() => setVariantId(variant.id)}
+                    >
+                      {met ? variant.name : '？？？'}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+            <p>{shown.description}</p>
             <div className="catalog-facts">
-              <span><b>稀有度</b>{RARITY_LABEL[selected.breed.rarity]}</span>
-              <span><b>出现频率</b>{hourText(selected.breed.perHour)}</span>
+              <span><b>稀有度</b>{RARITY_LABEL[selected.card.rarity]}</span>
+              <span><b>出现频率</b>{hourText(selected.card.perHour)}</span>
               <span><b>出现时间</b>全天</span>
             </div>
             <p className="hint-line">
-              {seenSet.has(selectedKey) ? '你已经在城市里见过它。' : '还没有在城市里遇见它，去街上找找看吧。'}
+              {selected.seenVariant ? '你已经在城市里见过它。' : '还没有在城市里遇见它，去街上找找看吧。'}
             </p>
           </div>
         </section>
@@ -1728,14 +1860,87 @@ function PetPanel({ id }: { id: string }) {
   )
 }
 
-export function Panels() {
-  const panel = useApp((state) => state.panel)
+/**
+ * 街边小摊的面板。
+ *
+ * NPC 摊直接对话（不经过这个面板），所以这里主要给"玩家摊"用：
+ * 摊主不在摊上，路人看到的就是这块牌子——摊名、卖什么、留了一句话，
+ * 以及这个区里还摆了哪些摊。
+ */
+function StallPanel({ id }: { id: string }) {
+  const closePanel = useApp((state) => state.closePanel)
+  const openPanel = useApp((state) => state.openPanel)
+  const stall = stallById[id]
+  if (!stall) {
+    return (
+      <Modal label="街边小摊" title="这个摊位已经收了" onClose={closePanel}>
+        <p className="empty-note">可能链接已经失效，去街上看看还有哪些摊。</p>
+      </Modal>
+    )
+  }
+  const others = stalls.filter((s) => s.zone === stall.zone && s.id !== stall.id).slice(0, 5)
+
+  return (
+    <Modal
+      label={STALL_ZONE_LABEL[stall.zone]}
+      title={stall.title}
+      subtitle={`${stall.category} · ${STALL_ZONE_BLURB[stall.zone]}`}
+      onClose={closePanel}
+      icon="place"
+    >
+      <div className="detail-strip">
+        <div className="detail-meta">
+          <span className="pill">{stall.vendor.kind === 'npc' ? 'NPC 摊位' : '玩家摊位'}</span>
+          <span className="pill soft">{stall.vendor.name}</span>
+          {stall.vendor.kind === 'player' && <span className="pill soft">摆了 {stall.vendor.since}</span>}
+        </div>
+      </div>
+
+      <section className="panel-section">
+        <div className="section-head">
+          <h3>摊上有什么</h3>
+          <span>{stall.items.length}</span>
+        </div>
+        <ul className="stall-items">
+          {stall.items.map((item) => (
+            <li key={item.name}>
+              <span className="stall-item-name">{item.name}</span>
+              <span className="stall-item-price">{item.price}</span>
+              <span className="stall-item-note">{item.note}</span>
+            </li>
+          ))}
+        </ul>
+        <p className="stall-note">“{stall.note}”</p>
+      </section>
+
+      <section className="panel-section">
+        <div className="section-head">
+          <h3>{STALL_ZONE_LABEL[stall.zone]}的其他摊</h3>
+          <span>{others.length}</span>
+        </div>
+        <div className="stall-more">
+          {others.map((s) => (
+            <button key={s.id} className="mini-btn" onClick={() => openPanel({ type: 'stall', id: s.id })}>
+              {s.title}
+            </button>
+          ))}
+        </div>
+        <p className="stall-rule">
+          街边摊位每人每天一个，一次四小时、可以续一次；摊位区只在广场、雪松巷、中巷和河岸步道。
+        </p>
+      </section>
+    </Modal>
+  )
+}
+
+export function Panels() {  const panel = useApp((state) => state.panel)
   const closePanel = useApp((state) => state.closePanel)
   if (!panel) return null
   if (panel.type === 'place') return <PlacePanel id={panel.id} />
   if (panel.type === 'pet') return <PetPanel id={panel.id} />
   if (panel.type === 'space') return <SpacePanel id={panel.id} />
   if (panel.type === 'elevator') return <ElevatorPanel id={panel.id} />
+  if (panel.type === 'stall') return <StallPanel id={panel.id} />
   if (panel.type === 'favorites') return <FavoritesPanel />
   if (panel.type === 'catalog') return <CatalogPanelV2 />
   if (panel.type === 'about') return <AboutPanel />

@@ -1,0 +1,985 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="theme-color" content="#f4f1ea" />
+<title>蓝花楹街角 · JACARANDA CORNER</title>
+<style>
+  :root {
+    --bg: #f4f1ea;
+    --ink: #2c2a28;
+    --muted: #7a7368;
+    --line: rgba(44, 42, 40, 0.12);
+    --panel: rgba(255, 255, 255, 0.72);
+    --accent: #7a4fc4;
+    --warm: #d4a05a;
+  }
+  html, body {
+    margin: 0; height: 100%; overflow: hidden;
+    background: var(--bg);
+    font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
+    color: var(--ink);
+    -webkit-user-select: none; user-select: none;
+  }
+  canvas {
+    display: block; width: 100%; height: 100%;
+    cursor: grab; touch-action: none;
+  }
+  canvas:active { cursor: grabbing; }
+  .ui { position: fixed; inset: 0; pointer-events: none; z-index: 2; }
+  #title {
+    position: absolute; left: clamp(20px, 4vw, 40px); top: clamp(18px, 3vh, 32px);
+    line-height: 1.45;
+  }
+  #title b {
+    display: block; font-size: 15px; letter-spacing: 0.28em; font-weight: 600;
+  }
+  #title span {
+    display: block; margin-top: 6px;
+    font-size: 12px; letter-spacing: 0.08em; color: var(--muted);
+  }
+  #modes {
+    position: absolute; right: clamp(20px, 4vw, 40px); top: clamp(18px, 3vh, 32px);
+    display: flex; gap: 8px; pointer-events: auto;
+  }
+  #modes button {
+    appearance: none; border: 1px solid var(--line);
+    background: var(--panel); backdrop-filter: blur(10px);
+    color: var(--ink); padding: 8px 14px; border-radius: 999px;
+    font: inherit; font-size: 12px; letter-spacing: 0.14em; cursor: pointer;
+    transition: background 0.2s, border-color 0.2s, color 0.2s;
+  }
+  #modes button:hover { border-color: rgba(122, 79, 196, 0.45); }
+  #modes button.active {
+    background: #2c2a28; color: #f4f1ea; border-color: #2c2a28;
+  }
+  #help {
+    position: absolute; left: clamp(20px, 4vw, 40px); bottom: clamp(18px, 3vh, 28px);
+    font-size: 11px; line-height: 1.8; color: var(--muted); letter-spacing: 0.04em;
+  }
+  #help em { font-style: normal; color: var(--ink); }
+  #tag {
+    position: absolute; right: clamp(20px, 4vw, 40px); bottom: clamp(18px, 3vh, 28px);
+    text-align: right; font-size: 11px; line-height: 1.75; color: var(--muted);
+  }
+  #tag b { color: var(--accent); font-weight: 600; letter-spacing: 0.08em; }
+  body.night { --bg: #12151c; --ink: #ebe6dc; --muted: #9a9488; --line: rgba(235, 230, 220, 0.14); --panel: rgba(20, 24, 32, 0.7); }
+  body.dusk { --bg: #e8d5c4; --ink: #2a2420; --muted: #6e5f52; }
+</style>
+</head>
+<body>
+<div class="ui">
+  <div id="title">
+    <b>蓝花楹街角</b>
+    <span id="modeLabel">白天 · 悉尼历史街区微缩</span>
+  </div>
+  <div id="modes">
+    <button type="button" data-mode="day" class="active">白天</button>
+    <button type="button" data-mode="dusk">黄昏</button>
+    <button type="button" data-mode="night">夜晚</button>
+  </div>
+  <div id="help">
+    <em>拖拽</em> 旋转 · <em>滚轮</em> 缩放 · <em>ESC</em> 返回
+  </div>
+  <div id="tag">
+    <div><b>JACARANDA</b> · SYDNEY CORNER</div>
+    <div>三渲二 · 日式动画风微缩</div>
+  </div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.161.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.161.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ============ 基础 ============
+let DPR = Math.min(devicePixelRatio, 1.75);
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(DPR);
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.setClearColor(0xf4f1ea, 1);
+document.body.appendChild(renderer.domElement);
+window.__jacaranda = { renderer };
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(32, innerWidth / innerHeight, 0.4, 80);
+// 接近正面的三分之四视角，略俯视
+camera.position.set(9.2, 6.4, 10.8);
+Object.assign(window.__jacaranda, { scene, camera });
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0.15, 2.05, 0.1);
+controls.enableDamping = true;
+controls.dampingFactor = 0.07;
+controls.minDistance = 7;
+controls.maxDistance = 22;
+controls.maxPolarAngle = Math.PI * 0.48;
+controls.minPolarAngle = Math.PI * 0.18;
+controls.autoRotate = true;
+controls.autoRotateSpeed = 0.28;
+let idleTimer = 0;
+controls.addEventListener('start', () => { controls.autoRotate = false; clearTimeout(idleTimer); });
+controls.addEventListener('end', () => { idleTimer = setTimeout(() => (controls.autoRotate = true), 7000); });
+addEventListener('keydown', (e) => { if (e.key === 'Escape') location.href = './index.html'; });
+
+// ============ 三渲二材质（无粗描边） ============
+const grad = (() => {
+  const t = new THREE.DataTexture(new Uint8Array([95, 175, 255]), 3, 1, THREE.RedFormat);
+  t.minFilter = t.magFilter = THREE.NearestFilter;
+  t.needsUpdate = true;
+  return t;
+})();
+const toonCache = new Map();
+function toon(c, extra) {
+  if (extra) return new THREE.MeshToonMaterial({ color: c, gradientMap: grad, ...extra });
+  if (!toonCache.has(c)) toonCache.set(c, new THREE.MeshToonMaterial({ color: c, gradientMap: grad }));
+  return toonCache.get(c);
+}
+function std(c, extra = {}) {
+  return new THREE.MeshStandardMaterial({ color: c, roughness: 0.72, metalness: 0.05, ...extra });
+}
+function metal(c, extra = {}) {
+  return new THREE.MeshStandardMaterial({ color: c, roughness: 0.28, metalness: 0.85, ...extra });
+}
+function canvasTex(w, h, draw) {
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  draw(c.getContext('2d'), w, h);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 4;
+  return t;
+}
+
+// 简易环境贴图：给玻璃一点天空/地面反射
+const pmrem = new THREE.PMREMGenerator(renderer);
+{
+  const envScene = new THREE.Scene();
+  const envGeo = new THREE.SphereGeometry(1, 24, 16);
+  const envCol = new Float32Array(envGeo.attributes.position.count * 3);
+  const cTop = new THREE.Color('#b7d7f0');
+  const cMid = new THREE.Color('#eef3f7');
+  const cBot = new THREE.Color('#c9b89a');
+  const c = new THREE.Color();
+  const pos = envGeo.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    const y = pos.getY(i);
+    if (y > 0) c.copy(cMid).lerp(cTop, y);
+    else c.copy(cMid).lerp(cBot, -y);
+    envCol[i * 3] = c.r; envCol[i * 3 + 1] = c.g; envCol[i * 3 + 2] = c.b;
+  }
+  envGeo.setAttribute('color', new THREE.BufferAttribute(envCol, 3));
+  envScene.add(new THREE.Mesh(envGeo, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide })));
+  scene.environment = pmrem.fromScene(envScene, 0.04).texture;
+  pmrem.dispose();
+}
+
+// 斜向高光条：三渲二玻璃常用笔触
+const glassShineTex = canvasTex(256, 256, (g, w, h) => {
+  g.clearRect(0, 0, w, h);
+  g.fillStyle = 'rgba(255,255,255,0.0)';
+  g.fillRect(0, 0, w, h);
+  g.fillStyle = 'rgba(255,255,255,0.55)';
+  g.beginPath(); g.moveTo(28, h); g.lineTo(72, h); g.lineTo(150, 0); g.lineTo(106, 0); g.fill();
+  g.fillStyle = 'rgba(255,255,255,0.28)';
+  g.beginPath(); g.moveTo(88, h); g.lineTo(108, h); g.lineTo(186, 0); g.lineTo(166, 0); g.fill();
+  g.fillStyle = 'rgba(210,235,255,0.22)';
+  g.beginPath(); g.moveTo(170, h); g.lineTo(210, h); g.lineTo(255, 40); g.lineTo(255, 0); g.lineTo(230, 0); g.fill();
+  // 上沿一抹天光
+  const gr = g.createLinearGradient(0, 0, 0, h * 0.35);
+  gr.addColorStop(0, 'rgba(255,255,255,0.35)');
+  gr.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, w, h * 0.35);
+});
+
+function glassPane(extra = {}) {
+  // 冷色半透明 + 高反射：比 transmission 更适合三渲二辨识
+  return new THREE.MeshPhysicalMaterial({
+    color: '#7eb0d4',
+    roughness: 0.05,
+    metalness: 0.55,
+    transparent: true,
+    opacity: 0.62,
+    envMapIntensity: 2.2,
+    clearcoat: 1,
+    clearcoatRoughness: 0.03,
+    reflectivity: 1,
+    ...extra,
+  });
+}
+
+function mesh(geo, mat, o = {}) {
+  const { x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0, cast = true, receive = true, parent = scene } = o;
+  const m = new THREE.Mesh(geo, mat);
+  m.position.set(x, y, z);
+  m.rotation.set(rx, ry, rz);
+  m.castShadow = cast;
+  m.receiveShadow = receive;
+  parent.add(m);
+  return m;
+}
+const SINK = 0.006;
+const box = (w, h, d, mat, x, y, z, o = {}) =>
+  mesh(new THREE.BoxGeometry(w, h + SINK, d), mat, { ...o, x, y: y + h / 2 - SINK / 2, z });
+const cyl = (rt, rb, h, mat, x, y, z, o = {}) =>
+  mesh(new THREE.CylinderGeometry(rt, rb, h + SINK, o.seg || 14), mat, { ...o, x, y: y + h / 2 - SINK / 2, z });
+function plane(w, h, mat, x, y, z, o = {}) {
+  if (mat.polygonOffset === undefined) {
+    mat.polygonOffset = true;
+    mat.polygonOffsetFactor = -1;
+    mat.polygonOffsetUnits = -1;
+  }
+  return mesh(new THREE.PlaneGeometry(w, h), mat, { cast: false, receive: false, ...o, x, y, z });
+}
+const group = (x = 0, y = 0, z = 0, ry = 0, parent = scene) => {
+  const g = new THREE.Group();
+  g.position.set(x, y, z);
+  g.rotation.y = ry;
+  parent.add(g);
+  return g;
+};
+const _up = new THREE.Vector3(0, 1, 0);
+function tube(points, r, mat, segs = 10, o = {}) {
+  const curve = new THREE.CatmullRomCurve3(points.map((p) => new THREE.Vector3(...p)));
+  return mesh(new THREE.TubeGeometry(curve, segs, r, 6, false), mat, { cast: true, receive: false, ...o });
+}
+
+// ============ 光照 ============
+const hemi = new THREE.HemisphereLight('#dff0ff', '#c9b59a', 0.85);
+scene.add(hemi);
+const sun = new THREE.DirectionalLight('#fff4e2', 2.1);
+sun.position.set(6.5, 12, 5.5);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { left: -8, right: 8, top: 8, bottom: -8, near: 1, far: 40 });
+sun.shadow.camera.updateProjectionMatrix();
+sun.shadow.bias = -0.0004;
+sun.shadow.normalBias = 0.03;
+scene.add(sun);
+const fill = new THREE.DirectionalLight('#c9ddf5', 0.35);
+fill.position.set(-5, 4, -3);
+scene.add(fill);
+
+const nightLights = [];
+function addPoint(color, intensity, distance, x, y, z, parent = scene) {
+  const l = new THREE.PointLight(color, 0, distance, 2);
+  l.position.set(x, y, z);
+  l.userData = { base: intensity };
+  parent.add(l);
+  nightLights.push(l);
+  return l;
+}
+
+// ============ 色板 ============
+const C = {
+  cream: '#f3eee4',
+  creamDeep: '#e8e0d2',
+  trim: '#d9d0bf',
+  roof: '#9aa3b0',
+  roofDeep: '#7f8794',
+  iron: '#3a3f4a',
+  ironLite: '#555c6b',
+  wood: '#6b4a8a',
+  woodDeep: '#543876',
+  pavement: '#d9d3c7',
+  curb: '#c8c1b4',
+  soil: '#b7aa95',
+  base: '#ebe6dc',
+  baseEdge: '#d8d0c4',
+  trunk: '#5a4638',
+  trunkLite: '#6e5848',
+  leaf: '#6f8a55',
+  flower: '#8f5fd6',
+  flowerLite: '#b58cf0',
+  flowerDeep: '#6a3fb0',
+  warmGlass: '#ffe2a8',
+  coolGlass: '#c5daf0',
+  door: '#5c4a3a',
+};
+
+const matCream = toon(C.cream);
+const matCreamDeep = toon(C.creamDeep);
+const matTrim = toon(C.trim);
+const matRoof = toon(C.roof);
+const matIron = metal(C.iron);
+const matWood = toon(C.wood);
+const matPavement = toon(C.pavement);
+const matTrunk = toon(C.trunk);
+const matFlower = toon(C.flower);
+const matFlowerLite = toon(C.flowerLite);
+const matFlowerDeep = toon(C.flowerDeep);
+
+const windowMats = [];
+const warmWindows = [];
+
+// ============ 方形薄底座 ============
+const baseRoot = group(0, 0, 0);
+box(11.2, 0.22, 11.2, toon(C.base), 0, -0.22, 0, { parent: baseRoot, outline: 0 });
+box(11.5, 0.08, 11.5, toon(C.baseEdge), 0, -0.30, 0, { parent: baseRoot });
+box(10.6, 0.04, 10.6, matPavement, 0, 0, 0, { parent: baseRoot, receive: true, cast: false });
+
+// 人行道与路缘
+box(7.2, 0.06, 4.8, toon('#e2ddd2'), 0.9, 0.04, 1.4, { parent: baseRoot, cast: false });
+box(7.2, 0.08, 0.1, toon(C.curb), 0.9, 0.04, 3.8, { parent: baseRoot, cast: false });
+box(0.1, 0.08, 4.8, toon(C.curb), -2.7, 0.04, 1.4, { parent: baseRoot, cast: false });
+
+// 接触阴影（柔和椭圆）
+const contactTex = (() => {
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const g = c.getContext('2d');
+  const gr = g.createRadialGradient(64, 64, 8, 64, 64, 64);
+  gr.addColorStop(0, 'rgba(40,30,20,0.28)');
+  gr.addColorStop(0.55, 'rgba(40,30,20,0.1)');
+  gr.addColorStop(1, 'rgba(40,30,20,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+})();
+function contactShadow(w, d, x, y, z, opacity = 0.55) {
+  return plane(w, d, new THREE.MeshBasicMaterial({
+    map: contactTex, transparent: true, opacity, depthWrite: false,
+  }), x, y, z, { rx: -Math.PI / 2, cast: false, receive: false });
+}
+contactShadow(6.5, 5.2, 0.2, 0.045, 0.2, 0.4);
+contactShadow(2.4, 0.9, 0.2, 0.048, 2.55, 0.35);
+
+// ============ 历史建筑（圆弧转角三层） ============
+const building = group(0, 0.05, -0.35);
+const H = 5.5;
+const R = 1.2;
+
+function makeCornerBuilding() {
+  // 正面翼（朝 +Z）
+  box(2.55, H, 2.35, matCream, -1.35, 0, 1.05, { parent: building });
+  // 侧面翼（朝 +X）
+  box(2.35, H, 2.55, matCream, 1.05, 0, -1.35, { parent: building });
+  // 圆弧转角（1/4 圆柱）
+  const corner = mesh(
+    new THREE.CylinderGeometry(R, R, H, 20, 1, false, 0, Math.PI / 2),
+    matCream,
+    { x: 0, y: H / 2, z: 0, parent: building, cast: true, receive: true },
+  );
+  // 内角补齐，避免空心
+  box(R * 0.95, H, R * 0.95, matCream, R * 0.35, 0, -R * 0.35, { parent: building, cast: false });
+
+  // 层间腰线（绕转角分段）
+  for (const y of [1.8, 3.55]) {
+    box(2.7, 0.07, 0.08, matTrim, -1.3, y, 2.2, { parent: building, cast: false });
+    box(0.08, 0.07, 2.7, matTrim, 2.2, y, -1.3, { parent: building, cast: false });
+    const band = mesh(
+      new THREE.TorusGeometry(R + 0.02, 0.035, 6, 16, Math.PI / 2),
+      matTrim,
+      { x: 0, y: y + 0.035, z: 0, rx: Math.PI / 2, parent: building, cast: false },
+    );
+  }
+
+  // 顶檐与屋顶
+  box(2.85, 0.12, 2.6, matCreamDeep, -1.3, H, 1.1, { parent: building });
+  box(2.6, 0.12, 2.85, matCreamDeep, 1.1, H, -1.3, { parent: building });
+  mesh(
+    new THREE.CylinderGeometry(R + 0.18, R + 0.18, 0.12, 20, 1, false, 0, Math.PI / 2),
+    matCreamDeep,
+    { x: 0, y: H + 0.06, z: 0, parent: building },
+  );
+  box(2.65, 0.2, 2.4, matRoof, -1.3, H + 0.12, 1.05, { parent: building });
+  box(2.4, 0.2, 2.65, matRoof, 1.05, H + 0.12, -1.3, { parent: building });
+  mesh(
+    new THREE.CylinderGeometry(R + 0.08, R + 0.08, 0.2, 20, 1, false, 0, Math.PI / 2),
+    matRoof,
+    { x: 0, y: H + 0.22, z: 0, parent: building },
+  );
+
+  // 女儿墙垛口
+  for (let i = 0; i < 4; i++) {
+    box(0.26, 0.26, 0.16, matCreamDeep, -2.2 + i * 0.7, H + 0.32, 2.18, { parent: building });
+    box(0.16, 0.26, 0.26, matCreamDeep, 2.18, H + 0.32, -2.2 + i * 0.7, { parent: building });
+  }
+  // 屋顶少量露出
+  box(1.8, 0.1, 1.5, toon(C.roofDeep), -0.6, H + 0.35, -0.4, { parent: building });
+}
+
+makeCornerBuilding();
+
+const glassOverlays = [];
+
+function addWindow(w, h, x, y, z, face = 'z') {
+  // 内层：房间暗部 / 夜间暖光
+  const inner = std('#3d4f63', {
+    roughness: 0.9, metalness: 0,
+    emissive: C.warmGlass, emissiveIntensity: 0,
+  });
+  warmWindows.push(inner);
+  // 玻璃：冷蓝半透明 + 环境反射
+  const shell = glassPane();
+  // 斜向高光笔触
+  const shine = new THREE.MeshBasicMaterial({
+    map: glassShineTex, color: '#eaf6ff', transparent: true, opacity: 0.85,
+    depthWrite: false, toneMapped: false,
+  });
+  glassOverlays.push(shell, shine);
+
+  if (face === 'z') {
+    box(w + 0.12, h + 0.12, 0.07, matTrim, x, y - h / 2, z, { parent: building, cast: false });
+    box(w + 0.18, 0.05, 0.12, matCreamDeep, x, y - h / 2 - 0.05, z + 0.04, { parent: building, cast: false });
+    box(w * 0.94, h * 0.94, 0.025, inner, x, y - h / 2, z + 0.012, { parent: building, cast: false });
+    box(w, h, 0.018, shell, x, y - h / 2, z + 0.032, { parent: building, cast: false });
+    const sMesh = plane(w * 0.92, h * 0.92, shine, x, y, z + 0.05, { parent: building, cast: false });
+    sMesh.renderOrder = 3;
+    box(0.04, h * 0.96, 0.04, matTrim, x, y - h / 2, z + 0.042, { parent: building, cast: false });
+    box(w * 0.96, 0.04, 0.04, matTrim, x, y, z + 0.042, { parent: building, cast: false });
+  } else {
+    box(0.07, h + 0.12, w + 0.12, matTrim, x, y - h / 2, z, { parent: building, cast: false });
+    box(0.12, 0.05, w + 0.18, matCreamDeep, x + 0.04, y - h / 2 - 0.05, z, { parent: building, cast: false });
+    box(0.025, h * 0.94, w * 0.94, inner, x + 0.012, y - h / 2, z, { parent: building, cast: false });
+    box(0.018, h, w, shell, x + 0.032, y - h / 2, z, { parent: building, cast: false });
+    const sMesh = plane(w * 0.92, h * 0.92, shine.clone(), x + 0.05, y, z, {
+      parent: building, cast: false, ry: Math.PI / 2,
+    });
+    sMesh.renderOrder = 3;
+    glassOverlays.push(sMesh.material);
+    box(0.04, h * 0.96, 0.04, matTrim, x + 0.042, y - h / 2, z, { parent: building, cast: false });
+    box(0.04, 0.04, w * 0.96, matTrim, x + 0.042, y, z, { parent: building, cast: false });
+  }
+}
+
+// 正面（+Z）
+addWindow(0.7, 1.05, -1.7, 1.3, 2.24, 'z');
+addWindow(0.7, 1.05, -0.75, 1.3, 2.24, 'z');
+addWindow(0.58, 0.8, -1.7, 3.05, 2.24, 'z');
+addWindow(0.58, 0.8, -0.75, 3.05, 2.24, 'z');
+addWindow(0.5, 0.68, -1.7, 4.7, 2.24, 'z');
+addWindow(0.5, 0.68, -0.75, 4.7, 2.24, 'z');
+addWindow(0.48, 0.75, 0.55, 3.05, 1.95, 'z');
+addWindow(0.48, 0.65, 0.85, 4.7, 1.7, 'z');
+
+// 侧面（+X）
+addWindow(0.7, 1.05, 2.24, 1.3, -1.7, 'x');
+addWindow(0.7, 1.05, 2.24, 1.3, -0.75, 'x');
+addWindow(0.58, 0.8, 2.24, 3.05, -1.7, 'x');
+addWindow(0.58, 0.8, 2.24, 3.05, -0.75, 'x');
+addWindow(0.5, 0.68, 2.24, 4.7, -1.7, 'x');
+addWindow(0.5, 0.68, 2.24, 4.7, -0.75, 'x');
+
+// 入口门：木门框 + 大面积玻璃门扇
+box(0.95, 1.95, 0.08, toon(C.door), 0.15, 0.05, 2.22, { parent: building });
+box(0.95, 0.1, 0.1, matTrim, 0.15, 1.95, 2.24, { parent: building, cast: false });
+box(0.08, 1.7, 0.06, toon(C.door), -0.22, 0.2, 2.26, { parent: building, cast: false });
+box(0.08, 1.7, 0.06, toon(C.door), 0.52, 0.2, 2.26, { parent: building, cast: false });
+box(0.95, 0.08, 0.06, toon(C.door), 0.15, 0.2, 2.26, { parent: building, cast: false });
+const doorInner = std('#3d4f63', {
+  roughness: 0.85, emissive: C.warmGlass, emissiveIntensity: 0,
+});
+warmWindows.push(doorInner);
+box(0.68, 1.35, 0.03, doorInner, 0.15, 0.42, 2.25, { parent: building, cast: false });
+const doorGlass = glassPane({ opacity: 0.58, color: '#a8cef0' });
+glassOverlays.push(doorGlass);
+box(0.68, 1.35, 0.02, doorGlass, 0.15, 0.42, 2.285, { parent: building, cast: false });
+const doorShine = plane(0.64, 1.28, new THREE.MeshBasicMaterial({
+  map: glassShineTex, color: '#eaf6ff', transparent: true, opacity: 0.9,
+  depthWrite: false, toneMapped: false,
+}), 0.15, 1.095, 2.305, { parent: building, cast: false });
+doorShine.renderOrder = 3;
+glassOverlays.push(doorShine.material);
+// 门横档
+box(0.7, 0.05, 0.04, toon(C.door), 0.15, 1.05, 2.29, { parent: building, cast: false });
+cyl(0.03, 0.03, 0.08, metal('#c9b48a'), 0.42, 1.0, 2.32, { parent: building, seg: 8 });
+cyl(0.05, 0.05, 0.12, metal('#c9b48a'), 0.15, 2.1, 2.3, { parent: building, seg: 8 });
+addPoint('#ffd49a', 0.55, 4.5, 0.15, 2.2, 2.55, building);
+
+// 二楼铁艺阳台 + 雨棚
+function makeBalcony() {
+  const bal = group(-1.15, 2.85, 2.38, 0, building);
+  box(2.2, 0.07, 0.52, matIron, 0, 0, 0, { parent: bal });
+  for (let i = 0; i < 7; i++) {
+    cyl(0.022, 0.022, 0.52, matIron, -0.95 + i * 0.32, 0.07, 0.2, { parent: bal, seg: 6, cast: false });
+  }
+  box(2.2, 0.035, 0.035, matIron, 0, 0.58, 0.2, { parent: bal, cast: false });
+  box(2.2, 0.035, 0.035, matIron, 0, 0.32, 0.2, { parent: bal, cast: false });
+  for (let i = 0; i < 6; i++) {
+    const x = -0.8 + i * 0.32;
+    tube([[x, 0.1, 0.2], [x + 0.16, 0.3, 0.2], [x + 0.32, 0.1, 0.2]], 0.01, matIron, 5, { parent: bal });
+  }
+  box(2.4, 0.05, 0.8, toon('#e8dfcf'), 0, 0.72, 0.12, { parent: bal, rx: -0.12 });
+  box(2.4, 0.025, 0.8, toon('#c9bba5'), 0, 0.68, 0.12, { parent: bal, rx: -0.12, cast: false });
+  tube([[-1.0, 0.65, 0.02], [-1.0, 0.12, 0.38]], 0.018, matIron, 4, { parent: bal });
+  tube([[1.0, 0.65, 0.02], [1.0, 0.12, 0.38]], 0.018, matIron, 4, { parent: bal });
+  addPoint('#ffe0b0', 0.4, 5, 0, 0.5, 0.3, bal);
+}
+makeBalcony();
+
+(() => {
+  const bal = group(2.38, 2.85, -1.15, Math.PI / 2, building);
+  box(1.7, 0.07, 0.42, matIron, 0, 0, 0, { parent: bal });
+  for (let i = 0; i < 5; i++) {
+    cyl(0.02, 0.02, 0.46, matIron, -0.7 + i * 0.35, 0.07, 0.16, { parent: bal, seg: 6, cast: false });
+  }
+  box(1.7, 0.035, 0.035, matIron, 0, 0.52, 0.16, { parent: bal, cast: false });
+  box(1.85, 0.045, 0.65, toon('#e8dfcf'), 0, 0.68, 0.08, { parent: bal, rx: -0.1 });
+})();
+
+box(4.2, 0.1, 0.07, matTrim, -0.6, 0.05, 2.22, { parent: building, cast: false });
+box(0.07, 0.1, 4.2, matTrim, 2.22, 0.05, -0.6, { parent: building, cast: false });
+
+// ============ 紫色木条长椅 ============
+function makeBench(x, z, ry = 0) {
+  const g = group(x, 0.05, z, ry);
+  contactShadow(1.6, 0.55, 0, 0.01, 0, 0.45);
+  // 腿
+  box(0.08, 0.32, 0.08, toon(C.woodDeep), -0.55, 0, 0.18, { parent: g });
+  box(0.08, 0.32, 0.08, toon(C.woodDeep), 0.55, 0, 0.18, { parent: g });
+  box(0.08, 0.32, 0.08, toon(C.woodDeep), -0.55, 0, -0.18, { parent: g });
+  box(0.08, 0.32, 0.08, toon(C.woodDeep), 0.55, 0, -0.18, { parent: g });
+  // 木条座面
+  for (let i = 0; i < 5; i++) {
+    box(1.35, 0.05, 0.1, matWood, 0, 0.32, -0.22 + i * 0.11, { parent: g });
+  }
+  // 靠背
+  for (let i = 0; i < 4; i++) {
+    box(1.35, 0.05, 0.08, toon(C.woodDeep), 0, 0.48 + i * 0.1, -0.28, { parent: g, rx: -0.15 });
+  }
+  box(0.06, 0.42, 0.06, toon(C.woodDeep), -0.62, 0.32, -0.26, { parent: g });
+  box(0.06, 0.42, 0.06, toon(C.woodDeep), 0.62, 0.32, -0.26, { parent: g });
+  return g;
+}
+makeBench(0.15, 2.75, 0.08);
+
+// ============ 路灯 ============
+const lampPosts = [];
+function makeLamp(x, z) {
+  const g = group(x, 0.05, z);
+  cyl(0.06, 0.08, 0.12, toon('#6a655c'), 0, 0, 0, { parent: g, seg: 8 });
+  cyl(0.035, 0.04, 2.4, metal('#4a4f5a'), 0, 0.12, 0, { parent: g, seg: 8 });
+  box(0.35, 0.04, 0.18, metal('#4a4f5a'), 0.12, 2.45, 0, { parent: g });
+  const shade = cyl(0.12, 0.16, 0.14, toon('#efe6d4'), 0.22, 2.35, 0, { parent: g, seg: 10 });
+  const bulb = cyl(0.05, 0.05, 0.06, std('#fff0c8', { emissive: '#ffd89a', emissiveIntensity: 0 }), 0.22, 2.28, 0, { parent: g, seg: 8, cast: false });
+  const light = addPoint('#ffd49a', 1.15, 7.5, 0.22, 2.2, 0, g);
+  lampPosts.push({ bulb, light, shade });
+  contactShadow(0.8, 0.8, 0, 0.01, 0, 0.3);
+  return g;
+}
+makeLamp(-2.9, 3.2);
+makeLamp(3.4, 2.4);
+
+// ============ 蓝花楹树（开敞分枝 + 圆锥花序，不要团块） ============
+const swayTrees = [];
+const flowerLights = [];
+const flowerMats = [matFlower, matFlowerLite, matFlowerDeep];
+const panicleGeo = new THREE.ConeGeometry(1, 1, 6, 1, true);
+const budGeo = new THREE.SphereGeometry(1, 6, 5);
+const twigMat = toon(C.trunkLite);
+
+function rand(a, b) { return a + Math.random() * (b - a); }
+function v3(x, y, z) { return [x, y, z]; }
+function lerp3(a, b, t) {
+  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+}
+function add3(a, b) { return [a[0] + b[0], a[1] + b[1], a[2] + b[2]]; }
+function scale3(a, s) { return [a[0] * s, a[1] * s, a[2] * s]; }
+function len3(a) { return Math.hypot(a[0], a[1], a[2]) || 1; }
+function norm3(a) { const L = len3(a); return [a[0] / L, a[1] / L, a[2] / L]; }
+
+/** 蓝花楹典型圆锥花序：细长一串，不是圆坨 */
+function addPanicle(parent, at, upHint = [0, 1, 0], size = 1) {
+  const mat = flowerMats[(Math.random() * 3) | 0];
+  const h = rand(0.18, 0.32) * size;
+  const r = rand(0.04, 0.065) * size;
+  const tip = norm3(upHint);
+  const cone = mesh(panicleGeo, mat, {
+    x: at[0], y: at[1] + h * 0.32, z: at[2],
+    parent, cast: true, receive: false,
+  });
+  cone.scale.set(r, h, r);
+  cone.quaternion.setFromUnitVectors(
+    _up,
+    new THREE.Vector3(tip[0], Math.max(0.35, tip[1]), tip[2]).normalize(),
+  );
+  // 同轴再叠一小锥，做出串状层次
+  if (Math.random() > 0.35) {
+    const c2 = mesh(panicleGeo, flowerMats[(Math.random() * 3) | 0], {
+      x: at[0] + tip[0] * h * 0.15,
+      y: at[1] + h * 0.55,
+      z: at[2] + tip[2] * h * 0.15,
+      parent, cast: false, receive: false,
+    });
+    c2.scale.set(r * 0.65, h * 0.55, r * 0.65);
+    c2.quaternion.copy(cone.quaternion);
+  }
+}
+
+function makeJacaranda({ x, z, h = 4.2, lean = 0, scale = 1, front = false, seed = 1 }) {
+  const root = group(x, 0.05, z, lean);
+  root.scale.setScalar(scale);
+  contactShadow(1.8 * scale, 1.8 * scale, 0, 0.012, 0, 0.28);
+
+  // S 形主干，中上段才分叉
+  const trunkPts = [
+    v3(0, 0, 0),
+    v3(0.04 * seed, h * 0.18, 0.06),
+    v3(-0.1 * seed, h * 0.38, -0.04),
+    v3(0.08 * seed, h * 0.58, 0.05),
+    v3(0.02, h * 0.72, 0.02),
+  ];
+  tube(trunkPts, 0.09, matTrunk, 14, { parent: root });
+  cyl(0.14, 0.18, 0.22, toon(C.trunkLite), 0, 0, 0, { parent: root, seg: 10 });
+
+  const fork = trunkPts[trunkPts.length - 1];
+  const canopy = group(fork[0], fork[1], fork[2], 0, root);
+  swayTrees.push({
+    group: canopy,
+    phase: rand(0, Math.PI * 2),
+    amp: front ? 0.014 : 0.022,
+    speed: rand(0.55, 0.95),
+  });
+
+  // 伞状主枝
+  const primaryN = front ? 5 : 7;
+  const tips = [];
+  for (let i = 0; i < primaryN; i++) {
+    const a = (i / primaryN) * Math.PI * 2 + seed * 0.4 + rand(-0.12, 0.12);
+    const reach = (front ? 0.95 : 1.25) * rand(0.9, 1.12);
+    const rise = rand(0.5, 1.0);
+    const mid = v3(Math.cos(a) * reach * 0.5, rise * 0.4 + 0.15, Math.sin(a) * reach * 0.5);
+    const end = v3(Math.cos(a) * reach, rise, Math.sin(a) * reach);
+    tube([v3(0, 0, 0), mid, end], rand(0.03, 0.042), matTrunk, 8, { parent: canopy });
+    tips.push({ end, a, reach, rise });
+
+    // 主枝外半段也挂花序（蓝花楹花在外围）
+    for (let t = 0.55; t <= 0.95; t += 0.2) {
+      if (Math.random() < 0.22) continue;
+      const p = lerp3(mid, end, (t - 0.5) / 0.5);
+      addPanicle(canopy, p, [Math.cos(a), 0.9, Math.sin(a)], rand(0.85, 1.1));
+    }
+
+    // 二级分叉
+    for (let j = 0; j < 2; j++) {
+      const side = j === 0 ? 1 : -1;
+      const a2 = a + side * rand(0.4, 0.75);
+      const len2 = reach * rand(0.4, 0.6);
+      const end2 = v3(
+        end[0] + Math.cos(a2) * len2,
+        end[1] + rand(0.15, 0.45),
+        end[2] + Math.sin(a2) * len2,
+      );
+      const mid2 = lerp3(end, end2, 0.5); mid2[1] += 0.1;
+      tube([end, mid2, end2], rand(0.015, 0.022), twigMat, 6, { parent: canopy });
+
+      const twigN = front ? 3 : 4;
+      for (let k = 0; k < twigN; k++) {
+        const a3 = a2 + rand(-0.55, 0.55);
+        const len3 = rand(0.25, 0.48);
+        const twigEnd = v3(
+          end2[0] + Math.cos(a3) * len3,
+          end2[1] + rand(0.02, 0.3),
+          end2[2] + Math.sin(a3) * len3,
+        );
+        tube([end2, lerp3(end2, twigEnd, 0.55), twigEnd], 0.007, twigMat, 4, { parent: canopy });
+        const blooms = 3 + ((Math.random() * 2) | 0);
+        for (let b = 0; b < blooms; b++) {
+          if (Math.random() < 0.12) continue;
+          const tt = 0.25 + b * 0.22;
+          const p = lerp3(end2, twigEnd, Math.min(0.98, tt));
+          addPanicle(
+            canopy,
+            [p[0] + rand(-0.03, 0.03), p[1], p[2] + rand(-0.03, 0.03)],
+            [twigEnd[0] - end2[0], 0.9, twigEnd[2] - end2[2]],
+            rand(0.75, 1.05),
+          );
+        }
+      }
+      addPanicle(canopy, add3(end2, [0, 0.05, 0]), [Math.cos(a2) * 0.25, 1, Math.sin(a2) * 0.25], 1.05);
+    }
+  }
+
+  // 顶层补一圈细枝，形成透空伞盖而不是空心骨架
+  for (let i = 0; i < (front ? 6 : 9); i++) {
+    const a = (i / (front ? 6 : 9)) * Math.PI * 2 + 0.2;
+    const r = rand(0.35, 0.75);
+    const p0 = v3(Math.cos(a) * 0.1, rand(0.35, 0.7), Math.sin(a) * 0.1);
+    const p1 = v3(Math.cos(a) * r, rand(0.7, 1.15), Math.sin(a) * r);
+    tube([p0, lerp3(p0, p1, 0.5), p1], 0.008, twigMat, 4, { parent: canopy });
+    if (Math.random() < 0.2) continue;
+    addPanicle(canopy, p1, [Math.cos(a), 1, Math.sin(a)], rand(0.8, 1.1));
+    addPanicle(canopy, lerp3(p0, p1, 0.65), [Math.cos(a), 0.8, Math.sin(a)], rand(0.7, 0.95));
+  }
+
+  // 羽叶提示：扁长小片，不成团
+  for (let i = 0; i < (front ? 8 : 12); i++) {
+    const tip = tips[(Math.random() * tips.length) | 0].end;
+    const leaf = mesh(budGeo, toon(C.leaf), {
+      x: tip[0] + rand(-0.25, 0.25),
+      y: tip[1] - rand(0.02, 0.18),
+      z: tip[2] + rand(-0.25, 0.25),
+      parent: canopy, cast: false, receive: false,
+    });
+    leaf.scale.set(rand(0.05, 0.09), rand(0.015, 0.03), rand(0.03, 0.05));
+    leaf.rotation.z = rand(-0.6, 0.6);
+  }
+
+  const fl = addPoint('#c9a0ff', 0.35, 4.5, 0.15, h * 0.2, 0.15, canopy);
+  flowerLights.push(fl);
+  return root;
+}
+
+// 前低后高围合
+makeJacaranda({ x: -3.4, z: 2.15, h: 3.1, scale: 0.88, front: true, lean: 0.18, seed: 1.1 });
+makeJacaranda({ x: 3.55, z: 1.55, h: 3.35, scale: 0.92, front: true, lean: -0.14, seed: -0.8 });
+makeJacaranda({ x: -3.85, z: -0.7, h: 4.5, scale: 1.02, lean: 0.28, seed: 0.6 });
+makeJacaranda({ x: 3.95, z: -1.35, h: 4.7, scale: 1.06, lean: -0.22, seed: -1.2 });
+makeJacaranda({ x: -1.7, z: -3.15, h: 5.1, scale: 1.12, lean: 0.08, seed: 0.3 });
+makeJacaranda({ x: 1.75, z: -3.4, h: 5.25, scale: 1.15, lean: -0.06, seed: -0.4 });
+makeJacaranda({ x: 0.15, z: -4.05, h: 4.3, scale: 0.98, lean: 0.04, seed: 0.9 });
+
+// 地面落花：小瓣，不成坨
+for (let i = 0; i < 36; i++) {
+  const s = rand(0.025, 0.05);
+  const m = mesh(
+    budGeo,
+    flowerMats[i % 3],
+    {
+      x: rand(-4.5, 4.5), y: 0.055, z: rand(-3.5, 3.8),
+      cast: false, receive: false,
+    },
+  );
+  m.scale.set(s, s * 0.55, s);
+}
+
+// ============ 花瓣飘落 ============
+const PETAL_N = 160;
+const petalData = new Float32Array(PETAL_N * 7); // x y z vx vy vz phase
+const petalGeo = new THREE.PlaneGeometry(0.08, 0.05);
+const petalMat = new THREE.MeshBasicMaterial({
+  color: C.flowerLite, transparent: true, opacity: 0.85,
+  side: THREE.DoubleSide, depthWrite: false,
+});
+const petals = new THREE.InstancedMesh(petalGeo, petalMat, PETAL_N);
+petals.frustumCulled = false;
+petals.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+scene.add(petals);
+const petalDummy = new THREE.Object3D();
+
+function resetPetal(i, top) {
+  const k = i * 7;
+  petalData[k] = rand(-5, 5);
+  petalData[k + 2] = rand(-4.5, 4);
+  petalData[k + 1] = top ? rand(4.5, 7.5) : rand(0.2, 6.5);
+  petalData[k + 3] = rand(-0.15, 0.15);
+  petalData[k + 4] = rand(-0.55, -0.25);
+  petalData[k + 5] = rand(-0.12, 0.12);
+  petalData[k + 6] = rand(0, Math.PI * 2);
+}
+for (let i = 0; i < PETAL_N; i++) resetPetal(i, false);
+
+// ============ 环境小物 ============
+// 门前花盆
+function pot(x, z) {
+  const g = group(x, 0.05, z);
+  cyl(0.16, 0.12, 0.28, toon('#8a6a55'), 0, 0, 0, { parent: g, seg: 10 });
+  cyl(0.02, 0.025, 0.2, matTrunk, 0, 0.28, 0, { parent: g, seg: 5 });
+  addPanicle(g, [0, 0.5, 0], [0, 1, 0], 0.85);
+  addPanicle(g, [0.08, 0.48, 0.04], [0.3, 1, 0.2], 0.65);
+}
+pot(-1.35, 2.55);
+pot(1.55, 2.6);
+
+// 路缘小灌木：细枝 + 小花序
+for (const [x, z] of [[-2.5, -2.2], [2.8, -2.6], [-4.2, 1.2]]) {
+  const g = group(x, 0.05, z);
+  cyl(0.03, 0.04, 0.35, matTrunk, 0, 0, 0, { parent: g, seg: 6 });
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2;
+    tube(
+      [[0, 0.28, 0], [Math.cos(a) * 0.18, 0.42, Math.sin(a) * 0.18], [Math.cos(a) * 0.32, 0.55, Math.sin(a) * 0.32]],
+      0.01, twigMat, 4, { parent: g },
+    );
+    addPanicle(g, [Math.cos(a) * 0.3, 0.58, Math.sin(a) * 0.3], [Math.cos(a) * 0.2, 1, Math.sin(a) * 0.2]);
+  }
+}
+
+// ============ 昼夜切换 ============
+const skyDay = { top: '#9ec8e8', mid: '#e7eef4', bot: '#f4f1ea' };
+const skyDusk = { top: '#6a7eb8', mid: '#e8b892', bot: '#e8d5c4' };
+const skyNight = { top: '#0e1422', mid: '#1a2438', bot: '#12151c' };
+
+const bgCanvas = document.createElement('canvas');
+bgCanvas.width = 8; bgCanvas.height = 256;
+const bgCtx = bgCanvas.getContext('2d');
+const bgTex = new THREE.CanvasTexture(bgCanvas);
+bgTex.colorSpace = THREE.SRGBColorSpace;
+scene.background = bgTex;
+
+function paintSky(a, b, t) {
+  const mix = (c1, c2) => {
+    const A = new THREE.Color(c1), B = new THREE.Color(c2);
+    return '#' + A.lerp(B, t).getHexString();
+  };
+  const gr = bgCtx.createLinearGradient(0, 0, 0, 256);
+  gr.addColorStop(0, mix(a.top, b.top));
+  gr.addColorStop(0.55, mix(a.mid, b.mid));
+  gr.addColorStop(1, mix(a.bot, b.bot));
+  bgCtx.fillStyle = gr;
+  bgCtx.fillRect(0, 0, 8, 256);
+  bgTex.needsUpdate = true;
+}
+
+const modes = {
+  day: {
+    label: '白天 · 悉尼历史街区微缩',
+    sky: skyDay, hemiSky: '#dff0ff', hemiGround: '#c9b59a', hemiI: 0.9,
+    sunColor: '#fff4e2', sunI: 2.15, fillI: 0.38, exposure: 1.05, bloom: 0.12,
+    body: '', windowE: 0, lampE: 0, lampI: 0, flowerI: 0, nightPoint: 0,
+  },
+  dusk: {
+    label: '黄昏 · 暖光初上',
+    sky: skyDusk, hemiSky: '#f0c9a8', hemiGround: '#8a6a55', hemiI: 0.55,
+    sunColor: '#ffb070', sunI: 1.15, fillI: 0.22, exposure: 0.95, bloom: 0.22,
+    body: 'dusk', windowE: 0.45, lampE: 0.55, lampI: 0.55, flowerI: 0.12, nightPoint: 0.35,
+  },
+  night: {
+    label: '夜晚 · 暖窗与路灯',
+    sky: skyNight, hemiSky: '#2a3a58', hemiGround: '#2a241c', hemiI: 0.28,
+    sunColor: '#a8b8e0', sunI: 0.18, fillI: 0.08, exposure: 0.82, bloom: 0.38,
+    body: 'night', windowE: 1.15, lampE: 1.4, lampI: 1.15, flowerI: 0.45, nightPoint: 1,
+  },
+};
+
+let mode = 'day';
+let modeT = 1;
+let fromMode = modes.day;
+let toMode = modes.day;
+
+function applyMode(m, t = 1) {
+  const A = fromMode, B = toMode;
+  const lerp = (a, b) => a + (b - a) * t;
+  paintSky(A.sky, B.sky, t);
+  hemi.color.lerpColors(new THREE.Color(A.hemiSky), new THREE.Color(B.hemiSky), t);
+  hemi.groundColor.lerpColors(new THREE.Color(A.hemiGround), new THREE.Color(B.hemiGround), t);
+  hemi.intensity = lerp(A.hemiI, B.hemiI);
+  sun.color.lerpColors(new THREE.Color(A.sunColor), new THREE.Color(B.sunColor), t);
+  sun.intensity = lerp(A.sunI, B.sunI);
+  fill.intensity = lerp(A.fillI, B.fillI);
+  renderer.toneMappingExposure = lerp(A.exposure, B.exposure);
+
+  const wE = lerp(A.windowE, B.windowE);
+  for (const w of warmWindows) {
+    w.emissiveIntensity = wE;
+    if (w.color) w.color.set(wE > 0.35 ? '#b8894a' : '#3d4f63');
+  }
+  for (const m of glassOverlays) {
+    if (m.isMeshPhysicalMaterial) {
+      m.opacity = 0.62 - wE * 0.25;
+      m.envMapIntensity = 2.2 - wE * 1.0;
+      m.color.set(wE > 0.35 ? '#c9b896' : '#7eb0d4');
+    } else if (m.map) {
+      m.opacity = 0.85 - wE * 0.35;
+    }
+  }
+
+  const lE = lerp(A.lampE, B.lampE);
+  const lI = lerp(A.lampI, B.lampI);
+  for (const { bulb, light } of lampPosts) {
+    bulb.material.emissiveIntensity = lE;
+    light.intensity = lI * (light.userData.base || 1);
+  }
+
+  const fI = lerp(A.flowerI, B.flowerI);
+  for (const fl of flowerLights) fl.intensity = fI * (fl.userData.base || 1);
+
+  const nI = lerp(A.nightPoint, B.nightPoint);
+  for (const l of nightLights) {
+    if (lampPosts.some((p) => p.light === l) || flowerLights.includes(l)) continue;
+    l.intensity = nI * (l.userData.base || 1);
+  }
+
+  document.body.className = t > 0.5 ? B.body : A.body;
+  if (t > 0.85) document.getElementById('modeLabel').textContent = B.label;
+}
+
+function setMode(name) {
+  if (name === mode && modeT >= 1) return;
+  fromMode = { ...toMode };
+  // snapshot current visual as from — use current toMode values at t
+  fromMode = modes[mode];
+  toMode = modes[name];
+  mode = name;
+  modeT = 0;
+  document.querySelectorAll('#modes button').forEach((b) => {
+    b.classList.toggle('active', b.dataset.mode === name);
+  });
+}
+
+document.querySelectorAll('#modes button').forEach((b) => {
+  b.addEventListener('click', () => setMode(b.dataset.mode));
+});
+addEventListener('keydown', (e) => {
+  if (e.key === '1') setMode('day');
+  if (e.key === '2') setMode('dusk');
+  if (e.key === '3') setMode('night');
+});
+
+applyMode(null, 1);
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setPixelRatio(DPR);
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+// ============ 动画 ============
+const clock = new THREE.Clock();
+function tick() {
+  const dt = Math.min(clock.getDelta(), 0.05);
+  const t = clock.elapsedTime;
+
+  if (modeT < 1) {
+    modeT = Math.min(1, modeT + dt * 1.4);
+    const ease = modeT * modeT * (3 - 2 * modeT);
+    applyMode(null, ease);
+  }
+
+  // 树梢轻摆
+  for (const s of swayTrees) {
+    s.group.rotation.z = Math.sin(t * s.speed + s.phase) * s.amp;
+    s.group.rotation.x = Math.cos(t * s.speed * 0.85 + s.phase) * s.amp * 0.6;
+  }
+
+  // 花瓣
+  for (let i = 0; i < PETAL_N; i++) {
+    const k = i * 7;
+    petalData[k] += petalData[k + 3] * dt + Math.sin(t * 1.2 + petalData[k + 6]) * 0.003;
+    petalData[k + 1] += petalData[k + 4] * dt;
+    petalData[k + 2] += petalData[k + 5] * dt;
+    if (petalData[k + 1] < 0.08) resetPetal(i, true);
+    petalDummy.position.set(petalData[k], petalData[k + 1], petalData[k + 2]);
+    petalDummy.rotation.set(
+      t * 1.5 + petalData[k + 6],
+      t * 1.1 + petalData[k + 6] * 0.7,
+      Math.sin(t + petalData[k + 6]) * 0.8,
+    );
+    petalDummy.updateMatrix();
+    petals.setMatrixAt(i, petalDummy.matrix);
+  }
+  petals.instanceMatrix.needsUpdate = true;
+
+  controls.update();
+  renderer.render(scene, camera);
+  requestAnimationFrame(tick);
+}
+tick();
+</script>
+</body>
+</html>
