@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="theme-color" content="#f7f0dd" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<title>卡造 · 整点好玩的卡</title>
+<link rel="icon" href="assets/icon.svg" />
+<link rel="apple-touch-icon" href="assets/icon.svg" />
+<link rel="stylesheet" href="vendor/fonts.css" />
+<link rel="stylesheet" href="src/style.css?v=20261020b" />
+<link rel="stylesheet" href="src/cards.css?v=20261020b" />
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="5" width="12" height="14" rx="2.4"></rect>
+          <rect x="9" y="9" width="12" height="10" rx="2.4"></rect>
+        </svg>
+      </span>
+      <span class="brand-text"><b>卡造</b><span>make it weird</span></span>
+    </div>
+    <div class="top-meta"><b id="tplName">挂绳工牌</b><span id="tplSize">54 × 86 mm</span></div>
+  </header>
+
+  <main class="stage" id="stage">
+    <div class="stage-inner" id="stageInner">
+      <div class="zoom" id="zoom">
+        <div class="flip" id="flip">
+          <div class="flip-3d" id="flip3d">
+            <div class="artboard face-front" id="faceFront"></div>
+            <div class="artboard face-back is-blank" id="faceBack"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="stage-tools">
+      <button type="button" class="chip-btn" id="flipBtn">
+        <i data-lucide="refresh-cw"></i><span id="flipTxt">翻面</span>
+      </button>
+      <button type="button" class="chip-btn" id="photoBtn">
+        <i data-lucide="image"></i><span>贴图</span>
+      </button>
+      <span class="size-hint" id="sizeHint">54 × 86 mm</span>
+    </div>
+  </main>
+
+  <nav class="dock" aria-label="主操作">
+    <div class="dock-in">
+      <button type="button" class="dock-btn" id="btnTpl">
+        <i data-lucide="layout-grid"></i><span>模板</span>
+      </button>
+      <button type="button" class="dock-btn" id="btnInfo">
+        <i data-lucide="text-cursor-input"></i><span>改字</span>
+      </button>
+      <button type="button" class="dock-btn" id="btnStyle">
+        <i data-lucide="palette"></i><span>配色</span>
+      </button>
+      <button type="button" class="dock-btn primary" id="btnExport">
+        <i data-lucide="download"></i><span>存图</span>
+      </button>
+    </div>
+  </nav>
+</div>
+
+<!-- 模板 -->
+<div class="sheet" id="sheetTpl" role="dialog" aria-modal="true" aria-label="选择模板">
+  <button type="button" class="sheet-scrim" data-close="sheetTpl" aria-label="关闭"></button>
+  <div class="sheet-panel">
+    <div class="sheet-grab"></div>
+    <header class="sheet-head">
+      <h2 class="sheet-title">挑个玩法<small>名片 / 主页 / 人设 / 搭子 / 恋爱 / 追星 / 毛孩子 / 证件 / 异世界 / 周边</small></h2>
+      <button type="button" class="sheet-close" data-close="sheetTpl" aria-label="关闭">
+        <i data-lucide="x"></i>
+      </button>
+    </header>
+    <div class="cat-row" id="catRow"></div>
+    <div class="sheet-body flush" id="tplBody">
+      <div class="tpl-grid" id="tplGrid"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 信息 -->
+<div class="sheet" id="sheetInfo" role="dialog" aria-modal="true" aria-label="编辑信息">
+  <button type="button" class="sheet-scrim" data-close="sheetInfo" aria-label="关闭"></button>
+  <div class="sheet-panel">
+    <div class="sheet-grab"></div>
+    <header class="sheet-head">
+      <h2 class="sheet-title">写点你的<small>换模板会自动带上示例文字</small></h2>
+      <button type="button" class="sheet-close" data-close="sheetInfo" aria-label="关闭">
+        <i data-lucide="x"></i>
+      </button>
+    </header>
+    <div class="sheet-body" id="fieldBody"></div>
+  </div>
+</div>
+
+<!-- 样式 -->
+<div class="sheet" id="sheetStyle" role="dialog" aria-modal="true" aria-label="样式设置">
+  <button type="button" class="sheet-scrim" data-close="sheetStyle" aria-label="关闭"></button>
+  <div class="sheet-panel">
+    <div class="sheet-grab"></div>
+    <header class="sheet-head">
+      <h2 class="sheet-title">调色 &amp; 配图<small>换颜色、放照片，图片只留在本机</small></h2>
+      <button type="button" class="sheet-close" data-close="sheetStyle" aria-label="关闭">
+        <i data-lucide="x"></i>
+      </button>
+    </header>
+    <div class="sheet-body">
+      <div class="section-label">图片</div>
+      <div class="upload-row">
+        <button type="button" class="upload-tile" id="photoTile">
+          <span class="upload-thumb" id="photoThumb"><i data-lucide="user-round"></i></span>
+          <span class="upload-txt">放张照片<small>人 / 宠物 / 自己都行</small></span>
+        </button>
+        <button type="button" class="upload-tile" id="logoTile">
+          <span class="upload-thumb" id="logoThumb"><i data-lucide="hexagon"></i></span>
+          <span class="upload-txt">贴个图案<small>社团 logo / 应援图</small></span>
+        </button>
+      </div>
+      <input type="file" id="photoInput" accept="image/*" hidden />
+      <input type="file" id="logoInput" accept="image/*" hidden />
+      <button type="button" class="btn-ghost" id="clearImg" style="margin-top:10px;padding:10px;font-size:12px">清掉已上传的图</button>
+
+      <div class="section-label">换个强调色（立刻生效）</div>
+      <div class="swatches" id="swatches"></div>
+
+    </div>
+  </div>
+</div>
+
+<!-- 导出 -->
+<div class="sheet" id="sheetExport" role="dialog" aria-modal="true" aria-label="导出">
+  <button type="button" class="sheet-scrim" data-close="sheetExport" aria-label="关闭"></button>
+  <div class="sheet-panel">
+    <div class="sheet-grab"></div>
+    <header class="sheet-head">
+      <h2 class="sheet-title">拿走<small>离线生成 · 只导出卡片本体</small></h2>
+      <button type="button" class="sheet-close" data-close="sheetExport" aria-label="关闭">
+        <i data-lucide="x"></i>
+      </button>
+    </header>
+    <div class="sheet-body">
+      <div class="section-label">哪一面</div>
+      <div class="seg" id="sideSeg">
+        <button type="button" data-side="front" class="on">正面</button>
+        <button type="button" data-side="back">背面</button>
+      </div>
+
+      <div class="section-label">清楚点</div>
+      <div class="seg" id="qualitySeg">
+        <button type="button" data-q="1.5" class="on">标准</button>
+        <button type="button" data-q="3">超清</button>
+      </div>
+
+      <p class="tip" id="exportTip">导出就是卡片本身：透明圆角、无背景，发图或送印都能直接用。</p>
+      <button type="button" class="btn-primary" id="doExport">保存到相册</button>
+      <div class="btn-row" style="margin-top:10px">
+        <button type="button" class="btn-ghost" id="doBoth">正反都要</button>
+        <button type="button" class="btn-ghost" id="doReset">全部重来</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="vendor/lucide.min.js"></script>
+<script src="vendor/qrcode.js"></script>
+<script src="vendor/html-to-image.js"></script>
+<script src="vendor/fonts-embed.js"></script>
+<script src="src/templates.js"></script>
+<script src="src/app.js"></script>
+</body>
+</html>

@@ -3,6 +3,7 @@ import { DiecutDefs } from './art'
 import FxLayer from './fx'
 import type { Fx } from './effects'
 import observeSize from './observeSize'
+import { publishSpread } from './publish'
 import { spreads, type Layer, type Spread } from './spreads'
 
 const PW = 500
@@ -321,7 +322,7 @@ type Gesture = {
   pick: string | null
 }
 
-export default function PopupBook({ book = spreads, overlay, reserve = 0, pageIndex, onPageIndex, locked = false, pickedSlot, onPickSlot, jumpNonce, pageFx = [], onEdit }: {
+export default function PopupBook({ book = spreads, overlay, reserve = 0, pageIndex, onPageIndex, locked = false, pickedSlot, onPickSlot, jumpNonce, pageFx = [], onEdit, onPublish }: {
   book?: Spread[]
   /** 画在书上面的 UI（制作面板、裁剪弹层），不参与书本手势 */
   overlay?: ReactNode
@@ -343,6 +344,8 @@ export default function PopupBook({ book = spreads, overlay, reserve = 0, pageIn
   pageFx?: Fx[][]
   /** 底部「制作」按钮：交给父组件开面板 */
   onEdit?: () => void
+  /** 底部「发布」按钮：默认把当前跨页发到小红书；传了就换成自定义行为 */
+  onPublish?: () => void
 }) {
   const n = book.length
   const [pos, setPos] = useState(0)
@@ -419,6 +422,16 @@ export default function PopupBook({ book = spreads, overlay, reserve = 0, pageIn
   const gesture = useRef<Gesture | null>(null)
   // 操作说明弹层：右下角问号按钮打开，点遮罩/「知道了」/Esc 关掉
   const [help, setHelp] = useState(false)
+  // 发布：画图要几十毫秒（几十个 SVG 序列化 + 解码），期间按钮置灰防连点
+  const [publishing, setPublishing] = useState(false)
+  const [toast, setToast] = useState<string | null>(null)
+  const toastTimer = useRef(0)
+  const say = (msg: string) => {
+    setToast(msg)
+    window.clearTimeout(toastTimer.current)
+    toastTimer.current = window.setTimeout(() => setToast(null), 2400)
+  }
+  useEffect(() => () => window.clearTimeout(toastTimer.current), [])
   const rootRef = useRef<HTMLElement>(null)
   const stageRef = useRef<HTMLDivElement>(null)
   // 回调放进 ref，翻页过程中不会因为父组件重渲染而反复触发
@@ -729,6 +742,31 @@ export default function PopupBook({ book = spreads, overlay, reserve = 0, pageIn
   const index = clamp(Math.round(pos), 0, n - 1)
   const page = index + 1
 
+  /** 发布当前跨页：把两页摊平画成一张图，再交给小红书的 postNote */
+  const publish = async () => {
+    if (publishing) return
+    if (onPublish) {
+      onPublish()
+      return
+    }
+    const el = bookRef.current
+    if (!el) return
+    // 翻页中 DOM 是「纸正在转」的姿态，读出来的几何是歪的，等停稳
+    if ((t > 0.001 && t < 0.999) || edgePull !== 0) {
+      say('等这一页翻完再发布')
+      return
+    }
+    setPublishing(true)
+    try {
+      const r = await publishSpread(el, A)
+      say(r === 'ok' ? '已打开小红书发布页' : r === 'nobridge' ? '在小红书 App 里才能发布' : '生成图片失败')
+    } catch {
+      say('发布失败，稍后再试')
+    } finally {
+      setPublishing(false)
+    }
+  }
+
   return (
     <main className="pb-root" ref={rootRef}>
       <DiecutDefs />
@@ -828,8 +866,14 @@ export default function PopupBook({ book = spreads, overlay, reserve = 0, pageIn
           {onEdit && (
             <button onClick={onEdit} className="pb-tool pb-edit">制作</button>
           )}
+          {/* 发布：把当前跨页发成一篇小红书图文笔记 */}
+          <button onClick={publish} className="pb-tool pb-publish" disabled={publishing}>
+            {publishing ? '生成中' : '发布'}
+          </button>
         </nav>
       </footer>
+
+      {toast && <div className="pb-toast" role="status">{toast}</div>}
 
       {/* 右下角操作说明入口：制作模式下让位给面板，不显示 */}
       {!locked && (
@@ -852,7 +896,7 @@ export default function PopupBook({ book = spreads, overlay, reserve = 0, pageIn
               <li><b>点一下书页</b><span>点右半边翻下一页，点左半边回上一页</span></li>
               <li><b>双击空白处</b><span>视角跑偏了，双击空白就回到默认角度</span></li>
               <li><b>滚轮缩放</b><span>滚轮或触控板上下滑，放大看纸片上的细节</span></li>
-              <li><b>底部按键</b><span>翻页、复位、横屏；「制作」可以自己改内容和特效</span></li>
+              <li><b>底部按键</b><span>翻页、复位、横屏；「制作」可以自己改内容和特效，「发布」把当前两页发成小红书笔记</span></li>
             </ul>
             <button className="pb-help-ok" onClick={() => setHelp(false)}>知道了</button>
           </div>

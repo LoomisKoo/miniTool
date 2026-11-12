@@ -1237,18 +1237,16 @@
       exportCloseTimer = 0;
     }
     exportSheetOpen = true;
-    const panel = exportSheet.querySelector('.fields-panel');
+    // 导出面板不顶起预览，直接盖在画面上
     exportSheet.classList.remove('is-closing');
     exportSheet.classList.add('is-open');
     exportSheet.setAttribute('aria-hidden', 'false');
-    setSheetPush(panel, true);
     if (window.lucide) lucide.createIcons({ nodes: [exportSheet] });
   }
 
   function closeExportSheet() {
     if (!exportSheet || !exportSheet.classList.contains('is-open')) return;
     exportSheetOpen = false;
-    setSheetPush(null, false);
     exportSheet.classList.add('is-closing');
     exportSheet.classList.remove('is-open');
     if (exportCloseTimer) clearTimeout(exportCloseTimer);
@@ -1267,18 +1265,16 @@
       publishCloseTimer = 0;
     }
     publishSheetOpen = true;
-    const panel = publishSheet.querySelector('.fields-panel');
+    // 发布面板不顶起预览，直接盖在画面上
     publishSheet.classList.remove('is-closing');
     publishSheet.classList.add('is-open');
     publishSheet.setAttribute('aria-hidden', 'false');
-    setSheetPush(panel, true);
     if (window.lucide) lucide.createIcons({ nodes: [publishSheet] });
   }
 
   function closePublishSheet() {
     if (!publishSheet || !publishSheet.classList.contains('is-open')) return;
     publishSheetOpen = false;
-    setSheetPush(null, false);
     publishSheet.classList.add('is-closing');
     publishSheet.classList.remove('is-open');
     if (publishCloseTimer) clearTimeout(publishCloseTimer);

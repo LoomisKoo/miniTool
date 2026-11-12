@@ -1835,6 +1835,31 @@ body.sheet-open {
   max-height: min(42dvh, 360px);
 }
 
+/* 导出 / 发布：全屏模态遮罩（绝对定位铺满整个 sheet，不依赖网格行）
+   用绝对定位而非网格行，避免面板 max-width 460px 时两侧露白 */
+.sheet-export .fx-scrim {
+  position: absolute;
+  inset: 0;
+  width: auto;
+  height: auto;
+  z-index: 0;
+  background: rgba(0, 0, 0, 0);
+  transition: background 0.24s ease;
+}
+
+.sheet-export.is-open .fx-scrim {
+  background: rgba(0, 0, 0, 0.42);
+}
+
+.sheet-export.is-closing .fx-scrim {
+  background: rgba(0, 0, 0, 0);
+}
+
+.sheet-export .fields-panel {
+  position: relative;
+  z-index: 1;
+}
+
 /* 预览层不再使用矩形高光罩：
    它 border-radius 为 0，会盖满整张票的矩形外框，
    圆形 / 手环票的四角是透明的，柔光就漏到票外并被矩形的边切断，看着像「直角边」。
@@ -11312,6 +11337,8 @@ body.sheet-open {
 
 .sheet-fx .fx-panel > .sheet-head {
   grid-row: 1;
+  /* 底部 sheet 不贴顶部，不叠加刘海安全区，否则标题上方会多出一大段空白 */
+  padding: 8px 14px 6px;
 }
 
 .sheet-fx .fx-panel > .fx-layer-row {
@@ -12659,4 +12686,15 @@ body.fx-open .app {
 .tk-snap--moss .sn-bar span,
 .tk-snap--night .sn-bar span {
   --sn-ink: #111;
+}
+
+/* —— 模态遮罩：铺满整个 sheet（包含底部面板所在行）——
+   面板 max-width 460px 居中时，遮罩只占上方一行会在面板两侧露出未遮罩的画面；
+   同优先级必须放在所有 .sheet-xxx .fx-scrim 规则之后靠顺序覆盖。
+   遮罩在 DOM 中位于面板之前，面板仍在它上面。 */
+.sheet > .fx-scrim {
+  grid-row: 1 / -1;
+  grid-column: 1;
+  align-self: stretch;
+  justify-self: stretch;
 }

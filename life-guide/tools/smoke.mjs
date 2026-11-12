@@ -233,7 +233,7 @@ ok('已展开的卡带 .open（决定 grid-template-rows:1fr）', () => {
 });
 
 console.log('\n整库与完整性：');
-ok('677 条全部能渲染成卡', () => {
+ok('全部条目都能渲染成卡', () => {
   const bad = [];
   for (const i of T.ITEMS) {
     const h = T.card(i, i.sc[0]);
@@ -243,10 +243,10 @@ ok('677 条全部能渲染成卡', () => {
   if (bad.length) throw new Error('异常 ' + bad.length + ' 个：' + bad.slice(0, 5).join(','));
   return T.ITEMS.length + ' 张卡全部通过';
 });
-ok('节内计数合计 677', () => {
+ok('节内计数合计 = 条目总数', () => {
   const t = T.DB.secs.reduce((a, s) => a + s.count, 0);
-  if (t !== 677) throw new Error('合计 ' + t);
-  return '合计 677';
+  if (t !== T.ITEMS.length) throw new Error(`合计 ${t}，条目总数 ${T.ITEMS.length}`);
+  return `合计 ${t}`;
 });
 ok('引用跳转目标都存在', () => {
   let bad = 0, tot = 0;
@@ -398,7 +398,7 @@ ok('打开的链接一律 http/https，不会出现 javascript: 之类', () => {
   const bad = [];
   for (const i of T.ITEMS) T.srcLinks(i.src).forEach(l => { if (l.url && !/^https?:\/\//.test(l.url)) bad.push(l.url); });
   if (bad.length) throw new Error('可疑链接：' + bad.slice(0, 3).join(' , '));
-  return '677 条里所有外链都是 http(s)';
+  return `${T.ITEMS.length} 条里所有外链都是 http(s)`;
 });
 
 console.log('\n搜索与筛选：');

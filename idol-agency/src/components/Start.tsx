@@ -122,7 +122,10 @@ export function Start({ hasSave }: { hasSave: boolean }) {
         </section>
       </div>
       <div className="create-foot">
-        <button className="btn-main block" onClick={start}>入职{COMPANY}</button>
+        <div className="create-foot-row">
+          <button className="btn-ghost create-back" onClick={() => setStep(0)}>返回</button>
+          <button className="btn-main block" onClick={start}>入职{COMPANY}</button>
+        </div>
       </div>
     </div>
   )

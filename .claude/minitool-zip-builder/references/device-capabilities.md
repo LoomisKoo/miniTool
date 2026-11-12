@@ -48,6 +48,21 @@ Cookie 仅作本地存储：可读写、按 origin 隔离，但因不联网**不
 
 `alert()` / `confirm()` 可用，以原生 UI 展示。
 
+### Worker（客户端 ≥ 9.53）
+
+仅支持 **Dedicated Worker**（`new Worker()`），不支持 SharedWorker / Service Worker。与标准 Web Worker 差异：
+
+| 项目 | 小工具容器约束 |
+| --- | --- |
+| 脚本入口 | 仅上传包内的 **classic `.js`**；禁 module Worker、外部 URL、`blob:` / `data:`、运行时生成的临时脚本 |
+| 实例配额 | 每页同时最多 **1** 个；超出抛 `QuotaExceededError`；`terminate()` 或平台回收后释放。`error` / `self.close()` 后仍须由页面 `terminate()` 释放 |
+| CSP | 与容器一致：禁网络、禁动态代码、禁追加脚本 / 创建子 Worker；依赖须预先打进入口脚本 |
+| 后台回收 | 页面连续隐藏 **30 秒**后回收 Worker；提前返回取消计时；到期仍隐藏时新建会抛 `SecurityError`；返回页面后需重新创建并恢复任务数据 |
+| `worker.onTerminate(callback)` | 名额释放后异步回调；参数 `"主动"` = 页面 `terminate()`，`"system"` = 平台回收；同一回调对同一实例只通知一次 |
+| `worker.offTerminate(callback)` | 注销指定终止回调；省略参数时清理本实例全部终止监听 |
+
+回收通知可能延后；页面或进程销毁时**不保证**收到通知。低版本客户端勿用 Worker，逻辑放主线程。
+
 ---
 
 ## 2. Native 能力（JSBridge）
@@ -81,7 +96,7 @@ Cookie 仅作本地存储：可读写、按 origin 隔离，但因不联网**不
 | 硬件连接 | `navigator.bluetooth` / `navigator.usb` / `navigator.hid` / `navigator.serial` | 移除 |
 | 传感器 | `new Accelerometer()` / `new Gyroscope()` / `new Magnetometer()`、环境光、`DeviceMotionEvent` / `DeviceOrientationEvent` | 改用触摸 / 指针手势（见 §5），摇一摇类移除 |
 | 实时通信 | `new WebSocket()`、`new EventSource()`、`new RTCPeerConnection()` | 移除（不联网，无轮询替代） |
-| 后台运行 | Web Worker、SharedWorker、Service Worker（`navigator.serviceWorker.register`） | 移除，逻辑放主线程 |
+| 后台运行 | SharedWorker、Service Worker（`navigator.serviceWorker.register`）；以及客户端低于 9.53 时的 `new Worker()` | Dedicated Worker 见 §1「Worker」；SharedWorker / SW 移除；低版本逻辑放主线程 |
 | 屏幕 | `getDisplayMedia`（屏幕共享）、`Element.requestFullscreen`（全屏由容器统一管理） | 全屏用 CSS 沉浸式布局实现视觉全屏 |
 | 设备信息 | `navigator.getBattery`、`navigator.connection`、`navigator.mediaDevices.enumerateDevices` | 移除 |
 | 存储进阶 | `navigator.storage.persist`（持久化）、跨域存储访问 | 移除；持久化改用 Storage JS API（见 §1 数据存储），客户端 < 9.46.0 才降级 `localStorage` |
@@ -118,7 +133,7 @@ Cookie 仅作本地存储：可读写、按 origin 隔离，但因不联网**不
 | 包内资源 / Canvas / 内存对象作为纹理 | ✅ |
 | 外部域名图片作为纹理 | 🔴 不联网，纹理须打包在内 |
 | 依赖 WASM 的加速库（Draco / Basis / ONNX / 抠图算法等） | 🔴 |
-| 依赖 Worker 的离屏渲染（OffscreenCanvas + Worker） | 🔴 |
+| 依赖 Worker 的离屏渲染（OffscreenCanvas + Worker） | ⚠️ 仅客户端 ≥ 9.53 的 Dedicated Worker + 包内 classic 脚本；受配额 / 隐藏回收约束，见 §1 |
 | SharedArrayBuffer 多线程 | 🔴 |
 
 WebGL 适合用包内资源做本地渲染；AI 图像处理等重计算（需联网或 WASM 模型）无法支持。WebGL 可用不等于低端真机性能足够：DPR、像素、纹理、draw call、几何预算、动态降档与兜底必须遵守 [performance-budget.md](./performance-budget.md) §4–5。
@@ -141,6 +156,7 @@ WebGL 适合用包内资源做本地渲染；AI 图像处理等重计算（需�
 | 跳转 App 搜索 / 用户页等 | `openRedPage({ type, params? })`，`type` 须在白名单内 |
 | 本地持久化（配置 / 收藏 / 最高分） | `setStorage` / `getStorage`（客户端 ≥ 9.46.0），低版本降级 `localStorage`；key 带业务前缀，读写都要异常兜底 |
 | 按客户端版本决定功能开关 | 同步读 `window.xhs.launchOptions.miniToolEnv.buildVersion`，取不到再 `getLaunchOptions()`；忽略末 3 位编译号 |
+| 后台重计算（客户端 ≥ 9.53） | `new Worker('./worker.js')`（包内 classic）；每页最多 1 个；监听 `onTerminate`；页面隐藏后需重建 |
 
 ---
 
@@ -156,7 +172,7 @@ navigator.bluetooth / navigator.usb / navigator.hid / navigator.serial
 navigator.getBattery / navigator.connection / navigator.credentials / navigator.locks
 navigator.mediaDevices.enumerateDevices / navigator.mediaDevices.getDisplayMedia
 navigator.storage.persist / navigator.serviceWorker.register
-new Worker( / new SharedWorker(
+new SharedWorker( / new Worker( 且脚本为 module / 外链 / blob: / data: / 运行时生成
 new Accelerometer() / new Gyroscope() / new Magnetometer()
 DeviceMotionEvent / DeviceOrientationEvent / addEventListener('devicemotion' / 'deviceorientation')
 Element.requestFullscreen / webkitRequestFullscreen
@@ -176,6 +192,7 @@ navigator.mediaDevices.getUserMedia({ video / audio })   // 用户手势 + 授�
 <input type="file">                                       // 选图片 / 视频
 window.xhs.miniTool.*                                     // 端能力：发笔记 / 存相册 / 临时文件 / 版本 / 本地缓存
 localStorage / sessionStorage / IndexedDB / Cookie / Cache API   // 仅作 Storage JS API 的降级，不保证持久
+new Worker('./xxx.js')                                    // 仅 ≥9.53；包内 classic；每页 1 个；见 §1 Worker
 alert() / confirm()
 touch / pointer events                                    // 手势交互
 标准 DOM / CSS / Canvas 2D / WebGL 渲染

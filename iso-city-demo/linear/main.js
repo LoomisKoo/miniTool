@@ -813,7 +813,7 @@ const TP_META = {
   stadium: [0, '文体', '🏟️'], arena: [0, '文体', '🎤'], sports: [0, '文体', '⛹️'], cinema: [0, '文体', '🎬'],
   library: [0, '文化', '📚'], museum: [0, '文化', '🏛️'], temple: [0, '文化', '🛕'], church: [0, '文化', '⛪'],
   hospital: [0, '生活', '🏥'], school: [0, '生活', '🏫'], market: [0, '生活', '🛒'], farmers: [0, '生活', '🥬'], post: [0, '生活', '📮'],
-  busterm: [0, '交通', '🚌'], airport: [0, '交通', '✈️'], themepark: [0, '文体', '🎢'], parkresort: [0, '文体', '🏨'], garage: [0, '交通', '🅿️'], police: [0, '公共服务', '🚓'], fire: [0, '公共服务', '🚒'],
+  busterm: [0, '交通', '🚌'], airport: [0, '交通', '🛸'], themepark: [0, '文体', '🎢'], parkresort: [0, '文体', '🏨'], garage: [0, '交通', '🅿️'], police: [0, '公共服务', '🚓'], fire: [0, '公共服务', '🚒'],
   walk: [0, '特色街区', '🛍️'], bar: [0, '特色街区', '🍸'], anime: [0, '特色街区', '🎮'], old: [0, '特色街区', '🏮'],
 }
 for (const k in TP_META) if (!TP_META[k][0]) TP_META[k][0] = signName(k) || k

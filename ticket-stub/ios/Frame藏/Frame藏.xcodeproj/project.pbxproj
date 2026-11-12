@@ -11,6 +11,7 @@
 		505B75BE30778A8B0091A845 /* Frame藏.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = "Frame藏.xcodeproj"; sourceTree = "<group>"; };
 		505B75DA307795410091A845 /* Frame藏.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = "Frame藏.xcodeproj"; sourceTree = "<group>"; };
 		505B762A3078DC770091A845 /* Frame藏.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = "Frame藏.xcodeproj"; sourceTree = "<group>"; };
+		507C74D2307E3BB200ADFBC4 /* Frame藏.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = "Frame藏.xcodeproj"; sourceTree = "<group>"; };
 		FRM00000000000000000003 /* Frame藏.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Frame藏.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -45,6 +46,11 @@
 			sourceTree = "<group>";
 		};
 		505B763F3078DC770091A845 /* Products */ = {
+			isa = PBXGroup;
+			name = Products;
+			sourceTree = "<group>";
+		};
+		507C74ED307E3BB200ADFBC4 /* Products */ = {
 			isa = PBXGroup;
 			name = Products;
 			sourceTree = "<group>";
@@ -132,6 +138,10 @@
 					ProductGroup = 505B75C530778A8B0091A845 /* Products */;
 					ProjectRef = 505B75BE30778A8B0091A845 /* Frame藏.xcodeproj */;
 				},
+				{
+					ProductGroup = 507C74ED307E3BB200ADFBC4 /* Products */;
+					ProjectRef = 507C74D2307E3BB200ADFBC4 /* Frame藏.xcodeproj */;
+				},
 			);
 			projectRoot = "";
 			targets = (
@@ -189,7 +199,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = 3RF98S68VY;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -206,7 +216,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0.0;
+				MARKETING_VERSION = 1.0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.tincom.framezang;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
@@ -222,7 +232,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = 3RF98S68VY;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -239,7 +249,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0.0;
+				MARKETING_VERSION = 1.0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.tincom.framezang;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;

@@ -45,7 +45,9 @@ function load(): GameState | null {
     if (!raw) return null
     const g = JSON.parse(raw) as GameState
     ensureArtistFaces([...(g.artists ?? []), ...(g.candidates ?? [])])
-    localStorage.setItem(KEY, JSON.stringify(g))
+    try {
+      localStorage.setItem(KEY, JSON.stringify(g))
+    } catch {}
     return g
   } catch {
     return null
@@ -53,8 +55,11 @@ function load(): GameState | null {
 }
 
 function save() {
-  if (game) localStorage.setItem(KEY, JSON.stringify(game))
-  else localStorage.removeItem(KEY)
+  // 宿主 WebView 可能禁用或限额 localStorage，存档失败不能打断点击逻辑
+  try {
+    if (game) localStorage.setItem(KEY, JSON.stringify(game))
+    else localStorage.removeItem(KEY)
+  } catch {}
 }
 
 function emit() {

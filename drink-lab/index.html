@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta name="theme-color" content="#6b4a33">
+<title>调饮实验室</title>
+<link rel="stylesheet" href="src/style.css?v=112">
+</head>
+<body>
+<canvas id="c" aria-label="3D 饮品杯，左右拖动旋转，轻点摇一摇"></canvas>
+<div class="grade" aria-hidden="true"></div>
+<div class="vignette" aria-hidden="true"></div>
+<div class="grain" aria-hidden="true"></div>
+
+<header class="hud">
+  <button class="save-top" id="saveTop" aria-label="保存的饮品">▣</button>
+  <input id="name" class="name" maxlength="16" placeholder="空杯" enterkeyhint="done" aria-label="饮品名，点一下可以自己起名">
+  <p id="sub"></p>
+  <div class="meter" aria-hidden="true"><span id="mix"></span></div>
+</header>
+
+<nav class="dock">
+  <div class="tabs" id="tabs"></div>
+  <div class="chips" id="chips"></div>
+  <div class="actions">
+    <button class="act" id="random">随机一杯</button>
+    <button class="act main" id="shake">摇一摇</button>
+    <button class="act" id="share">分享</button>
+    <button class="act" id="reset">重置</button>
+  </div>
+</nav>
+
+<div class="sheet-mask" id="sheet">
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+    <div class="sheet-bar"></div>
+    <h3 id="sheetTitle"></h3>
+    <div class="sheet-grid" id="sheetGrid"></div>
+  </div>
+</div>
+
+<div class="save-mask" id="saveMask">
+  <div class="sheet save-sheet" role="dialog" aria-modal="true" aria-labelledby="saveTitle">
+    <div class="sheet-bar"></div>
+    <h3 id="saveTitle">我的调饮</h3>
+    <div class="save-list" id="saveList"></div>
+    <button class="save-new" id="saveNew">保存当前状态</button>
+  </div>
+</div>
+
+<div class="confirm-mask" id="replaceMask">
+  <div class="confirm-card">
+    <h3>替换当前饮品？</h3>
+    <p id="replaceText">当前饮品会被保存的状态覆盖。</p>
+    <div class="confirm-actions">
+      <button class="act" id="replaceCancel">取消</button>
+      <button class="act main" id="replaceConfirm">继续替换</button>
+    </div>
+  </div>
+</div>
+
+<input type="file" id="sleeveFile" accept="image/*" hidden>
+
+<div class="share-mask" id="shareMask">
+  <div class="share-card">
+    <img id="shareImg" alt="分享图预览">
+    <div class="share-btns">
+      <button class="act" id="shareSave">保存图片</button>
+      <button class="act main" id="shareSend">发布到小红书</button>
+      <button class="act" id="shareClose">关闭</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="vendor/three.min.js"></script>
+<script type="module" src="src/main.js?v=112"></script>
+</body>
+</html>

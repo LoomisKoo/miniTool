@@ -38,6 +38,7 @@ xiaohongshu/
 | 焚香计时 | 焚香计时 | 焚香倒计时，自选时长 | ✅ 已发布 1.0.1 | `incense-timer/icon.png` | `incense-timer/dist/xiaohongshu-incense-timer.zip` |
 | 轻映 | 轻映 | 图片裁切与多宫格分图 | ✅ 已发布 1.0.1 | `crop-grid/icon.png` | `crop-grid/dist/xiaohongshu-qingying.zip` |
 | 帧藏 | 帧藏 | 看过的电影走过的路，做成票根 | ⏳ 待提交 1.0.0 | `ticket-stub/assets/icon.jpg` | `ticket-stub/dist/xiaohongshu-ticket-stub.zip` |
+| 立体书画 | 立体书画 | 翻一页，纸片立起来，自己也能做一本 | ⏳ 待提交 1.0.0 | `liti-shuhua/icon.png` | `liti-shuhua/dist/xiaohongshu-liti-shuhua.zip` |
 
 跨项目总表见根目录 [README 发布总表](../README.md#发布总表)（小红书 / 快手状态一致）。
 
@@ -71,7 +72,8 @@ xiaohongshu/
 **容易踩的坑**：
 
 - `a[download]`、blob 下载被禁用 → 导出图片一律走 `writeTempFile` + `saveImageToPhotosAlbum` / `postNote`。
-- 全屏 `requestFullscreen`、`window.open`、剪贴板、`navigator.geolocation`、Worker、WASM、`eval` 均不可用。
+- 全屏 `requestFullscreen`、`window.open`、剪贴板、`navigator.geolocation`、WASM、`eval` 均不可用。
+- **Worker**：客户端 **≥ 9.53** 可用 Dedicated Worker（`new Worker()`）；不支持 SharedWorker / Service Worker。脚本须为包内 classic `.js`（禁 module / 外链 / `blob:` / `data:`）；每页同时最多 1 个；页面隐藏 30 秒会回收，返回后需重建。详见 [`device-capabilities.md`](minitool-zip-builder/references/device-capabilities.md)。
 - 不联网：媒体字段与所有资源只接受包内文件或 `data:` / `blob:`。
 - 调用前判空 `window.xhs && window.xhs.miniTool`，未注入（如普通浏览器预览）时走降级路径。
 

@@ -777,65 +777,152 @@ export function makeCivic(ctx) {
     const side = Math.abs(s) > 0.5
     F.S(x, z, side ? 38 : 6, side ? 6 : 38, y + 2.2)
   }
+  // ── 未来交通：eVTOL 空中枢纽（云港）+ 跨城磁悬浮站 ─────────────────────
+  // 原来这里是「客机机场」：这块地 638×354m，大型客机连滑跑都不够，
+  // 机坪上摆 4 架 737 只会显得假。换成垂直起降 + 悬浮轨道，尺度才立得住。
+  const ringGeo = new THREE.TorusGeometry(0.5, 0.022, 8, 72).rotateX(Math.PI / 2)
+  // 发光环：白天也要读得出"在发光"，所以自发光强度给足（不是靠环境光反射）
+  const ringIce = G(ringGeo, '#bfeaff', 0.1, 0.15, 1.1, { emissive: '#63c8ff', emissiveIntensity: 0.9 })
+  Mat.registerNight(ringIce.mat, 0.9, 2.8)
+  const ringTeal = G(ringGeo, '#3fd6c4', 0.3, 0.3, 0.8, { emissive: '#25c9b6', emissiveIntensity: 0.8 })
+  Mat.registerNight(ringTeal.mat, 0.8, 2.4)
+  // 起降坪面：深灰盘。浅色坪面放在浅色机坪上会"消失"，深色盘 + 白 H 才一眼看出这是停机位
+  const cylPad = G(cylGeo, '#4e545b', 0.15, 0.72, 0.35)
+  // 塔身玻璃压深一档：原来和晴天白云同色，塔直接融进天空里
+  const cylGlassDeep = G(cylGeo, '#5f8fae', 0.55, 0.1, 1.25, { emissive: '#2f6f96' })
+  Mat.registerNight(cylGlassDeep.mat, 0.05, 1.1)
+
+  /** eVTOL：压扁吊舱 + 4 个涵道风扇；机头朝局部 -z（相对 ly）。lift 用来做"悬停在空中" */
+  function vtol(F, x, z, ly, col, lift = 0) {
+    const c = Math.cos(ly), s = Math.sin(ly)
+    const at = (u, v) => [x + u * c + v * s, z - u * s + v * c]
+    const put = (pool, u, y, v, sx, sy, sz, ly2 = 0) => { const [px, pz] = at(u, v); F.B(pool, px, y, pz, sx, sy, sz, ly + ly2) }
+    const y = S + 3.2 + lift
+    put(sphW, 0, y, 0, 4.2, 2.0, 8.2)                     // 机身：椭球吊舱（不是细长机身）
+    put(col, 0, y - 0.15, 0.6, 4.25, 0.75, 5.4)           // 涂装腰线
+    put(glass, 0, y + 0.62, -2.5, 3.0, 0.85, 2.2)         // 前风挡
+    for (const sd of [-1, 1]) {
+      put(cW, sd * 3.4, y + 0.05, 0.1, 2.6, 0.3, 4.6)     // 短翼（涵道挂架）
+      for (const v of [-2.8, 2.4]) {
+        const u = sd * 4.6
+        put(cylSteel, u, y + 0.5, v, 2.6, 0.55, 2.6)      // 涵道外圈
+        put(cDark, u, y + 0.82, v, 2.1, 0.22, 2.1)        // 旋转盘
+      }
+      put(cLit, sd * 4.6, y + 0.5, -3.4, 0.55, 0.4, 0.55) // 航行灯
+      put(cylSteel, sd * 1.5, y - 1.5, 1.6, 0.35, 1.3, 0.35) // 起落架
+    }
+    put(cylSteel, 0, y + 1.7, 1.4, 0.36, 1.7, 0.36)
+    put(cLit, 0, y + 2.6, 1.4, 0.7, 0.5, 0.7)
+    if (!lift) F.S(x, z, 9, 9, y + 1.6)
+  }
+
   B.airport = (F, w, d) => {
     // 局部：x 沿临街长边（w），z 指向城墙（d）
-    // t34：底板改为草地（以前整块深色沥青 = 一大片纯色暗板）；只有陆侧车道 / 停车场 / 跑道滑行道是沥青，机坪是浅色混凝土
     F.P(lawn, 0, 0, w - 4, d - 4, 0.18, 0.2)
-    // 陆侧：进场车道 + 落客雨棚 + 停车场 + 绿化
-    F.P(tarmac, 0, -d / 2 + 28, w - 24, 9, 0.28, 0.1)
-    for (const s of [-1, 1]) F.P(tarmac, s * (w / 2 - 16), -d / 2 + 50, 8, 52, 0.28, 0.1)
-    for (let x = -w / 2 + 20; x < w / 2 - 20; x += 9) F.P(line, x, -d / 2 + 28, 3, 0.15, 0.34, 0.03)
-    for (let i = 0; i < 28; i++) F.T(-w / 2 + 14 + i * (w - 28) / 27, -d / 2 + 6, 0.95)
-    F.P(P0.pave, 0, -d / 2 + 44, w * 0.5, 8, 0.32, 0.12)
-    const tz = -d / 2 + 82
-    const tw = Math.min(300, w * 0.55)
-    F.K(cW, 0, S + 8, -d / 2 + 44, tw * 0.8, 0.7, 14, false)
-    for (let x = -tw * 0.38; x <= tw * 0.38; x += 16) F.K(cSteel, x, S, -d / 2 + 39, 0.5, 8, 0.5, false)
+
+    // ── 陆侧：进场车道 + 落客广场 + 自动驾驶舱泊位 ──
+    F.P(tarmac, 0, -d / 2 + 26, w - 24, 10, 0.28, 0.1)
+    for (let x = -w / 2 + 20; x < w / 2 - 20; x += 9) F.P(line, x, -d / 2 + 26, 3, 0.15, 0.34, 0.03)
+    for (let i = 0; i < 30; i++) F.T(-w / 2 + 14 + i * (w - 28) / 29, -d / 2 + 5, 0.95)
+    F.P(pave, 0, -d / 2 + 50, w * 0.6, 18, 0.32, 0.12)
     for (const s of [-1, 1]) {
-      const px = s * (tw / 2 + (w / 2 - tw / 2) / 2)
-      const pw = w / 2 - tw / 2 - 16
-      F.P(P0.tarmac, px, -d / 2 + 70, pw, 60, 0.3, 0.12)
-      for (let i = 0; i < Math.floor(pw / 3); i += 1) for (const r of [-14, 0, 14]) if (rng() < 0.6) lotCar(F.X(px - pw / 2 + 2 + i * 3, -d / 2 + 70 + r), S + 0.3, F.Z(px - pw / 2 + 2 + i * 3, -d / 2 + 70 + r), F.yaw + Math.PI / 2, null, false)
-      for (const r of [-7, 7]) F.P(line, px, -d / 2 + 70 + r, pw, 0.2, 0.34, 0.05)
+      const px = s * w * 0.31
+      F.P(tarmac, px, -d / 2 + 50, w * 0.24, 14, 0.3, 0.1)
+      for (let i = 0; i < 6; i++) {         // 自动驾驶舱（一排小吊舱，不再是私家车）
+        const bx = px - w * 0.09 + i * w * 0.036
+        F.B(fuseW, bx, S + 2.2, -d / 2 + 50, 2.2, 2.2, 5.6)
+        F.B(glass, bx, S + 2.8, -d / 2 + 47.2, 1.9, 1.2, 1.0)
+        F.B(cLit, bx, S + 1.2, -d / 2 + 50, 0.3, 0.4, 4.8)
+      }
     }
-    // 航站楼：幕墙楼身 + 波浪大屋顶（三段拱顶）+ 正立面玻璃大厅
-    F.H('#cfe3ec', 'curtain', 0, S, tz, tw, 16, 56)
-    for (let i = 0; i < 3; i++) F.B(i === 1 ? vaultGlass : vaultW, (i - 1) * tw / 3, S + 16.6, tz, tw / 3 + 1, 16 + (i === 1 ? 6 : 0), 64)
-    F.S(0, tz, tw, 56, S + 27)
-    F.K(glass, 0, S, tz - 30, tw * 0.5, 14, 4, false)
-    F.sign('airport', 0, S + 21, tz - 32.6, 30)
-    // 指廊 + 廊桥 + 停机位
-    const fz = tz + 28 + 10
-    F.K(cW, 0, S, fz, tw * 0.9, 7, 14)
-    F.B(glass, 0, S + 4.5, fz + 7.05, tw * 0.88, 3.2, 0.2)
-    const nG = 4
-    const liv = [cBlue, cCoral, cTeal, cYellow]
-    for (let i = 0; i < nG; i++) {
-      const gx = -tw * 0.36 + i * (tw * 0.72) / (nG - 1)
-      F.K(cSteel, gx + 6, S + 4.2, fz + 7 + 9, 3, 3, 18, false)
-      F.K(cSteel, gx + 6, S, fz + 7 + 16, 0.8, 4.2, 0.8, false)
-      plane(F, gx, fz + 7 + 32, 0, liv[i % liv.length])
-      F.P(line, gx, fz + 7 + 32, 0.3, 50, 0.24, 0.05)
+
+    // ── 主塔：三退台玻璃圆环（航站楼 + 塔台一体）──
+    const tz = -d / 2 + 96
+    const R = Math.min(30, w * 0.045)
+    F.R(cylW, 0, S, tz, R * 2 + 10, 2.6)
+    F.R(cylTeal, 0, S + 2.6, tz, R * 2 + 1.2, 1.1)     // 底座青绿腰线（白塔需要一道色才不糊）
+    F.R(cylGlassDeep, 0, S + 3.7, tz, R * 2, 24.9)
+    F.R(cylW, 0, S + 14, tz, R * 2 + 1.6, 1.6)          // 中部白环
+    F.R(cylW, 0, S + 28.6, tz, R * 2 + 7, 2.6)
+    F.R(cylTeal, 0, S + 31.2, tz, R * 1.45 + 0.8, 0.9)
+    F.R(cylGlassDeep, 0, S + 32.1, tz, R * 1.45, 10.1)
+    F.R(cylW, 0, S + 42.2, tz, R * 1.45 + 5, 2.2)
+    F.R(cylSteel, 0, S + 44.4, tz, 1.4, 6)
+    F.B(cLit, 0, S + 50.6, tz, 1.8, 1.4, 1.8)
+    F.S(0, tz, R * 2 + 10, R * 2 + 10, S + 28.6)
+    // 塔顶悬浮环：无支撑的发光环（未来交通枢纽的符号，也当夜间地标）
+    F.B(ringIce, 0, S + 46.5, tz, R * 3.4, R * 3.4, R * 3.4)
+    for (let k = 0; k < 10; k++) {
+      const a = (k / 10) * Math.PI * 2
+      F.B(cLit, Math.cos(a) * R * 1.7, S + 46.5, tz + Math.sin(a) * R * 1.7, 0.9, 0.6, 0.9)
     }
-    // 塔台
-    const cx = tw / 2 + 30
-    F.R(cylW, cx, S, tz + 10, 7, 44)
-    F.R(cylGlass, cx, S + 44, tz + 10, 13, 5)
-    F.R(cylW, cx, S + 49, tz + 10, 15, 1.4)
-    F.R(cylSteel, cx, S + 50.4, tz + 10, 0.5, 8)
-    F.S(cx, tz + 10, 7, 7, S + 50)
-    // 滑行道 + 跑道（贴城墙一侧，标线）
-    const rz = d / 2 - 34
-    // 机坪：浅色混凝土分格（stoneStep 池自带 1.2m 石板缝 + 斑驳），留出草地缓冲带再接跑道
-    F.P(P0.stoneStep, 0, (fz + 7 + rz - 30) / 2, w - 30, rz - 30 - fz - 7, 0.26, 0.1)
-    for (let x = -w / 2 + 30; x < w / 2 - 30; x += 20) F.P(line, x, (fz + 7 + rz - 30) / 2, 0.12, rz - 30 - fz - 9, 0.32, 0.02)
-    F.P(cDark, 0, rz, w - 20, 46, 0.22, 0.05)
-    for (let x = -w / 2 + 40; x < w / 2 - 40; x += 30) F.P(line, x, rz, 14, 0.8, 0.24, 0.03)
-    for (const s of [-1, 1]) for (let k = 0; k < 8; k++) F.P(line, s * (w / 2 - 24), rz - 16 + k * 4.6, 12, 1.6, 0.24, 0.03)
-    F.P(cYellow, 0, rz - 34, w - 40, 0.5, 0.24, 0.03)
-    for (const s of [-1, 1]) F.P(cYellow, s * (w * 0.32), (fz + rz) / 2 + 10, 0.5, rz - fz - 40, 0.24, 0.03)
-    plane(F, -w * 0.18, rz, Math.PI / 2, cBlue)
-    for (let x = -w / 2 + 20; x < w / 2 - 20; x += 24) for (const s of [-1, 1]) F.B(cLit, x, S + 0.4, rz + s * 24, 0.5, 0.3, 0.5)
+    // 入口：环形挑檐 + 门厅
+    F.R(cylW, 0, S + 7.0, tz - R - 2, R * 1.2, 1.0, R * 1.2)
+    for (const s of [-1, 1]) F.R(cylSteel, s * R * 0.7, S, tz - R - 2, 1.1, 7.0)
+    F.K(glass, 0, S, tz - R - 2, R * 1.1, 7.0, 3.0, false)
+    F.sign('airport', 0, S + 19, tz - R - 0.6, 34)
+
+    // ── 机坪 + 4 个起降坪（H 标 + 发光边圈 + 引导灯）──
+    const az0 = tz + R + 30
+    const az1 = d / 2 - 34
+    F.P(P0.stoneStep, 0, (az0 + az1) / 2, w - 34, Math.max(40, az1 - az0), 0.26, 0.1)
+    const padR = Math.min(20, w * 0.032)
+    const pads = []
+    for (const sz of [0.3, 0.72]) for (const sx of [-0.26, 0.26]) pads.push([w * sx, az0 + (az1 - az0) * sz])
+    for (const [px, pz] of pads) {
+      F.R(cylPad, px, S + 0.23, pz, padR * 2, 0.26)
+      F.B(ringTeal, px, S + 0.42, pz, padR * 2.1, padR * 2.1, padR * 2.1)
+      F.B(cW, px - padR * 0.4, S + 0.4, pz, 1.5, 0.1, padR * 1.05)       // H 标两竖（白压深灰坪）
+      F.B(cW, px + padR * 0.4, S + 0.4, pz, 1.5, 0.1, padR * 1.05)
+      F.B(cW, px, S + 0.4, pz, padR * 0.8, 0.1, 1.5)                     // H 标一横
+      for (let k = 0; k < 8; k++) {
+        const a = (k / 8) * Math.PI * 2
+        F.B(cLit, px + Math.cos(a) * padR * 1.2, S + 0.65, pz + Math.sin(a) * padR * 1.2, 0.7, 0.4, 0.7)
+      }
+    }
+    // 引导带：塔底 → 各起降坪（不然 600m 见方的机坪就是一片白）
+    for (const [px, pz] of pads) {
+      const x0 = px * 0.3, z0 = tz + R + 16
+      const n = 15
+      for (let i = 0; i < n; i++) {
+        const t = i / (n - 1)
+        F.B(i % 2 ? cLit : cTeal, x0 + (px - x0) * t, S + 0.32, z0 + (pz - z0) * t, 1.6, 0.14, 4.2)
+      }
+    }
+    // 两侧机库（检修 / 换电）：低矮体量，压住空荡的机坪
+    for (const s of [-1, 1]) {
+      const hx = s * (w / 2 - 58)
+      const hz = (az0 + az1) / 2
+      F.K(cIce, hx, S, hz, 56, 11, 44)
+      F.K(cSteel, hx, S + 11, hz, 58, 0.9, 46, false)
+      F.B(glass, hx, S + 5.2, hz - 22.2, 46, 8.6, 0.3)
+      F.B(cTeal, hx, S + 10.2, hz - 22.4, 46, 1.2, 0.2)
+      F.S(hx, hz, 56, 44, S + 11)
+    }
+    const liv = [cBlue, cTeal, cCoral, cPurple]
+    for (let i = 0; i < pads.length; i++) {
+      const [px, pz] = pads[i]
+      vtol(F, px, pz, i % 2 ? Math.PI : 0, liv[i % liv.length])
+    }
+    // 一台正在悬停进场（抬到 12m，看得出"在飞"而不是停在地上）
+    vtol(F, pads[3][0] + 26, pads[3][1] - 18, 0.5, cCoral, 12)
+
+    // ── 跨城磁悬浮：架空梁横穿场地 + 站台 + 悬浮舱 ──
+    const gz = d / 2 - 16
+    F.K(cSteel, 0, S + 14, gz, w - 16, 1.5, 4.2, false)
+    for (let x = -w / 2 + 40; x < w / 2 - 20; x += 52) F.K(cylSteel, x, S, gz, 2.4, 14, 2.4, false)
+    for (let x = -w / 2 + 18; x < w / 2 - 10; x += 6) F.B(cLit, x, S + 14.9, gz, 2.6, 0.22, 0.3)
+    // 站台（贴着梁的一侧）
+    F.K(cIce, 0, S + 15.5, gz - 8, 54, 6.5, 11, false)
+    F.B(glass, 0, S + 22, gz - 13.2, 52, 3.4, 0.25)
+    F.K(cSteel, 0, S, gz - 8, 3.2, 15.5, 3.2, false)
+    // 悬浮舱
+    for (const px of [-w * 0.2, w * 0.28]) {
+      F.B(fuseW, px, S + 18.8, gz, 3.6, 3.4, 14)
+      F.B(glass, px, S + 19.6, gz - 6.0, 3.0, 1.7, 2.4)
+      F.B(cLit, px, S + 17.0, gz, 0.35, 0.42, 13)
+      for (const s of [-1, 1]) F.B(ringTeal, px, S + 16.6, gz + s * 4.6, 7, 7, 7)
+    }
   }
 
   // t37 大型主题乐园（整块地，造型在 themepark.js；复用这里的几何 / 材质 / 小型游乐设施）

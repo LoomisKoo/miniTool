@@ -17,9 +17,11 @@ const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'me', label: '我的', icon: '👤' },
 ]
 
+const TAB_TITLE: Record<Tab, string> = { home: '', artists: '旗下艺人', feed: '公司动态', me: '我的' }
+
 export default function App() {
   const { g, ui } = useStore()
-  const hostClass = /xhs|xiaohongshu/i.test(navigator.userAgent) ? 'host-xhs' : ''
+  const hostClass = import.meta.env.VITE_HOST === 'xhs' || /xhs|xiaohongshu|discover/i.test(navigator.userAgent) ? 'host-xhs' : ''
 
   if (!g || ui.screen === 'title') {
     return (
@@ -45,6 +47,7 @@ export default function App() {
   return (
     <div className={`phone ph-${g.phase} ${hostClass}`}>
       <Header g={g} tab={ui.tab} />
+      {hostClass && ui.tab !== 'home' && <div className="xhs-title">{TAB_TITLE[ui.tab]}</div>}
       <main className="content">
         {ui.tab === 'home' && <HomeTab g={g} />}
         {ui.tab === 'artists' && <ArtistsTab g={g} />}

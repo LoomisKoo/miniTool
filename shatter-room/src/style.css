@@ -1,0 +1,503 @@
+:root {
+  --coral: #ff7a59;
+  --coral-deep: #ff5a3a;
+  --peach: #ffe8dc;
+  --cream: #fff7f2;
+  --sky: #6ec8ff;
+  --mint: #5ee0a8;
+  --ink: #3b2a24;
+  --muted: #8a6f64;
+  --panel: rgba(255, 247, 242, 0.92);
+  --shadow: 0 10px 24px rgba(80, 40, 20, 0.18);
+  --radius: 22px;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #1a1210;
+  color: var(--ink);
+  font-family: "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Segoe UI", sans-serif;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: none;
+}
+
+/* 竖屏手机框：桌面居中模拟全面屏 */
+#phone {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(ellipse at 50% 20%, #5a3a30, #1a1210 70%);
+}
+
+#app {
+  position: relative;
+  width: min(100vw, 430px);
+  height: 100%;
+  max-height: 100dvh;
+  overflow: hidden;
+  background: #111;
+  box-shadow: 0 0 0 1px rgba(255,255,255,.06), 0 30px 80px rgba(0,0,0,.45);
+}
+
+@media (max-width: 480px) {
+  #app {
+    width: 100vw;
+    box-shadow: none;
+  }
+}
+
+#c {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
+
+#blastFlash {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(circle at 50% 55%, rgba(255,220,150,.8), rgba(255,100,40,.35) 35%, transparent 70%);
+  mix-blend-mode: screen;
+}
+#blastFlash.on { animation: blastFlash .28s ease-out forwards; }
+@keyframes blastFlash {
+  0% { opacity: .9; }
+  40% { opacity: .4; }
+  100% { opacity: 0; }
+}
+
+#hud {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.crosshair {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 20px;
+  height: 20px;
+  transform: translate(-50%, -50%);
+}
+.crosshair .dot {
+  position: absolute;
+  left: 50%; top: 50%;
+  width: 3px; height: 3px;
+  margin: -1.5px 0 0 -1.5px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 0 1.5px rgba(0,0,0,.4);
+}
+.crosshair .arm {
+  position: absolute;
+  background: #fff;
+  box-shadow: 0 0 0 1.5px rgba(0,0,0,.35);
+}
+.crosshair .arm.t { left: 50%; top: 0; width: 2px; height: 5px; margin-left: -1px; }
+.crosshair .arm.b { left: 50%; bottom: 0; width: 2px; height: 5px; margin-left: -1px; }
+.crosshair .arm.l { top: 50%; left: 0; width: 5px; height: 2px; margin-top: -1px; }
+.crosshair .arm.r { top: 50%; right: 0; width: 5px; height: 2px; margin-top: -1px; }
+.crosshair.hit .dot,
+.crosshair.hit .arm { background: #ff4d4d; }
+
+.top-bar {
+  position: absolute;
+  top: calc(12px + var(--safe-top));
+  left: 12px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 86px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+.pill-ico {
+  width: 28px;
+  height: 28px;
+  border-radius: 10px;
+  object-fit: cover;
+}
+.pill small {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1;
+}
+.pill strong {
+  display: block;
+  margin-top: 2px;
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--ink);
+}
+.left-pill { justify-content: flex-end; text-align: right; }
+.left-pill strong { color: var(--coral-deep); }
+
+.title-bubble {
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #fff, var(--peach));
+  box-shadow: var(--shadow);
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: var(--coral-deep);
+}
+
+.round-btn {
+  pointer-events: auto;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--panel);
+  color: var(--ink);
+  font-size: 22px;
+  box-shadow: var(--shadow);
+  cursor: pointer;
+}
+.reset-btn {
+  position: absolute;
+  top: calc(70px + var(--safe-top));
+  right: 14px;
+}
+
+.target-fab {
+  pointer-events: auto;
+  position: absolute;
+  top: calc(70px + var(--safe-top));
+  left: 14px;
+  border: 0;
+  border-radius: 18px;
+  padding: 8px 12px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  text-align: left;
+  cursor: pointer;
+  color: var(--ink);
+}
+.target-fab span {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+}
+.target-fab strong {
+  display: block;
+  margin-top: 2px;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--coral-deep);
+}
+
+.sheet {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  pointer-events: auto;
+  background: rgba(40, 24, 18, 0.35);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 12px;
+}
+.sheet.hidden { display: none; }
+.sheet-card {
+  width: 100%;
+  max-height: 70%;
+  overflow: auto;
+  background: var(--cream);
+  border-radius: 24px 24px 28px 28px;
+  padding: 16px 14px 20px;
+  box-shadow: 0 -8px 30px rgba(0,0,0,.18);
+}
+.sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  padding: 0 4px;
+}
+.sheet-head h3 {
+  font-size: 18px;
+  font-weight: 800;
+}
+.sheet-close {
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 50%;
+  background: #ffe8dc;
+  color: var(--ink);
+  font-size: 16px;
+  cursor: pointer;
+}
+.target-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.target-opt {
+  border: 0;
+  border-radius: 18px;
+  padding: 14px 10px;
+  background: #fff;
+  box-shadow: 0 6px 14px rgba(80,40,20,.08);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--ink);
+  cursor: pointer;
+}
+.target-opt span { font-size: 28px; line-height: 1; }
+.target-opt small {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.target-opt.active {
+  background: linear-gradient(180deg, #ffe0d2, #ffcbb8);
+  box-shadow: inset 0 0 0 2px rgba(255,90,58,.35);
+}
+
+.weapon-bar {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: calc(14px + var(--safe-bottom));
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  pointer-events: auto;
+  padding: 10px;
+  border-radius: 28px;
+  background: rgba(255, 247, 242, 0.88);
+  backdrop-filter: blur(12px);
+  box-shadow: var(--shadow);
+}
+
+.wep {
+  border: 0;
+  background: transparent;
+  border-radius: 18px;
+  padding: 8px 4px 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  pointer-events: auto;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+.wep img {
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+  object-fit: cover;
+  background: #fff;
+  box-shadow: 0 4px 10px rgba(80,40,20,.12);
+}
+.wep.active {
+  background: linear-gradient(180deg, #ffe0d2, #ffcbb8);
+  color: var(--coral-deep);
+  box-shadow: inset 0 0 0 2px rgba(255,90,58,.35);
+}
+.wep.active img {
+  transform: scale(1.05);
+}
+
+/* 触控：摇杆 + 开火 */
+.touch-only { display: none; }
+body.is-touch .touch-only { display: block; }
+
+#joyZone {
+  position: absolute;
+  left: 0;
+  bottom: 110px;
+  width: 46%;
+  height: 38%;
+  pointer-events: auto;
+}
+#joyBase {
+  position: absolute;
+  left: 28px;
+  bottom: 28px;
+  width: 118px;
+  height: 118px;
+  border-radius: 50%;
+  background: rgba(255,255,255,.18);
+  border: 2px solid rgba(255,255,255,.35);
+  pointer-events: none;
+}
+#joyKnob {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 52px;
+  height: 52px;
+  margin: -26px 0 0 -26px;
+  border-radius: 50%;
+  background: rgba(255,255,255,.75);
+  box-shadow: 0 6px 16px rgba(0,0,0,.2);
+  pointer-events: none;
+}
+
+.fire-btn {
+  pointer-events: auto;
+  position: absolute;
+  right: 22px;
+  bottom: 130px;
+  width: 92px;
+  height: 92px;
+  border: 0;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #ffb199, var(--coral) 45%, var(--coral-deep));
+  color: #fff;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  box-shadow: 0 12px 28px rgba(255,90,58,.4), inset 0 -4px 0 rgba(0,0,0,.12);
+  cursor: pointer;
+}
+.fire-btn:active {
+  transform: scale(0.94);
+}
+
+/* ===== 开始页：竖屏手游封面 ===== */
+#overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  background: var(--cream);
+}
+#overlay.hidden { display: none; }
+
+.start-screen {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.hero {
+  position: relative;
+  flex: 1.15;
+  min-height: 0;
+  overflow: hidden;
+}
+.hero img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.hero-shade {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(255,247,242,.05) 40%, rgba(255,247,242,.92) 92%, var(--cream));
+}
+.hero h1 {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 58px;
+  text-align: center;
+  font-size: 42px;
+  font-weight: 900;
+  letter-spacing: 0.18em;
+  text-indent: 0.18em;
+  color: var(--ink);
+  text-shadow: 0 2px 0 #fff, 0 10px 24px rgba(255,90,58,.2);
+}
+.hero p {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 28px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 15px;
+  letter-spacing: 0.08em;
+}
+
+.start-body {
+  flex: 0 0 auto;
+  padding: 8px 22px calc(28px + var(--safe-bottom));
+  text-align: center;
+}
+
+.tip-cards {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin-bottom: 18px;
+}
+.tip {
+  flex: 1;
+  padding: 10px 6px;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 6px 14px rgba(80,40,20,.08);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.play-btn {
+  width: 100%;
+  border: 0;
+  border-radius: 999px;
+  padding: 16px 20px;
+  background: linear-gradient(180deg, #ff9a7a, var(--coral-deep));
+  color: #fff;
+  font-size: 20px;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  box-shadow: 0 14px 28px rgba(255,90,58,.35);
+  cursor: pointer;
+}
+.play-btn:active { transform: scale(0.98); }
+
+.start-note {
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* 桌面也能点武器栏 */
+body:not(.is-touch) .weapon-bar,
+body:not(.is-touch) .reset-btn,
+body:not(.is-touch) #startBtn {
+  pointer-events: auto;
+}

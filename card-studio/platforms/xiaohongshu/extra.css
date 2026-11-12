@@ -1,0 +1,6 @@
+/* 小红书容器自带约 44px 顶栏 */
+.topbar { padding-top: calc(16px + 44px); }
+
+@media (max-height: 700px) {
+  .stage-tools { margin-top: 10px; }
+}

@@ -1,0 +1,869 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<title>帧藏 · 小红书推广片 3:4</title>
+<style>
+  @font-face {
+    font-family: 'Instrument Serif';
+    font-style: normal;
+    font-weight: 400;
+    src: url('../vendor/fonts/jizBRFtNs2ka5fXjeivQ4LroWlx-6zUTjnTLgNs.woff2') format('woff2');
+  }
+  @font-face {
+    font-family: 'DM Sans';
+    font-style: normal;
+    font-weight: 400 700;
+    src: url('../vendor/fonts/rP2Hp2ywxg089UriCZOIHTWEBlw.woff2') format('woff2');
+  }
+  @font-face {
+    font-family: 'JetBrains Mono';
+    font-style: normal;
+    font-weight: 400;
+    src: url('../vendor/fonts/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPxDcwgknk-4.woff2') format('woff2');
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1080px; height: 1440px; overflow: hidden; background: #0b0b0d; }
+  body {
+    font-family: 'DM Sans', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  #stage {
+    position: relative;
+    width: 1080px;
+    height: 1440px;
+    overflow: hidden;
+    background: #0d0d0f;
+    color: #f1efea;
+  }
+
+  /* ---------- 通用底纹 ---------- */
+  .bg {
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(980px 760px at 72% 24%, rgba(214, 180, 122, 0.18), transparent 68%),
+      radial-gradient(900px 900px at 8% 88%, rgba(120, 92, 62, 0.16), transparent 70%),
+      radial-gradient(700px 700px at 96% 96%, rgba(214, 180, 122, 0.07), transparent 70%),
+      #0d0d0f;
+  }
+  .bg--light {
+    background:
+      radial-gradient(900px 700px at 82% 8%, rgba(214, 180, 122, 0.28), transparent 65%),
+      radial-gradient(760px 760px at 0% 100%, rgba(180, 150, 110, 0.2), transparent 70%),
+      #f2efe7;
+  }
+  .grain {
+    position: absolute;
+    inset: -10%;
+    pointer-events: none;
+    opacity: 0.05;
+    mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/></filter><rect width='240' height='240' filter='url(%23n)' opacity='0.9'/></svg>");
+  }
+  .vignette {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: radial-gradient(120% 96% at 50% 46%, transparent 52%, rgba(0, 0, 0, 0.55) 100%);
+  }
+  .light .vignette { background: radial-gradient(120% 96% at 50% 46%, transparent 58%, rgba(90, 70, 40, 0.16) 100%); }
+
+  /* ---------- 文本 ---------- */
+  .kicker {
+    position: absolute;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 24px;
+    letter-spacing: 0.26em;
+    color: #d6b47a;
+    white-space: nowrap;
+  }
+  .kicker .bar { width: 54px; height: 1px; background: rgba(214, 180, 122, 0.7); }
+
+  .headline {
+    position: absolute;
+    font-family: 'Songti SC', 'STSong', 'Noto Serif SC', serif;
+    font-weight: 700;
+    font-size: 104px;
+    line-height: 1.08;
+    letter-spacing: 0.015em;
+    color: #f4f1ea;
+  }
+  .headline em {
+    font-style: normal;
+    color: #d6b47a;
+  }
+  .headline--sm { font-size: 86px; }
+
+  .line-mask { display: block; overflow: hidden; padding-bottom: 6px; margin-bottom: -6px; }
+  .line-mask > span { display: block; will-change: transform, opacity; }
+
+  /* 每屏文字统一包一层，退场时整块抬走，避免和下一屏标题叠在一起 */
+  .tb { position: absolute; inset: 0; pointer-events: none; }
+
+  .sub {
+    position: absolute;
+    font-size: 30px;
+    line-height: 1.75;
+    letter-spacing: 0.08em;
+    color: rgba(241, 239, 234, 0.55);
+  }
+
+  .serif {
+    font-family: 'Instrument Serif', Georgia, serif;
+    font-weight: 400;
+  }
+
+  /* ---------- 票根 ---------- */
+  .ticket {
+    position: absolute;
+    filter: drop-shadow(0 46px 54px rgba(0, 0, 0, 0.52)) drop-shadow(0 6px 12px rgba(0, 0, 0, 0.32));
+    will-change: transform, opacity;
+  }
+  .ticket img { display: block; width: 100%; height: auto; }
+
+  /* ================= 场景 1 ================= */
+  #s1 .k { left: 96px; top: 182px; }
+  #s1 .h { left: 90px; top: 262px; }
+  #s1 .sub { left: 98px; top: 528px; }
+  #heroTicket { left: 560px; top: 630px; width: 430px; }
+  #heroTicket img { transform: rotate(-6.5deg); }
+
+  .stamp {
+    position: absolute;
+    left: 112px;
+    top: 1020px;
+    width: 190px;
+    height: 190px;
+    border: 2px solid rgba(214, 180, 122, 0.7);
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    text-align: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 20px;
+    letter-spacing: 0.18em;
+    line-height: 1.7;
+    color: #d6b47a;
+    transform: rotate(12deg);
+    opacity: 0.9;
+  }
+  .stamp::before {
+    content: '';
+    position: absolute;
+    inset: 10px;
+    border: 1px dashed rgba(214, 180, 122, 0.45);
+    border-radius: 50%;
+  }
+
+  /* ================= 场景 2 / 3 ================= */
+  .fan-card { position: absolute; transform-origin: 50% 90%; }
+  .cap {
+    position: absolute;
+    left: 96px;
+    bottom: 128px;
+    display: flex;
+    align-items: flex-end;
+    gap: 22px;
+  }
+  .cap-index {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 22px;
+    letter-spacing: 0.16em;
+    color: #d6b47a;
+    padding-bottom: 8px;
+  }
+  .cap-title {
+    font-family: 'Instrument Serif', Georgia, serif;
+    font-size: 56px;
+    letter-spacing: 0.01em;
+    color: #f1efea;
+  }
+  .cap-meta {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 20px;
+    letter-spacing: 0.12em;
+    color: rgba(241, 239, 234, 0.42);
+    padding-bottom: 10px;
+  }
+  .scene-tag {
+    position: absolute;
+    right: 96px;
+    bottom: 132px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 22px;
+    letter-spacing: 0.2em;
+    color: rgba(241, 239, 234, 0.35);
+  }
+
+  #s2 .k, #s3 .k, #s4 .k { left: 96px; top: 158px; }
+  #s2 .h, #s3 .h, #s4 .h { left: 90px; top: 232px; }
+  #s2 .sub, #s3 .sub { left: 98px; top: 388px; }
+
+  /* 旅行虚线航迹 */
+  .route { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+  .route path { fill: none; stroke: rgba(214, 180, 122, 0.55); stroke-width: 2; stroke-dasharray: 10 12; }
+  .plane-dot {
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #d6b47a;
+    box-shadow: 0 0 22px 6px rgba(214, 180, 122, 0.45);
+  }
+
+  /* ================= 场景 4 ================= */
+  .phone-halo {
+    position: absolute;
+    left: 540px;
+    top: 850px;
+    width: 780px;
+    height: 980px;
+    transform: translate(-50%, -50%);
+    background: radial-gradient(closest-side, rgba(214, 180, 122, 0.22), rgba(214, 180, 122, 0.07) 56%, transparent 76%);
+    filter: blur(26px);
+    pointer-events: none;
+    will-change: opacity;
+  }
+  .phone {
+    position: absolute;
+    left: 325px;
+    top: 420px;
+    width: 420px;
+    height: 860px;
+    border-radius: 46px;
+    padding: 9px;
+    background: linear-gradient(155deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.04) 38%, rgba(214, 180, 122, 0.22));
+    box-shadow:
+      0 60px 110px rgba(0, 0, 0, 0.6),
+      0 0 0 1px rgba(255, 255, 255, 0.06),
+      0 0 90px rgba(214, 180, 122, 0.14);
+    will-change: transform, opacity;
+  }
+  .phone-screen {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    border-radius: 38px;
+    overflow: hidden;
+    background: #0e0e10;
+  }
+  .phone-screen img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: 50% 0%;
+  }
+  .phone-glare {
+    position: absolute;
+    inset: 0;
+    border-radius: 38px;
+    background: linear-gradient(118deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0.03) 22%, transparent 46%);
+    pointer-events: none;
+  }
+  .chip {
+    position: absolute;
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    padding: 18px 26px;
+    border-radius: 999px;
+    background: rgba(22, 22, 25, 0.82);
+    border: 1px solid rgba(214, 180, 122, 0.28);
+    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.42);
+    backdrop-filter: blur(6px);
+    will-change: transform, opacity;
+  }
+  .chip b {
+    font-family: 'Instrument Serif', Georgia, serif;
+    font-weight: 400;
+    font-size: 42px;
+    color: #d6b47a;
+    line-height: 1;
+  }
+  .chip span {
+    font-size: 21px;
+    letter-spacing: 0.14em;
+    color: rgba(241, 239, 234, 0.72);
+  }
+  #chip1 { left: 74px; top: 604px; }
+  #chip2 { right: 66px; top: 828px; }
+  #chip3 { right: 84px; top: 1088px; }
+
+  .steps {
+    position: absolute;
+    left: 96px;
+    right: 96px;
+    bottom: 96px;
+    display: flex;
+    justify-content: space-between;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 22px;
+    letter-spacing: 0.1em;
+    color: rgba(241, 239, 234, 0.3);
+  }
+  .steps span { display: flex; align-items: center; gap: 12px; }
+  .steps i {
+    font-style: normal;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    border: 1px solid currentColor;
+    display: grid;
+    place-items: center;
+    font-size: 17px;
+  }
+
+  /* ================= 场景 5 ================= */
+  #s5 { opacity: 1; }
+  #s5 .light-label {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 188px;
+    text-align: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 22px;
+    letter-spacing: 0.42em;
+    color: #9a7c4c;
+  }
+  #s5 .brand {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 268px;
+    text-align: center;
+    font-family: 'Songti SC', 'STSong', 'Noto Serif SC', serif;
+    font-weight: 700;
+    font-size: 176px;
+    line-height: 1;
+    letter-spacing: 0.1em;
+    text-indent: 0.1em;
+    color: #17150f;
+  }
+  #s5 .brand-en {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 480px;
+    text-align: center;
+    font-family: 'Instrument Serif', Georgia, serif;
+    font-style: italic;
+    font-size: 40px;
+    letter-spacing: 0.16em;
+    color: #a58a5c;
+  }
+  #s5 .tagline {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 566px;
+    text-align: center;
+    font-size: 34px;
+    letter-spacing: 0.16em;
+    color: rgba(23, 21, 15, 0.72);
+  }
+  .final-ticket { position: absolute; filter: drop-shadow(0 26px 30px rgba(70, 52, 24, 0.28)); }
+  .cta {
+    position: absolute;
+    left: 50%;
+    top: 1176px;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 22px;
+    width: max-content;
+    white-space: nowrap;
+    padding: 26px 44px 26px 50px;
+    border-radius: 999px;
+    background: #17150f;
+    color: #f4f0e6;
+    box-shadow: 0 24px 54px rgba(60, 44, 20, 0.34);
+  }
+  .cta .txt { font-size: 32px; letter-spacing: 0.1em; flex: none; }
+  .cta .arrow {
+    width: 40px;
+    height: 40px;
+    flex: none;
+    border-radius: 50%;
+    background: #d6b47a;
+    color: #17150f;
+    display: grid;
+    place-items: center;
+    font-size: 22px;
+  }
+  .fineprint {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 1298px;
+    text-align: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 19px;
+    letter-spacing: 0.18em;
+    color: rgba(23, 21, 15, 0.42);
+  }
+
+  .wipe {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 1080px;
+    height: 1440px;
+    background: #f2efe7;
+    border-top: 2px solid rgba(0, 0, 0, 0.06);
+    box-shadow: 0 -10px 36px rgba(0, 0, 0, 0.28);
+    z-index: 90;
+    transform: translateY(1440px);
+    will-change: transform;
+  }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="bg" id="bg"></div>
+  <div class="grain"></div>
+  <div class="vignette" id="vig"></div>
+
+  <!-- 场景 1 -->
+  <section id="s1">
+    <div class="tb" id="tb1">
+      <div class="kicker k" id="k1"><span class="bar"></span>FRAMEZANG · 电子票根</div>
+      <h1 class="headline h">
+        <span class="line-mask"><span id="h1a">把回忆</span></span>
+        <span class="line-mask"><span id="h1b">做成一张<em>票根</em></span></span>
+      </h1>
+      <p class="sub" id="sub1">看过的电影，走过的路，听过的现场<br />都值得被认真收藏一次</p>
+    </div>
+    <div class="ticket" id="heroTicket">
+      <img src="./assets/ticket-cinema-tear.png" alt="" />
+    </div>
+    <div class="stamp" id="stamp">已检票<br />ADMIT ONE</div>
+  </section>
+
+  <!-- 场景 2 -->
+  <section id="s2">
+    <div class="tb" id="tb2">
+      <div class="kicker k" id="k2"><span class="bar"></span>01 / 电影票</div>
+      <h1 class="headline headline--sm h">
+        <span class="line-mask"><span id="h2">看过的电影</span></span>
+      </h1>
+      <p class="sub" id="sub2">午夜场、雨夜、迟到的十分钟<br />都留在那张副券上</p>
+    </div>
+
+    <div class="fan-card ticket" id="f21" style="left:64px;top:636px;width:300px;z-index:1">
+      <img src="./assets/ticket-cinema-polaroid.png" alt="" />
+    </div>
+    <div class="fan-card ticket" id="f22" style="left:712px;top:696px;width:300px;z-index:2">
+      <img src="./assets/ticket-cinema-redclassic.png" alt="" />
+    </div>
+    <div class="fan-card ticket" id="f23" style="left:350px;top:498px;width:380px;z-index:3">
+      <img src="./assets/ticket-cinema-tear.png" alt="" />
+    </div>
+
+    <div class="cap" id="cap2">
+      <span class="cap-index" id="cap2i">01</span>
+      <span class="cap-title" id="cap2t">午夜巴黎</span>
+      <span class="cap-meta" id="cap2m">双联撕裂 · 雨夜场</span>
+    </div>
+    <div class="scene-tag" id="tag2">TICKET / 001</div>
+  </section>
+
+  <!-- 场景 3 -->
+  <section id="s3">
+    <div class="tb" id="tb3">
+      <div class="kicker k" id="k3"><span class="bar"></span>02 / 旅行通票</div>
+      <h1 class="headline headline--sm h">
+        <span class="line-mask"><span id="h3">走过的路</span></span>
+      </h1>
+      <p class="sub" id="sub3">登机牌、明信片、一张当地车票<br />拼成你的旅行账本</p>
+    </div>
+
+    <svg class="route" viewBox="0 0 1080 1440" id="route" aria-hidden="true">
+      <path id="routePath" d="M 140 1080 C 300 840, 640 700, 930 842" />
+    </svg>
+    <div class="plane-dot" id="dot"></div>
+
+    <div class="fan-card ticket" id="f31" style="left:76px;top:692px;width:300px;z-index:1">
+      <img src="./assets/ticket-travel-postcard.png" alt="" />
+    </div>
+    <div class="fan-card ticket" id="f32" style="left:720px;top:624px;width:290px;z-index:2">
+      <img src="./assets/ticket-stamp-classic.png" alt="" />
+    </div>
+    <div class="fan-card ticket" id="f33" style="left:350px;top:556px;width:380px;z-index:3">
+      <img src="./assets/ticket-travel-board.png" alt="" />
+    </div>
+
+    <div class="cap" id="cap3">
+      <span class="cap-index" id="cap3i">01</span>
+      <span class="cap-title" id="cap3t">东京 → 京都</span>
+      <span class="cap-meta" id="cap3m">登机牌 · 2026.03.28</span>
+    </div>
+    <div class="scene-tag" id="tag3">TRIP / 002</div>
+  </section>
+
+  <!-- 场景 4 -->
+  <section id="s4">
+    <div class="tb" id="tb4">
+      <div class="kicker k" id="k4"><span class="bar"></span>03 / 自己就能做</div>
+      <h1 class="headline headline--sm h">
+        <span class="line-mask"><span id="h4">三步，出一张票根</span></span>
+      </h1>
+    </div>
+
+    <div class="phone-halo" id="phoneHalo"></div>
+    <div class="phone" id="phone">
+      <div class="phone-screen">
+        <img id="shot1" src="./assets/ui-home.png" alt="" />
+        <img id="shot2" src="./assets/ui-templates.png" alt="" />
+        <img id="shot3" src="./assets/ui-effects.png" alt="" />
+        <img id="shot4" src="./assets/ui-export.png" alt="" />
+      </div>
+      <div class="phone-glare"></div>
+    </div>
+
+    <div class="chip" id="chip1"><b>175</b><span>款票根模板</span></div>
+    <div class="chip" id="chip2"><b>27</b><span>种特效素材</span></div>
+    <div class="chip" id="chip3"><b>PNG</b><span>高清导出</span></div>
+
+    <div class="steps" id="steps">
+      <span id="st1"><i>1</i>选模板</span>
+      <span id="st2"><i>2</i>换照片</span>
+      <span id="st3"><i>3</i>导出 PNG</span>
+    </div>
+  </section>
+
+  <!-- 场景 5 -->
+  <section id="s5" class="light">
+    <div class="bg bg--light"></div>
+    <div class="grain"></div>
+    <div class="vignette"></div>
+
+    <div class="light-label" id="brandLabel">FRAMEZANG · 帧藏</div>
+    <div class="brand" id="brand">帧藏</div>
+    <div class="brand-en" id="brandEn">keep the moment</div>
+    <div class="tagline" id="tagline">把去过的地方，收进一张票根</div>
+
+    <div class="final-ticket" id="ft1" style="left:150px;top:660px;width:260px"><img src="./assets/ticket-travel-board.png" style="width:100%;display:block" alt="" /></div>
+    <div class="final-ticket" id="ft2" style="left:398px;top:648px;width:285px"><img src="./assets/ticket-cinema-redclassic.png" style="width:100%;display:block" alt="" /></div>
+    <div class="final-ticket" id="ft3" style="left:684px;top:668px;width:250px"><img src="./assets/ticket-stamp-classic.png" style="width:100%;display:block" alt="" /></div>
+
+    <div class="cta" id="cta">
+      <span class="txt">点击下方小工具即可体验</span>
+      <span class="arrow">→</span>
+    </div>
+    <div class="fineprint" id="fineprint">纯本地处理 · 离线可用 · 高清 PNG</div>
+  </section>
+
+  <div class="wipe" id="wipe"></div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id)
+const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v))
+const seg = (t, a, b) => clamp((t - a) / (b - a))
+const lerp = (a, b, p) => a + (b - a) * p
+const easeOut = (p) => 1 - Math.pow(1 - p, 3)
+const easeOutQuint = (p) => 1 - Math.pow(1 - p, 5)
+const easeInOut = (p) => (p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2)
+const easeBack = (p) => 1 + 2.2 * Math.pow(p - 1, 3) + 1.6 * Math.pow(p - 1, 2)
+
+const TOTAL = 18
+
+// 时间线：每屏的进出是硬边界，旧标题退完才允许下一屏标题进
+const S1 = { in: 0, out: 3.0 }
+const S2 = { in: 3.0, out: 6.6 }
+const S3 = { in: 6.6, out: 10.2 }
+const S4 = { in: 10.2, out: 14.55 }
+const S5 = { in: 14.55 }
+
+function put(el, { x = 0, y = 0, rot = 0, scale = 1, opacity = 1 }) {
+  if (!el) return
+  el.style.transform = `translate3d(${x}px, ${y}px, 0) rotate(${rot}deg) scale(${scale})`
+  el.style.opacity = String(opacity)
+}
+
+// 入场：从下方抬起 + 淡入
+function rise(el, t, start, dur = 0.65, fromY = 60) {
+  const p = easeOut(seg(t, start, start + dur))
+  el.style.transform = `translate3d(0, ${lerp(fromY, 0, p)}px, 0)`
+  el.style.opacity = String(easeOut(seg(t, start, start + dur * 0.55)))
+}
+
+// 遮罩行文字入场
+function line(el, t, start, dur = 0.8, fromY = 78) {
+  const p = easeOutQuint(seg(t, start, start + dur))
+  el.style.transform = `translate3d(0, ${lerp(fromY, 0, p)}%, 0)`
+  el.style.opacity = String(clamp(seg(t, start, start + 0.22)))
+}
+
+function fade(el, t, start, dur = 0.6) {
+  el.style.opacity = String(easeOut(seg(t, start, start + dur)))
+}
+
+// 整屏文字退场：抬走 + 淡出，必须在下一屏标题进场前完成
+function textOut(el, t, scene, dur = 0.32) {
+  const p = easeInOut(seg(t, scene.out - 0.5, scene.out - 0.5 + dur))
+  el.style.opacity = String(1 - p)
+  el.style.transform = `translate3d(0, ${-36 * p}px, 0)`
+  return p
+}
+
+function sceneOn(el, on) {
+  el.style.display = on ? 'block' : 'none'
+}
+
+function renderAt(t) {
+  /* ---------- 场景可见性 ---------- */
+  sceneOn($('s1'), t >= S1.in && t < S1.out)
+  sceneOn($('s2'), t >= S2.in && t < S2.out)
+  sceneOn($('s3'), t >= S3.in && t < S3.out)
+  sceneOn($('s4'), t >= S4.in && t < S4.out)
+  sceneOn($('s5'), t >= S5.in)
+
+  /* ---------- 场景 1 ---------- */
+  if (t >= S1.in && t < S1.out) {
+    rise($('k1'), t, 0.16, 0.55, 26)
+    line($('h1a'), t, 0.3, 0.8)
+    line($('h1b'), t, 0.42, 0.8)
+    rise($('sub1'), t, 0.7, 0.6, 40)
+    textOut($('tb1'), t, S1)
+
+    const p = easeOutQuint(seg(t, 0.55, 1.65))
+    const bob = Math.sin((t - 1.65) * 1.4) * 4
+    const q = easeInOut(seg(t, S1.out - 0.55, S1.out))
+    put($('heroTicket'), {
+      x: lerp(210, 0, p),
+      y: lerp(300, 0, p) + bob + 170 * q,
+      rot: lerp(11, 0, p),
+      scale: lerp(0.94, 1, p),
+      opacity: clamp(seg(t, 0.55, 0.95)) * (1 - q),
+    })
+
+    const sp = seg(t, 1.2, 1.6)
+    put($('stamp'), {
+      rot: lerp(26, 12, easeBack(sp)),
+      scale: lerp(1.5, 1, easeOutQuint(sp)),
+      opacity: 0.9 * clamp(seg(t, 1.2, 1.42)) * (1 - q),
+    })
+  }
+
+  /* ---------- 场景 2 ---------- */
+  if (t >= S2.in && t < S2.out) {
+    rise($('k2'), t, S2.in + 0.06, 0.5, 22)
+    line($('h2'), t, S2.in + 0.1, 0.75)
+    rise($('sub2'), t, S2.in + 0.3, 0.6, 36)
+    const outTb = textOut($('tb2'), t, S2)
+
+    const cards = [
+      { el: $('f21'), at: 3.32, fromX: -260, fromY: 170, rot: -13, img: -9 },
+      { el: $('f22'), at: 3.72, fromX: 250, fromY: 190, rot: 13, img: 8 },
+      { el: $('f23'), at: 4.02, fromX: 0, fromY: 250, rot: 9, img: -2.5 },
+    ]
+    const cardOut = easeInOut(seg(t, S2.out - 0.6, S2.out - 0.05))
+    for (const c of cards) {
+      const p = easeOutQuint(seg(t, c.at, c.at + 0.8))
+      put(c.el, {
+        x: lerp(c.fromX, 0, p),
+        y: lerp(c.fromY, 0, p) + 260 * cardOut,
+        rot: lerp(c.rot, 0, p),
+        scale: lerp(0.9, 1, p),
+        opacity: clamp(seg(t, c.at, c.at + 0.32)) * (1 - cardOut),
+      })
+      c.el.querySelector('img').style.transform = `rotate(${c.img}deg)`
+    }
+
+    // 文案轮换：拍立得 → 红票 → 双联撕裂
+    const caps = [
+      { at: 3.4, title: '海边的房间', meta: '拍立得卡 · 16:9' },
+      { at: 4.15, title: '花样年华', meta: '经典红票 · 重映场' },
+      { at: 4.85, title: '午夜巴黎', meta: '双联撕裂 · 雨夜场' },
+    ]
+    let cur = caps[0]
+    let index = 1
+    caps.forEach((c, i) => { if (t >= c.at) { cur = c; index = i + 1 } })
+    $('cap2t').textContent = cur.title
+    $('cap2m').textContent = cur.meta
+    $('cap2i').textContent = String(index).padStart(2, '0')
+
+    const appear = easeOut(seg(t, S2.in + 0.35, S2.in + 0.8))
+    $('cap2').style.opacity = String(appear * (1 - cardOut))
+    $('cap2').style.transform = `translateY(${lerp(24, 0, appear)}px)`
+    $('tag2').style.opacity = String(0.6 * appear * (1 - cardOut))
+  }
+
+  /* ---------- 场景 3 ---------- */
+  if (t >= S3.in && t < S3.out) {
+    rise($('k3'), t, S3.in + 0.06, 0.5, 22)
+    line($('h3'), t, S3.in + 0.1, 0.75)
+    rise($('sub3'), t, S3.in + 0.3, 0.6, 36)
+    textOut($('tb3'), t, S3)
+
+    const cards = [
+      { el: $('f31'), at: 6.92, fromX: -250, fromY: 150, rot: -15, img: -10 },
+      { el: $('f33'), at: 7.18, fromX: 0, fromY: 240, rot: 8, img: -2 },
+      { el: $('f32'), at: 7.45, fromX: 240, fromY: 170, rot: 14, img: 9 },
+    ]
+    const cardOut = easeInOut(seg(t, S3.out - 0.6, S3.out - 0.05))
+    for (const c of cards) {
+      const p = easeOutQuint(seg(t, c.at, c.at + 0.78))
+      put(c.el, {
+        x: lerp(c.fromX, 0, p),
+        y: lerp(c.fromY, 0, p) + 250 * cardOut,
+        rot: lerp(c.rot, 0, p),
+        scale: lerp(0.9, 1, p),
+        opacity: clamp(seg(t, c.at, c.at + 0.3)) * (1 - cardOut),
+      })
+      c.el.querySelector('img').style.transform = `rotate(${c.img}deg)`
+    }
+
+    // 航迹虚线 + 光点
+    const rp = easeOut(seg(t, 6.95, 8.4))
+    const len = $('routePath').getTotalLength()
+    $('routePath').style.strokeDashoffset = String(len * (1 - rp))
+    $('routePath').style.opacity = String(0.75 * rp * (1 - cardOut))
+    const pt = $('routePath').getPointAtLength(len * rp)
+    $('dot').style.left = `${pt.x - 7}px`
+    $('dot').style.top = `${pt.y - 7}px`
+    $('dot').style.opacity = String(clamp(seg(t, 6.9, 7.3)) * (1 - cardOut))
+
+    const trip = [
+      { at: 7.0, title: '东京 → 京都', meta: '登机牌 · 2026.03.28' },
+      { at: 8.1, title: '京都 → 大阪', meta: '明信片 · 樱花季' },
+    ]
+    let cur = trip[0]
+    let index = 1
+    trip.forEach((c, i) => { if (t >= c.at) { cur = c; index = i + 1 } })
+    $('cap3t').textContent = cur.title
+    $('cap3m').textContent = cur.meta
+    $('cap3i').textContent = String(index).padStart(2, '0')
+
+    const appear = easeOut(seg(t, S3.in + 0.35, S3.in + 0.8))
+    $('cap3').style.opacity = String(appear * (1 - cardOut))
+    $('cap3').style.transform = `translateY(${lerp(24, 0, appear)}px)`
+    $('tag3').style.opacity = String(0.6 * appear * (1 - cardOut))
+  }
+
+  /* ---------- 场景 4 ---------- */
+  if (t >= S4.in && t < S4.out) {
+    rise($('k4'), t, S4.in + 0.06, 0.5, 22)
+    line($('h4'), t, S4.in + 0.1, 0.75)
+    textOut($('tb4'), t, S4)
+
+    const pp = easeOutQuint(seg(t, S4.in + 0.12, S4.in + 1.0))
+    const out = easeInOut(seg(t, S4.out - 0.55, S4.out))
+    const floaty = Math.sin((t - S4.in) * 1.2) * 4
+    put($('phone'), {
+      y: lerp(130, 0, pp) - 90 * out + floaty,
+      rot: lerp(-2.4, 0, pp),
+      scale: lerp(0.94, 1, pp),
+      opacity: clamp(seg(t, S4.in + 0.12, S4.in + 0.5)) * (1 - out),
+    })
+    $('phoneHalo').style.opacity = String(0.9 * clamp(seg(t, S4.in + 0.12, S4.in + 0.8)) * (1 - out))
+
+    // 手机内界面轮播
+    const shots = [
+      { el: $('shot1'), a: 10.4, b: 11.45, pan: 0 },
+      { el: $('shot2'), a: 11.45, b: 12.35, pan: 14 },
+      { el: $('shot3'), a: 12.35, b: 13.25, pan: 24 },
+      { el: $('shot4'), a: 13.25, b: 14.45, pan: 10 },
+    ]
+    for (const s of shots) {
+      const inP = easeOut(seg(t, s.a, s.a + 0.4))
+      const outP = easeInOut(seg(t, s.b - 0.35, s.b))
+      s.el.style.opacity = String(inP * (1 - outP))
+      s.el.style.transform = `scale(${1.014 + 0.01 * seg(t, s.a, s.b)}) translateY(${s.pan * (1 - inP)}px)`
+    }
+
+    // 浮动标签
+    const chips = [
+      { el: $('chip1'), at: 10.8, dx: -40 },
+      { el: $('chip2'), at: 11.55, dx: 40 },
+      { el: $('chip3'), at: 12.45, dx: 40 },
+    ]
+    for (const c of chips) {
+      const p = easeOutQuint(seg(t, c.at, c.at + 0.6))
+      put(c.el, {
+        x: (1 - p) * c.dx,
+        y: (1 - p) * 24,
+        rot: (1 - p) * (c.dx > 0 ? 6 : -6),
+        scale: lerp(0.94, 1, p),
+        opacity: clamp(seg(t, c.at, c.at + 0.28)) * (1 - out),
+      })
+    }
+
+    // 三步提示
+    const steps = [$('st1'), $('st2'), $('st3')]
+    const activeAt = [10.75, 12.3, 13.3]
+    steps.forEach((el, i) => {
+      el.style.color = t >= activeAt[i] ? '#d6b47a' : 'rgba(241,239,234,0.3)'
+      el.style.opacity = String(clamp(seg(t, S4.in + 0.55 + i * 0.1, S4.in + 0.85 + i * 0.1)) * (1 - out))
+    })
+  }
+
+  /* ---------- 转场纸片 ---------- */
+  if (t >= 14.3) {
+    const cover = easeInOut(seg(t, 14.3, 14.92))
+    const leaveW = easeInOut(seg(t, 14.98, 15.55))
+    $('wipe').style.transform = `translateY(${lerp(1440, 0, cover) + lerp(0, -1440, leaveW)}px)`
+  } else {
+    $('wipe').style.transform = 'translateY(1440px)'
+  }
+
+  /* ---------- 场景 5 ---------- */
+  if (t >= S5.in) {
+    const base = 15.15
+    rise($('brandLabel'), t, base, 0.55, 22)
+    const bp = easeOutQuint(seg(t, base + 0.07, base + 0.85))
+    $('brand').style.opacity = String(clamp(seg(t, base + 0.07, base + 0.42)))
+    $('brand').style.transform = `translateY(${lerp(56, 0, bp)}px) scale(${lerp(0.97, 1, bp)})`
+
+    fade($('brandEn'), t, base + 0.35, 0.6)
+    fade($('tagline'), t, base + 0.48, 0.6)
+
+    const tickets = [
+      { el: $('ft1'), at: 15.7, x: -70, rot: -12 },
+      { el: $('ft2'), at: 15.84, x: 0, rot: 2 },
+      { el: $('ft3'), at: 15.98, x: 70, rot: 12 },
+    ]
+    for (const tk of tickets) {
+      const p = easeOutQuint(seg(t, tk.at, tk.at + 0.72))
+      put(tk.el, {
+        x: lerp(tk.x, 0, p),
+        y: lerp(80, 0, p),
+        rot: lerp(tk.rot * 1.8, tk.rot, p),
+        scale: lerp(0.9, 1, p),
+        opacity: clamp(seg(t, tk.at, tk.at + 0.34)),
+      })
+    }
+    if (t > 15.9) {
+      const drift = Math.sin((t - 15.9) * 1.0) * 3
+      $('ft1').style.transform += ` translateY(${drift}px)`
+      $('ft2').style.transform += ` translateY(${-drift}px)`
+      $('ft3').style.transform += ` translateY(${drift}px)`
+    }
+
+    const cp = easeOutQuint(seg(t, 16.55, 17.2))
+    $('cta').style.opacity = String(clamp(seg(t, 16.55, 16.9)))
+    $('cta').style.transform = `translateX(-50%) translateY(${lerp(38, 0, cp)}px) scale(${lerp(0.96, 1, cp)})`
+    fade($('fineprint'), t, 16.95, 0.6)
+  }
+}
+
+window.renderAt = renderAt
+window.TOTAL = TOTAL
+renderAt(0)
+document.fonts.ready.then(() => {
+  window.__ready = true
+  renderAt(0)
+})
+</script>
+</body>
+</html>

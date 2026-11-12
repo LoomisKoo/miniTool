@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="theme-color" content="#ff8f6b" />
+  <title>碎物间</title>
+  <link rel="stylesheet" href="/src/style.css" />
+</head>
+<body>
+  <div id="phone">
+    <div id="app">
+      <canvas id="c"></canvas>
+      <div id="blastFlash" aria-hidden="true"></div>
+
+      <!-- 游戏内 HUD：竖屏手游 -->
+      <div id="hud">
+        <div class="crosshair" aria-hidden="true">
+          <span class="dot"></span>
+          <span class="arm t"></span>
+          <span class="arm b"></span>
+          <span class="arm l"></span>
+          <span class="arm r"></span>
+        </div>
+
+        <header class="top-bar">
+          <div class="pill score-pill">
+            <img class="pill-ico" src="/ui/icon-pistol.jpg" alt="" />
+            <div>
+              <small>打碎</small>
+              <strong id="score">0</strong>
+            </div>
+          </div>
+          <div class="title-bubble">碎物间</div>
+          <div class="pill left-pill">
+            <div>
+              <small>剩余</small>
+              <strong id="left">0</strong>
+            </div>
+          </div>
+        </header>
+
+        <button type="button" id="resetBtn" class="round-btn reset-btn" aria-label="重置">↻</button>
+        <button type="button" id="targetBtn" class="target-fab" aria-label="更换目标">
+          <span>目标</span>
+          <strong id="targetName">瓷器</strong>
+        </button>
+
+        <!-- 目标选择抽屉 -->
+        <div id="targetSheet" class="sheet hidden" aria-hidden="true">
+          <div class="sheet-card">
+            <div class="sheet-head">
+              <h3>选择打击物</h3>
+              <button type="button" id="targetClose" class="sheet-close">✕</button>
+            </div>
+            <div class="target-grid" id="targetGrid">
+              <button type="button" class="target-opt active" data-id="porcelain"><span>🏺</span>瓷器<small>脆响碎裂</small></button>
+              <button type="button" class="target-opt" data-id="glass"><span>🫙</span>玻璃<small>晶亮碎片</small></button>
+              <button type="button" class="target-opt" data-id="wood"><span>🪵</span>木箱<small>木屑崩飞</small></button>
+              <button type="button" class="target-opt" data-id="metal"><span>🥫</span>铁罐<small>金属弹飞</small></button>
+              <button type="button" class="target-opt" data-id="cardboard"><span>📦</span>纸箱<small>打出破洞</small></button>
+              <button type="button" class="target-opt" data-id="balloon"><span>🎈</span>气球<small>啪一声爆</small></button>
+              <button type="button" class="target-opt" data-id="mixed"><span>🎲</span>混合<small>随机材质</small></button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 左侧虚拟摇杆 -->
+        <div id="joyZone" class="touch-only">
+          <div id="joyBase"><div id="joyKnob"></div></div>
+        </div>
+
+        <!-- 右侧开火 -->
+        <button type="button" id="fireBtn" class="fire-btn touch-only" aria-label="开火">开火</button>
+
+        <nav class="weapon-bar" id="weaponSlots">
+          <button type="button" class="wep active" data-id="pistol">
+            <img src="/ui/icon-pistol.jpg" alt="沙漠之鹰" />
+            <span>沙漠之鹰</span>
+          </button>
+          <button type="button" class="wep" data-id="smg">
+            <img src="/ui/icon-smg.jpg" alt="AK-47" />
+            <span>AK-47</span>
+          </button>
+          <button type="button" class="wep" data-id="shotgun">
+            <img src="/ui/icon-shotgun.jpg" alt="霰弹枪" />
+            <span>霰弹</span>
+          </button>
+          <button type="button" class="wep" data-id="grenade">
+            <img src="/ui/icon-grenade.jpg" alt="手雷" />
+            <span>手雷</span>
+          </button>
+        </nav>
+      </div>
+
+      <!-- 开始页 -->
+      <div id="overlay">
+        <div class="start-screen">
+          <div class="hero">
+            <img src="/ui/cover-hero.jpg" alt="碎物间" />
+            <div class="hero-shade"></div>
+            <h1>碎物间</h1>
+            <p>砸碎一切 · 解压神器</p>
+          </div>
+          <div class="start-body">
+            <div class="tip-cards">
+              <div class="tip">拖动画布瞄准</div>
+              <div class="tip">按住开火射击</div>
+              <div class="tip">点按钮换目标</div>
+            </div>
+            <button type="button" id="startBtn" class="play-btn">开始发泄</button>
+            <p class="start-note">打光会自动补货哦</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

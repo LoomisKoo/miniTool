@@ -1,17 +1,19 @@
 # 高质量人生指南
 
-把开源书 [《高性价比人生指南》](https://github.com/eternity4719/HowToLiveBetter)（CC BY 4.0，34 节 677 条）
+把开源项目 [《高性价比人生指南》](https://github.com/eternity4719/HowToLiveBetter)（CC BY 4.0，34 节 765 条）
 编译成一个**单文件、离线可用**的移动端查询工具。双击 `index.html` 即可，不需要服务器、不需要联网、不需要账号。
+
+原文是 GitHub 上的 Markdown 文档仓库（同时提供 PDF、EPUB、Anki 和在线检索页），不是出版书。本工具是它的衍生版本，只多做了场景索引、搜索筛选和收藏。
 
 ## 产物
 
-`index.html` —— 约 2 MB，HTML/CSS/JS 和全部 677 条正文都内联在里面，可以直接丢进 QMuse 之类的平台。
+`index.html` —— 约 4 MB，HTML/CSS/JS 和全部 765 条正文都内联在里面，可以直接丢进 QMuse 之类的平台。
 
 ## 三个页签
 
 | 页签 | 内容 |
 | --- | --- |
-| **首页** | 「按场景」27 个生活场景（在家、突然出事、看病、被裁、租房…）／「按章节」原书 34 节。顶部的模式切换 tab 吸顶 |
+| **首页** | 「按场景」27 个生活场景（在家、突然出事、看病、被裁、租房…）／「按章节」原文 34 节。顶部的模式切换 tab 吸顶 |
 | **精选** | 今日精选（默认同日固定一条，「随机」在模块内切换；收藏星在右侧）、省力清单、结论最硬的（A）、有争议的 |
 | **收藏** | 收藏列表（无页内大标题） |
 
@@ -99,13 +101,13 @@ node tools/build.mjs --src /path/to/HowToLiveBetter   # 指定本地原文目录
 4. 把数据内联进 `tools/template.html`，输出 `index.html`。
 
 跑完会打印节数、条数、证据等级分布、性价比分布、每个场景的条数，以及**有问题的条目**（缺字段、关键词一条都没命中的行）。
-数字和原书一致时说明解析没问题：677 条、A 441 / B 189 / C 47、极高 114 / 高 303 / 一般 260。
+数字和原文一致时说明解析没问题：765 条、A 495 / B 218 / C 52、极高 122 / 高 344 / 一般 299。
 
 ## 调场景分类
 
 场景分类是纯关键词的，写在 `tools/scenarios.mjs`：
 
-- `SEC_DEFAULT`：每一节的默认场景，保证 677 条每条都落进至少一个场景；
+- `SEC_DEFAULT`：每一节的默认场景，保证 765 条每条都落进至少一个场景；
 - `SCENARIOS[].keys`：正则数组，**只匹配标题和「说人话」两段**（收益 / 来源字段太长、词太泛，匹配它们会大量误伤）；
 - 一条建议可以同时属于多个场景。
 
@@ -115,13 +117,16 @@ node tools/build.mjs --src /path/to/HowToLiveBetter   # 指定本地原文目录
 
 `tools/data.json` 是构建时的中间产物（含每条命中原因），方便用 `node -e` 抽查归类，不纳入版本管理。
 
-## 打包（小红书小工具）
+## 打包
 
 ```bash
-node tools/pack.mjs   # 先 build，再输出 dist/xiaohongshu/ 与 dist/xiaohongshu-life-guide.zip
+node tools/pack.mjs                # 默认小红书 → dist/xiaohongshu-life-guide.zip
+node tools/pack.mjs kuaishou       # 快手 → dist/kuaishou-life-guide.zip（单文件，≤8MB）
+node tools/pack.mjs xiaohongshu kuaishou
 ```
 
-容器 CSP 禁止内联脚本，所以把 `index.html` 里的 `<script>` 拆成 `app.js`，并去掉 base64 favicon（小工具图标在平台后台配置）。
+小红书：容器 CSP 禁止内联脚本，把 `<script>` 拆成 `app.js`，并给 `<html>` 写死 `env-xhs`。  
+快手：无容器顶栏，`--safe-t` / `--nav-h` 置 0，保持单文件内联。两边都去掉 base64 favicon。
 
 ## 自检
 
@@ -129,7 +134,7 @@ node tools/pack.mjs   # 先 build，再输出 dist/xiaohongshu/ 与 dist/xiaohon
 node tools/smoke.mjs
 ```
 
-用最小 DOM 桩把 `index.html` 的渲染路径真跑一遍（37 项）：677 条是否都能渲染成卡片、每一节计数是否合计 677、
+用最小 DOM 桩把 `index.html` 的渲染路径真跑一遍（37 项）：765 条是否都能渲染成卡片、每一节计数是否合计条目总数、
 所有「见第 X 节第 Y 条」引用是否都指向存在的条目、27 个场景是否有空场景、搜索是否会抛错、
 **收藏页是否无多余标题区**（防回归）、**详情区内容是否都在 `.detail-inner` 里**（展开动画的裁切层，
 内容漏在外面动画就会裁错），以及两组回归断言：**转场中两页是否全程不透明、结束后是否只剩一页可见**（遮挡与重影）、

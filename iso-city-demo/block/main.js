@@ -11,7 +11,7 @@ import { createPlayer } from './player.js'
 
 const canvas = document.querySelector('canvas')
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' })
-const dpr = Math.min(window.devicePixelRatio || 1, 1.4)
+const dpr = Math.min(window.devicePixelRatio || 1, 1.25)
 renderer.setPixelRatio(dpr)
 renderer.setSize(innerWidth, innerHeight)
 renderer.shadowMap.enabled = true
@@ -149,7 +149,9 @@ fixZfight(root)
 const player = createPlayer(scene, camera, canvas)
 
 const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(innerWidth, innerHeight, {
-  samples: 0,
+  // 原版这里是 0 —— renderer 的 antialias 只作用于默认帧缓冲，走 EffectComposer
+  // 之后完全失效，所以原来全场景零抗锯齿，这就是锯齿的来源。改成 2 修掉它。
+  samples: 2,
   type: THREE.HalfFloatType,
 }))
 composer.setPixelRatio(dpr)

@@ -65,6 +65,7 @@ miniTool/
 | 熊猫拼图 | `panda-puzzle/` | ✅ 已上线 1.0.0 | — | — | — | 开发中 | 照片真 3D 拼图 · `*-panda-puzzle.zip` |
 | 仙鹿起名 | `deerName/` | — | — | — | — | ✅ 已上架 1.0.0 | App **DeerNames** · H5 未上架 · `*-deerName.zip` |
 | 帧藏 | `ticket-stub/` | 待提交 1.0.0 | — | — | — | — | 电子票根生成器 · 简介「看过的电影走过的路，做成票根」· `*-ticket-stub.zip` |
+| 卡造 | `card-studio/` | 开发中 | — | — | — | — | 名片 / 社交主页卡 / 工牌 / 宠物牌 / 吊牌生成器 · 53 套双面模板 · `*-card-studio.zip` |
 
 iOS 一列 `未开始` 表示已规划原生版本、`ios/` 工程尚未建立；工程建好后改为此处版本号。命名与技术选型见 [`docs/ios/README.md`](docs/ios/README.md)。
 

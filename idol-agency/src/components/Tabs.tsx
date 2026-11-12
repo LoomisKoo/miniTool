@@ -1,7 +1,7 @@
 import { COMPANY, FACILITIES, PHASE_NAMES, RANKS, ROOMS, SKILL_NAMES, TEMPERS, fmtFans, fmtMoney } from '../game/data/base'
 import { CONTACTS, stageOf } from '../game/data/contacts'
 import { bubble, statusWord, visitContact } from '../game/engine'
-import { act, ask, openSheet, pushDialogs, setGame, setUI } from '../game/store'
+import { act, ask, openSheet, pushDialogs, setGame, setUI, toast } from '../game/store'
 import type { Artist, GameState, RoomId } from '../game/types'
 import { capacity } from '../game/util'
 import { Avatar, BubbleTag, Chip, Empty, Face, RankTag, Seg } from './common'
@@ -174,14 +174,14 @@ function NightView({ g }: { g: GameState }) {
                 <p>{c.met ? d.hint : d.desc}</p>
               </div>
               <button
-                className="btn-main sm"
-                disabled={g.nightDone}
-                onClick={() =>
+                className={`btn-main sm ${g.nightDone ? 'is-off' : ''}`}
+                onClick={() => {
+                  if (g.nightDone) return toast('今晚已经见过人了，明晚再来')
                   act((g) => {
                     const dl = visitContact(g, c.id)
                     if (dl) pushDialogs(dl)
                   })
-                }
+                }}
               >
                 去见
               </button>
@@ -286,7 +286,7 @@ export function MeTab({ g }: { g: GameState }) {
           {g.contacts.map((c) => {
             const d = CONTACTS.find((x) => x.id === c.id)!
             return (
-              <button key={c.id} className="contact" onClick={() => c.met && openSheet({ type: 'contact', id: c.id })}>
+              <button key={c.id} className="contact" onClick={() => (c.met ? openSheet({ type: 'contact', id: c.id }) : toast('还没结识，深夜时间也许会遇见'))}>
                 <Face char={c.met ? d.name.slice(1, 2) : '?'} color={c.met ? d.color : '#c9c4d6'} color2={c.met ? d.color2 : '#a9a3b8'} seed={d.id + d.name} gender="m" size={44} />
                 <div className="contact-main">
                   <b>{c.met ? d.name : '尚未结识'}</b>

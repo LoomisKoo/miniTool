@@ -1,7 +1,7 @@
 import type { Dialog, DialogOption } from '../game/dialog'
 import { RANKS } from '../game/data/base'
 import { bustUrl, resolveFaceId, VN_BG } from '../game/portraits'
-import { actSilent, flush, setUI, setUISilent, useStore } from '../game/store'
+import { actSilent, flush, setUI, setUISilent, toast, useStore } from '../game/store'
 import { Sheet } from './common'
 import { AvatarFace } from './Portrait'
 
@@ -80,9 +80,8 @@ export function DialogSheet() {
           {opts.map((o, i) => (
             <button
               key={i}
-              className={`vn-opt ${opts.length === 1 ? 'single' : ''}`}
-              disabled={o.disabled}
-              onClick={() => choose(o)}
+              className={`vn-opt ${opts.length === 1 ? 'single' : ''} ${o.disabled ? 'is-off' : ''}`}
+              onClick={() => (o.disabled ? toast('资金不够，选不了这个') : choose(o))}
             >
               <i>{String.fromCharCode(65 + i)}</i>
               <span>{o.label}</span>

@@ -1,5 +1,6 @@
 import { cutPuzzle, loadImage, MAX_DIM, MAX_TOTAL, SOFT_TOTAL, buildJigsawShape, suggestGrid, getPieceThumb, getPieceThumbHi, getPieceFrame, hitTestPiece, rotatedShapeKey, cropRect, thumbBodyMetrics, tracePieceAt, buildTabMap, tabsFor } from './puzzle.js?v=20260928-1';
 import { celebrate } from './confetti.js?v=20260927-53';
+import { unlock as sfxUnlock, place as sfxPlace, rotate as sfxRotate, scatter as sfxScatter, reveal as sfxReveal, win as sfxWin } from './sfx.js?v=20261018-1';
 const THREE = window.THREE;
 if (!THREE) throw new Error('Three.js 未加载');
 
@@ -1951,6 +1952,8 @@ function placeOnSlot(slot) {
   clearSlotHints();
   renderTray();
   const left = puzzle.pieces.filter((p) => !p.placed).length;
+  // 落位音：音高跟着进度走，越到后面越亮
+  sfxPlace((puzzle.pieces.length - left) / puzzle.pieces.length);
   if (!left) {
     // 每块都在自己的原位且朝向归正，才算真正拼对；等最后一块落地再庆祝
     const perfect = puzzle.pieces.every((p) => p.slotIndex === p.id && ((p.rot || 0) % 4) === 0);
@@ -1959,6 +1962,7 @@ function placeOnSlot(slot) {
       setTimeout(() => {
         setHint('太棒了，拼图完成！');
         celebrate();
+        sfxWin();
       }, wait);
       setDone('win');
     } else {
@@ -2096,6 +2100,7 @@ function shuffleUnplaced() {
   clearSlotHints();
   shuffleTray();
   renderTray();
+  sfxScatter();
 }
 
 function openRestartConfirm() {
@@ -2177,6 +2182,7 @@ function solveAll() {
     }, delay);
   });
   setHint('已揭晓完整画面');
+  sfxReveal();
   // 等最后一块飞到位再撒花
   const wait = snaps.size ? PLACE_FLY_MS + stagger + 60 : 0;
   setTimeout(celebrate, wait);
@@ -2415,6 +2421,7 @@ function rotateSelected() {
     } else {
       rotating = false;
       applyPieceYaw(mesh, piece);
+      sfxRotate();
       for (const el of thumbImgs) {
         el.style.transition = 'none';
         el.style.transform = `rotate(${piece.rot * 90}deg)`;
@@ -2797,6 +2804,8 @@ els.file.addEventListener('change', async () => {
 });
 
 els.scatter.addEventListener('click', shuffleUnplaced);
+// 首次点按解锁音频：浏览器要求用户手势之后才能创建/恢复 AudioContext
+window.addEventListener('pointerdown', sfxUnlock, { once: true, passive: true });
 els.restart.addEventListener('click', openRestartConfirm);
 els.restartCancel.addEventListener('click', closeRestartConfirm);
 els.restartCancelScrim.addEventListener('click', closeRestartConfirm);

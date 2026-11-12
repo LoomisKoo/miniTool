@@ -470,7 +470,7 @@ export const FAC = {
   pagoda: ['七级浮屠塔', 'PAGODA', '#7a1a14', '#f3d27a', null],
   confucius: ['文庙', 'CONFUCIUS TEMPLE', '#8a1a14', '#f3d27a', null],
   amusement: ['欢乐世界', 'FUN WORLD', '#3fa39a', '#ffffff', '#e8735a'],
-  airport: ['城市机场', 'CITY AIRPORT', '#0e2a4a', '#ffffff', '#3fa39a'],
+  airport: ['云港空枢', 'SKY PORT', '#0b2b45', '#eaf6ff', '#3fd6c4'],
   themepark: ['云岬乐园', 'CLOUDCAPE PARK', '#1f62b4', '#ffffff', '#f2c14e'],
   parkresort: ['云岬乐园度假区', 'CLOUDCAPE RESORT', '#1f62b4', '#ffffff', '#f2c14e'],
 }

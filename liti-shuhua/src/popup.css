@@ -810,6 +810,14 @@ body { overflow: hidden; background: #6e4630; }
   font-weight: 600;
 }
 .pb-foot button.pb-edit:hover { background: #fbeac4; }
+/* 发布：主行为，用小红书那支红，和「制作」的米色分开 */
+.pb-foot button.pb-publish {
+  color: #fff;
+  background: #ff2e4d;
+  font-weight: 600;
+}
+.pb-foot button.pb-publish:hover { background: #ff4560; }
+.pb-foot button.pb-publish:disabled { opacity: .55; background: #ff2e4d; }
 .pb-foot button:hover { background: rgba(70, 40, 28, .9); transform: translateY(-2px); }
 .pb-foot button:active { transform: scale(.94); }
 .pb-foot button:disabled { opacity: .35; cursor: default; transform: none; }
@@ -871,13 +879,15 @@ body { overflow: hidden; background: #6e4630; }
 }
 
 /* ===== 操作说明 =====
-   问号贴在右下角、不参与底部那一排，所以窄屏也不会挤到翻页键。
+   问号贴右上角、不参与底部那一排，所以窄屏也不会挤到翻页键。
    弹层走 fixed，不跟着书本缩放/转向，横屏时也正着读。 */
 .pb-help-btn {
   position: absolute;
   z-index: 6;
-  right: 14px;
-  bottom: calc(var(--pb-foot, 22px) + env(safe-area-inset-bottom, 0px));
+  /* 放右上角：避开容器导航栏（安全区 + 44px 顶栏），再加一点呼吸位。
+     --xhs-nav / --safe-t 在 xhs-base.css 里定义；普通浏览器预览时两者都是 0。 */
+  right: 12px;
+  top: calc(var(--xhs-nav, 0px) + 12px);
   width: 34px;
   height: 34px;
   padding: 0;
@@ -978,3 +988,28 @@ html.ua-webkit .pb-flap .pb-backside {
   background: #2a3158;
 }
 html.ua-webkit .pb-cast { filter: none; opacity: .55; }
+
+/* 发布/操作反馈：底部控制条上方的轻提示，2.4 秒自己淡出 */
+.pb-toast {
+  position: absolute;
+  left: 50%;
+  bottom: 96px;
+  z-index: 7;
+  padding: 9px 16px;
+  border-radius: 10px;
+  background: rgba(28, 16, 10, .9);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .35), inset 0 0 0 .5px rgba(255, 226, 180, .16);
+  color: #fbecc8;
+  font-size: 13px;
+  white-space: nowrap;
+  pointer-events: none;
+  transform: translateX(-50%);
+  animation: pb-toast-in .18s ease;
+}
+@keyframes pb-toast-in {
+  from { opacity: 0; transform: translate(-50%, 6px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+@media (max-width: 620px) {
+  .pb-toast { bottom: 84px; font-size: 12.5px; padding: 8px 13px; }
+}

@@ -10,19 +10,22 @@
 <body>
 <div id="app">
   <header class="top">
-    <h1>本草</h1>
+    <div class="brand">
+      <span class="logo">本草</span>
+      <span class="rank" id="rank">学徒</span>
+    </div>
     <div class="wallet">
-      <span id="money">200 文</span>
-      <span id="rep" class="dim">声望 0</span>
+      <span class="res"><i class="coin-i"></i><b id="money">200</b></span>
+      <span class="res"><i class="rep-i">望</i><b id="rep">0</b></span>
       <button class="help" id="helpBtn" aria-label="指南">?</button>
     </div>
   </header>
   <main id="main"></main>
   <nav class="tabbar">
-    <button data-tab="shop" class="on">药铺</button>
-    <button data-tab="farm">药圃</button>
-    <button data-tab="land">山林</button>
-    <button data-tab="atlas">图鉴</button>
+    <button data-tab="shop" class="on"><svg viewBox="0 0 24 24"><path d="M3 10 L12 4 L21 10 M5 9 V20 H19 V9 M9 20 V14 H15 V20"/></svg><span>药铺</span></button>
+    <button data-tab="farm"><svg viewBox="0 0 24 24"><path d="M12 21 V11 M12 13 C7 13 5 9 5 6 C9 6 12 8 12 13 M12 11 C12 7 15 4 19 4 C19 8 16 11 12 11 M4 21 H20"/></svg><span>药圃</span></button>
+    <button data-tab="land"><svg viewBox="0 0 24 24"><path d="M2 20 L9 8 L13 14 L16 10 L22 20 Z M7 11 L9 13 L11 11"/></svg><span>山林</span></button>
+    <button data-tab="atlas"><svg viewBox="0 0 24 24"><path d="M4 5 C7 4 10 4 12 6 C14 4 17 4 20 5 V19 C17 18 14 18 12 20 C10 18 7 18 4 19 Z M12 6 V20"/></svg><span>图鉴</span></button>
   </nav>
   <div id="toast"></div>
 

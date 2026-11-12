@@ -184,7 +184,7 @@ zip 内仅允许以下类型：
 
 ### 端能力（见 [device-capabilities.md](./device-capabilities.md)）
 
-- [ ] 未使用不可用能力（网络请求、定位、剪贴板、传感器、Worker、WebRTC 等）
+- [ ] 未使用不可用能力（网络请求、定位、剪贴板、传感器、SharedWorker / Service Worker、WebRTC 等）；若用 Dedicated Worker：客户端 ≥9.53、包内 classic、每页 ≤1 个）
 - [ ] 相机 / 麦克风 / 选图用法符合「用户手势触发 + 授权」
 - [ ] 若使用 JSBridge：仅调用 [jsbridge-api.md](./jsbridge-api.md) 列出的 API，参数符合 schema
 

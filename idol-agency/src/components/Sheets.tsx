@@ -126,9 +126,10 @@ function ArtistSheet({ g, a }: { g: GameState; a: Artist }) {
               {(Object.keys(ROOMS) as RoomId[]).map((r) => (
                 <button
                   key={r}
-                  className={`room-opt ${a.room === r ? 'on' : ''}`}
-                  disabled={a.status === 'suspended'}
-                  onClick={() => act((g) => setRoom(g, a.id, r))}
+                  className={`room-opt ${a.room === r ? 'on' : ''} ${a.status === 'suspended' ? 'is-off' : ''}`}
+                  onClick={() =>
+                    a.status === 'suspended' ? toast(`${a.name}停工中，暂时不能安排`) : act((g) => setRoom(g, a.id, r))
+                  }
                 >
                   <span>{ROOMS[r].emoji}</span>
                   {ROOMS[r].name}
@@ -226,8 +227,7 @@ function FacilitySheet({ g }: { g: GameState }) {
                 <small>{f.desc}</small>
               </div>
               <button
-                className="btn-soft"
-                disabled={cost === undefined || g.money < cost}
+                className={`btn-soft ${cost === undefined || g.money < cost ? 'is-off' : ''}`}
                 onClick={() => {
                   let err: string | null = null
                   act((g) => (err = upgrade(g, k)))
@@ -281,9 +281,8 @@ function PickRoomSheet({ g, room }: { g: GameState; room: RoomId }) {
           return (
             <button
               key={x.id}
-              className={`pick ${on ? 'on' : ''}`}
-              disabled={disabled}
-              onClick={() => toggle(x.id)}
+              className={`pick ${on ? 'on' : ''} ${disabled ? 'is-off' : ''}`}
+              onClick={() => (disabled ? toast(`${x.name}停工中，暂时不能安排`) : toggle(x.id))}
             >
               <Avatar a={x} size={44} />
               <div className="pick-main">

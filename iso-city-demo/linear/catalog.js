@@ -54,7 +54,7 @@ export const CIVIC = [
   { id: 'confucius', zh: '孔庙', tier: 'city', size: [130, 100], host: { kind: 'library', x: -649, z: 2254 } },
   { id: 'civicplaza', zh: '城市广场（方尖碑 + 倒影池）', tier: 'city', size: [160, 130], host: { kind: 'mall', x: -655, z: -1299 } },
   { id: 'parkresort', zh: '云岬乐园度假区（主题酒店 + 入口小镇 + 停车场 + 跨干道步行桥）', tier: 'city', block: { x: 1133, z: -1878 }, kinds: ['mall'] },
-  { id: 'airport', zh: '机场航站楼（城边，紧凑机坪 + 短跑道）', tier: 'city', block: { x: 2284, z: -1878 } },
+  { id: 'airport', zh: '云港空枢（eVTOL 起降场 + 跨城磁悬浮站）', tier: 'city', block: { x: 2284, z: -1878 } },
   // t37 大型原创主题乐园：城东南角整块（约 617m × 651m，四面都是原有干道 / 街道，不压路），机场隔一条干道
   // t40 扩大：南北各并一块（吞掉中间两段支路，登记为 closed），约 617m × 1392m；干道对面原商场改成乐园度假区（酒店 + 入口小镇 + 停车 + 跨干道步行桥 / 单轨）
   { id: 'themepark', zh: '云岬乐园（主题乐园：灯塔泻湖 + 八大园区 + 巡游大道）', tier: 'city', block: { x: 1751, z: -1881 }, grow: { z0: -2470, z1: -1060 },
