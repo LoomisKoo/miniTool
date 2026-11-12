@@ -775,11 +775,15 @@ function skinOfHex(hex, style) {
   return r < 0.24 ? 'paint' : r < 0.42 ? 'enamel' : r < 0.6 ? 'glaze' : r < 0.74 ? 'breeze' : r < 0.86 ? 'wood' : r < 0.94 ? 'perf' : 'terra'
 }
 
-function makeWallMat(hex, style, cyl = false, upper = false) {
-  const skin = skinOfHex(hex, style)
+function makeWallMat(hex, style, cyl = false, upper = false, tinted = false) {
+  // tinted：hex 位置传的是 skin 名，颜色交给逐实例的 aTint。
+  // 好处是同 skin + 同立面类型的所有墙色合成一个 material → 一个 draw call。
+  // Safari 的 WebGL 每个 draw call 的开销比 Chrome 高好几倍，这座城 700 多个墙池
+  // 曾经就是 10fps 的主因。
+  const skin = tinted ? hex : skinOfHex(hex, style)
   const pbr = SKIN_PBR[skin] || SKIN_PBR.paint
   const mat = new THREE.MeshStandardMaterial({
-    color: hex,
+    color: tinted ? 0xffffff : hex,
     roughness: pbr.roughness,
     metalness: pbr.metalness,
     // IBL 略抬：背光面靠环境光补一层，不只靠硬方向光
@@ -792,6 +796,7 @@ function makeWallMat(hex, style, cyl = false, upper = false) {
   const frag = facadeFragment(style)
   if (cyl) mat.defines = { CYL: '' }
   if (upper) mat.defines = { ...(mat.defines || {}), UPPER: '' }
+  if (tinted) mat.defines = { ...(mat.defines || {}), TINT: '' }
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uNight = Mat.nightU
     shader.uniforms.uUpView = Mat.upViewU
@@ -800,6 +805,10 @@ function makeWallMat(hex, style, cyl = false, upper = false) {
       .replace(
         '#include <common>',
         `#include <common>
+        #ifdef TINT
+          attribute vec3 aTint;
+          varying vec3 vTint;
+        #endif
         // 打包：varying 数量有硬上限（16 个 vec4），拆开写会把整条管线挤爆
         varying vec4 vP0; // meters.x, meters.z, yFromBot, H
         flat varying vec4 vP1; // halfX, halfZ, seed, baseY（逐实例常量，flat 防插值误差被 hash 放大成噪点）
@@ -809,6 +818,9 @@ function makeWallMat(hex, style, cyl = false, upper = false) {
       .replace(
         '#include <begin_vertex>',
         `vec3 _localPos = position;
+        #ifdef TINT
+          vTint = aTint;
+        #endif
         #include <begin_vertex>`,
       )
       .replace(
@@ -844,6 +856,9 @@ function makeWallMat(hex, style, cyl = false, upper = false) {
       .replace(
         '#include <common>',
         `#include <common>
+        #ifdef TINT
+          varying vec3 vTint;
+        #endif
         varying vec4 vP0;
         flat varying vec4 vP1;
         varying vec4 vP2;
@@ -908,7 +923,10 @@ function makeWallMat(hex, style, cyl = false, upper = false) {
       )
       .replace(
         '#include <color_fragment>',
-        `
+        `#include <color_fragment>
+        #ifdef TINT
+          diffuseColor.rgb *= vTint;
+        #endif
         {
           float vert = (1.0 - smoothstep(0.28, 0.72, abs(vP2.y))) * (1.0 - vP2.w);
           vec3 wallCol = diffuseColor.rgb;
@@ -997,7 +1015,7 @@ function makeWallMat(hex, style, cyl = false, upper = false) {
         }`,
       )
   }
-  mat.customProgramCacheKey = () => `facade-${style}${cyl ? '-cyl' : ''}${upper ? '-up' : ''}-v47`
+  mat.customProgramCacheKey = () => `facade-${style}${cyl ? '-cyl' : ''}${upper ? '-up' : ''}${tinted ? '-tint' : ''}-v47`
   return mat
 }
 
@@ -1013,18 +1031,27 @@ function makeGableGeo() {
   return geo
 }
 
-function makeRoofMat(hex) {
+function makeRoofMat(hex, tinted = false) {
   const mat = new THREE.MeshStandardMaterial({
-    color: hex,
+    color: tinted ? 0xffffff : hex,
     roughness: 0.55,
     metalness: 0.0,
     envMapIntensity: 0.45,
   })
+  if (tinted) mat.defines = { TINT: '' }
   mat.onBeforeCompile = (sh) => {
     sh.uniforms.uNight = Mat.nightU
     sh.vertexShader = sh.vertexShader
-      .replace('#include <common>', '#include <common>\nvarying vec2 vRXZ;')
+      .replace('#include <common>', `#include <common>
+        #ifdef TINT
+          attribute vec3 aTint;
+          varying vec3 vTint;
+        #endif
+        varying vec2 vRXZ;`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>
+        #ifdef TINT
+          vTint = aTint;
+        #endif
         #ifdef USE_INSTANCING
           vRXZ = (modelMatrix * instanceMatrix * vec4(transformed, 1.0)).xz;
         #else
@@ -1032,6 +1059,9 @@ function makeRoofMat(hex) {
         #endif`)
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>
+        #ifdef TINT
+          varying vec3 vTint;
+        #endif
         varying vec2 vRXZ;
         uniform float uNight;
         float rRgh = 0.0;
@@ -1039,6 +1069,9 @@ function makeRoofMat(hex) {
         float rN(vec2 p) { vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);
           return mix(mix(rHash(i), rHash(i + vec2(1.0, 0.0)), f.x), mix(rHash(i + vec2(0.0, 1.0)), rHash(i + vec2(1.0, 1.0)), f.x), f.y); }`)
       .replace('#include <color_fragment>', `#include <color_fragment>
+        #ifdef TINT
+          diffuseColor.rgb *= vTint;
+        #endif
         {
           float fw = max(fwidth(vRXZ.x), fwidth(vRXZ.y));
           float det = 1.0 - smoothstep(0.12, 0.6, fw);
@@ -1080,6 +1113,7 @@ function makeRoofMat(hex) {
   }
   mat.customProgramCacheKey = () => 'roof-paint-v5'
   mat.userData.mergeOK = true
+  mat.customProgramCacheKey = () => `roof${tinted ? '-tint' : ''}-v47`
   return mat
 }
 
@@ -1126,82 +1160,100 @@ export function buildBuildings(plan, seed = 77) {
     return { geo, mat, material: mat, lod, recs: new Map(), n: 0 }
   }
 
+  // ── 墙/屋面：按「表皮 + 立面类型」合并，颜色走逐实例 aTint ─────────────
+  // 以前每面墙色一个 material（700+ 个 draw call），Safari 上每 draw call 的固定开销
+  // 就是帧率的天花板。合成后同 skin 同 style 的墙共用一个材质，颜色由 aTint 给。
+  const tintHex = (hex) => parseInt(hex.slice(1), 16)
+
   function wallPool(hex, style, upper = false) {
-    const key = `${hex}:${style}${upper ? ':up' : ''}`
+    const skin = skinOfHex(hex, style)
+    const key = `${skin}:${style}${upper ? ':up' : ''}`
     let inst = wallPools.get(key)
     if (!inst) {
       let mat = wallMats.get(key)
       if (!mat) {
-        mat = makeWallMat(hex, style, false, upper)
+        mat = makeWallMat(skin, style, false, upper, true)
         wallMats.set(key, mat)
         Mat.registerMaterial(mat)
       }
       inst = newPool(boxGeo, mat, 0)
       inst.trackG = 'wall'
       inst.struct = true
+      inst.tinted = true
       wallPools.set(key, inst)
     }
+    inst._tint = tintHex(hex)
     return inst
   }
 
   function roofPool(hex) {
-    let inst = roofPools.get(hex)
+    const key = 'roof'
+    let inst = roofPools.get(key)
     if (!inst) {
-      let mat = roofMats.get(hex)
+      let mat = roofMats.get(key)
       if (!mat) {
-        mat = makeRoofMat(hex)
-        roofMats.set(hex, mat)
+        mat = makeRoofMat(null, true)
+        roofMats.set(key, mat)
         Mat.registerMaterial(mat)
       }
       inst = newPool(boxGeo, mat, 0)
       inst.trackG = 'decor'
       inst.struct = true
-      roofPools.set(hex, inst)
+      inst.tinted = true
+      roofPools.set(key, inst)
     }
+    inst._tint = tintHex(hex)
     return inst
   }
 
   // 圆柱楼的屋顶也要是圆的（以前是方盒子扣在圆柱上，边缘对不上）
   function roofCylPool(hex) {
-    const key = `${hex}:roof`
+    const key = 'roof:cyl'
     let inst = cylPools.get(key)
     if (!inst) {
-      const mat = makeRoofMat(hex)
+      const mat = makeRoofMat(null, true)
       Mat.registerMaterial(mat)
       inst = newPool(cylGeo, mat, 0)
       inst.trackG = 'decor'
       inst.struct = true
+      inst.tinted = true
       cylPools.set(key, inst)
     }
+    inst._tint = tintHex(hex)
     return inst
   }
   const cylList = []
   // t32 椭圆 / 六边形等异形筒：与圆柱同一套立面 shader（CYL 展开），只换几何
   const hexGeo = new THREE.CylinderGeometry(0.5, 0.5, 1, 6)
   function shapePool(hex, geoK, roof) {
-    const key = `${hex}:${geoK}:${roof ? 'roof' : 'wall'}`
+    const key = `${geoK}:${roof ? 'roof' : 'wall'}`
     let inst = cylPools.get(key)
     if (!inst) {
-      const mat = roof ? makeRoofMat(hex) : makeWallMat(hex, 'curtain', true)
+      const mat = roof ? makeRoofMat(null, true)
+        : makeWallMat(skinOfHex(hex, 'curtain'), 'curtain', true, false, true)
       Mat.registerMaterial(mat)
       inst = newPool(geoK === 'hex' ? hexGeo : cylGeo, mat, 0)
       inst.trackG = roof ? 'decor' : 'wall'
       inst.struct = true
+      inst.tinted = true
       cylPools.set(key, inst)
     }
+    inst._tint = tintHex(hex)
     return inst
   }
   function cylPool(hex) {
-    const key = `${hex}:curtain`
+    const key = 'cyl:curtain'
     let inst = cylPools.get(key)
     if (!inst) {
-      const mat = makeWallMat(hex, 'curtain', true)
+      const mat = makeWallMat(skinOfHex(hex, 'curtain'), 'curtain', true, false, true)
       Mat.registerMaterial(mat)
       inst = newPool(cylGeo, mat, 0)
       inst.trackG = 'wall'
       inst.struct = true
+      inst.tinted = true
       cylPools.set(key, inst)
     }
+    inst._tint = tintHex(hex)
     return inst
   }
 
@@ -1600,7 +1652,9 @@ export function buildBuildings(plan, seed = 77) {
     const o = r.n * 8
     const b = r.buf
     b[o] = x; b[o + 1] = y; b[o + 2] = z
-    b[o + 3] = sx; b[o + 4] = sy; b[o + 5] = sz; b[o + 6] = yaw; b[o + 7] = -1
+    b[o + 3] = sx; b[o + 4] = sy; b[o + 5] = sz; b[o + 6] = yaw
+    // 槽 7：逐实例颜色（0xRRGGBB），只有 tinted 池（墙/屋面）读它
+    b[o + 7] = pool.tinted ? (pool._tint || 0xffffff) : -1
     r.n++
     pool.n++
     return r
@@ -7031,8 +7085,16 @@ export function buildBuildings(plan, seed = 77) {
   const mArr = dummy.matrix.elements
   const flagCol = new THREE.Color()
   const lodMeshes = []
+  const tintCol = new THREE.Color()
   function emitPool(pool, recs, count, center, lod = pool.lod) {
-    const inst = new THREE.InstancedMesh(pool.geo, pool.mat, count)
+    let geo = pool.geo
+    let tintArr = null
+    if (pool.tinted) {
+      // 逐实例墙色：几何要各自一份（属性挂在 geometry 上），盒子才 24 个顶点，代价可忽略
+      geo = pool.geo.clone()
+      tintArr = new Float32Array(count * 3)
+    }
+    const inst = new THREE.InstancedMesh(geo, pool.mat, count)
     inst.instanceMatrix.setUsage(THREE.StaticDrawUsage)
     inst.matrixAutoUpdate = false
     const arr = inst.instanceMatrix.array
@@ -7047,6 +7109,10 @@ export function buildBuildings(plan, seed = 77) {
         dummy.rotation.set(0, b[o + 6], 0)
         dummy.updateMatrix()
         arr.set(mArr, i * 16)
+        if (tintArr) {
+          tintCol.setHex(b[o + 7] >= 0 ? b[o + 7] : 0xffffff)
+          tintArr[i * 3] = tintCol.r; tintArr[i * 3 + 1] = tintCol.g; tintArr[i * 3 + 2] = tintCol.b
+        }
         i++
       }
       if (r.col) {
@@ -7059,6 +7125,7 @@ export function buildBuildings(plan, seed = 77) {
       }
     }
     if (hasCol && inst.instanceColor) inst.instanceColor.needsUpdate = true
+    if (tintArr) geo.setAttribute('aTint', new THREE.InstancedBufferAttribute(tintArr, 3))
     inst.computeBoundingSphere()
     // 投影：只让"结构性大块"进深度图（墙体/屋顶/檐口/雨棚/阳台）。
     // 窗台、窗套、空调、货架这些几十万件的小件不投 —— 深度图里它们只贡献亚像素噪点，

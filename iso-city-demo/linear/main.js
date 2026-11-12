@@ -16,6 +16,10 @@ const renderer = new THREE.WebGLRenderer({
   canvas,
   antialias: true,
   powerPreference: 'high-performance',
+  // 画布本来就被天空球铺满，不需要和页面合成：不透明的 framebuffer 少一趟 alpha 合成，
+  // Safari 的 WebGL 合成路径明显便宜一些；stencil 也没用上
+  alpha: false,
+  stencil: false,
   // t37：关掉对数深度。它让每个片元写 gl_FragDepth → GPU 无法提前深度剔除，被挡住的立面也要把整套
   // 立面 shader（凹窗 / 室内 / 噪声）跑完，城区重叠层数一多就是 10fps 的元凶。改用随高度变化的近裁剪面保精度。
   logarithmicDepthBuffer: /[?&]logz\b/.test(location.search),
@@ -382,7 +386,9 @@ let camInit = false
 // ── 阴影档位：高(2048/PCF) → 中(1024) → 关。跟着帧率自动降级，卡的时候先牺牲影子而不是掉到十几帧 ──
 // 手动指定：?shadows=high|mid|off（off 时连阴影图都不建）
 const SHADOW_ARG = (location.search.match(/[?&]shadows=([a-z0-9]+)/) || [])[1]
-let shadowLvl = SHADOW_ARG === 'off' || SHADOW_ARG === '0' ? 0 : SHADOW_ARG === 'mid' ? 1 : SHADOW_ARG === 'high' ? 2 : 2
+// 默认从中档起步：高档（墙面也接影）是满屏 9 次深度比较，Safari 上一开局就吃满。
+// 稳在 60fps 的机器两秒后会自动升到高档，卡机器则留在中档/关掉
+let shadowLvl = SHADOW_ARG === 'off' || SHADOW_ARG === '0' ? 0 : SHADOW_ARG === 'mid' ? 1 : SHADOW_ARG === 'high' ? 2 : 1
 let shadowCool = 0
 let shadowInit = true
 function applyShadowLvl() {
@@ -422,33 +428,43 @@ function adaptDPR(dt) {
   const avg = dprAccT / dprAccN
   dprAccT = 0
   dprAccN = 0
-  // 先降阴影档位，再把分辨率往下压：影子是纯装饰，分辨率掉下去整屏都糊
-  // 降级门槛分开：高→中 只要低于 38fps；中→关 要低到 30fps 以下（影子对观感很重要，别轻易丢）
+  // 先降阴影档位，再把分辨率往下压：影子是纯装饰，分辨率掉下去整屏都糊。
+  // 门槛按「能不能锁在 60」来定：低于 45fps 就退一档，稳定锁 60（<1/56）时才升回去。
+  // （以前升级门槛写的是 78fps —— 60Hz 屏幕永远达不到，高级档一旦降下来就再也回不去。）
   shadowCool -= 2
-  if (!SHADOW_ARG && shadowCool <= 0 && shadowLvl === 2 && avg > 1 / 38) {
+  if (!SHADOW_ARG && shadowCool <= 0 && shadowLvl === 2 && avg > 1 / 45) {
     shadowLvl = 1
     shadowCool = 8
     applyShadowLvl()
-  } else if (!SHADOW_ARG && shadowCool <= 0 && shadowLvl === 1 && avg > 1 / 30) {
+  } else if (!SHADOW_ARG && shadowCool <= 0 && shadowLvl === 1 && avg > 1 / 34) {
     shadowLvl = 0
     shadowCool = 10
     applyShadowLvl()
-  } else if (!SHADOW_ARG && shadowCool <= 0 && shadowLvl < 2 && avg < 1 / 78) {
+  } else if (!SHADOW_ARG && shadowCool <= 0 && shadowLvl < 2 && avg < 1 / 56) {
     shadowLvl++
     shadowCool = 12
     applyShadowLvl()
   }
   if (dprCool > 0) return
-  dprBad = avg > 1 / 48 ? dprBad + 1 : 0
-  dprGood = avg < 1 / 85 ? dprGood + 1 : 0
+  dprBad = avg > 1 / 45 ? dprBad + 1 : 0
+  dprGood = avg < 1 / 58 ? dprGood + 1 : 0
   let next = curDPR
-  // 下限抬到 1.25：Retina 上掉到 1.0 就是"整屏锯齿"，宁可少几帧也别掉画质
-  if (dprBad >= 2 && curDPR > 1.25) next = Math.max(1.25, +(curDPR - 0.25).toFixed(2))
-  else if (dprGood >= 3 && curDPR < maxDPR) next = Math.min(maxDPR, +(curDPR + 0.25).toFixed(2))
-  if (next === curDPR) return
+  if (avg > 1 / 45) {
+    // 渲染时间大致与像素数成正比 → 目标 DPR 用 sqrt 一次算到位，
+    // 不再每 6 秒挪 0.25（Safari 上以前就是这样越拖越卡、最后卡在十几帧）
+    // 下限：平时 1.0；真的掉到 30fps 以下才允许 0.85（整屏发软，但比卡死强）
+    const floor = avg > 1 / 30 ? 0.85 : 1.0
+    next = +(curDPR * Math.sqrt((1 / 56) / avg)).toFixed(2)
+    next = Math.min(next, curDPR - 0.05)
+    next = Math.max(floor, next)
+  } else if (dprGood >= 2 && curDPR < maxDPR && avg < 1 / 58) {
+    // 只有稳定锁帧（说明还有余量）才往上加，每次 0.1 —— 45~58fps 之间是死区，不会来回跳
+    next = Math.min(maxDPR, +(curDPR + 0.1).toFixed(2))
+  }
+  if (Math.abs(next - curDPR) < 0.02) return
   curDPR = next
   dprBad = dprGood = 0
-  dprCool = 6
+  dprCool = 3
   renderer.setPixelRatio(curDPR)
   renderer.setSize(innerWidth, innerHeight, false)
 }
@@ -941,6 +957,27 @@ let lodZ = 1e9
 let lodY = 1e9
 const lampHalos = world?.getObjectByName('lampHalos')
 
+// ?perf：帧率 / 分辨率 / draw call 面板（Safari 上排查性能用，默认不显示）
+const PERF = /[?&]perf\b/.test(location.search) ? document.createElement('div') : null
+if (PERF) {
+  PERF.style.cssText = 'position:fixed;left:8px;bottom:8px;z-index:999;font:12px/1.45 ui-monospace,SFMono-Regular,monospace;color:#fff;background:rgba(0,0,0,.62);padding:6px 9px;border-radius:6px;white-space:pre;pointer-events:none'
+  document.body.appendChild(PERF)
+}
+let perfT = 0
+let perfN = 0
+function tickPerf(dt) {
+  if (!PERF) return
+  perfT += dt
+  perfN++
+  if (perfT < 0.5) return
+  const i = renderer.info.render
+  PERF.textContent = `${(perfN / perfT).toFixed(0)} fps  ${(perfT / perfN * 1000).toFixed(1)} ms\n`
+    + `dpr ${curDPR.toFixed(2)}  ${renderer.domElement.width}x${renderer.domElement.height}\n`
+    + `draws ${i.calls}  tris ${(i.triangles / 1e6).toFixed(2)}M  shadow ${shadowLvl}`
+  perfT = 0
+  perfN = 0
+}
+
 function tick() {
   const frameDt = Math.min(clock.getDelta(), 0.1)
   const time = clock.elapsedTime
@@ -996,6 +1033,7 @@ function tick() {
   adaptDPR(frameDt)
   maybeUpdateShadow(false)
   renderer.render(scene, camera)
+  tickPerf(frameDt)
   updateHUD(frameDt)
   requestAnimationFrame(tick)
 }
