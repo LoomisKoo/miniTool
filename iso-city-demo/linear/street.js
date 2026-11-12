@@ -27,9 +27,9 @@ export function buildStreetLife(plan, seed = 91, extraLamps = null) {
 
   // 大设施合并地块里的路已取消：人行道/路缘/路灯/标线/斑马线等一律不放
   const closedAt = (x, z) => !!plan.isClosed?.(x, z)
-  function push(inst, x, y, z, sx, sy, sz, yaw = 0) {
+  function push(inst, x, y, z, sx, sy, sz, yaw = 0, force = false) {
     if (inst.userData.n >= inst.userData.cap) return
-    if (closedAt(x, z)) return
+    if (!force && closedAt(x, z)) return
     dummy.position.set(x, y, z)
     dummy.scale.set(sx, sy, sz)
     dummy.rotation.set(0, yaw, 0)
@@ -45,8 +45,8 @@ export function buildStreetLife(plan, seed = 91, extraLamps = null) {
     paint.geometry = flat
     yellow.geometry = flat
   }
-  const walk = pool(Mat.concrete('#8f8b85'), 40_000)
-  const curb = pool(Mat.concrete('#6a6862'), 40_000)
+  const walk = pool(Mat.concrete('#d2c2a4'), 40_000) // t32 暖色人行道砖
+  const curb = pool(Mat.concrete('#bcb2a0'), 40_000) // 浅花岗岩路缘
   const pole = pool(Mat.metal('#4a5058'), 8_000)
   const sigMat = (hex, emis) => {
     const m = new THREE.MeshStandardMaterial({ color: hex, emissive: emis, emissiveIntensity: 0, roughness: 0.4 })
@@ -156,14 +156,14 @@ export function buildStreetLife(plan, seed = 91, extraLamps = null) {
   const lamps = []
   const nearX = (v) => plan.avenues.some((a) => Math.abs(a - v) < aw / 2 + 8)
   const nearZ = (v) => plan.streets.some((s2) => Math.abs(s2 - v) < sw / 2 + 8)
-  const lamp = (px, pz, hx, hz, alongZ) => {
-    if (closedAt(px, pz)) return
+  const lamp = (px, pz, hx, hz, alongZ, force = false) => {
+    if (!force && closedAt(px, pz)) return
     addProp(px, pz, 0.35)
-    push(lampPole, px, SURFACE + 3.2, pz, 0.18, 6.4, 0.18)
-    if (alongZ) push(lampPole, (px + hx) / 2, lampY + 0.15, pz, Math.abs(hx - px) + 0.2, 0.08, 0.08)
-    else push(lampPole, px, lampY + 0.15, (pz + hz) / 2, 0.08, 0.08, Math.abs(hz - pz) + 0.2)
-    push(lampHead, hx, lampY, hz, alongZ ? 0.9 : 0.45, 0.18, alongZ ? 0.45 : 0.9)
-    push(lampGlow, hx, SURFACE + 0.27, hz, 52.0, 0.01, 52.0)
+    push(lampPole, px, SURFACE + 3.2, pz, 0.18, 6.4, 0.18, 0, force)
+    if (alongZ) push(lampPole, (px + hx) / 2, lampY + 0.15, pz, Math.abs(hx - px) + 0.2, 0.08, 0.08, 0, force)
+    else push(lampPole, px, lampY + 0.15, (pz + hz) / 2, 0.08, 0.08, Math.abs(hz - pz) + 0.2, 0, force)
+    push(lampHead, hx, lampY, hz, alongZ ? 0.9 : 0.45, 0.18, alongZ ? 0.45 : 0.9, 0, force)
+    push(lampGlow, hx, SURFACE + 0.27, hz, 52.0, 0.01, 52.0, 0, force)
     lamps.push(hx, lampY - 0.3, hz)
   }
   for (const x of plan.avenues) {
@@ -187,6 +187,39 @@ export function buildStreetLife(plan, seed = 91, extraLamps = null) {
         }
       }
     }
+  }
+  // —— 园区内部道路：路缘 + 两侧人行道 + 标线 + 路灯（比干道窄一号，但路的语言齐全：车一看就是在路上开）——
+  for (const r of plan.inner || []) {
+    const zA = r.axis === 'z'
+    const len = r.hi - r.lo
+    const mid = (r.lo + r.hi) / 2
+    const yP = zA ? yPaint : yPaintS
+    const P = (inst, off, along, y, wAcross, h, lAlong) => (zA
+      ? push(inst, r.at + off, y, along, wAcross, h, lAlong, 0, true)
+      : push(inst, along, y, r.at + off, lAlong, h, wAcross, 0, true))
+    for (const s of [-1, 1]) {
+      P(curb, s * (r.cw / 2 + 0.15), yWalk - 0.005, mid, 0.3, 0.17, len)
+      P(walk, s * (r.cw / 2 + 0.3 + r.walk / 2), yWalk, mid, r.walk, 0.16, len)
+      // 白色路缘线
+      P(paint, s * (r.cw / 2 - 0.35), yP, mid, 0.15, 0.006, len - 2)
+      // 路灯：单侧交错，每 30m 一根
+      for (let a = r.lo + 12 + (s > 0 ? 15 : 0); a < r.hi - 8; a += 30) {
+        const off = s * (r.cw / 2 + 0.7)
+        const hoff = s * (r.cw / 2 - 0.8)
+        if (zA) lamp(r.at + off, a, r.at + hoff, a, true, true)
+        else lamp(a, r.at + off, a, r.at + hoff, false, true)
+      }
+    }
+    if (r.type === 'avenue') {
+      // 双向四车道：黄色中线 + 两侧车道虚线
+      P(yellow, 0, yP, mid, 0.25, 0.006, len - 2)
+      for (const s of [-1, 1]) for (let a = r.lo + 3; a < r.hi - 4; a += 9) P(paint, s * 3.6, yP, a + 2, 0.15, 0.006, 4)
+    } else {
+      // 双向两车道：黄色中心虚线
+      for (let a = r.lo + 3; a < r.hi - 4; a += 8) P(yellow, 0, yP, a + 1.75, 0.18, 0.006, 3.5)
+    }
+    // 园区出入口：两端各一道停止线
+    for (const e of [r.lo + 1.2, r.hi - 1.2]) P(paint, 0, yP + 0.002, e, r.cw - 1, 0.006, 0.4)
   }
   // 桥灯 / 公园庭院灯也进最近灯查询（夜里主角走过时有真实点光）
   if (extraLamps) for (const arr of extraLamps) if (arr) for (let i = 0; i < arr.length; i++) lamps.push(arr[i])
@@ -483,6 +516,34 @@ function buildTraffic(plan, rng, kit) {
       if (L.hi - h1 > 60) lanes.push({ ...L, lo: h1, cars: [] })
     }
   }
+  // 园区内部道路段：干道车道在进园区前（路口内）平滑并到窄路车道上，园区里限速，出来再回到原车道
+  const RAMP0 = 28
+  const RAMP1 = 5
+  for (const r of plan.inner || []) {
+    for (const L of lanes) {
+      if (L.axis !== r.axis) continue
+      const o = L.at - r.at
+      const lim = r.axis === 'z' ? W.avenueW / 2 : W.streetW / 2
+      if (Math.abs(o) > lim) continue
+      if (r.hi + RAMP0 < L.lo || r.lo - RAMP0 > L.hi) continue
+      ;(L.sq ||= []).push({ lo: r.lo, hi: r.hi, d: Math.sign(o) * r.laneAt(Math.abs(o)) - o, vmax: r.vmax })
+    }
+  }
+  const sm = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t))
+  function squeeze(lane, s) {
+    if (!lane.sq) return 0
+    for (const q of lane.sq) {
+      if (s < q.lo - RAMP0 || s > q.hi + RAMP0) continue
+      const k = Math.min(sm((s - (q.lo - RAMP0)) / (RAMP0 - RAMP1)), sm(((q.hi + RAMP0) - s) / (RAMP0 - RAMP1)))
+      return q.d * k
+    }
+    return 0
+  }
+  function innerVmax(lane, s) {
+    if (!lane.sq) return Infinity
+    for (const q of lane.sq) if (s > q.lo - RAMP0 && s < q.hi + RAMP0) return q.vmax
+    return Infinity
+  }
   const streetsS = plan.streets.slice().sort((a, b) => a - b)
   const avesS = plan.avenues.slice().sort((a, b) => a - b)
   const cars = []
@@ -591,7 +652,7 @@ function buildTraffic(plan, rng, kit) {
       const half = lane.axis === 'z' ? W.streetW / 2 : W.avenueW / 2
       for (let k = 0; k < arr.length; k++) {
         const c = arr[k]
-        let target = lane.vmax * (c.scooter ? 0.8 : 1)
+        let target = Math.min(lane.vmax, innerVmax(lane, c.s)) * (c.scooter ? 0.8 : 1)
         const ahead = arr[k + 1]
         if (ahead) {
           const gap = (ahead.s - c.s) * lane.dir - (ahead.L + c.L) / 2
@@ -632,8 +693,9 @@ function buildTraffic(plan, rng, kit) {
       if (!c.alive || !c.lane) { hide(i, c); continue }
       const lane = c.lane
       let x, z, yaw
-      if (lane.axis === 'z') { x = lane.at + (c.pull ? lane.side * 2.0 * c.pull * c.pull * (3 - 2 * c.pull) : 0); z = c.s; yaw = lane.dir > 0 ? -Math.PI / 2 : Math.PI / 2 }
-      else { z = lane.at; x = c.s; yaw = lane.dir > 0 ? 0 : Math.PI }
+      const sq = squeeze(lane, c.s)
+      if (lane.axis === 'z') { x = lane.at + sq + (c.pull ? lane.side * 2.0 * c.pull * c.pull * (3 - 2 * c.pull) : 0); z = c.s; yaw = lane.dir > 0 ? -Math.PI / 2 : Math.PI / 2 }
+      else { z = lane.at + sq; x = c.s; yaw = lane.dir > 0 ? 0 : Math.PI }
       const y = SURFACE + (lane.axis === 'z' ? 0.12 : Math.abs(x) < W.riverWidth / 2 + 30 ? 0.26 : 0.095)
       place(i, c, x, y, z, yaw)
     }
@@ -654,7 +716,7 @@ function buildFurniture(plan, rng, glowTex, kit, addProp = () => {}) {
   const boxGeo = new THREE.BoxGeometry(1, 1, 1)
   const cylGeo = new THREE.CylinderGeometry(0.5, 0.5, 1, 8)
   const crownGeo = new THREE.IcosahedronGeometry(1, 1)
-  const M = (c, r = 0.85, m = 0.05) => { const x = new THREE.MeshStandardMaterial({ color: c, roughness: r, metalness: m }); Mat.registerMaterial(x); return x }
+  const M = (c, r = 0.85, m = 0.05) => { const x = new THREE.MeshStandardMaterial({ color: c, roughness: r, metalness: m }); Mat.registerMaterial(x); Mat.tactile(x, r < 0.2 ? 0.3 : 0.9); return x } // t35 布景质感
   const kinds = {
     trunk: [cylGeo, M('#5a4030')], crown: [crownGeo, M('#ffffff')], pit: [boxGeo, M('#4a4642')],
     bench: [boxGeo, M('#8a6a48')], metal: [boxGeo, M('#3c4248', 0.4, 0.6)], bin: [cylGeo, M('#2f5a40', 0.6, 0.2)],
@@ -918,6 +980,8 @@ function buildPedestrians(plan, rng) {
   const lines = []
   for (const x of plan.avenues) for (const s of [-1, 1]) lines.push({ axis: 'z', at: x + s * (aw / 2 + 3.6) })
   for (const z of plan.streets) for (const s of [-1, 1]) lines.push({ axis: 'x', at: z + s * (sw / 2 + 3.4) })
+  // 园区内部道路两侧人行道（只在园区段内走）
+  for (const r of plan.inner || []) for (const s of [-1, 1]) lines.push({ axis: r.axis, at: r.at + s * (r.cw / 2 + 0.3 + r.walk / 2), lo: r.lo + 2, hi: r.hi - 2, inner: true })
   const riverHalf = W.riverWidth / 2 + 45
   const P = Array.from({ length: N }, () => ({ line: null, s: 0, off: 0, dir: 1, v: 1.3, ph: 0, h: 1.7, alive: false }))
   const R = 230
@@ -930,10 +994,10 @@ function buildPedestrians(plan, rng) {
       const s = along + (first ? (Math.random() * 2 - 1) * R * 0.85 : (Math.random() < 0.5 ? -1 : 1) * R * (0.55 + Math.random() * 0.3))
       if (L.axis === 'x' && Math.abs(s) < riverHalf) continue
       if (Math.abs(s) > 2440) continue
-      if (plan.isClosed?.(L.axis === 'z' ? L.at : s, L.axis === 'z' ? s : L.at, -4)) continue
+      if (L.inner ? s < L.lo || s > L.hi : plan.isClosed?.(L.axis === 'z' ? L.at : s, L.axis === 'z' ? s : L.at, -4)) continue
       p.line = L
       p.s = s
-      p.off = (Math.random() - 0.5) * 3.2
+      p.off = (Math.random() - 0.5) * (L.inner ? 1.6 : 3.2)
       p.dir = Math.random() < 0.5 ? -1 : 1
       p.v = 1.1 + Math.random() * 0.6
       p.ph = Math.random() * 6.28
@@ -952,7 +1016,7 @@ function buildPedestrians(plan, rng) {
         const along = p.line.axis === 'z' ? pz : px
         const cross = p.line.axis === 'z' ? px : pz
         if (Math.abs(p.s - along) > R || Math.abs(p.line.at - cross) > R) respawn(p, px, pz, false)
-        else if (plan.isClosed?.(p.line.axis === 'z' ? p.line.at : p.s, p.line.axis === 'z' ? p.s : p.line.at, -4)) { p.alive = false; respawn(p, px, pz, false) }
+        else if (p.line.inner ? p.s < p.line.lo || p.s > p.line.hi : plan.isClosed?.(p.line.axis === 'z' ? p.line.at : p.s, p.line.axis === 'z' ? p.s : p.line.at, -4)) { p.alive = false; respawn(p, px, pz, false) }
       }
       if (!p.alive) {
         hide()

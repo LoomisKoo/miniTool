@@ -126,13 +126,192 @@ export function asphaltMap() {
 
 export function concrete(tint = '#8a929c') {
   return make(`concrete:${tint}`, () =>
-    new THREE.MeshStandardMaterial({
+    tactile(new THREE.MeshStandardMaterial({
       color: tint,
       roughness: 0.9,
       metalness: 0.04,
       envMapIntensity: 0.5,
-    }),
+    })),
   )
+}
+
+/** t35 共享的值噪声（GLSL）：hash + 双线性平滑插值，前缀 tq 避免和各材质自带函数重名 */
+export const TQ_NOISE = `
+  float tqH(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
+  float tqN(vec2 p) { vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(tqH(i), tqH(i + vec2(1.0, 0.0)), f.x), mix(tqH(i + vec2(0.0, 1.0)), tqH(i + vec2(1.0, 1.0)), f.x), f.y); }
+`
+
+/**
+ * t35 通用「主题乐园布景」质感：给普通纯色材质（设施零件、公共建筑体块、船、城墙/河岸混凝土……）加
+ * 世界坐标的 漆面颗粒（近）+ 有机冷暖/明暗斑驳（远也在）+ 贴地返潮污渍（竖面）+ 逐处光泽差（粗糙度起伏）。
+ * 按法线主轴选投影面（简化三平面），只加 2 个 varying；amp 控制强度（0.6 小零件 / 1 默认）。
+ */
+export function tactile(mat, amp = 1, box = false) {
+  if (mat.userData.tactile) return mat
+  mat.userData.tactile = true
+  // box=true：几何是单位立方体（实例缩放成实际尺寸）→ 能算出到棱边的米制距离：棱边一道细亮线（倒角受光）+ 棱内侧一圈积灰，
+  // 这是「真的被建出来、刷过漆、用旧了」最强的线索
+  if (box) mat.defines = { ...(mat.defines || {}), TQ_BOX: '' }
+  const prev = mat.onBeforeCompile
+  const A = Number(amp).toFixed(2)
+  mat.onBeforeCompile = (sh, r) => {
+    if (prev) prev(sh, r)
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vTqW;\nvarying vec3 vTqN;\n#ifdef TQ_BOX\nvarying vec3 vTqE;\n#endif')
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+        #ifdef TQ_BOX
+          #ifdef USE_INSTANCING
+            vec3 _tqS = vec3(length(instanceMatrix[0].xyz), length(instanceMatrix[1].xyz), length(instanceMatrix[2].xyz));
+          #else
+            vec3 _tqS = vec3(1.0);
+          #endif
+          // 每轴到该轴两端面的米制距离（朝向本面的那一轴取很大值，不算棱）
+          vTqE = (0.5 - abs(position)) * _tqS + abs(objectNormal) * 1e3;
+        #endif
+        #ifdef USE_INSTANCING
+          vTqW = (modelMatrix * instanceMatrix * vec4(transformed, 1.0)).xyz;
+          vTqN = (modelMatrix * instanceMatrix * vec4(objectNormal, 0.0)).xyz;
+        #else
+          vTqW = (modelMatrix * vec4(transformed, 1.0)).xyz;
+          vTqN = (modelMatrix * vec4(objectNormal, 0.0)).xyz;
+        #endif`)
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', `#include <common>
+        varying vec3 vTqW;
+        varying vec3 vTqN;
+        #ifdef TQ_BOX
+          varying vec3 vTqE;
+        #endif
+        float tqRough = 0.0;
+        ${TQ_NOISE}`)
+      .replace('#include <color_fragment>', `#include <color_fragment>
+        {
+          vec3 tn = normalize(vTqN + 1e-5);
+          vec3 an = abs(tn);
+          vec2 q = an.y > 0.6 ? vTqW.xz : (an.x > an.z ? vTqW.zy : vTqW.xy);
+          float fw = max(fwidth(q.x), fwidth(q.y));
+          float nD = 1.0 - smoothstep(0.02, 0.14, fw);
+          float mD = 1.0 - smoothstep(0.14, 1.0, fw);
+          float grain = (tqN(q * 7.0) - 0.5) * nD + (tqN(q * 1.6 + 7.1) - 0.5) * mD;
+          float mott = tqN(q / 3.2 + 3.0) * 0.55 + tqN(q / 12.0 + 1.0) * 0.45;
+          vec3 c = diffuseColor.rgb;
+          c *= 1.0 + (grain * 0.05 + (mott - 0.5) * 0.12) * ${A}; // t42 颗粒 / 斑点减半以上
+          c *= mix(vec3(1.0), mix(vec3(0.96, 0.99, 1.045), vec3(1.045, 1.0, 0.945), tqN(q / 7.5 + 11.0)), ${A});
+          #ifdef TQ_BOX
+          {
+            float ed = min(vTqE.x, min(vTqE.y, vTqE.z));
+            float efw = fwidth(ed) + 1e-4;
+            float lip = (1.0 - smoothstep(0.0, 0.035 + efw, ed)) * clamp(0.04 / efw, 0.0, 1.0);
+            float crease = (1.0 - smoothstep(0.03, 0.35 + 0.25 * tqN(q * 1.3), ed)) * (1.0 - lip);
+            float wear = smoothstep(0.45, 0.75, tqN(q * 2.3 + 17.0));
+            c = mix(c, min(c * 1.22 + 0.05, vec3(1.0)), lip * (0.55 + 0.45 * wear) * ${A});
+            c = mix(c, c * vec3(0.86, 0.83, 0.78), crease * 0.45 * ${A});
+            tqRough += crease * 0.12 - lip * 0.1;
+          }
+          #endif
+          float hy = vTqW.y;
+          float contact = (1.0 - smoothstep(0.0, 1.0 + tqN(q * 0.7) * 0.9, hy)) * step(-0.3, hy) * (1.0 - an.y) * 0.16 * ${A};
+          c = mix(c, c * vec3(0.84, 0.8, 0.74), contact * 1.6);
+          diffuseColor.rgb = c;
+          tqRough += ((mott - 0.5) * 0.18 + grain * 0.05 + contact * 0.5) * ${A};
+        }`)
+      .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
+        roughnessFactor = clamp(roughnessFactor + tqRough, 0.04, 1.0);`)
+  }
+  const pk = mat.customProgramCacheKey ? mat.customProgramCacheKey.bind(mat) : () => ''
+  mat.customProgramCacheKey = () => pk() + `|tactile-v3-${A}${box ? '-box' : ''}`
+  mat.needsUpdate = true
+  return mat
+}
+
+/**
+ * t34 地面/地块工艺：世界坐标 XZ 程序化纹理，只作用在朝上的面（侧面不动），远看也保留低频分区明暗。
+ * kind: 'pave' 0.6×0.3 铺砖 + 3m 分格缝 | 'slab' 1.2m 石板 | 'asphalt' 骨料噪点 + 补丁 + 油渍 | 'lawn' 4m 剪草条纹 + 草丛斑
+ * | 'ground' 城市底板：6m 大板分格 + 冷暖斑块
+ */
+export function groundCraft(mat, kind) {
+  const K = { pave: 0, slab: 1, asphalt: 2, lawn: 3, ground: 4 }[kind] ?? 0
+  const prev = mat.onBeforeCompile
+  mat.onBeforeCompile = (sh, r) => {
+    if (prev) prev(sh, r)
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vGW;\nvarying float vGUp;')
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+        #ifdef USE_INSTANCING
+          vGW = (modelMatrix * instanceMatrix * vec4(transformed, 1.0)).xyz;
+          vGUp = (modelMatrix * instanceMatrix * vec4(objectNormal, 0.0)).y;
+        #else
+          vGW = (modelMatrix * vec4(transformed, 1.0)).xyz;
+          vGUp = (modelMatrix * vec4(objectNormal, 0.0)).y;
+        #endif`)
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', `#include <common>
+        varying vec3 vGW;
+        varying float vGUp;
+        float gRgh = 0.0;
+        float gHash(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
+        float gNoise(vec2 p) { vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);
+          return mix(mix(gHash(i), gHash(i + vec2(1, 0)), f.x), mix(gHash(i + vec2(0, 1)), gHash(i + vec2(1, 1)), f.x), f.y); }
+        float gLine(float x, float P, float w, float fw) { float d = (0.5 - abs(fract(x / P) - 0.5)) * P; return 1.0 - smoothstep(w, w + fw * 1.5, d); }`)
+      .replace('#include <color_fragment>', `#include <color_fragment>
+        if (vGUp > 0.5) {
+          vec2 q = vGW.xz;
+          float fw = max(fwidth(q.x), fwidth(q.y));
+          float nearD = 1.0 - smoothstep(0.04, 0.25, fw);
+          float midD = 1.0 - smoothstep(0.25, 1.4, fw);
+          // 低频：大尺度明暗/冷暖斑（远看也在）
+          float lo = gNoise(q / 23.0) * 0.6 + gNoise(q / 7.0) * 0.4;
+          vec3 c = diffuseColor.rgb * (0.93 + 0.14 * lo);
+          int k = ${K};
+          if (k == 0) {
+            float cell = gHash(floor(q / 3.0) + 5.0);
+            c *= 0.96 + 0.08 * cell;
+            float row = floor(q.y / 0.3);
+            float bx = q.x / 0.6 + mod(row, 2.0) * 0.5;
+            float j = max(gLine(bx * 0.6, 0.6, 0.012, fw), gLine(q.y, 0.3, 0.012, fw)) * nearD;
+            c *= 1.0 - 0.12 * j + (gHash(vec2(floor(bx), row)) - 0.5) * 0.07 * nearD;
+            float big = max(gLine(q.x, 3.0, 0.05, fw), gLine(q.y, 3.0, 0.05, fw)) * midD;
+            c *= 1.0 - 0.14 * big;
+          } else if (k == 1) {
+            vec2 sc = floor(q / vec2(1.2, 0.8));
+            c *= 0.94 + 0.1 * gHash(sc);
+            float j = max(gLine(q.x, 1.2, 0.015, fw), gLine(q.y, 0.8, 0.015, fw)) * midD;
+            c *= 1.0 - 0.16 * j;
+          } else if (k == 2) {
+            c *= 1.0 + (gHash(floor(q * 6.0)) - 0.5) * 0.12 * nearD;
+            float patchv = smoothstep(0.66, 0.7, gNoise(q / 9.0 + 3.1));
+            c = mix(c, c * 1.16 + 0.015, patchv * 0.7);
+            float oil = smoothstep(0.72, 0.9, gNoise(q / 2.3 + 8.0)) * 0.22;
+            c *= 1.0 - oil;
+          } else if (k == 3) {
+            float stripe = step(0.5, fract((q.x + q.y * 0.15) / 8.0));
+            c *= mix(0.94, 1.05, stripe) ;
+            c *= 0.9 + 0.2 * gNoise(q * 0.9) * midD + 0.0;
+            c = mix(c, c * vec3(1.08, 1.06, 0.82), smoothstep(0.7, 0.95, gNoise(q / 13.0 + 2.0)) * 0.5);
+          } else {
+            float big = max(gLine(q.x, 6.0, 0.06, fw), gLine(q.y, 6.0, 0.06, fw)) * midD;
+            c *= 0.95 + 0.1 * gHash(floor(q / 6.0) + 9.0);
+            c *= 1.0 - 0.12 * big;
+            c *= 1.0 + (gHash(floor(q * 4.0)) - 0.5) * 0.05 * nearD;
+          }
+          // t35 有机层（所有地面）：近处颗粒 + 2~25m 不规则污渍/晒褪斑（不是方格马赛克）+ 低洼积灰；粗糙度跟着起伏（湿/磨亮处更亮滑）
+          float gr = (gNoise(q * 5.0) - 0.5) * nearD + (gNoise(q * 1.3 + 4.0) - 0.5) * midD;
+          float st = gNoise(q / 2.3 + 6.0) * 0.35 + gNoise(q / 8.0 + 2.0) * 0.4 + gNoise(q / 25.0) * 0.25;
+          float stain = smoothstep(0.58, 0.82, st);
+          c *= 1.0 + gr * 0.07;
+          c = mix(c, c * vec3(0.86, 0.83, 0.78), stain * ${kind === 'lawn' ? '0.25' : '0.42'});
+          c = mix(c, c * vec3(1.05, 1.03, 0.98) + 0.01, (1.0 - smoothstep(0.12, 0.32, st)) * ${kind === 'lawn' ? '0.3' : '0.5'});
+          gRgh = (st - 0.5) * 0.22 - stain * ${kind === 'asphalt' ? '0.28' : '0.1'} + gr * 0.06;
+          diffuseColor.rgb = c;
+        }`)
+      .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
+        roughnessFactor = clamp(roughnessFactor + gRgh * step(0.5, vGUp), 0.05, 1.0);`)
+  }
+  const pk = mat.customProgramCacheKey ? mat.customProgramCacheKey.bind(mat) : () => ''
+  mat.customProgramCacheKey = () => pk() + `|ground-${kind}-v2`
+  mat.needsUpdate = true
+  return mat
 }
 
 export function deck() {
@@ -176,10 +355,11 @@ export function asphalt() {
   // 改为按世界坐标的细噪声 + 大尺度轻微斑驳，高频部分按屏幕像素大小淡出，远处不起摩尔纹
   return make('asphalt', () => {
     const m = new THREE.MeshStandardMaterial({
-      color: '#6c7076',
-      roughness: 0.94,
-      metalness: 0.02,
-      envMapIntensity: 0.3,
+      // t32 暖深炭灰沥青（以前 #6c7076 偏蓝的中灰，白天看像一条条廉价灰塑料）
+      color: '#4f4d4c',
+      roughness: 0.88,
+      metalness: 0.0,
+      envMapIntensity: 0.32,
     })
     m.onBeforeCompile = (sh) => {
       sh.vertexShader = sh.vertexShader
@@ -193,6 +373,7 @@ export function asphalt() {
       sh.fragmentShader = sh.fragmentShader
         .replace('#include <common>', `#include <common>
           varying vec2 vAXZ;
+          float aRgh = 0.0;
           float aHash(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
           float aNoise(vec2 p) {
             vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);
@@ -204,9 +385,27 @@ export function asphalt() {
             // 只留低频轻微斑驳（细噪声在远处/斜视会变成一粒粒的斑点）
             float mid = (aNoise(vAXZ * 0.12) - 0.5) * (1.0 - smoothstep(1.5, 5.0, fw));
             float big = aNoise(vAXZ * 0.018) - 0.5;
-            diffuseColor.rgb *= 1.0 + mid * 0.035 + big * 0.05;
+            // 骨料细斑（近处）+ 大片新旧补丁（暖/冷两种沥青略有色差），远处只剩补丁
+            float patchN = aNoise(vAXZ * 0.006 + 7.3);
+            diffuseColor.rgb *= 1.0 + mid * 0.06 + big * 0.07;
+            diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(1.06, 1.03, 0.98), smoothstep(0.55, 0.75, patchN));
+            // t35 质感：骨料颗粒（近）+ 不规则油渍/沥青灌缝（深、发亮）+ 细裂缝网 + 晒褪发白的旧面（哑）；粗糙度随之起伏
+            float nD = 1.0 - smoothstep(0.03, 0.2, fw);
+            float mD = 1.0 - smoothstep(0.2, 1.4, fw);
+            float agg = (aNoise(vAXZ * 7.0) - 0.5) * nD + (aNoise(vAXZ * 1.7 + 3.0) - 0.5) * mD * 0.6;
+            float oil = smoothstep(0.7, 0.9, aNoise(vAXZ / 3.1 + 11.0) * 0.6 + aNoise(vAXZ / 0.9) * 0.4 * mD);
+            float crk = (1.0 - smoothstep(0.0, 0.035 + fw * 0.5, abs(aNoise(vAXZ / 2.2 + 5.0) - 0.5))) * smoothstep(0.55, 0.75, aNoise(vAXZ / 9.0 + 2.0)) * mD;
+            float worn = smoothstep(0.45, 0.8, aNoise(vAXZ / 14.0 + 21.0));
+            diffuseColor.rgb *= 1.0 + agg * 0.12;
+            diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 1.12 + vec3(0.02, 0.018, 0.015), worn * 0.45);
+            diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 0.62, max(oil * 0.55, crk * 0.7));
+            aRgh = -oil * 0.35 - crk * 0.2 + worn * 0.06 + agg * 0.08;
           }`)
+        .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
+          roughnessFactor = clamp(roughnessFactor + aRgh, 0.2, 1.0);`)
     }
+    m.customProgramCacheKey = () => 'asphalt-v2'
+
     m.userData.mergeOK = true // 着色只依赖世界坐标
     return m
   })

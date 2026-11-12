@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { radialTex, stops } from './mat.js'
+import { radialTex, stops, nightU } from './mat.js'
 
 export function makeSky() {
   const c = document.createElement('canvas')
@@ -18,9 +18,14 @@ export function makeSky() {
   return t
 }
 
-export function makeEnv(renderer, top = '#6aa8d8', mid = '#d0e0ee', bot = '#9a8a70') {
+/**
+ * 环境图（IBL）。t35：白天不再是一张平滑渐变（漆面/搪瓷/金属反射出来全是一片灰蓝 → 塑料感），
+ * 加 暖色太阳光斑 + 地平线暖霾 + 一圈远处城市天际线剪影 + 几团云 —— 亮面表皮的反射有了内容和方向。
+ * 夜里（rich=false）保持原来的纯渐变。
+ */
+export function makeEnv(renderer, top = '#6aa8d8', mid = '#d0e0ee', bot = '#9a8a70', rich = false) {
   const pmrem = new THREE.PMREMGenerator(renderer)
-  const geo = new THREE.SphereGeometry(1, 32, 20)
+  const geo = new THREE.SphereGeometry(1, 48, 32)
   const pos = geo.attributes.position
   const cols = new Float32Array(pos.count * 3)
   const cTop = new THREE.Color(top)
@@ -31,6 +36,7 @@ export function makeEnv(renderer, top = '#6aa8d8', mid = '#d0e0ee', bot = '#9a8a
     const y = pos.getY(i)
     if (y > 0) c.copy(cMid).lerp(cTop, Math.pow(y, 0.85))
     else c.copy(cMid).lerp(cBot, Math.pow(-y, 0.9))
+    if (rich && y > -0.05 && y < 0.18) c.lerp(new THREE.Color('#f2e2c8'), (1 - Math.abs(y - 0.04) / 0.14) * 0.45)
     cols[i * 3] = c.r
     cols[i * 3 + 1] = c.g
     cols[i * 3 + 2] = c.b
@@ -38,7 +44,51 @@ export function makeEnv(renderer, top = '#6aa8d8', mid = '#d0e0ee', bot = '#9a8a
   geo.setAttribute('color', new THREE.BufferAttribute(cols, 3))
   const mat = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide })
   const ball = new THREE.Mesh(geo, mat)
-  const rt = pmrem.fromScene(ball, 0.04)
+  const envScene = new THREE.Scene()
+  envScene.add(ball)
+  const extra = []
+  if (rich) {
+    // 太阳（与主光同向，HDR 亮度）+ 外圈暖晕
+    const sunDir = new THREE.Vector3(-0.69, 0.5, 0.45).normalize()
+    const sunM = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.0, 0.88, 0.66).multiplyScalar(14) })
+    const sunB = new THREE.Mesh(new THREE.SphereGeometry(0.035, 12, 8), sunM)
+    sunB.position.copy(sunDir.clone().multiplyScalar(0.9))
+    const haloM = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.0, 0.86, 0.62).multiplyScalar(1.6), transparent: true, opacity: 0.5 })
+    const halo = new THREE.Mesh(new THREE.SphereGeometry(0.14, 12, 8), haloM)
+    halo.position.copy(sunDir.clone().multiplyScalar(0.88))
+    envScene.add(sunB, halo)
+    extra.push(sunB, halo)
+    // 远处城市天际线：一圈高低不一的楼块（冷灰蓝 / 暖米两种），反射里能看到「城市」而不是一片空
+    let sd = 7
+    const rnd = () => ((sd = (sd * 16807) % 2147483647) - 1) / 2147483646
+    const cityA = new THREE.MeshBasicMaterial({ color: new THREE.Color('#6f8296') })
+    const cityB = new THREE.MeshBasicMaterial({ color: new THREE.Color('#b8a58a') })
+    for (let i = 0; i < 90; i++) {
+      const a = (i / 90) * Math.PI * 2 + rnd() * 0.03
+      const h = 0.03 + Math.pow(rnd(), 2.2) * 0.2
+      const w = 0.04 + rnd() * 0.05
+      const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, w), rnd() < 0.6 ? cityA : cityB)
+      b.position.set(Math.cos(a) * 0.8, h / 2 - 0.02, Math.sin(a) * 0.8)
+      b.lookAt(0, h / 2 - 0.02, 0)
+      envScene.add(b)
+      extra.push(b)
+    }
+    // 云团
+    const cloudM = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.25, 1.24, 1.22) })
+    for (let i = 0; i < 14; i++) {
+      const a = rnd() * Math.PI * 2
+      const el = 0.18 + rnd() * 0.45
+      const r = Math.cos(el) * 0.85
+      const c = new THREE.Mesh(new THREE.SphereGeometry(0.06 + rnd() * 0.07, 10, 6), cloudM)
+      c.scale.set(2.2, 0.5, 1.2)
+      c.position.set(Math.cos(a) * r, Math.sin(el) * 0.85, Math.sin(a) * r)
+      c.lookAt(0, c.position.y, 0)
+      envScene.add(c)
+      extra.push(c)
+    }
+  }
+  const rt = pmrem.fromScene(envScene, 0.035)
+  for (const e of extra) e.geometry.dispose()
   geo.dispose()
   mat.dispose()
   pmrem.dispose()
@@ -53,9 +103,9 @@ function makeStars() {
     const a = Math.random() * Math.PI * 2
     const y = 0.12 + Math.random() * 0.88
     const r = Math.sqrt(1 - y * y)
-    pos[i * 3] = Math.cos(a) * r * 30_000
-    pos[i * 3 + 1] = y * 30_000
-    pos[i * 3 + 2] = Math.sin(a) * r * 30_000
+    pos[i * 3] = Math.cos(a) * r * 26_000
+    pos[i * 3 + 1] = y * 26_000
+    pos[i * 3 + 2] = Math.sin(a) * r * 26_000
   }
   const geo = new THREE.BufferGeometry()
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3))
@@ -83,10 +133,10 @@ export function setupDay(scene, renderer) {
     depthWrite: false,
     fog: false,
     uniforms: {
-      top: { value: new THREE.Color('#3a7ab4') },
-      mid: { value: new THREE.Color('#7eb4dc') },
-      horizon: { value: new THREE.Color('#c5dcec') },
-      bottom: { value: new THREE.Color('#e8f1f7') },
+      top: { value: new THREE.Color('#1f62b4') },
+      mid: { value: new THREE.Color('#4f93dc') },
+      horizon: { value: new THREE.Color('#a6cbec') },
+      bottom: { value: new THREE.Color('#8fb2d2') },
     },
     vertexShader: `
       varying vec3 vDir;
@@ -103,15 +153,15 @@ export function setupDay(scene, renderer) {
       uniform vec3 bottom;
       void main() {
         float h = normalize(vDir).y;
-        vec3 c = mix(mid, top, smoothstep(0.15, 0.85, h));
-        c = mix(horizon, c, smoothstep(-0.02, 0.32, h));
+        vec3 c = mix(mid, top, smoothstep(0.12, 0.7, h));
+        c = mix(horizon, c, smoothstep(-0.01, 0.22, h));
         c = mix(bottom, c, smoothstep(-0.22, -0.02, h));
         vec3 srgb = mix(c * 12.92, 1.055 * pow(max(c, vec3(0.0)), vec3(1.0 / 2.4)) - 0.055, step(vec3(0.0031308), c));
         gl_FragColor = vec4(srgb, 1.0);
       }
     `,
   })
-  const sky = new THREE.Mesh(new THREE.SphereGeometry(50_000, 24, 16), skyMat)
+  const sky = new THREE.Mesh(new THREE.SphereGeometry(30_000, 24, 16), skyMat)
   sky.frustumCulled = false
   sky.renderOrder = -1
   scene.add(sky)
@@ -120,14 +170,16 @@ export function setupDay(scene, renderer) {
   scene.add(stars)
 
   // 几乎不通雾：之前 Fog near=3500 会把整座城蒙成蓝纱
-  scene.fog = new THREE.FogExp2('#d2e0ec', 0.000018)
+  scene.fog = new THREE.FogExp2('#9cc0e4', 0.00015)
 
   // 半球光抬高，压住「受光惨白 / 背光死黑」的对比
-  const hemi = new THREE.HemisphereLight('#e0f0ff', '#9a8a74', 0.95)
+  // t35：环境光略降、偏天空蓝，地面反射偏暖（受光 / 背光有冷暖之分，不再每个面一样亮 → 塑料感的主要来源之一）
+  const hemi = new THREE.HemisphereLight('#c6dcff', '#b39874', 0.64)
   scene.add(hemi)
 
   // 主光降到约 1.6：立体感还在，但背光不再比受光暗一个数量级
-  const sun = new THREE.DirectionalLight('#fff4e4', 1.6)
+  // t35：午后偏侧的暖阳（高度角 ~33°），强一些 → 受光面暖亮、背光面靠天光偏冷，立体感回来
+  const sun = new THREE.DirectionalLight('#ffe4bf', 2.5)
   sun.position.set(-2_400, 2_600, 1_600)
   // 场景里没有任何投影体（castShadow 全关），阴影图只是白白让所有受影材质做 PCF 采样 → 整体关掉
   sun.castShadow = false
@@ -143,7 +195,7 @@ export function setupDay(scene, renderer) {
   scene.add(sun)
   scene.add(sun.target)
 
-  const fill = new THREE.DirectionalLight('#c8daf0', 0.75)
+  const fill = new THREE.DirectionalLight('#bcd2f2', 0.38)
   fill.position.set(2_000, 1_000, -1_200)
   scene.add(fill)
 
@@ -158,7 +210,7 @@ export function setupDay(scene, renderer) {
   renderer.toneMappingExposure = 1.05
   renderer.outputColorSpace = THREE.SRGBColorSpace
 
-  const env = makeEnv(renderer)
+  const env = makeEnv(renderer, '#3f86d6', '#bcd6ee', '#a8987c', true)
   const envNight = makeEnv(renderer, '#12203c', '#1c2a46', '#2c2218')
   scene.environment = env
   return { sun, env, envNight, hemi, fill, moon, sky, skyMat, stars, starMat }
@@ -167,14 +219,17 @@ export function setupDay(scene, renderer) {
 /** 拉远 / 全景时进一步减雾，近处略留一点空气感 */
 export function tuneFog(scene, camDist, overview) {
   if (!scene.fog) return
-  if (overview || camDist > 400) scene.fog.density = 0
-  else scene.fog.density = 0.000018 * Math.min(1, 40 / Math.max(40, camDist))
+  // t37：空气透视改成「蓝色、随视距缩放」的雾 —— 雾色是饱和的天蓝（不是灰白），
+  // 密度按相机距离/高度反比：无论贴地、筋斗云 600m 还是全景俯瞰，近处城市只蒙 2% 左右，
+  // 3~5 倍视距外才明显发蓝 → 远景有层次但颜色还在，不再是一片平涂的塑料盒子。夜里减到 35%。
+  const k = overview ? 0.16 : 0.2
+  scene.fog.density = (k / Math.max(1200, camDist)) * (1 - 0.65 * nightU.value)
 }
 
 export const SKY = {
   day: {
-    top: '#3a7ab4', mid: '#7eb4dc', horizon: '#c5dcec', bottom: '#e8f1f7',
-    hemi: '#e0f0ff', ground: '#8a7a64', fog: '#d2e0ec',
+    top: '#1f62b4', mid: '#4f93dc', horizon: '#a6cbec', bottom: '#8fb2d2',
+    hemi: '#c6dcff', ground: '#b39874', fog: '#9cc0e4',
   },
   night: {
     top: '#03070f', mid: '#081328', horizon: '#26283c', bottom: '#15120f',

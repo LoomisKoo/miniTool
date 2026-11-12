@@ -15,7 +15,9 @@ const renderer = new THREE.WebGLRenderer({
   canvas,
   antialias: true,
   powerPreference: 'high-performance',
-  logarithmicDepthBuffer: true,
+  // t37：关掉对数深度。它让每个片元写 gl_FragDepth → GPU 无法提前深度剔除，被挡住的立面也要把整套
+  // 立面 shader（凹窗 / 室内 / 噪声）跑完，城区重叠层数一多就是 10fps 的元凶。改用随高度变化的近裁剪面保精度。
+  logarithmicDepthBuffer: /[?&]logz\b/.test(location.search),
 })
 
 // 像素比：Retina 上 2.0 + MSAA 填充率太高，起步 1.25、最高 1.5（自适应只在这之间调）
@@ -42,7 +44,7 @@ try {
 if (loading) loading.hidden = true
 
 // near 略抬高，减轻大世界里地表共面时的深度抖动
-const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 1.2, 80_000)
+const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 1.2, 40_000)
 const hero = buildHero()
 scene.add(hero.group)
 const cloudRig = buildCloud(scene)
@@ -106,7 +108,7 @@ let nightT = 0
 let envNightOn = false
 const DAY = SKY.day
 const NIGHT = SKY.night
-const cSunD = new THREE.Color('#fff4e4')
+const cSunD = new THREE.Color('#ffe4bf') // t35 午后暖阳
 const cSunN = new THREE.Color('#c5d4f2')
 const cTop = new THREE.Color(DAY.top)
 const cTopN = new THREE.Color(NIGHT.top)
@@ -142,10 +144,10 @@ function applyTimeOfDay(t) {
 
   hemi.color.copy(cHemi).lerp(cHemiN, t)
   hemi.groundColor.copy(cGround).lerp(cGroundN, t)
-  hemi.intensity = 0.95 - 0.7 * t // 夜里环境光压得更暗，灯光/窗光对比更强
-  sun.intensity = 1.6 * (1 - t) + 0.5 * t
+  hemi.intensity = 0.64 - 0.39 * t // t37 白天再降环境光（0.78→0.64）、主光加强 → 受光/背光的冷暖对比拉开； 夜里环境光压得更暗，灯光/窗光对比更强（t35 白天 0.95→0.78，夜里终值不变 0.25）
+  sun.intensity = 2.5 * (1 - t) + 0.5 * t
   sun.color.copy(cSunD).lerp(cSunN, t)
-  fill.intensity = 0.75 * (1 - t) + 0.02 * t
+  fill.intensity = 0.38 * (1 - t) + 0.02 * t
   moon.intensity = 0
   renderer.toneMappingExposure = 1.05 - 0.02 * t
   starMat.opacity = Math.max(0, (t - 0.32) / 0.68)
@@ -635,6 +637,8 @@ function animateHero(dt, time, rx, ry, rz) {
   }
 }
 
+// t39 整岛包围盒（城内 5km + 城墙 + 墙外自然带；高度含城墙 550m 与超高楼；海面顶 -6.4）
+const ISLE_BOX = { x: W.cityWidth / 2 + W.wallThick + 1_100, z: W.segmentLength / 2 + 400, top: 900, bot: -12, sea: SURFACE - 6.4 }
 function tickCamera(dt, rx, ry, rz) {
   // 与帧率无关的指数平滑
   smoothDist += (player.dist - smoothDist) * (1 - Math.exp(-dt * 12))
@@ -660,9 +664,25 @@ function tickCamera(dt, rx, ry, rz) {
   }
   camera.updateMatrixWorld()
   updateUpView(camera)
-  tuneFog(scene, smoothDist, player.over)
+  tuneFog(scene, Math.max(smoothDist, camera.position.y - GROUND), player.over)
   sky.position.copy(camera.position)
   stars.position.copy(camera.position)
+  // t37 动态近裁剪面（没有对数深度后靠它保远处深度精度）：贴地 1.2m，320m 高空约 8m，最高 14m
+  // t39：全景 / 高空时相机在整座岛的包围盒外面，最近的几何也在几公里外 → 近裁剪面直接推到「到包围盒距离的一半」
+  // （同时不超过离海面高度的 0.7 倍，海面是无限大平面）。24 位深度的误差 ≈ d²/(near·2²⁴)：
+  // 全景 12km 时 near 14m → 0.3~0.6m 误差（薄铺装 / 草坪 / 屋面 / 路面互相打架闪烁），near≈5km → 毫米级。
+  // 仍是普通线性深度，不写 gl_FragDepth，地面早期深度剔除不受影响。
+  {
+    const p = camera.position
+    const dx = Math.max(0, Math.abs(p.x) - ISLE_BOX.x), dz = Math.max(0, Math.abs(p.z) - ISLE_BOX.z)
+    const dy = Math.max(0, p.y - ISLE_BOX.top, ISLE_BOX.bot - p.y)
+    const boxD = Math.hypot(dx, dy, dz)
+    const seaD = p.y - ISLE_BOX.sea
+    let nn = Math.min(14, Math.max(1.2, (p.y - GROUND) * 0.025))
+    nn = Math.max(nn, Math.min(boxD * 0.5, seaD * 0.7))
+    const ff = player.over ? Math.max(40_000, smoothDist + 20_000) : 40_000
+    if (Math.abs(nn - camera.near) > camera.near * 0.08 || ff !== camera.far) { camera.near = nn; camera.far = ff; camera.updateProjectionMatrix() }
+  }
 }
 
 // ── 阴影图：只在走出 400m 或昼夜切换时重绘一次（以前每 30 帧整张重绘 → 周期性顿挫）──
@@ -681,7 +701,7 @@ function maybeUpdateShadow(force) {
   const gx = Math.round(shX / snap) * snap
   const gz = Math.round(shZ / snap) * snap
   sun.target.position.set(gx, 0, gz)
-  sun.position.set(gx - 1_800, 2_200, gz + 1_200)
+  sun.position.set(gx - 2_000, 1_450, gz + 1_300) // t35 午后偏侧光（高度角 ~33°，与环境图太阳同向）
   sun.target.updateMatrixWorld()
   renderer.shadowMap.needsUpdate = true
 }
@@ -696,7 +716,7 @@ Object.assign(DISTRICT, { riverbank: '滨河公园' })
 const SIGN_KEY = { sports: 'gym', busterm: 'bus', walk: 'walkst', bar: 'barst', old: 'oldtown' }
 const signName = (k) => FAC[SIGN_KEY[k] || k]?.[0]
 for (const k of ['hospital', 'school', 'gym', 'sports', 'parking', 'gas', 'stadium', 'arena', 'garage', 'busterm', 'temple', 'church', 'office', 'gov', 'library',
-  'museum', 'cinema', 'police', 'fire', 'post', 'hotel', 'market', 'farmers']) if (signName(k)) DISTRICT[k] = signName(k)
+  'museum', 'cinema', 'police', 'fire', 'post', 'hotel', 'market', 'farmers', 'airport', 'themepark', 'parkresort']) if (signName(k)) DISTRICT[k] = signName(k)
 const plan = world?.userData?.plan
 const boats = world?.children?.find((c) => c.userData?.boats)?.userData?.boats
 function districtAt(x, z) {
@@ -730,7 +750,7 @@ const TP_META = {
   stadium: [0, '文体', '🏟️'], arena: [0, '文体', '🎤'], sports: [0, '文体', '⛹️'], cinema: [0, '文体', '🎬'],
   library: [0, '文化', '📚'], museum: [0, '文化', '🏛️'], temple: [0, '文化', '🛕'], church: [0, '文化', '⛪'],
   hospital: [0, '生活', '🏥'], school: [0, '生活', '🏫'], market: [0, '生活', '🛒'], farmers: [0, '生活', '🥬'], post: [0, '生活', '📮'],
-  busterm: [0, '交通', '🚌'], garage: [0, '交通', '🅿️'], police: [0, '公共服务', '🚓'], fire: [0, '公共服务', '🚒'],
+  busterm: [0, '交通', '🚌'], airport: [0, '交通', '✈️'], themepark: [0, '文体', '🎢'], parkresort: [0, '文体', '🏨'], garage: [0, '交通', '🅿️'], police: [0, '公共服务', '🚓'], fire: [0, '公共服务', '🚒'],
   walk: [0, '特色街区', '🛍️'], bar: [0, '特色街区', '🍸'], anime: [0, '特色街区', '🎮'], old: [0, '特色街区', '🏮'],
 }
 for (const k in TP_META) if (!TP_META[k][0]) TP_META[k][0] = signName(k) || k
@@ -747,7 +767,7 @@ if (plan) {
     add(d.id, d.x0 + 6, sz, cx, sz)
   }
   const spots = [['villa', 1300, 1950], ['core', 400, 0], ['hospital', 0, 0], ['school', 0, 0], ['sports', 0, 0]]
-  for (const f of ['stadium', 'arena', 'library', 'museum', 'cinema', 'busterm', 'temple', 'church', 'hotel', 'market', 'farmers', 'gov', 'office', 'garage', 'police', 'fire', 'post']) spots.push([f, 0, 0])
+  for (const f of ['stadium', 'arena', 'library', 'museum', 'cinema', 'busterm', 'temple', 'church', 'hotel', 'market', 'farmers', 'gov', 'office', 'garage', 'police', 'fire', 'post', 'airport']) spots.push([f, 0, 0])
   for (const [kind, x, z] of spots) {
     const list = plan.blocks.filter((q) => q.kind === kind)
     const b = near(list.filter((q) => q.big).length ? list.filter((q) => q.big) : list, x, z)
@@ -755,6 +775,11 @@ if (plan) {
     if (!b) continue
     const st = (plan.streets || []).filter((v) => v < b.z0 + 1 && v > b.z0 - 40).sort((p, q) => q - p)[0]
     add(kind, b.cx, st != null ? st + W.streetW / 2 - 1.5 : b.z0 - 8, b.cx, b.cz)
+  }
+  // t37 主题乐园：站在入口广场前（朝城内那条干道一侧），正对大门和中央灯塔
+  {
+    const b = plan.blocks.find((q) => q.kind === 'themepark')
+    if (b) { const fx = b.cx > 0 ? -1 : 1; add('themepark', b.cx + fx * (b.w / 2 - 26), b.cz, b.cx, b.cz) }
   }
 }
 let tpIdx = 0

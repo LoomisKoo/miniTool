@@ -23,6 +23,14 @@ export const SHOP_TYPES = [
   { id: 'anime', zh: '动漫手办', en: 'ANIME · FIGURES', bg: '#ff5fa8', fg: '#ffffff', acc: '#2fd0ff', style: 'box', round: true, font: ZH, enFont: '"Arial Black", Helvetica, sans-serif', awning: '#ff5fa8', interior: 'racks', wall: '#fff0f7', only: 'anime' },
   { id: 'toys', zh: '潮玩盲盒', en: 'POP TOYS', bg: '#2fd0ff', fg: '#1a1a2e', acc: '#ffe066', style: 'box', stripes: true, font: ZH, enFont: '"Arial Black", Helvetica, sans-serif', awning: '#2fd0ff', interior: 'shelves', wall: '#eefaff', only: 'anime' },
   { id: 'flower', zh: '花店', en: 'FLOWERS', bg: '#e9f2e4', fg: '#3e7a3a', acc: '#e86a9a', style: 'box', font: ZHS, enFont: 'Georgia, serif', awning: '#3e7a3a', interior: 'flowers', outdoor: 'flowers', wall: '#f1f5ec' },
+  { id: 'hair', zh: '理发', en: 'SALON', bg: '#2a2420', fg: '#f0e6d8', acc: '#d4a056', style: 'box', font: ZH, enFont: 'Georgia, serif', awning: '#3a332e', interior: 'racks', wall: '#e8e0d6' },
+  { id: 'laundry', zh: '洗衣', en: 'LAUNDRY', bg: '#e8f0f4', fg: '#2a6a8a', acc: '#3a9ac0', style: 'box', font: ZH, enFont: 'Helvetica, Arial, sans-serif', awning: '#3a9ac0', interior: 'shelves', wall: '#eef2f4' },
+  { id: 'express', zh: '快递', en: 'EXPRESS', bg: '#ff6a00', fg: '#ffffff', acc: '#1a1a1a', style: 'box', font: ZH, enFont: '"Arial Black", Helvetica, sans-serif', awning: '#ff6a00', interior: 'shelves', outdoor: 'bikes', wall: '#f4eee8' },
+  { id: 'hardware', zh: '五金', en: 'HARDWARE', bg: '#3d4a38', fg: '#e8e0c8', acc: '#c8a04a', style: 'box', border: true, font: ZH, enFont: 'Helvetica, Arial, sans-serif', awning: '#3d4a38', interior: 'shelves', wall: '#d8d0c4' },
+  { id: 'greens', zh: '水果', en: 'FRUIT', bg: '#2e8a3a', fg: '#ffffff', acc: '#f0c030', style: 'box', font: ZH, enFont: 'Georgia, serif', awning: '#2e8a3a', interior: 'flowers', outdoor: 'flowers', wall: '#eef4e8' },
+  { id: 'clinic', zh: '诊所', en: 'CLINIC', bg: '#ffffff', fg: '#1a7a6a', acc: '#1a7a6a', style: 'box', cross: true, font: ZH, enFont: 'Helvetica, Arial, sans-serif', awning: '#1a7a6a', interior: 'pharmacy', wall: '#f4f8f6' },
+  { id: 'phone', zh: '通讯', en: 'MOBILE', bg: '#1a1a28', fg: '#5ec8ff', acc: '#5ec8ff', style: 'box', font: ZH, enFont: '"Arial Black", Helvetica, sans-serif', awning: '#1a1a28', interior: 'racks', wall: '#e8e8ee' },
+  { id: 'realtor', zh: '房产', en: 'ESTATE', bg: '#f4f0e8', fg: '#8a2a2a', acc: '#8a2a2a', style: 'box', border: true, font: ZHS, enFont: 'Georgia, serif', awning: '#8a2a2a', interior: 'bank', wall: '#f0ece4' },
 ]
 
 function rnd(seed) {
@@ -446,6 +454,25 @@ export const FAC = {
   anime: ['动漫潮玩街', 'ANIME · TOYS', '#ff5fa8', '#ffffff', '#2fd0ff'],
   oldtown: ['老城区', 'OLD TOWN', '#5a3a26', '#f3e2c4', null],
   cbd: ['中央商务区', 'CBD', '#0e1a2a', '#cfe3f2', null],
+  // t33 公共建筑
+  opera: ['城市大剧院', 'GRAND OPERA HOUSE', '#f4f1ea', '#1f3a5a', '#e8735a'],
+  expo: ['国际会展中心', 'INTL EXPO CENTER', '#0e2a4a', '#ffffff', '#3fa39a'],
+  art: ['当代美术馆', 'MUSEUM OF CONTEMPORARY ART', '#ffffff', '#111111', '#e8735a'],
+  tvtower: ['广播电视塔', 'TV TOWER', '#1a2a4a', '#ffffff', '#f2c14e'],
+  rail: ['中央火车站', 'CENTRAL RAILWAY STATION', '#1f3a5a', '#ffffff', '#c8102e'],
+  skyrail: ['轻轨高架站', 'SKY RAIL STATION', '#3fa39a', '#ffffff', '#f2c14e'],
+  swim: ['游泳馆', 'AQUATICS CENTER', '#1d7fa8', '#ffffff', '#f2c14e'],
+  ice: ['溜冰馆', 'ICE RINK', '#eef6fb', '#1f5fbf', '#3fa39a'],
+  mosque: ['清真寺', 'MOSQUE', '#0f5a4a', '#f3d27a', null],
+  orthodox: ['东正教堂', 'ORTHODOX CATHEDRAL', '#f3eee4', '#2a3a7a', '#d8b04a'],
+  synagogue: ['犹太会堂', 'SYNAGOGUE', '#e6d3b0', '#2a3a5a', null],
+  hindu: ['印度教神庙', 'HINDU TEMPLE', '#e8735a', '#ffffff', '#f2c14e'],
+  pagoda: ['七级浮屠塔', 'PAGODA', '#7a1a14', '#f3d27a', null],
+  confucius: ['文庙', 'CONFUCIUS TEMPLE', '#8a1a14', '#f3d27a', null],
+  amusement: ['欢乐世界', 'FUN WORLD', '#3fa39a', '#ffffff', '#e8735a'],
+  airport: ['城市机场', 'CITY AIRPORT', '#0e2a4a', '#ffffff', '#3fa39a'],
+  themepark: ['云岬乐园', 'CLOUDCAPE PARK', '#1f62b4', '#ffffff', '#f2c14e'],
+  parkresort: ['云岬乐园度假区', 'CLOUDCAPE RESORT', '#1f62b4', '#ffffff', '#f2c14e'],
 }
 function drawBoard(k) {
   const [zh, en, bg, fg, acc] = FAC[k]

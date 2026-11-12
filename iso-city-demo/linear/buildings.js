@@ -4,6 +4,8 @@ import { mulberry, range, pick } from './rng.js'
 import { heightFor } from './plan.js'
 import * as Mat from './mat.js'
 import * as Signs from './signs.js'
+import { CATALOG } from './catalog.js'
+import { makeCivic } from './civic.js'
 
 /**
  * 立面规范对齐 docs/08-building-style.md（城市合批尺度适配版）：
@@ -17,20 +19,65 @@ import * as Signs from './signs.js'
  * 近中距再叠几何窗框/层间板（dressFacade）。合批城段不做店内几何货架。
  */
 
-// 整城以暖石材为主；幕墙也走香槟/暖砂玻璃，禁止大面积冷灰墙
+// t30：材质方向改为 Jetsons 式中世纪未来主义「漆面」——每栋一种明确的主色（青绿 / 薄荷 / 芥末黄 / 珊瑚 / 奶油 /
+// 粉 / 薰衣草 / 天蓝 / 金），表面是光滑的漆、搪瓷、烤漆，不再是石缝/砖缝/清水模/污渍的写实贴皮（t28 方向作废）。
+// 色板名字沿用（调用处不用改），内容全部换成漆色；禁止米灰、石板灰这种「没有颜色」的墙。
+// 浅色漆：奶油、浅薄荷、浅粉、浅天蓝、浅薰衣草、象牙（大面积底色，仍然有色相）
 const WALL = [
-  '#d2c4b0', '#c8b59a', '#d6c8b4', '#c0aa92', '#d8d0bc', '#cbbba4',
-  '#cfc0a8', '#bda88e', '#d0bba8', '#b8987c', '#d4c8b4', '#e0d6c6',
+  '#f4e8c8', '#f2e2bc', '#f6eed8', '#cdeedd', '#bfe6d4', '#f6d4dc',
+  '#f2c4d0', '#c8e4f2', '#b8dcf0', '#ddd2f0', '#d2c4ec', '#f8f0dc',
+  '#e6f2c8', '#fbe3c4',
 ]
-const WALL_WARM = ['#c4a090', '#b88870', '#c09888', '#b07a66', '#b09070', '#c0a888']
-// 幕墙框/裙色：香槟银、暖砂、米白铝——不再用冷灰蓝
-const WALL_GLASS = ['#c8b8a4', '#d0c4b0', '#b8a890', '#c4b49c', '#d8ccb8', '#bca890', '#cfc2ae']
-const WALL_ACCENT = ['#a87860', '#9a7060'] // 极少暖褐点缀，替代近黑灰
-const ROOF = ['#6a665e', '#5c5852', '#77716a', '#545250', '#6e6860', '#625e58', '#807a70', '#58544e']
-const ROOF_GREEN = ['#3a5a40', '#455e3e', '#2e4a36', '#4a6244', '#5a7048']
+// 暖漆：珊瑚、三文鱼、芥末黄、金、杏
+const WALL_WARM = ['#ee7a5e', '#f28c70', '#e8b040', '#f0c252', '#e09a3c', '#f4a882', '#e46a52', '#f0b468']
+// 以前的「混凝土灰」位：改成带色的浅漆（暖白 / 淡青 / 淡黄），不再出灰墙
+const WALL_CONCRETE = ['#f0ead8', '#e4efe8', '#f2ecc8', '#e8e4f2', '#eaf2f2', '#f6ebe0']
+// 以前的「砖」位：改成光面的番茄红 / 赭红漆（只有颜色，没有砖缝）
+const WALL_BRICK = ['#d85a46', '#c84e3e', '#e0684e', '#c8603a', '#d4704a', '#b8483c']
+// 釉面搪瓷：高饱和标志色（青绿、松石、天蓝、薰衣草、品红、芥末）
+const WALL_ENAMEL = [
+  '#2fa3a0', '#3bb8ac', '#3cc0cc', '#4a9ad8', '#7cc4e8', '#e8b040',
+  '#ee7a5e', '#d85a8a', '#ec8aa8', '#9a86d0', '#5cc49a', '#e4c040',
+]
+// 抛光金属：铬银、香槟金、铜、阳极氧化青
+const WALL_METAL = ['#d8dde2', '#e2c070', '#d49a5c', '#c88058', '#a8d0d8', '#e8d6a0', '#c4ccd4', '#9cc8c0']
+// 幕墙玻璃：真实着色玻璃保留（蓝、薄荷、琥珀、玫瑰、冰银、紫）
+const WALL_GLASS = ['#8fb6d0', '#a9d4c4', '#c79a5a', '#d0a060', '#c08a94', '#c8d2d8', '#5a90c0', '#b6cfdd', '#7fae9e', '#cbb68c', '#5aa8c8', '#8d80b4']
+const WALL_ACCENT = ['#e46a52', '#2fa3a0'] // 点缀：珊瑚 / 青绿
+const OLD_COLS_SKIN = ['#c8603a', '#d4704a', '#b8483c', '#e09a3c', '#c88a4a']
+// t32 白灰联排 / 半木构宅：石灰白、奶油、淡粉白、淡青白（仍带一点色相）
+const WHITEWASH = ['#f6f2ea', '#f4ecdc', '#f6e8e4', '#eaf2ee', '#f2eee2', '#eef0f4']
+/** 同色相深浅：k>0 提亮，k<0 压深（按 HSL 明度），量化到 1/32 避免材质池爆炸 */
+function shadeHex(hex, k) {
+  const c = new THREE.Color(hex)
+  const hsl = { h: 0, s: 0, l: 0 }
+  c.getHSL(hsl)
+  const l = Math.round(Math.min(0.92, Math.max(0.18, hsl.l + k)) * 32) / 32
+  c.setHSL(hsl.h, hsl.s, l)
+  return '#' + c.getHexString()
+}
+// t32 屋面：俯瞰是城市的主色块，不再用碎石灰。漆面屋顶：一半白/奶油（中世纪白顶），一半跟墙同色系的亮漆色
+const ROOF = ['#f3ecdc', '#eef2ee', '#f6eed6', '#e8eef4']
+const ROOF_PAINT = ['#e46a52', '#ee9a6a', '#e8b040', '#e4cc5a', '#9cc86a', '#4fb89a', '#3bb8ac', '#4fb0d8', '#6a9ae0', '#9a86d0', '#d878a8', '#ec8aa8']
+/** 屋面色：按墙色相挑一个同色系亮漆（或白顶）；量化到小色板，材质池不爆 */
+function roofOf(hex, r) {
+  if (r < 0.42) return ROOF[(r * 1000 | 0) % ROOF.length]
+  const c = new THREE.Color(hex)
+  const hsl = { h: 0, s: 0, l: 0 }
+  c.getHSL(hsl)
+  if (hsl.s < 0.16) return ROOF_PAINT[(r * 997 | 0) % ROOF_PAINT.length]
+  // 色相最近的那格，偶尔跳到邻格（同栋不同顶时也协调）
+  const hues = ROOF_PAINT.map((x) => { const q = new THREE.Color(x); const o = { h: 0, s: 0, l: 0 }; q.getHSL(o); return o.h })
+  let bi = 0, bd = 9
+  for (let i = 0; i < hues.length; i++) { const d = Math.min(Math.abs(hues[i] - hsl.h), 1 - Math.abs(hues[i] - hsl.h)); if (d < bd) { bd = d; bi = i } }
+  if (r > 0.9) bi = (bi + 1) % ROOF_PAINT.length
+  return ROOF_PAINT[bi]
+}
+const ROOF_GREEN = ['#5f9a58', '#6fa860', '#4f8a52', '#7ab06a', '#88b870']
 const ROOF_TERRACE = ['#c4b8a4', '#b8a098', '#d0c4b0', '#a89888', '#e0d4c0']
-const HOTEL = ['#e6dfd2', '#d8ccb8', '#9a7a62', '#bfb3a3', '#7d6a5c']
-const PODIUM = ['#d8d0bc', '#d2c4b0', '#d4c8b4', '#d6c8b4']
+const HOTEL = ['#f6d4dc', '#cdeedd', '#f4e8c8', '#c8e4f2', '#f0c252', '#ee9a80']
+// 裙房：奶油 / 象牙 / 淡薄荷 / 淡粉（当作主楼主色下面的一条浅色点缀）
+const PODIUM = ['#f4e8c8', '#f8f0dc', '#e4f2e8', '#f6e2e0']
 
 /** @typedef {'curtain'|'punch'|'ribbon'|'podium'} FacadeStyle */
 
@@ -216,9 +263,10 @@ function facadeCommonPrelude() {
       // 底层污渍/压暗：贴地不要像刚出厂的塑料（只作用于真正临街的一段）
       float streetBase = 1.0 - smoothstep(0.8, 5.0, abs(vBaseY));
       // 每栋墙色轻微错开，避免连排楼像同一张贴图平铺
-      float wallTint = 0.95 + 0.10 * hash21(vec2(vSeed * 9.7, 5.3));
-      float grime = (1.0 - smoothstep(0.0, 8.0, yFromBot)) * 0.16 * streetBase;
-      float soot = (1.0 - smoothstep(vH * 0.62, vH, yFromBot)) * 0.06;
+      float wallTint = 0.97 + 0.06 * hash21(vec2(vSeed * 9.7, 5.3));
+      // 漆面：几乎不做贴地污渍、不做顶部烟熏（以前 16% / 6% 压暗 → 一片脏灰）
+      float grime = (1.0 - smoothstep(0.0, 3.0, yFromBot)) * 0.03 * streetBase;
+      float soot = 0.0;
   `
 }
 
@@ -280,7 +328,7 @@ function facadeFragment(style) {
       // 一层全部交给几何店厢（dressShopfront）。这里只做石材基座 + 上口线脚 + 污渍，
       // 绝不再往墙上画假橱窗/彩条雨棚 —— 那正是近看最像「贴图」的一层
       vec3 base = col * 0.95;
-      base = mix(base, col * 0.78, 1.0 - smoothstep(0.0, 0.34, yFromBot));
+      base = mix(base, col * 0.88, 1.0 - smoothstep(0.0, 0.34, yFromBot));
       base = mix(base, col * 1.06, smoothstep(4.04, 4.24, yFromBot) * (1.0 - groundCut));
       col = mix(base, col, groundCut);
       // 夜里沿街一层透出的暖光（真正落地的一段）
@@ -315,6 +363,199 @@ function facadeFragment(style) {
       float bH = hash21(vec2(vSeed * 13.1, 7.7));
       float bH2 = hash21(vec2(vSeed * 5.3, 2.1));
       vec3 wall = diffuseColor.rgb * wallTint;
+      // t30 Jetsons 漆面：光滑的漆 / 搪瓷 / 烤漆，没有石缝、砖缝、模板、颗粒、污渍（t28 写实贴皮作废）。
+      // 只做插画式的柔和明暗：自下而上轻轻提亮、略提饱和；金属给一两道竖向柔光；烤漆板只留极淡的分缝
+      {
+        float fwS = max(fwidth(axis), fwidth(yFromBot));
+        float mid = 1.0 - smoothstep(0.28, 1.15, fwS);
+        float hk = clamp(yFromBot / max(vH, 1.0), 0.0, 1.0);
+        // t32 插画式：底部略深、上部略亮，但分成 3 档柔和色阶（赛璐璐感），饱和度再提
+        float band = smoothstep(0.0, 0.16, hk) * 0.5 + smoothstep(0.55, 0.72, hk) * 0.5;
+        wall *= mix(0.95, 1.06, band);
+        float lum = dot(wall, vec3(0.299, 0.587, 0.114));
+        wall = clamp(mix(vec3(lum), wall, 1.2), vec3(0.0), vec3(1.0));
+        if (uSkin < 4.5) {
+          // t34 漆面 / 搪瓷钢板：不再是一整面纯色 —— 搪瓷 1.2m×层高 圆角板（深缝 + 每块上沿釉光 + 逐块深浅），
+          // 缎光漆 2.4m 大板（浅缝 + 逐块冷暖微差）；远处退成「逐块明暗马赛克」而不是一片平涂
+          float P = uSkin > 3.5 ? 1.2 : 2.4;
+          float Q = uSkin > 3.5 ? 1.5 : 3.0;
+          float bx = (0.5 - abs(fract(axis / P) - 0.5)) * P;
+          float by = (0.5 - abs(fract(yFromBot / Q) - 0.5)) * Q;
+          float joint = lineAA(min(bx, by), uSkin > 3.5 ? 0.03 : 0.015, fwS) * mid;
+          float pv = hash21(vec2(floor(axis / P) + vSeed * 17.0, floor(yFromBot / Q) + 3.0));
+          wall *= 0.985 + 0.03 * pv; // t42：逐块明暗 ±5% → ±1.5%（远看不再是方格马赛克）
+          wall = mix(wall, wall * (uSkin > 3.5 ? 0.86 : 0.93), joint);
+          if (uSkin > 3.5) {
+            float gl = aaBox(fract(yFromBot / Q) * Q, Q * 0.72, Q * 0.9, fwS) * mid;
+            wall = min(wall + vec3(0.025) * gl, vec3(1.0));
+            gRoughW -= 0.1 * (1.0 - joint) - joint * 0.3;
+          }
+        } else if (uSkin > 4.5 && uSkin < 5.5) {
+          float sheen = 0.5 + 0.5 * sin(axis / max(faceHalf, 1.0) * 3.14159 + vSeed * 6.283);
+          wall *= 0.96 + 0.08 * sheen;
+        } else if (uSkin > 5.5 && uSkin < 6.5) {
+          float px = abs(fract(axis / 3.0) - 0.5) * 3.0;
+          float py = abs(fract(yFromBot / 3.0) - 0.5) * 3.0;
+          float joint = lineAA(min(px, py), 0.012, fwS) * mid;
+          wall = mix(wall, wall * 0.95, joint);
+        } else if (uSkin > 8.5) {
+          // t33 Googie 表皮（照 googie/main.js 的 glazeTex / iridTex / perfTex / anodTex / tileTex / woodTex / meshTex / corrTex / breezeTex 移植）：
+          // 原版是 canvas 贴图按盒面 UV 平铺；这里改成按立面米制坐标（axis / yFromBot）程序化生成同样的图案，
+          // 近处出图案、远处退成图案的平均明度（与窗 LOD 同一套 mid 因子），不贴图、不加 draw、不碰窗。
+          float bdX = 0.0, bdY = 0.0;
+          if (uSkin < 9.5) {
+            // 釉面陶瓷板：1.6×0.8m 分格深色勾缝 + 每排上沿一道釉面高光 + 逐块微差
+            float P = 1.6, Q = 0.8;
+            bdX = (0.5 - abs(fract(axis / P) - 0.5)) * P;
+            bdY = (0.5 - abs(fract(yFromBot / Q) - 0.5)) * Q;
+            float joint = lineAA(min(bdX, bdY), 0.025, fwS) * mid;
+            float tileV = hash21(vec2(floor(axis / P) + vSeed * 31.0, floor(yFromBot / Q)));
+            float hl = aaBox(fract(yFromBot / Q) * Q, Q * 0.74, Q * 0.86, fwS) * mid;
+            wall *= 0.99 + 0.02 * tileV * mid;
+            wall = mix(wall, wall * 0.84, joint * 0.7 + (1.0 - mid) * 0.02);
+            wall = min(wall + vec3(0.025) * hl, vec3(1.0));
+            gRoughW += joint * 0.45 - 0.04;
+          } else if (uSkin < 10.5) {
+            // 幻彩不锈钢：蓝 → 紫 → 粉 → 杏 → 薄荷 的渐变，随立面位置和视角（菲涅尔）流动；保留本楼色相 45%
+            vec3 _n = normalize(vNormal);
+            float _fv = 1.0 - abs(dot(_n, normalize(vViewPosition)));
+            float t = fract(axis / max(faceHalf * 2.0, 1.0) * 0.8 + yFromBot / max(vH, 1.0) * 0.6 + _fv * 0.55 + vSeed);
+            vec3 c0 = vec3(0.62, 0.85, 1.0), c1 = vec3(0.79, 0.66, 1.0), c2 = vec3(1.0, 0.69, 0.85), c3 = vec3(1.0, 0.85, 0.66), c4 = vec3(0.66, 1.0, 0.88);
+            float s4 = t * 4.0;
+            vec3 ic = s4 < 1.0 ? mix(c0, c1, s4) : s4 < 2.0 ? mix(c1, c2, s4 - 1.0) : s4 < 3.0 ? mix(c2, c3, s4 - 2.0) : mix(c3, c4, s4 - 3.0);
+            wall = mix(ic * 0.92, wall, 0.45);
+            // 拉丝细纹（近处）
+            wall *= 1.0 + (hash21(vec2(floor(yFromBot * 18.0), vSeed)) - 0.5) * 0.015 * mid;
+          } else if (uSkin < 11.5) {
+            // 穿孔铝板：0.42m 错位圆孔，孔里是暗背衬；远处取开孔率的平均
+            float P = 0.42;
+            float row = floor(yFromBot / P);
+            vec2 q = vec2(fract(axis / P + 0.5 * mod(row, 2.0)), fract(yFromBot / P)) - 0.5;
+            float d = length(q) * P;
+            float hole = (1.0 - smoothstep(0.12 - fwS, 0.12 + fwS, d)) * mid;
+            float avg = 0.26 * (1.0 - mid);
+            wall = mix(wall, wall * 0.7, hole * 0.6 + avg * 0.3);
+          } else if (uSkin < 12.5) {
+            // 阳极氧化渐变铝：自下而上 深蓝紫 → 银白（googie anodTex 的竖向渐变），乘本楼色
+            vec3 aLo = vec3(0.62, 0.68, 0.92), aHi = vec3(1.1, 1.12, 1.14);
+            wall *= mix(aLo, aHi, smoothstep(0.0, 1.0, hk));
+            float P = 1.2;
+            bdX = (0.5 - abs(fract(axis / P) - 0.5)) * P;
+            wall *= 1.0 - 0.025 * lineAA(bdX, 0.02, fwS) * mid;
+          } else if (uSkin < 13.5) {
+            // 陶土百叶：0.5m 一道横向陶棍，上表面受光、下面一道阴影缝（tileTex / terra 鳍片）
+            float P = 0.5;
+            float v = fract(yFromBot / P) * P;
+            float blade = aaBox(v, 0.06, 0.34, fwS);
+            float shade = aaBox(v, 0.0, 0.06, fwS);
+            vec3 tc = mix(wall, vec3(0.74, 0.42, 0.28), 0.3);
+            vec3 pat = mix(tc * 0.95, tc * 1.02, blade);
+            pat = mix(pat, tc * 0.88, shade);
+            wall = mix(tc * 0.97, pat, mid * 0.6);
+          } else if (uSkin < 14.5) {
+            // 木格栅：0.16m 竖向木条，条缝深色；木色与本楼漆色各半（不变成一片棕）
+            float P = 0.16;
+            float u = fract(axis / P) * P;
+            float slat = aaBox(u, 0.0, 0.11, fwS);
+            vec3 woodC = vec3(0.6, 0.43, 0.27) * (0.92 + 0.16 * hash21(vec2(floor(axis / P), vSeed)));
+            vec3 wc = mix(woodC, wall, 0.45);
+            vec3 pat = mix(wc * 0.88, wc, slat);
+            wall = mix(wc * 0.96, pat, mid * 0.5);
+          } else if (uSkin < 15.5) {
+            // 金属网：0.5m 方格亮丝网罩在本楼色上（网后略暗）
+            float P = 0.5;
+            bdX = (0.5 - abs(fract(axis / P) - 0.5)) * P;
+            bdY = (0.5 - abs(fract(yFromBot / P) - 0.5)) * P;
+            float wire = lineAA(min(bdX, bdY), 0.03, fwS) * mid;
+            wall = mix(wall * 0.96, min(wall * 1.05 + 0.015, vec3(1.0)), wire * 0.6);
+          } else if (uSkin < 16.5) {
+            // 波纹铁皮：0.2m 竖向波峰亮 / 波谷暗
+            float w = sin(axis / 0.2 * 6.2832);
+            wall *= 1.0 + 0.018 * w * mid * mid; // t42：±12% → ±1.8%，且只在很近处出现
+          } else {
+            // 空心砌块（breeze block）：0.6m 一块，中间方孔深色；远处取平均
+            float P = 0.6;
+            vec2 q = vec2(fract(axis / P), fract(yFromBot / P)) * P;
+            float hole = aaBox(q.x, 0.17, 0.43, fwS) * aaBox(q.y, 0.17, 0.43, fwS) * mid;
+            float jn = lineAA(min(min(q.x, P - q.x), min(q.y, P - q.y)), 0.02, fwS) * mid;
+            wall = mix(wall, wall * 0.62, hole * 0.5 + (1.0 - mid) * 0.05);
+            wall *= 1.0 - 0.04 * jn;
+          }
+        }
+      }
+      // t34 宏观肌理（与距离无关，远看也在）：逐 2 开间 × 2 层 的板块冷暖/明暗马赛克 + 低频竖向雨痕 + 底部和檐下的老化暗带，
+      // 让整面墙从航拍高度看也不是一块纯色平涂（窗格本身不动）
+      {
+        float cellA = floor(axis / (_bay * 2.0));
+        float cellY = floor(yFromBot / (FH * 2.0));
+        float mv = hash21(vec2(cellA + vSeed * 7.3, cellY + 1.7));
+        float mw = hash21(vec2(cellA * 1.9 + 4.1, cellY + vSeed * 3.1));
+        // t35：方格马赛克减半（方块状的变化读起来像数码贴图），主要的变化交给下面的有机斑驳
+        wall *= 0.99 + 0.02 * mv; // t42 马赛克再减（逐 2 开间的方块明暗读起来像贴图）
+        wall *= mix(vec3(1.004, 1.0, 0.995), vec3(0.995, 1.0, 1.004), mw);
+        float hk2 = clamp(yFromBot / max(vH, 1.0), 0.0, 1.0);
+        float streak = hash21(vec2(floor(axis / 1.7) + vSeed * 11.0, 9.0));
+        float rain = smoothstep(0.55, 1.0, streak) * (1.0 - smoothstep(0.0, 0.9, 1.0 - hk2)) * 0.012;
+        float grime = (1.0 - smoothstep(0.0, 0.08, hk2)) * 0.08 + smoothstep(0.93, 1.0, hk2) * 0.05;
+        wall *= 1.0 - rain - grime;
+      }
+      // t35 主题乐园布景质感（参照：上色灰泥/真漆面的实景，不是平涂）：
+      //  · 灰泥颗粒（近）+ 中频起伏（中）+ 2.6/9/23m 三层有机斑驳（远也在）+ 同一面墙内日晒偏暖 / 背阴偏冷；
+      //  · 积累的生活痕迹：叠放体块接缝积灰、墙根返潮（波状上沿）、窗台两端流挂、檐口下长雨痕、墙角磨亮露底 + 角部积灰；
+      //  · 光泽差：斑驳/污渍处更哑，干净处更亮（gRoughW → roughnessFactor），不再整面同一层塑料高光。
+      {
+        vec2 sp = vec2(axis, yFromBot) + vSeed * 37.0;
+        float fwT = max(fwidth(axis), fwidth(yFromBot));
+        float nD = 1.0 - smoothstep(0.02, 0.12, fwT);
+        float mD = 1.0 - smoothstep(0.12, 0.9, fwT);
+        float grain = (tqN(sp * 9.0) - 0.5) * nD * 0.035 + (tqN(sp * 2.2 + 5.0) - 0.5) * mD * 0.03;
+        float mott = tqN(sp / 2.6 + 1.3) * 0.3 + tqN(sp / 9.0 + 7.7) * 0.4 + tqN(sp / 23.0 + 3.1) * 0.3;
+        wall *= 1.0 + grain + (mott - 0.5) * 0.12;
+        float tw = smoothstep(0.25, 0.75, tqN(sp / 14.0 + 9.0));
+        wall *= mix(vec3(0.955, 0.985, 1.05), vec3(1.05, 1.0, 0.94), tw);
+        float segY = vP0.z, segH = vP0.w;
+        float seamD = (1.0 - smoothstep(0.0, 0.7 + 0.7 * tqN(sp * 0.6), segY)) * step(0.6, baseW) * 0.08
+          + smoothstep(segH - 0.45, segH, segY) * 0.035;
+        float dampTop = 0.6 + 1.2 * tqN(vec2(axis * 0.32, 3.0) + vSeed);
+        float damp = (1.0 - smoothstep(dampTop - 0.45, dampTop, yFromBot)) * (0.35 + 0.65 * streetBase) * 0.08;
+        float dripCol = smoothstep(0.5, 0.85, tqN(vec2(fx * _bay * 3.2 + floor(_local / _bay) * 7.0, floor(yFromBot / FH) * 3.0 + vSeed * 9.0)));
+        float drip = smoothstep(0.0, ${f(P.b)}, fy) * step(fy, ${f(P.b)}) * dripCol * inGrid * mD * 0.04;
+        float topRun = smoothstep(vH - 4.0 - 14.0 * tqN(vec2(axis * 0.45, 4.0) + vSeed), vH - 0.5, yFromBot)
+          * smoothstep(0.45, 0.8, tqN(vec2(axis * 0.9, 1.0) + vSeed * 5.0)) * 0.06;
+        float dirt = clamp(seamD + damp + drip + topRun, 0.0, 0.42);
+        #ifndef CYL
+          float edgeD = faceHalf - abs(axis);
+          float chip = (1.0 - smoothstep(0.03, 0.14, edgeD)) * smoothstep(0.5, 0.7, tqN(vec2(yFromBot * 1.7, sign(axis) * 3.0) + vSeed * 11.0));
+          wall = mix(wall, min(wall * 1.1 + 0.035, vec3(1.0)), chip * 0.3 * mD);
+          dirt += (1.0 - smoothstep(0.08, 0.9, edgeD)) * 0.06;
+          // 倒角受光：楼角 / 体块上沿一道细亮线（真实墙角是圆的、刷过漆，会接住阳光），亚像素时按覆盖率淡出
+          float eD = min(edgeD, segH - segY);
+          float efw = fwidth(eD) + 1e-4;
+          float lip = (1.0 - smoothstep(0.0, 0.05 + efw, eD)) * clamp(0.06 / efw, 0.0, 1.0);
+          wall = mix(wall, min(wall * 1.18 + 0.04, vec3(1.0)), lip * 0.6);
+        #endif
+        wall = mix(wall, wall * vec3(0.86, 0.83, 0.79), dirt * 1.1);
+        gRoughW += (mott - 0.5) * 0.22 + grain * 0.6 + dirt * 0.7;
+        // t37 航拍尺度（200~500m 也读得出）：t35 那层全是 ≤23m、±5~14% 的细节，在 320m 高空每栋楼只占几十像素 →
+        // 被平均成一块纯色。这里加「整栋 / 整面」级别的变化：
+        //  · 逐栋明度 ±9%、饱和度 ±12%（同一色号的楼不再一模一样）；
+        //  · 逐面冷暖偏移（同一栋楼四个面略有不同的晒褪程度）；
+        //  · 竖向：墙根受地面遮挡偏暗、顶部受天光偏亮（天然的 AO 渐变，航拍时楼体有体积）；
+        //  · 宽幅竖向雨痕带（6m × 60m 的拉伸噪声，远看是一道道深浅竖纹）。
+        float bS = hash21(vec2(vSeed * 13.7, 5.3));
+        float bV = hash21(vec2(vSeed * 3.9, 11.1));
+        float fS = hash21(vec2(vSeed * 7.1 + sign(axis) * 2.0 + (abs(vP2.x) > abs(vP2.z) ? 5.0 : 0.0), 9.4));
+        float lum = dot(wall, vec3(0.3, 0.55, 0.15));
+        wall = max(mix(vec3(lum), wall, 0.88 + 0.24 * bS), vec3(0.0));
+        wall *= 0.91 + 0.18 * bV;
+        wall *= mix(vec3(1.035, 1.0, 0.955), vec3(0.965, 0.995, 1.04), fS);
+        float hk = clamp(yFromBot / max(min(vH, 60.0), 6.0), 0.0, 1.0);
+        wall *= 0.86 + 0.18 * smoothstep(0.0, 0.55, hk);
+        float streak = smoothstep(0.35, 0.8, tqN(vec2(axis / 5.5 + vSeed * 17.0, yFromBot / 70.0)))
+          * (0.4 + 0.6 * smoothstep(vH * 0.3, vH, yFromBot));
+        wall *= 1.0 - 0.05 * streak;
+        gRoughW += streak * 0.12;
+      }
       // 视线切空间：T 沿 axis 增大方向，B 沿世界上方，N 朝外
       vec3 _p = -vViewPosition;
       vec3 Nv = normalize(vNormal);
@@ -411,8 +652,21 @@ function facadeFragment(style) {
       float F = 0.04 + 0.96 * pow(1.0 - cosV, 5.0);
       vec3 Rv = reflect(Vd, Nv);
       vec3 Rw = normalize((vec4(Rv, 0.0) * viewMatrix).xyz);
+      // t35 玻璃：每片玻璃微微不平（逐片法线小倾角 → 反射在相邻窗间错开，像真玻璃）+ 地平线暖霾 + 远处城市剪影 + 云絮 + 太阳高光
+      vec2 _pt = vec2(hash21(vec2(cellI + vSeed * 3.0, floorI * 3.1)), hash21(vec2(floorI + 1.7, cellI * 1.3 + vSeed))) - 0.5;
+      Rw = normalize(Rw + vec3(_pt.x, _pt.y * 0.6, -_pt.x * 0.5) * 0.06 * dK);
       float ru = Rw.y;
-      vec3 skyD = mix(vec3(0.70, 0.78, 0.86), vec3(0.32, 0.52, 0.80), smoothstep(0.0, 0.7, ru));
+      float _az = atan(Rw.z, Rw.x);
+      float _sky = 0.012 + 0.075 * tqN(vec2(_az * 9.0, 1.0)) * step(0.42, tqN(vec2(_az * 3.0, 5.0))) + 0.025 * tqN(vec2(_az * 31.0, 2.0));
+      vec3 skyD = mix(vec3(0.88, 0.85, 0.80), vec3(0.64, 0.79, 0.93), smoothstep(0.0, 0.22, ru));
+      skyD = mix(skyD, vec3(0.26, 0.49, 0.83), smoothstep(0.2, 0.85, ru));
+      float _cl = smoothstep(0.55, 0.85, tqN(Rw.xz / max(ru, 0.08) * 1.4 + 3.0)) * smoothstep(0.03, 0.25, ru);
+      skyD = mix(skyD, vec3(0.98, 0.97, 0.95), _cl * 0.65);
+      float _city = (1.0 - smoothstep(_sky - 0.004, _sky + 0.004, ru)) * step(-0.06, ru);
+      skyD = mix(skyD, mix(vec3(0.40, 0.47, 0.56), vec3(0.66, 0.60, 0.52), tqN(vec2(_az * 40.0, 0.0))), _city * 0.85);
+      vec3 _sunW = normalize(vec3(-0.69, 0.5, 0.45));
+      float _sd = max(dot(Rw, _sunW), 0.0);
+      skyD += vec3(1.0, 0.86, 0.62) * pow(_sd, 30.0) * 0.4;
       vec3 skyN = mix(vec3(0.20, 0.15, 0.12), vec3(0.03, 0.05, 0.10), smoothstep(0.0, 0.45, ru));
       vec3 gndR = mix(skyD * 0.35, vec3(0.09, 0.065, 0.04), uNight);
       vec3 sky = mix(gndR, mix(skyD, skyN, uNight), smoothstep(-0.2, 0.05, ru));
@@ -421,10 +675,11 @@ function facadeFragment(style) {
       float hGrad = 0.92 + 0.16 * clamp(yFromBot / max(vH, 1.0), 0.0, 1.0);
       vec3 cityGlow = vec3(0.012, 0.010, 0.009) * uNight;
       vec3 reflE = sky * gTint * 1.4 * (F + 0.22 * (1.0 - uNight) + 0.16 * uNight + ${f(P.curtain ? 0.06 : 0)}) * paneVar * hGrad + cityGlow;
+      reflE += vec3(1.0, 0.88, 0.66) * pow(_sd, 700.0) * 5.0 * (1.0 - uNight) * (1.0 - farK);
       vec3 moonV = normalize(vec3(0.53, 0.71, -0.47));
       reflE += vec3(0.75, 0.82, 1.0) * pow(max(dot(Rw, moonV), 0.0), 400.0) * 1.5 * uNight;
       reflE += vec3(0.10, 0.07, 0.035) * exp(-max(yFromBot, 0.0) / 12.0) * uNight;
-      vec3 glassAlb = gTint * 0.08;
+      vec3 glassAlb = gTint * 0.16;
       vec3 unlitHint = mix(surf, curtCol, curtainM) * vec3(0.007, 0.0065, 0.006) * (1.0 - step(0.001, litV)) * dK;
       vec3 glassE = reflE + (roomE + unlitHint) * (1.0 - F) * 0.9 * uNight;
       vec3 winAlb = mix(revealCol, mix(glassAlb, frameCol, frameAll), onGlass);
@@ -436,12 +691,13 @@ function facadeFragment(style) {
       // 窗外墙面：层间线 + 窗台；幕墙的层间是不透明 spandrel 玻璃
       vec3 outAlb = wall;
       float slabL = lineAA(min(fy, 1.0 - fy) * FH, 0.09, fwY) * inGrid;
-      outAlb *= 1.0 - 0.2 * slabL;
+      outAlb *= 1.0 - 0.08 * slabL;
       float sillL = lineAA(abs(ly - (wb - 0.05)), 0.05, fwY) * aaBox(lx, wl - 0.1, wr + 0.1, fwA) * inGrid * floorOk;
       outAlb = mix(outAlb, wall * 1.15, sillL);
       float spandG = ${f(P.curtain)} * inGrid;
-      outAlb = mix(outAlb, gTint * 0.1, spandG * 0.92);
-      vec3 outE = reflE * 0.75 * spandG;
+      // t32 幕墙层间改成漆色窗下墙（Jetsons 式色带），不再是一整层深色玻璃 → 远看不再一片灰
+      outAlb = mix(outAlb, wall * 0.96, spandG * 0.92);
+      vec3 outE = reflE * 0.18 * spandG;
       vec3 colD = mix(outAlb, winAlb, openM);
       vec3 emD = mix(outE, winE, openM);
       float glassD = mix(spandG, winGlass, openM);
@@ -449,9 +705,11 @@ function facadeFragment(style) {
       float area = (ww * wh) / (cw * FH) * inGrid * smoothstep(4.2, 4.6, yFromBot);
       float bRatio = (0.30 + 0.25 * hash21(vec2(vSeed * 7.13, 2.9))) * 0.8;
       vec3 avgLitT = mix(vec3(1.0, 0.85, 0.68), vec3(0.92, 0.95, 1.0), ${f(P.office)} * 0.6);
-      vec3 reflAvg = sky * gTint * 1.4 * (0.08 + 0.22 * (1.0 - uNight) + 0.16 * uNight) + cityGlow;
-      vec3 avgAlb = mix(mix(wall, gTint * 0.1, spandG * 0.92), glassAlb, area);
-      vec3 avgE = area * (reflAvg + avgLitT * bRatio * 0.6 * uNight) + (1.0 - area) * spandG * reflAvg * 0.75;
+      vec3 reflAvg = sky * gTint * 1.4 * (0.08 + F * 0.7 + 0.3 * (1.0 - uNight) + 0.16 * uNight) + cityGlow;
+      // t37 远处玻璃闪天光：整面玻璃的法线朝向决定它反到的是深蓝天顶、白云还是太阳 → 相邻楼面明暗不同
+      reflAvg += vec3(1.0, 0.9, 0.72) * pow(_sd, 18.0) * 0.9 * (1.0 - uNight);
+      vec3 avgAlb = mix(wall, glassAlb, area);
+      vec3 avgE = area * (reflAvg + avgLitT * bRatio * 0.6 * uNight) + (1.0 - area) * spandG * reflAvg * 0.18;
       vec3 col = mix(colD, avgAlb, farK);
       gWinEmis = mix(emD, avgE, farK);
       gGlass = mix(glassD, area + (1.0 - area) * spandG, farK);
@@ -465,15 +723,67 @@ export function facadeMaterial(hex, style) {
   Mat.registerMaterial(m)
   return m
 }
+// t30 漆面表皮：paint 缎光漆 / enamel 搪瓷亮漆 / metal 抛光金属 / panel 烤漆板 / glass 幕墙（其余旧名兜底到漆）
+const SKIN_PBR = {
+  // t32：IBL 是灰色房间环境，env 高 = 每栋楼罩一层灰纱。压低 env，颜色靠漆本身
+  // t35：环境图换成真天空（蓝天 + 暖太阳 + 地平线城市剪影），亮面表皮的 env 适当放回，缎光漆仍保持哑
+  paint:    { roughness: 0.5, metalness: 0.0, env: 0.5 },
+  enamel:   { roughness: 0.3, metalness: 0.0, env: 0.75 },
+  metal:    { roughness: 0.22, metalness: 0.7, env: 1.1 },
+  panel:    { roughness: 0.4, metalness: 0.06, env: 0.6 },
+  glass:    { roughness: 0.2, metalness: 0.15, env: 1.0 },
+  // t33 Googie 表皮（参数对照 googie/main.js 的 glazeM / metalM / aluM / stoneM，env 统一压低保 v41 的色彩）
+  glaze:    { roughness: 0.16, metalness: 0.02, env: 0.85 },
+  irid:     { roughness: 0.18, metalness: 0.75, env: 1.0 },
+  perf:     { roughness: 0.48, metalness: 0.35, env: 0.6 },
+  anod:     { roughness: 0.24, metalness: 0.7, env: 0.95 },
+  terra:    { roughness: 0.82, metalness: 0.0, env: 0.3 },
+  wood:     { roughness: 0.74, metalness: 0.0, env: 0.3 },
+  mesh:     { roughness: 0.5, metalness: 0.55, env: 0.7 },
+  corr:     { roughness: 0.46, metalness: 0.45, env: 0.7 },
+  breeze:   { roughness: 0.84, metalness: 0.0, env: 0.3 },
+}
+const SKIN_ID = { paint: 3, enamel: 4, metal: 5, panel: 6, glass: 8, glaze: 9, irid: 10, perf: 11, anod: 12, terra: 13, wood: 14, mesh: 15, corr: 16, breeze: 17 }
+
+/** 按墙色推表皮：高饱和走搪瓷亮漆，浅色/低饱和走缎光漆；裙房/幕墙里的银金铜色走抛光金属 */
+function skinOfHex(hex, style) {
+  const c = new THREE.Color(hex)
+  const hsl = { h: 0, s: 0, l: 0 }
+  c.getHSL(hsl)
+  const { s, l } = hsl
+  // t33：按墙色 + 立面类型 稳定地挑一种 Googie 表皮（同一个池子永远同一种，不增加 program，只换 uSkin 值）
+  let hh = 0
+  for (let i = 0; i < hex.length; i++) hh = (hh * 31 + hex.charCodeAt(i) * (i + 7) + style.length * 13) % 9973
+  const r = (hh % 1000) / 1000
+  if (style === 'curtain') {
+    if (WALL_METAL.includes(hex)) return r < 0.35 ? 'metal' : r < 0.6 ? 'anod' : r < 0.8 ? 'irid' : 'perf'
+    if (s < 0.14 && l > 0.45) return r < 0.5 ? 'metal' : 'anod'
+    if (s > 0.3 && l < 0.8) return r < 0.6 ? 'enamel' : 'glaze'
+    if (s < 0.18 && l < 0.45) return 'panel'
+    return 'glass'
+  }
+  if (style === 'podium') {
+    if (WALL_METAL.includes(hex)) return r < 0.4 ? 'perf' : r < 0.7 ? 'mesh' : 'anod'
+    if (s > 0.3 && l < 0.8) return r < 0.5 ? 'enamel' : 'glaze'
+    return r < 0.3 ? 'breeze' : r < 0.55 ? 'perf' : r < 0.75 ? 'glaze' : 'enamel'
+  }
+  if (WALL_METAL.includes(hex)) return r < 0.25 ? 'metal' : r < 0.45 ? 'anod' : r < 0.6 ? 'irid' : r < 0.8 ? 'corr' : 'perf'
+  if (WALL_BRICK.includes(hex) || OLD_COLS_SKIN.includes(hex)) return r < 0.45 ? 'terra' : r < 0.7 ? 'glaze' : 'paint'
+  if (WALL_WARM.includes(hex)) return r < 0.3 ? 'enamel' : r < 0.55 ? 'terra' : r < 0.75 ? 'wood' : 'glaze'
+  if (s > 0.42 && l > 0.3 && l < 0.78) return r < 0.5 ? 'enamel' : 'glaze'
+  // 浅色漆：一半保持缎光漆（v41 的清爽底色），其余分给 釉面砖 / 空心砌块 / 木格栅 / 穿孔板
+  return r < 0.24 ? 'paint' : r < 0.42 ? 'enamel' : r < 0.6 ? 'glaze' : r < 0.74 ? 'breeze' : r < 0.86 ? 'wood' : r < 0.94 ? 'perf' : 'terra'
+}
+
 function makeWallMat(hex, style, cyl = false, upper = false) {
-  // 金属度压低：蓝天反射会把窗染成多色「贴纸」
-  const glassLike = style === 'curtain' || style === 'podium'
+  const skin = skinOfHex(hex, style)
+  const pbr = SKIN_PBR[skin] || SKIN_PBR.paint
   const mat = new THREE.MeshStandardMaterial({
     color: hex,
-    roughness: glassLike ? 0.62 : 0.9,
-    metalness: glassLike ? 0.1 : 0.03,
+    roughness: pbr.roughness,
+    metalness: pbr.metalness,
     // IBL 略抬：背光面靠环境光补一层，不只靠硬方向光
-    envMapIntensity: glassLike ? 0.42 : 0.38,
+    envMapIntensity: pbr.env,
     // 贴墙细件（玻璃/窗套）外挑不够时，靠深度偏移压住 z-fight 虚线
     polygonOffset: true,
     polygonOffsetFactor: 1,
@@ -485,6 +795,7 @@ function makeWallMat(hex, style, cyl = false, upper = false) {
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uNight = Mat.nightU
     shader.uniforms.uUpView = Mat.upViewU
+    shader.uniforms.uSkin = { value: SKIN_ID[skin] }
     shader.vertexShader = shader.vertexShader
       .replace(
         '#include <common>',
@@ -538,6 +849,7 @@ function makeWallMat(hex, style, cyl = false, upper = false) {
         varying vec4 vP2;
         uniform float uNight;
         uniform vec3 uUpView;
+        uniform float uSkin;
         // 视角方向用 three 自带的 vViewPosition 反推（view 空间），不再多占 varying
         vec3 camDirV() { return normalize(vViewPosition); }
         float gLitWin = 0.0;
@@ -574,6 +886,10 @@ function makeWallMat(hex, style, cyl = false, upper = false) {
         }
         vec3 gWinEmis = vec3(0.0);
         float gGlass = 0.0;
+        float gRoughW = 0.0;
+        float tqH(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
+        float tqN(vec2 p) { vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);
+          return mix(mix(tqH(i), tqH(i + vec2(1.0, 0.0)), f.x), mix(tqH(i + vec2(0.0, 1.0)), tqH(i + vec2(1.0, 1.0)), f.x), f.y); }
         float aaBox(float x, float a, float b, float fw) {
           return clamp((x - a) / fw + 0.5, 0.0, 1.0) * clamp((b - x) / fw + 0.5, 0.0, 1.0);
         }
@@ -600,6 +916,32 @@ function makeWallMat(hex, style, cyl = false, upper = false) {
           diffuseColor.rgb = mix(wallCol, col, vert);
           gWinEmis *= vert;
           gGlass *= vert;
+          // t35：立面盒子的顶面（裙房顶 / 退台 / 没盖屋顶件的平顶）以前直接是墙色 + 表皮的低粗糙度 → 一整块亮白塑料板。
+          // 改成屋面做法：卷材缝 + 有机斑驳 + 积水干痕 + 女儿墙根积灰，粗糙度拉到 0.6~0.8（哑光）
+          float horiz = 1.0 - vert;
+          float rgTop = 0.0;
+          if (horiz > 0.01) {
+            vec2 rq = vP0.xy + vSeed * 53.0;
+            float rfw = max(fwidth(rq.x), fwidth(rq.y));
+            float rnD = 1.0 - smoothstep(0.03, 0.2, rfw);
+            float rmD = 1.0 - smoothstep(0.2, 1.2, rfw);
+            vec3 rc = wallCol * (0.94 + 0.06 * hash21(vec2(vSeed * 3.1, 8.0)));
+            float rgr = (tqN(rq * 5.0) - 0.5) * rnD + (tqN(rq * 1.2 + 2.0) - 0.5) * rmD;
+            float rst = tqN(rq / 2.4 + 5.0) * 0.4 + tqN(rq / 8.5 + 1.0) * 0.6;
+            float rsd = (0.5 - abs(fract(rq.x / 1.5) - 0.5)) * 1.5;
+            float rseam = (1.0 - smoothstep(0.03, 0.03 + rfw * 1.5, rsd)) * rmD;
+            float redge = min(vP1.x - abs(vP0.x), vP1.y - abs(vP0.y));
+            float rpar = 1.0 - smoothstep(0.1, 1.4 + tqN(rq * 0.6) * 1.2, redge);
+            rc *= 1.0 + rgr * 0.08 + (rst - 0.5) * 0.22;
+            rc *= 1.0 - 0.08 * rseam;
+            rc = mix(rc, rc * vec3(0.82, 0.79, 0.74), smoothstep(0.62, 0.85, rst) * 0.5 + rpar * 0.35);
+            // t37 航拍尺度：18m 级大块晒褪 / 修补斑 + 逐栋顶面明度
+            float rbig = tqN(rq / 18.0 + 2.0);
+            rc *= (0.88 + 0.2 * rbig) * (0.92 + 0.16 * hash21(vec2(vSeed * 5.7, 2.2)));
+            diffuseColor.rgb = mix(diffuseColor.rgb, rc, horiz);
+            rgTop = 0.62 - roughness + (rst - 0.5) * 0.25 - smoothstep(0.62, 0.85, rst) * 0.18 + rpar * 0.1;
+          }
+          gRoughW = gRoughW * vert + rgTop * horiz;
           gWallCol = diffuseColor.rgb * vert * (1.0 - gGlass);
           gYB = yFromBot;
           gVH = vH;
@@ -609,6 +951,7 @@ function makeWallMat(hex, style, cyl = false, upper = false) {
       .replace(
         '#include <roughnessmap_fragment>',
         `#include <roughnessmap_fragment>
+        roughnessFactor = clamp(roughnessFactor + gRoughW * (1.0 - gGlass), 0.06, 1.0);
         roughnessFactor = mix(roughnessFactor, 0.12, gGlass * 0.85);`,
       )
       .replace(
@@ -624,12 +967,13 @@ function makeWallMat(hex, style, cyl = false, upper = false) {
           float _crownOn = step(0.6, hash21(vec2(gSeedG * 3.3, 1.7))) * step(60.0, gVH);
           float _crown = smoothstep(gVH - 16.0, gVH - 1.0, gYB) * _crownOn;
           vec3 _crownCol = mix(vec3(1.0, 0.86, 0.66), vec3(0.75, 0.85, 1.0), step(0.8, hash21(vec2(gSeedG, 4.4))));
-          vec3 _lift = vec3(1.0, 0.74, 0.48) * _street + vec3(0.50, 0.60, 0.85) * 0.03 + _crownCol * _crown * 0.22;
+          // 夜里墙面按自身漆色补一层（以前只补偏蓝的天光 → 全城墙塌成石板灰）
+          vec3 _lift = vec3(1.0, 0.74, 0.48) * _street + vec3(0.11) + _crownCol * _crown * 0.22;
           totalEmissiveRadiance += gWallCol * _lift * uNight;
         }`,
       )
   }
-  mat.customProgramCacheKey = () => `facade-${style}${cyl ? '-cyl' : ''}${upper ? '-up' : ''}-v38`
+  mat.customProgramCacheKey = () => `facade-${style}${cyl ? '-cyl' : ''}${upper ? '-up' : ''}-v46`
   return mat
 }
 
@@ -646,12 +990,73 @@ function makeGableGeo() {
 }
 
 function makeRoofMat(hex) {
-  return new THREE.MeshStandardMaterial({
+  const mat = new THREE.MeshStandardMaterial({
     color: hex,
-    roughness: 0.92,
-    metalness: 0.08,
-    envMapIntensity: 0.35,
+    roughness: 0.55,
+    metalness: 0.0,
+    envMapIntensity: 0.45,
   })
+  mat.onBeforeCompile = (sh) => {
+    sh.uniforms.uNight = Mat.nightU
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec2 vRXZ;')
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+        #ifdef USE_INSTANCING
+          vRXZ = (modelMatrix * instanceMatrix * vec4(transformed, 1.0)).xz;
+        #else
+          vRXZ = (modelMatrix * vec4(transformed, 1.0)).xz;
+        #endif`)
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', `#include <common>
+        varying vec2 vRXZ;
+        uniform float uNight;
+        float rRgh = 0.0;
+        float rHash(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
+        float rN(vec2 p) { vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);
+          return mix(mix(rHash(i), rHash(i + vec2(1.0, 0.0)), f.x), mix(rHash(i + vec2(0.0, 1.0)), rHash(i + vec2(1.0, 1.0)), f.x), f.y); }`)
+      .replace('#include <color_fragment>', `#include <color_fragment>
+        {
+          float fw = max(fwidth(vRXZ.x), fwidth(vRXZ.y));
+          float det = 1.0 - smoothstep(0.12, 0.6, fw);
+          float n = rHash(floor(vRXZ * 8.0));
+          float n2 = rHash(vRXZ * 0.35);
+          diffuseColor.rgb *= 1.0 + (n - 0.5) * 0.025 * det + (n2 - 0.5) * 0.03;
+          // t34 屋面工艺（不再是一块纯色板）：1.5m 卷材/金属屋面搭接缝 + 6m 分区的冷暖明暗马赛克（远看也在）
+          // + 每 12m 一道检修走道浅带 + 低频积水/日晒斑
+          float det2 = 1.0 - smoothstep(0.05, 0.35, fw);
+          float sd = (0.5 - abs(fract(vRXZ.x / 1.5) - 0.5)) * 1.5;
+          float seam = 1.0 - smoothstep(0.03, 0.03 + fw * 1.5, sd);
+          diffuseColor.rgb *= 1.0 - 0.07 * seam * det2;
+          vec2 zc = floor(vRXZ / 6.0);
+          float zv = rHash(zc + 17.0);
+          diffuseColor.rgb *= (0.95 + 0.1 * zv) * mix(vec3(1.02, 1.0, 0.97), vec3(0.97, 1.0, 1.03), rHash(zc * 1.7 + 3.0));
+          float walkway = 1.0 - smoothstep(0.55, 0.75 + fw, abs(fract(vRXZ.y / 12.0) - 0.5) * 12.0);
+          diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 1.08 + 0.03, walkway * 0.6 * det);
+          float blot = smoothstep(0.62, 0.9, rHash(floor(vRXZ / 3.0) + 41.0)) * 0.05;
+          diffuseColor.rgb *= 1.0 - blot;
+          // t35 有机层：卷材颗粒 + 积水干痕（不规则暖灰斑，不是方块）+ 晒褪的亮斑；水痕处更亮滑、晒褪处更哑
+          float g1 = (rN(vRXZ * 4.0) - 0.5) * det2 + (rN(vRXZ * 1.1 + 3.0) - 0.5) * det;
+          float wst = rN(vRXZ / 2.6 + 5.0) * 0.4 + rN(vRXZ / 9.0 + 1.0) * 0.6;
+          float pond = smoothstep(0.62, 0.84, wst);
+          float fade = 1.0 - smoothstep(0.14, 0.34, wst);
+          diffuseColor.rgb *= 1.0 + g1 * 0.06;
+          diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.84, 0.82, 0.78), pond * 0.45);
+          diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 1.06 + 0.015, fade * 0.5);
+          rRgh = -pond * 0.2 + fade * 0.12 + g1 * 0.08 + seam * 0.15;
+          // t37 航拍尺度：20m / 55m 两层大块修补斑 + 偶尔一片新铺的深色卷材 → 高空看屋面不再是一整块纯色
+          float big = rN(vRXZ / 20.0 + 7.0) * 0.6 + rN(vRXZ / 55.0 + 1.0) * 0.4;
+          diffuseColor.rgb *= 0.86 + 0.26 * big;
+          float patchN = smoothstep(0.7, 0.74, rHash(floor(vRXZ / 9.0) + 3.0)) * step(0.5, rN(vRXZ / 30.0));
+          diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.7, 0.7, 0.72), patchN * 0.6);
+        }`)
+      .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
+        roughnessFactor = clamp(roughnessFactor + rRgh, 0.08, 1.0);`)
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+        totalEmissiveRadiance += diffuseColor.rgb * 0.1 * uNight;`)
+  }
+  mat.customProgramCacheKey = () => 'roof-paint-v5'
+  mat.userData.mergeOK = true
+  return mat
 }
 
 export function buildBuildings(plan, seed = 77) {
@@ -747,6 +1152,21 @@ export function buildBuildings(plan, seed = 77) {
     return inst
   }
   const cylList = []
+  // t32 椭圆 / 六边形等异形筒：与圆柱同一套立面 shader（CYL 展开），只换几何
+  const hexGeo = new THREE.CylinderGeometry(0.5, 0.5, 1, 6)
+  function shapePool(hex, geoK, roof) {
+    const key = `${hex}:${geoK}:${roof ? 'roof' : 'wall'}`
+    let inst = cylPools.get(key)
+    if (!inst) {
+      const mat = roof ? makeRoofMat(hex) : makeWallMat(hex, 'curtain', true)
+      Mat.registerMaterial(mat)
+      inst = newPool(geoK === 'hex' ? hexGeo : cylGeo, mat, 0)
+      inst.trackG = roof ? 'decor' : 'wall'
+      inst.struct = true
+      cylPools.set(key, inst)
+    }
+    return inst
+  }
   function cylPool(hex) {
     const key = `${hex}:curtain`
     let inst = cylPools.get(key)
@@ -771,17 +1191,21 @@ export function buildBuildings(plan, seed = 77) {
       emissiveIntensity: opts.emissiveIntensity || 0,
     })
     Mat.registerMaterial(mat)
+    if (opts.craft) Mat.groundCraft(mat, opts.craft) // t34 地块铺装/草坪/沥青 工艺纹理
+    // t35 其余不透明、不发光的池子（设施零件 / 公共建筑体块 / 围墙栏杆 / 屋顶设备……）统一加布景质感；
+    // 亮面（玻璃类 rough<0.2）只给很弱的一层，不给玻璃加颗粒
+    else if (!opts.transparent && !(opts.emissiveIntensity > 0) && !opts.noTactile) Mat.tactile(mat, rough < 0.2 ? 0.3 : metal > 0.5 ? 0.6 : 1, !opts.geo)
     return newPool(opts.geo || boxGeo, mat, opts.lod ?? DETAIL_DIST)
   }
 
-  const balcony = makePool('#b0aaa0', 0.08, 0.86, 30_000, 0.45)
+  const balcony = makePool('#ece6da', 0.08, 0.86, 30_000, 0.45)
   const rail = makePool('#5a6570', 0.7, 0.35, 30_000, 0.9)
-  const canopy = makePool('#2e343c', 0.5, 0.45, 12_000, 0.7)
-  const mech = makePool('#5a626a', 0.28, 0.62, 40_000, 0.55, { lod: 0 })
+  const canopy = makePool('#2f8f8a', 0.5, 0.45, 12_000, 0.7)
+  const mech = makePool('#cdd4da', 0.28, 0.62, 40_000, 0.55, { lod: 0 })
   const accent = makePool('#8a949e', 0.4, 0.45, 12_000, 0.7, { lod: 0 })
   // 几何立面：层间板 / 窗台 / 竖挺 / 暗玻璃凸片
-  const band = makePool('#a89e90', 0.05, 0.88, 380_000, 0.35)
-  const sill = makePool('#b8aea0', 0.08, 0.82, 1_100_000, 0.4)
+  const band = makePool('#efe8da', 0.05, 0.88, 380_000, 0.35)
+  const sill = makePool('#f2ecdf', 0.08, 0.82, 1_100_000, 0.4)
   const mull = makePool('#5a6068', 0.45, 0.4, 900_000, 0.85)
   const pane = makePool('#7d8f9c', 0.22, 0.32, 620_000, 0.75, { transparent: true, opacity: 0.16 })
   // 夜间亮窗：近处几何窗三态（暗 / 暖亮 / 冷亮），白天同色
@@ -807,7 +1231,7 @@ export function buildBuildings(plan, seed = 77) {
     return newPool(winFrameGeo, mat, DETAIL_DIST)
   })
   // 檐口 / 女儿墙压顶 / 落水管 / 空调机：把盒子楼拉出真实轮廓
-  const cornice = makePool('#cfc4b0', 0.05, 0.86, 90_000, 0.32, { lod: 0 })
+  const cornice = makePool('#f6f0e4', 0.05, 0.86, 90_000, 0.32, { lod: 0 })
   const pipe = makePool('#6a7078', 0.5, 0.42, 60_000, 0.7)
   const acUnit = makePool('#c4ccd4', 0.28, 0.5, 80_000, 0.55)
   const acGrill = makePool('#78828c', 0.4, 0.5, 80_000, 0.6)
@@ -842,7 +1266,7 @@ export function buildBuildings(plan, seed = 77) {
   const shopFramePools = [true, false].map((doorLeft) => [1.02, 0.06].map((fr) => newPool(makeShopFrameGeo(doorLeft, fr), shopFrameMat, DETAIL_DIST)))
   // 金属檐口雨棚（与布棚区分）
   const canopyPools = ['#4a4e52', '#3a3c40', '#6a6e72', '#5a4a40'].map((c) => makePool(c, 0.4, 0.5, 30_000, 0.7))
-  const pillar = makePool('#9a8e7e', 0.04, 0.9, 340_000, 0.3)
+  const pillar = makePool('#f0eadf', 0.04, 0.9, 340_000, 0.3)
   // 一层专用框料（与上层 dressFacade 的 sill/mull/band/pane 隔离，防抢配额）
   const stMull = makePool('#6a7078', 0.45, 0.4, 460_000, 0.7)
   const stHandle = makePool('#c0c8d0', 0.7, 0.28, 120_000, 0.9)
@@ -887,7 +1311,7 @@ export function buildBuildings(plan, seed = 77) {
   // 俯瞰屋顶色块（多色池，避免整城同一绿）
   const roofGreenPools = ROOF_GREEN.map((c) => makePool(c, 0.02, 0.95, 8_000, 0.25, { lod: 0 }))
   const roofDeckPools = ROOF_TERRACE.map((c) => makePool(c, 0.04, 0.9, 8_000, 0.35, { lod: 0 }))
-  const parapet = makePool('#6a6560', 0.08, 0.88, 40_000, 0.4, { lod: 0 })
+  const parapet = makePool('#ece4d2', 0.08, 0.88, 40_000, 0.4, { lod: 0 })
   // ── 店铺类型：招牌 / 挑灯箱 / 店内背景画 / 雨棚 各一套（一种店一个池） ──
   const planeGeo = new THREE.PlaneGeometry(1, 1)
   const shopTypes = Signs.SHOP_TYPES.map((t, i) => ({
@@ -917,16 +1341,47 @@ export function buildBuildings(plan, seed = 77) {
   const steelP = litPool('#a8b0b8', 0.25, 0.35)
   // 坡屋顶 / 水箱
   const gableGeo = makeGableGeo()
-  const gablePools = ['#8a3b2c', '#5a5450', '#6b4a3a', '#3f4a52', '#9a5a3a'].map((c) => makePool(c, 0.05, 0.82, 20_000, 0.3, { geo: gableGeo, lod: 0 }))
+  const gablePools = ['#c8543c', '#3f9a90', '#d08a3a', '#4f86b8', '#b8604a'].map((c) => makePool(c, 0.02, 0.5, 20_000, 0.4, { geo: gableGeo, lod: 0 }))
+  // t33 坡屋顶 = Googie tileTex 的釉面筒瓦：横向瓦行暗缝 + 竖向瓦垄明暗（世界坐标，近处出纹、远处退成均色），颜色保持 v41 的亮漆色
+  for (const gp of gablePools) {
+    gp.mat.onBeforeCompile = (sh) => {
+      sh.uniforms.uNight = Mat.nightU
+      sh.vertexShader = sh.vertexShader
+        .replace('#include <common>', '#include <common>\nvarying vec3 vTW;')
+        .replace('#include <begin_vertex>', `#include <begin_vertex>
+          #ifdef USE_INSTANCING
+            vTW = (modelMatrix * instanceMatrix * vec4(transformed, 1.0)).xyz;
+          #else
+            vTW = (modelMatrix * vec4(transformed, 1.0)).xyz;
+          #endif`)
+      sh.fragmentShader = sh.fragmentShader
+        .replace('#include <common>', '#include <common>\nvarying vec3 vTW;\nuniform float uNight;')
+        .replace('#include <color_fragment>', `#include <color_fragment>
+          {
+            float fw = max(max(fwidth(vTW.x), fwidth(vTW.z)), fwidth(vTW.y));
+            float nearT = 1.0 - smoothstep(0.08, 0.3, fw);
+            float row = fract(vTW.y / 0.3);
+            float rowL = 1.0 - smoothstep(0.0, 0.16, row);
+            float ridge = 0.5 + 0.5 * sin((vTW.x + vTW.z) / 0.26 * 6.2832);
+            diffuseColor.rgb *= mix(0.96, (1.0 - 0.32 * rowL) * (0.9 + 0.18 * ridge), nearT);
+          }`)
+        .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+          totalEmissiveRadiance += diffuseColor.rgb * 0.1 * uNight;`)
+    }
+    gp.mat.customProgramCacheKey = () => 'gable-tile-v1'
+    // t35：瓦面再叠一层布景质感（makePool 先挂的那层已被上面覆盖，重新挂）
+    gp.mat.userData.tactile = false
+    Mat.tactile(gp.mat, 0.7)
+  }
   // 水箱用 10 段低模圆柱（以前和圆柱楼共用 40 段几何，几千个水箱就是几十万三角）
   const tank = makePool('#8a7560', 0.1, 0.8, 8_000, 0.3, { geo: new THREE.CylinderGeometry(0.5, 0.5, 1, 10), lod: 0 })
-  const lawn = makePool('#6f9a57', 0.0, 0.95, 0, 0.3, { lod: 0 })
+  const lawn = makePool('#6f9a57', 0.0, 0.95, 0, 0.3, { lod: 0, craft: 'lawn' })
   const hedge = makePool('#3d6935', 0.0, 0.95, 0, 0.3)
   const fence = makePool('#ebe7de', 0.05, 0.7, 0, 0.5)
-  const pave = makePool('#bdb6aa', 0.02, 0.9, 0, 0.4, { lod: 0 })
-  const barPave = makePool('#6e6660', 0.02, 0.85, 0, 0.4, { lod: 0 })
+  const pave = makePool('#dccaa8', 0.02, 0.9, 0, 0.4, { lod: 0, craft: 'pave' })
+  const barPave = makePool('#6e6660', 0.02, 0.85, 0, 0.4, { lod: 0, craft: 'slab' })
   const bollardP = makePool('#8a9098', 0.7, 0.35, 0, 0.8)
-  const tarmac = makePool('#3d3f42', 0.02, 0.92, 0, 0.3, { lod: 0 })
+  const tarmac = makePool('#4c4b4d', 0.02, 0.92, 0, 0.3, { lod: 0, craft: 'asphalt' })
   const pitchG = makePool('#3f8a46', 0.0, 0.95, 0, 0.3, { lod: 0 })
   const trackR = makePool('#b5523b', 0.0, 0.92, 0, 0.3, { lod: 0 })
   const courtB = makePool('#3a6ea5', 0.0, 0.9, 0, 0.3, { lod: 0 })
@@ -945,14 +1400,15 @@ export function buildBuildings(plan, seed = 77) {
   const villaWood = makePool('#8a6a48', 0.02, 0.85, 0, 0.3)
   const timber = makePool('#3a2a20', 0.02, 0.85, 0, 0.3)
   const brickP = makePool('#8a4a3a', 0.02, 0.9, 0, 0.3)
-  const wallGrey = makePool('#8e8c88', 0.02, 0.9, 0, 0.3)
+  const wallGrey = makePool('#d8ccb4', 0.02, 0.9, 0, 0.3)
   const soilP = makePool('#5a4636', 0.0, 0.98, 0, 0.2, { lod: 0 })
   // 花：颜色收一点，只近处画（远处是彩色噪点）
   const flowerPools = ['#c86a80', '#d8b860', '#ece8e0', '#9a78b8', '#d8875a'].map((c) => makePool(c, 0.0, 0.8, 0, 0.3, { lod: 70 }))
   const carPools = ['#c9ccd1', '#1f2328', '#8a1c1c', '#2a4f8a', '#e8e8e6', '#5b6066'].map((c) => makePool(c, 0.5, 0.35, 0, 0.8))
   const crossP = newPool(boxGeo, Signs.crossMaterial(), 0)
   const boards = {}
-  for (const k of ['hospital', 'emergency', 'school', 'gas', 'parking', 'gym', 'stadium', 'library', 'arena', 'museum', 'cinema', 'busterm', 'police', 'fire', 'post', 'hotel', 'market', 'temple', 'church', 'office', 'walkst', 'barst', 'anime', 'oldtown', 'bike', 'mall', 'metro', 'gov', 'farmers', 'garage']) boards[k] = newPool(boxGeo, Signs.facilityMaterial(k === 'busterm' ? 'bus' : k), 0)
+  for (const k of ['hospital', 'emergency', 'school', 'gas', 'parking', 'gym', 'stadium', 'library', 'arena', 'museum', 'cinema', 'busterm', 'police', 'fire', 'post', 'hotel', 'market', 'temple', 'church', 'office', 'walkst', 'barst', 'anime', 'oldtown', 'bike', 'mall', 'metro', 'gov', 'farmers', 'garage', 'plaza',
+    'opera', 'expo', 'art', 'tvtower', 'rail', 'skyrail', 'swim', 'ice', 'mosque', 'orthodox', 'synagogue', 'hindu', 'pagoda', 'confucius', 'amusement', 'airport', 'themepark', 'parkresort']) boards[k] = newPool(boxGeo, Signs.facilityMaterial(k === 'busterm' ? 'bus' : k), 0)
   const cylLed = makePool('#ff3fa4', 0.2, 0.5, 0, 0.5, { emissive: '#ff3fa4', geo: cylGeo, lod: 0 })
   const neonC = makePool('#38e8ff', 0.2, 0.5, 0, 0.5, { emissive: '#38e8ff', lod: 0 })
   Mat.registerNight(neonC.material, 0.3, 2.4)
@@ -977,7 +1433,7 @@ export function buildBuildings(plan, seed = 77) {
   const glassPortal = makePool('#8fa6b4', 0.45, 0.14, 0, 1.1, { emissive: '#ffe0b0', lod: 0 })
   Mat.registerNight(glassPortal.mat, 0.0, 0.85)
   const treadP = makePool('#3c4046', 0.5, 0.4, 0, 0.6)
-  const stoneStep = makePool('#cfc6b6', 0.03, 0.88, 0, 0.4, { lod: 0 })
+  const stoneStep = makePool('#cfc6b6', 0.03, 0.88, 0, 0.4, { lod: 0, craft: 'slab' })
   // ── Round 9：新设施用的池（加入 allPools）──
   const latePools = []
   const LP = (c, m, r, env = 0.6, o = {}) => { const p = makePool(c, m, r, 0, env, o); latePools.push(p); return p }
@@ -1157,6 +1613,50 @@ export function buildBuildings(plan, seed = 77) {
       }
     }
   }
+  /**
+   * t41 托底检查：底面离地的楼段（塔楼上段 / 门洞塔横梁 / 悬挑上段……）必须坐在已生成的实体上。
+   * 根因：各形体把上下段分别交给 pushBuilding，下段可能被 claimBox 裁窄甚至整段放弃（与邻楼冲突），
+   * 上段却照常生成 → 一大块楼身悬在空中，只剩一两根细「腿」。这里统一兜底：
+   * 支撑面积（顶面≈本段底面的实体与本段投影的交叠）< 50% → 收缩到支撑范围的外包框；外包框 < 35% → 整段不生成（再往上的段落随之连锁放弃）。
+   */
+  const floatFix = { checked: 0, shrunk: 0, skipped: 0 }
+  // 楼段即时索引（实体碰撞盒是按组延后合并登记的，不能拿来判断同一栋楼的下段是否已落地）
+  const segChunks = new Map()
+  function addSeg(x, z, w, d, top, base) {
+    const q = { x, z, w, d, y: top, base }
+    for (let i = Math.floor((x - w / 2) / SOLID_CELL); i <= Math.floor((x + w / 2) / SOLID_CELL); i++) {
+      for (let j = Math.floor((z - d / 2) / SOLID_CELL); j <= Math.floor((z + d / 2) / SOLID_CELL); j++) {
+        const k = (i + 32768) * 65536 + (j + 32768)
+        let arr = segChunks.get(k)
+        if (!arr) { arr = []; segChunks.set(k, arr) }
+        arr.push(q)
+      }
+    }
+  }
+  function supportOf(x, z, w, d, y0, h = 0) {
+    const x0 = x - w / 2, x1 = x + w / 2, z0 = z - d / 2, z1 = z + d / 2
+    const seen = new Set()
+    let area = 0, bx0 = Infinity, bx1 = -Infinity, bz0 = Infinity, bz1 = -Infinity, sides = 0
+    for (let i = Math.floor(x0 / SOLID_CELL); i <= Math.floor(x1 / SOLID_CELL); i++) {
+      for (let j = Math.floor(z0 / SOLID_CELL); j <= Math.floor(z1 / SOLID_CELL); j++) {
+        const key = (i + 32768) * 65536 + (j + 32768)
+        for (const q of [...(solidChunks.get(key) || []), ...(segChunks.get(key) || [])]) {
+          if (seen.has(q)) continue
+          seen.add(q)
+          // 侧向支撑：两侧贴着通高的楼身（双塔之间的空中连廊 / 夹层）——算挂在两边，不算悬空
+          if (h > 0 && q.base < y0 + 0.5 && q.y >= y0 + h * 0.9 &&
+            Math.abs(q.x - x) < (q.w + w) / 2 + 1.5 && Math.abs(q.z - z) < (q.d + d) / 2 + 1.5) sides++
+          if (!(q.base < y0 + 0.5 && q.y > y0 - 4 && q.y < y0 + 4.5)) continue
+          const ox0 = Math.max(x0, q.x - q.w / 2), ox1 = Math.min(x1, q.x + q.w / 2)
+          const oz0 = Math.max(z0, q.z - q.d / 2), oz1 = Math.min(z1, q.z + q.d / 2)
+          if (ox1 <= ox0 || oz1 <= oz0) continue
+          area += (ox1 - ox0) * (oz1 - oz0)
+          bx0 = Math.min(bx0, ox0); bx1 = Math.max(bx1, ox1); bz0 = Math.min(bz0, oz0); bz1 = Math.max(bz1, oz1)
+        }
+      }
+    }
+    return { sides, ratio: area / (w * d), bx0, bx1, bz0, bz1, bbA: bx1 > bx0 ? (bx1 - bx0) * (bz1 - bz0) : 0 }
+  }
   // 每帧会被物理调用多次：不再分配数组/Set/字符串（GC 卡顿源），用盖章去重 + 复用输出数组
   let qStamp = 0
   const qOut = []
@@ -1214,6 +1714,15 @@ export function buildBuildings(plan, seed = 77) {
     // 兜底：退台/裙房计算出的退化体量不再生成（否则墙薄到看不见，
     // 只剩同一材质的深色屋顶板浮在空中，看起来就是「这栋楼没有墙」）
     if (!(Math.min(w, h, d) > 1.5)) return
+    if (y - h / 2 > SURFACE + 0.8) {
+      floatFix.checked++
+      const sr = supportOf(x, z, w, d, y - h / 2, h)
+      if (sr.ratio < 0.5 && sr.sides < 2) {
+        if (sr.bbA < w * d * 0.35 || sr.bx1 - sr.bx0 < 6 || sr.bz1 - sr.bz0 < 6) { floatFix.skipped++; return }
+        x = (sr.bx0 + sr.bx1) / 2; z = (sr.bz0 + sr.bz1) / 2; w = sr.bx1 - sr.bx0; d = sr.bz1 - sr.bz0
+        floatFix.shrunk++
+      }
+    }
     const _k0 = kxz(x, z)
     const _w0 = w
     const _d0 = d
@@ -1229,10 +1738,11 @@ export function buildBuildings(plan, seed = 77) {
       x = cb.x; z = cb.z; w = cb.w; d = cb.d
     }
     const _r = push(wallPool(hex, style), x, y, z, w, h, d, yaw)
+    addSeg(x, z, w, d, y + h / 2, y - h / 2)
     if (y - h / 2 <= SURFACE + 0.6 && !wallAt.has(_k0)) wallAt.set(_k0, { r: _r, i: _r.n - 1, hex, style, x, z, w, d, h, base: y - h / 2 })
     if (y - h / 2 <= SURFACE + 0.6) regPrint(x, z, w, d)
     const top = y + h / 2
-    const roofC = pick(rng, ROOF)
+    const roofC = roofOf(hex, rng())
     const roofT = Math.max(1.6, Math.min(3.2, Math.min(w, d) * 0.04)) + roofJit * 0.045
     // 刚体顶 = 屋面板顶（以前只到墙盒顶，人落在屋顶上会陷进 1.6~3.2m 厚的屋面板里看不见）
     const solidRef = { x, z, w, d, y, h, yaw }
@@ -1321,10 +1831,21 @@ export function buildBuildings(plan, seed = 77) {
     addSolid(x, z, r * 2, r * 2, y + h / 2 + 0.7, y - h / 2)
     const top = y + h / 2
     cylList.push({ x, z, r, h, y })
-    push(roofCylPool(pick(rng, ROOF)), x, top + 0.35, z, r * 2.05, 0.7, r * 2.05)
+    push(roofCylPool(roofOf(hex, rng())), x, top + 0.35, z, r * 2.05, 0.7, r * 2.05)
     if (rng() < 0.7) {
       push(mech, x, top + 2, z, r * 0.8, 2.5, r * 0.8)
     }
+  }
+
+  /** t32 圆/椭圆/六边形筒体：rx≠rz 为椭圆；roofHex 为空则不盖顶（叠段中间段） */
+  function pushRound(hex, x, y, z, rx, rz, h, geoK = 'cyl', roofHex = null, yaw = 0) {
+    const cb = claimBox(x, z, rx * 2 + 0.2, rz * 2 + 0.2, y - h / 2, y + h / 2 + 3, 0.1, 0.1, y + h / 2)
+    if (!cb || cb.w < rx * 2 - 0.01 || cb.d < rz * 2 - 0.01) return false
+    push(shapePool(hex, geoK, false), x, y, z, rx * 2, h, rz * 2, yaw)
+    addSolid(x, z, rx * 2, rz * 2, y + h / 2 + 0.7, y - h / 2)
+    cylList.push({ x, z, r: Math.min(rx, rz), h, y })
+    if (roofHex) push(shapePool(roofHex, geoK, true), x, y + h / 2 + 0.35, z, rx * 2.05, 0.7, rz * 2.05, yaw)
+    return true
   }
 
   /**
@@ -2108,6 +2629,45 @@ export function buildBuildings(plan, seed = 77) {
     }
   }
 
+  /**
+   * t34 弧面底层：沿圆/椭圆（或六边形各面）一圈分段的玻璃店面 + 竖梃 + 室内暖光 + 外挑雨棚，每段按切线转向贴住墙面。
+   * 上层窗交给 CYL 立面 shader（本来就随弧面展开），这里不再放任何方形窗框 / 大堂柱。
+   */
+  function dressRound(cx, baseY, cz, rx, rz, h, sides = 0) {
+    if (h < 6 || Math.min(rx, rz) < 4) return
+    const n = sides || Math.max(10, Math.round((Math.PI * (rx + rz)) / 4.4))
+    const doorK = (rng() * n) | 0
+    for (let k = 0; k < n; k++) {
+      let a0, a1
+      if (sides) { a0 = (k / n) * Math.PI * 2; a1 = ((k + 1) / n) * Math.PI * 2 }
+      else { a0 = (k / n) * Math.PI * 2; a1 = ((k + 1) / n) * Math.PI * 2 }
+      // CylinderGeometry 的顶点 = (r sinθ, r cosθ)
+      const p0x = cx + rx * Math.sin(a0), p0z = cz + rz * Math.cos(a0)
+      const p1x = cx + rx * Math.sin(a1), p1z = cz + rz * Math.cos(a1)
+      const mx = (p0x + p1x) / 2, mz = (p0z + p1z) / 2
+      const L = Math.hypot(p1x - p0x, p1z - p0z)
+      const yaw = Math.atan2(-(p1z - p0z), p1x - p0x)
+      // 外法线（指离圆心）
+      let nx = mx - cx, nz = mz - cz
+      const nl = Math.hypot(nx, nz) || 1
+      nx /= nl; nz /= nl
+      const at = (o) => [mx + nx * o, mz + nz * o]
+      const [gx, gz] = at(0.06)
+      push(k === doorK ? doorGlass : shopGlass, gx, baseY + 2.0, gz, L * 0.94, 3.6, 0.08, yaw)
+      const [ix, iz] = at(-0.5)
+      push(displayGlow, ix, baseY + 2.0, iz, L * 0.9, 3.0, 0.05, yaw)
+      const [ux, uz] = at(0.1)
+      push(stMull, p0x + nx * 0.1, baseY + 2.0, p0z + nz * 0.1, 0.16, 3.8, 0.16, yaw)
+      push(stMull, ux, baseY + 3.95, uz, L, 0.2, 0.14, yaw)
+      const [cx2, cz2] = at(1.2)
+      push(canopy, cx2, baseY + 4.5, cz2, L * 1.02, 0.18, 2.4, yaw)
+      if (k === doorK) {
+        const [dx, dz] = at(0.12)
+        push(door, dx, baseY + 1.25, dz, Math.min(2.4, L * 0.5), 2.5, 0.1, yaw)
+      }
+    }
+  }
+
   function dressNear(cx, baseY, cz, w, h, d, style, opts = {}) {
     const _key = kxz(cx, cz)
     if (skippedAt.has(_key)) return
@@ -2182,12 +2742,12 @@ export function buildBuildings(plan, seed = 77) {
     if (kind === 'mall') return r < 0.12 ? 'curtain' : 'podium'
     if (kind === 'shop') return h < 26 && r < 0.4 ? 'podium' : 'punch'
     if (kind === 'core' || h > 220) {
-      if (r < (h > 120 ? 0.62 : 0.35)) return 'curtain'
+      if (r < (h > 120 ? 0.4 : 0.22)) return 'curtain'
       if (r < 0.82) return 'ribbon'
       return r < 0.92 ? 'hotel' : 'punch'
     }
     if (kind === 'high' || kind === 'waterfront' || kind === 'wallside') {
-      if (h > 120 && r < 0.18) return 'curtain'
+      if (h > 120 && r < 0.12) return 'curtain'
       if (r < 0.34) return 'ribbon'
       if (r < 0.5) return 'hotel'
       return 'punch'
@@ -2200,17 +2760,32 @@ export function buildBuildings(plan, seed = 77) {
   }
 
   const ANIME_COLS = ['#ff8fc1', '#7fd8ff', '#ffe066', '#b49bff', '#7ff0b4', '#ffb27f']
-  const OLD_COLS = ['#9a5a44', '#8a4a3a', '#a8705a', '#b08060', '#7a4a3a']
+  const OLD_COLS = ['#c8603a', '#d4704a', '#b8483c', '#e09a3c', '#c88a4a']
   function pickColor(style) {
     if (curDistrict === 'anime' && style !== 'curtain') return pick(rng, ANIME_COLS)
     if (curDistrict === 'old') return pick(rng, OLD_COLS)
-    // 幕墙也用暖香槟/暖砂，极少数暖褐点缀
-    if (style === 'hotel') return pick(rng, HOTEL)
-    if (style === 'curtain') return rng() < 0.08 ? pick(rng, WALL_ACCENT) : pick(rng, WALL_GLASS)
-    if (style === 'punch' || style === 'ribbon') {
-      return rng() < 0.62 ? pick(rng, WALL) : pick(rng, WALL_WARM)
+    if (style === 'hotel') return rng() < 0.28 ? pick(rng, WALL_ENAMEL) : pick(rng, HOTEL)
+    if (style === 'curtain') {
+      const u = rng()
+      if (u < 0.44) return pick(rng, WALL_GLASS)
+      if (u < 0.68) return pick(rng, WALL_METAL)
+      if (u < 0.90) return pick(rng, WALL_ENAMEL)
+      return pick(rng, WALL_ACCENT)
     }
-    return pick(rng, PODIUM)
+    if (style === 'punch' || style === 'ribbon') {
+      const u = rng()
+      if (u < 0.38) return pick(rng, WALL)
+      if (u < 0.56) return pick(rng, WALL_WARM)
+      if (u < 0.72) return pick(rng, WALL_ENAMEL)
+      if (u < 0.82) return pick(rng, WALL_BRICK)
+      if (u < 0.92) return pick(rng, WALL_CONCRETE)
+      return pick(rng, WALL_METAL)
+    }
+    const u = rng()
+    if (u < 0.48) return pick(rng, PODIUM)
+    if (u < 0.74) return pick(rng, WALL_ENAMEL)
+    if (u < 0.88) return pick(rng, WALL)
+    return pick(rng, WALL_METAL)
   }
 
   /**
@@ -2218,6 +2793,10 @@ export function buildBuildings(plan, seed = 77) {
    * opts.nyc — 优先婚礼蛋糕退台
    * 体量：板楼 / 同轴退台 / 错位退台 / L / T / 双塔 / 圆柱 —— 全锁在 footprint 内
    */
+  // 普通地皮的高宽比上限（总高 / 足迹短边）。以前一律放到 8~10:1，20m 宽的地皮也能拔起 200m，
+  // 满城都是又高又薄的细针。地标（超高簇 / 异形塔 / 预留超高地块）另外放宽。
+  const ASPECT = { core: 4.6, high: 4.0, wallside: 3.6, waterfront: 3.4, mid: 3.0, low: 2.4, shop: 2.0 }
+  const maxAspect = (kind, landmark = false) => (landmark ? 7.5 : (ASPECT[kind] ?? 3.0))
   function placeTower(kind, bx, bz, footprintW, footprintD, block, opts = {}) {
     if (!(Math.min(footprintW, footprintD) >= 10)) return
     let h = opts.height ?? heightFor(kind, rng, block)
@@ -2230,9 +2809,12 @@ export function buildBuildings(plan, seed = 77) {
 
     let w0 = Math.min(footprintW, footprintW * range(rng, 0.82, 0.98))
     let d0 = Math.min(footprintD, footprintD * range(rng, 0.82, 0.98))
-    if (h > Math.min(w0, d0) * 10) h = Math.min(w0, d0) * range(rng, 8, 10)
+    {
+      const AR = opts.maxAspect ?? maxAspect(kind, false)
+      if (h > Math.min(w0, d0) * AR) h = Math.min(w0, d0) * AR * range(rng, 0.85, 1)
+    }
 
-    const preferFlat = !opts.nyc && rng() < 0.22
+    const preferFlat = !opts.nyc && rng() < 0.05
     if (preferFlat) {
       if (rng() < 0.5) {
         w0 = footprintW * range(rng, 0.9, 0.98)
@@ -2249,27 +2831,38 @@ export function buildBuildings(plan, seed = 77) {
     const ground = opts.baseY ?? SURFACE
     const yaw0 = 0
 
-    // 体量原型：按片区分配（CBD 偏双塔/收分/切角；住宅偏板楼/H/L/退台；多层偏弧面/架空/L）
+    // 体量原型：按用途分配；只从当前地块放得下的配方里抽，不再动辄退回叠盒子
     const minFoot = Math.min(w0, d0)
     let form = 'stack'
     {
-      const r = rng()
       const W8 = kind === 'core'
-        ? [['cyl', 0.08, 22], ['twin', 0.12, 26], ['taper', 0.14, 18], ['chamfer', 0.14, 20], ['zigg', 0.06, 26], ['offset', 0.14, 0], ['L', 0.06, 20], ['stilts', 0.04, 20], ['podgreen', 0.08, 24], ['stack', 0.14, 0]]
+        ? [['cyl', 0.14, 16], ['invtaper', 0.13, 14], ['wedge', 0.14, 12], ['cantilever', 0.13, 14], ['arc', 0.1, 16], ['blade', 0.08, 14], ['chamfer', 0.09, 16], ['taper', 0.06, 14], ['vcut', 0.05, 20], ['terrace', 0.05, 14], ['twin', 0.04, 22], ['stilts', 0.04, 16], ['zigg', 0.03, 20], ['L', 0.02, 18], ['court', 0.02, 26], ['stack', 0.01, 0],
+          ['ellipse', 0.05, 18], ['hex', 0.04, 18], ['drum', 0.04, 18], ['waist', 0.04, 18], ['bullet', 0.04, 18], ['ringcrown', 0.04, 22], ['gate', 0.03, 30], ['vtwin', 0.03, 28], ['trefoil', 0.03, 26], ['spiral', 0.03, 22], ['lean', 0.03, 20], ['blocks', 0.04, 18], ['greenterr', 0.04, 16]]
         : kind === 'high' || kind === 'wallside' || kind === 'waterfront'
-          ? [['slab', 0.14, 0], ['H', 0.1, 26], ['L', 0.1, 20], ['T', 0.08, 18], ['zigg', 0.1, 24], ['chamfer', 0.1, 20], ['podgreen', 0.08, 24], ['twin', 0.06, 26], ['taper', 0.06, 18], ['cyl', 0.04, 22], ['offset', 0.08, 0], ['stack', 0.06, 0]]
-          : [['L', 0.14, 20], ['arc', 0.14, 22], ['stilts', 0.1, 18], ['zigg', 0.12, 20], ['chamfer', 0.1, 18], ['H', 0.08, 26], ['T', 0.08, 18], ['slab', 0.08, 0], ['offset', 0.08, 0], ['stack', 0.08, 0]]
+          ? [['cyl', 0.12, 16], ['invtaper', 0.11, 14], ['wedge', 0.13, 12], ['cantilever', 0.12, 14], ['arc', 0.11, 16], ['blade', 0.08, 14], ['chamfer', 0.09, 16], ['terrace', 0.06, 14], ['vcut', 0.05, 18], ['taper', 0.05, 14], ['twin', 0.04, 22], ['stilts', 0.04, 16], ['H', 0.03, 22], ['L', 0.03, 18], ['zigg', 0.03, 20], ['slab', 0.015, 0], ['stack', 0.01, 0],
+            ['ellipse', 0.05, 18], ['hex', 0.04, 18], ['drum', 0.04, 18], ['waist', 0.03, 18], ['bullet', 0.03, 18], ['ringcrown', 0.04, 22], ['gate', 0.03, 30], ['vtwin', 0.03, 28], ['trefoil', 0.03, 26], ['spiral', 0.03, 22], ['lean', 0.03, 20], ['blocks', 0.05, 18], ['greenterr', 0.05, 16]]
+          : [['arc', 0.14, 14], ['wedge', 0.14, 12], ['cantilever', 0.13, 14], ['cyl', 0.12, 16], ['invtaper', 0.1, 14], ['chamfer', 0.09, 16], ['blade', 0.07, 14], ['terrace', 0.07, 12], ['arcade', 0.07, 14], ['stilts', 0.05, 16], ['vcut', 0.04, 18], ['L', 0.03, 18], ['court', 0.03, 24], ['slab', 0.015, 0], ['stack', 0.01, 0],
+            ['ellipse', 0.05, 18], ['hex', 0.04, 18], ['drum', 0.03, 18], ['blocks', 0.06, 16], ['greenterr', 0.07, 14], ['gate', 0.03, 28], ['spiral', 0.02, 22], ['ringcrown', 0.03, 20]]
+      const fit = W8.filter(([, , need]) => minFoot > need)
+      const pool = fit.length ? fit : [['stack', 1, 0]]
+      const tot = pool.reduce((s, x) => s + x[1], 0)
       let acc = 0
-      const tot = W8.reduce((s, x) => s + x[1], 0)
-      for (const [f, wgt, need] of W8) {
+      const r = rng()
+      for (const [f, wgt] of pool) {
         acc += wgt / tot
-        if (r < acc) { form = minFoot > need ? f : 'stack'; break }
+        if (r < acc) { form = f; break }
       }
-      if (preferFlat && form !== 'slab' && rng() < 0.5) form = 'slab'
+      if (preferFlat && form !== 'slab' && form !== 'terrace' && form !== 'wedge' && rng() < 0.12) form = 'slab'
+      if (opts.googie && (form === 'slab' || form === 'stack' || form === 'L' || form === 'H' || form === 'T')) {
+        const g = pool.filter(([f]) => !['slab', 'stack', 'L', 'H', 'T'].includes(f))
+        if (g.length) form = g[(rng() * g.length) | 0][0]
+      }
       if (opts.forms && !opts.forms.includes(form)) form = opts.forms[(rng() * opts.forms.length) | 0]
     }
 
-    if (!opts.skipPodium && h > 70 && form !== 'cyl' && form !== 'stilts' && form !== 'podgreen' && rng() < 0.7) {
+    const googieForm = ['cyl', 'invtaper', 'wedge', 'cantilever', 'blade', 'arc', 'chamfer', 'stilts', 'vcut', 'terrace', 'arcade', 'taper',
+      'ellipse', 'hex', 'drum', 'waist', 'bullet', 'ringcrown', 'gate', 'vtwin', 'trefoil', 'spiral', 'lean', 'blocks', 'greenterr'].includes(form)
+    if (!opts.skipPodium && h > 70 && !googieForm && form !== 'podgreen' && rng() < 0.28) {
       const sh = range(rng, 12, 24)
       const pw = Math.min(footprintW, w0 * 1.15)
       const pd = Math.min(footprintD, d0 * 1.15)
@@ -2278,14 +2871,21 @@ export function buildBuildings(plan, seed = 77) {
     }
 
     const dressBase = (x, z, w, d, segH, st = style) => {
-      if (!opts.skipPodium) dressNear(x, ground, z, w, Math.min(segH, 80), d, st)
+      // 从地面起的形体要铺店面；坐在已有街墙上的塔不再重复铺
+      if (opts.skipPodium && ground > SURFACE + 1) return
+      dressNear(x, ground, z, w, Math.min(segH, 80), d, st)
     }
     const B = (x, y0, z, w, hh, d) => pushBuilding(col, style, x, y0 + hh / 2, z, w, hh, d, 0)
+    // t34：圆/椭圆/六边形筒体的底层只做贴弧面的店面环（以前按外接方盒 dressNear → 方形窗框悬空、大堂柱子围成方笼）
+    const dressRoundBase = (x, z, rx, rz, segH, sides = 0) => {
+      if (opts.skipPodium && ground > SURFACE + 1) return
+      dressRound(x, ground, z, rx, rz, segH, sides)
+    }
 
     if (form === 'cyl') {
       const r = Math.min(w0, d0) * range(rng, 0.42, 0.48)
       pushCylBuilding(col, bx, ground + h / 2, bz, r, h)
-      dressBase(bx, bz, r * 2, r * 2, h, 'curtain')
+      dressRoundBase(bx, bz, r, r, h)
       return
     }
 
@@ -2432,12 +3032,14 @@ export function buildBuildings(plan, seed = 77) {
           if (i !== 0 && i !== nx && j !== 0 && j !== nz) continue
           const px = bx - w0 / 2 + 0.6 + (w0 - 1.2) * (i / nx)
           const pz = bz - d0 / 2 + 0.6 + (d0 - 1.2) * (j / nz)
-          push(pillar, px, ground + lift / 2, pz, 0.9, lift, 0.9)
-          addSolid(px, pz, 0.9, 0.9, ground + lift, ground)
+          // t41 柱子按楼身尺度加粗（以前 0.9m 细杆托一整栋楼）
+          const pt = Math.max(1.2, Math.min(2.4, Math.min(w0, d0) * 0.06))
+          push(pillar, px, ground + lift / 2, pz, pt, lift, pt)
+          addSolid(px, pz, pt, pt, ground + lift, ground)
         }
       }
-      const lw = w0 * 0.34
-      const ld = d0 * 0.34
+      const lw = w0 * 0.6
+      const ld = d0 * 0.6
       pushBuilding(pick(rng, WALL_GLASS), 'curtain', bx, ground + lift / 2, bz, lw, lift, ld, 0)
       B(bx, ground + lift, bz, w0, h - lift, d0)
       return
@@ -2457,11 +3059,406 @@ export function buildBuildings(plan, seed = 77) {
         const gz = bz + range(rng, -gd * 0.42, gd * 0.42)
         push(hedge, gx, ground + ph + 3.6, gz, range(rng, 2, 5), 0.8, range(rng, 1, 2))
       }
-      const tw = w0 * range(rng, 0.45, 0.6)
-      const td = d0 * range(rng, 0.45, 0.6)
+      const tw = w0 * range(rng, 0.62, 0.78)
+      const td = d0 * range(rng, 0.62, 0.78)
       const ox = (rng() - 0.5) * (w0 - tw) * 0.6
       const oz = (rng() - 0.5) * (d0 - td) * 0.6
       B(bx + ox, ground + ph, bz + oz, tw, h - ph, td)
+      return
+    }
+
+    if (form === 'invtaper') {
+      // 倒锥：底部收、向上展开，顶面用满地块
+      const n = 8 + ((rng() * 6) | 0)
+      const minK = range(rng, 0.55, 0.72)
+      let y = ground
+      for (let s = 0; s < n; s++) {
+        const k = minK + (1 - minK) * (s / Math.max(1, n - 1))
+        const seg = h / n
+        const cw = w0 * k
+        const cd = d0 * k
+        B(bx, y, bz, cw, seg, cd)
+        if (s === 0) dressBase(bx, bz, cw, cd, seg)
+        y += seg
+      }
+      return
+    }
+
+    if (form === 'terrace') {
+      // 单侧退台：只朝一个方向退，形成层层露台
+      const n = 3 + ((rng() * 3) | 0)
+      const alongXT = rng() < 0.5
+      const dir = rng() < 0.5 ? 1 : -1
+      let y = ground
+      let cw = w0, cd = d0, cxT = bx, czT = bz
+      let rem = h
+      for (let s = 0; s < n; s++) {
+        const seg = s === n - 1 ? rem : rem * range(rng, 0.22, 0.4)
+        B(cxT, y, czT, cw, seg, cd)
+        if (s === 0) dressBase(cxT, czT, cw, cd, seg)
+        y += seg
+        rem -= seg
+        if (s < n - 1) {
+          const shrink = range(rng, 0.12, 0.22)
+          if (alongXT) {
+            const nd = Math.max(8, cd * (1 - shrink))
+            czT -= dir * (cd - nd) / 2
+            cd = nd
+          } else {
+            const nw = Math.max(8, cw * (1 - shrink))
+            cxT -= dir * (cw - nw) / 2
+            cw = nw
+          }
+        }
+      }
+      return
+    }
+
+    if (form === 'court') {
+      // 中庭：三面或四面围合，中间留院
+      const thick = Math.min(w0, d0) * range(rng, 0.22, 0.3)
+      const innerW = w0 - thick * 2
+      const innerD = d0 - thick * 2
+      if (innerW >= 8 && innerD >= 8) {
+        const openU = rng() < 0.5
+        const openSide = (rng() * 4) | 0
+        const hWing = h * range(rng, 0.75, 1)
+        const bars = [
+          { ok: !(openU && openSide === 0), x: bx, z: bz + d0 / 2 - thick / 2, w: w0, d: thick, hh: h },
+          { ok: !(openU && openSide === 1), x: bx, z: bz - d0 / 2 + thick / 2, w: w0, d: thick, hh: hWing },
+          { ok: !(openU && openSide === 2), x: bx + w0 / 2 - thick / 2, z: bz, w: thick, d: d0 - thick * 2, hh: hWing },
+          { ok: !(openU && openSide === 3), x: bx - w0 / 2 + thick / 2, z: bz, w: thick, d: d0 - thick * 2, hh: h },
+        ]
+        let dressed = false
+        for (const bar of bars) {
+          if (!bar.ok) continue
+          B(bar.x, ground, bar.z, bar.w, bar.hh, bar.d)
+          if (!dressed) { dressBase(bar.x, bar.z, bar.w, bar.d, bar.hh); dressed = true }
+        }
+        return
+      }
+    }
+
+    if (form === 'vcut') {
+      // 下段整体，上段两侧分叉，中间留出切口
+      const midH = h * range(rng, 0.35, 0.52)
+      const alongXV = w0 >= d0
+      B(bx, ground, bz, w0, midH, d0)
+      dressBase(bx, bz, w0, d0, midH)
+      const topH = h - midH
+      // 两支上段各自也守高宽比：太细就加粗（最多到半边）
+      const wing = Math.min((alongXV ? w0 : d0) * 0.46, Math.max((alongXV ? w0 : d0) * range(rng, 0.32, 0.4), topH / 3.4))
+      const hB = topH * range(rng, 0.78, 1)
+      if (alongXV) {
+        B(bx - w0 / 2 + wing / 2, ground + midH, bz, wing, topH, d0 * 0.92)
+        B(bx + w0 / 2 - wing / 2, ground + midH, bz, wing, hB, d0 * 0.92)
+      } else {
+        B(bx, ground + midH, bz - d0 / 2 + wing / 2, w0 * 0.92, topH, wing)
+        B(bx, ground + midH, bz + d0 / 2 - wing / 2, w0 * 0.92, hB, wing)
+      }
+      return
+    }
+
+    if (form === 'blade') {
+      // 一片薄高墙 + 一翼较低的横向体量
+      const alongXB = rng() < 0.5
+      // 刀片墙不能薄成纸：厚度至少是高度的 1/3.2（以前 0.22~0.34 倍短边，侧面看是一根细针）
+      const t = Math.min(Math.min(w0, d0), Math.max(Math.min(w0, d0) * range(rng, 0.42, 0.56), h / 3.2))
+      const wingH = h * range(rng, 0.35, 0.55)
+      if (alongXB) {
+        B(bx, ground, bz, t, h, d0)
+        dressBase(bx, bz, t, d0, h)
+        B(bx, ground, bz, w0, wingH, d0 * range(rng, 0.4, 0.55))
+      } else {
+        B(bx, ground, bz, w0, h, t)
+        dressBase(bx, bz, w0, t, h)
+        B(bx, ground, bz, w0 * range(rng, 0.4, 0.55), wingH, d0)
+      }
+      return
+    }
+
+    if (form === 'arcade') {
+      // 骑楼：底层内收出廊，柱子撑住上层出挑
+      const lift = range(rng, 6.2, 7.2)
+      const inset = range(rng, 2.6, 3.8)
+      if (h > lift + 8 && Math.min(w0, d0) > inset * 2 + 8) {
+        const gw = w0 - inset * 2
+        const gd = d0 - inset * 2
+        B(bx, ground, bz, gw, lift, gd)
+        dressBase(bx, bz, gw, gd, lift)
+        const nxA = Math.max(3, Math.round(w0 / 6))
+        const nzA = Math.max(3, Math.round(d0 / 6))
+        for (let i = 0; i <= nxA; i++) {
+          for (let j = 0; j <= nzA; j++) {
+            if (i !== 0 && i !== nxA && j !== 0 && j !== nzA) continue
+            const px = bx - w0 / 2 + 0.45 + (w0 - 0.9) * (i / nxA)
+            const pz = bz - d0 / 2 + 0.45 + (d0 - 0.9) * (j / nzA)
+            push(pillar, px, ground + lift / 2, pz, 0.7, lift, 0.7)
+            addSolid(px, pz, 0.7, 0.7, ground + lift, ground)
+          }
+        }
+        B(bx, ground + lift, bz, w0, h - lift, d0)
+        return
+      }
+    }
+
+    if (form === 'wedge') {
+      // 楔形：沿一边高度递减，轮廓是斜面而不是方盒子
+      const n = 5 + ((rng() * 4) | 0)
+      const alongXW = rng() < 0.5
+      const dir = rng() < 0.5 ? 1 : -1
+      const minK = range(rng, 0.28, 0.48)
+      const L = alongXW ? w0 : d0
+      const sl = L / n
+      let dressed = false
+      for (let i = 0; i < n; i++) {
+        const hh = h * (1 - (1 - minK) * (i / Math.max(1, n - 1)))
+        if (hh < 4) continue
+        if (alongXW) {
+          const x = bx + dir * (-w0 / 2 + sl * (i + 0.5))
+          B(x, ground, bz, sl + 0.03, hh, d0)
+          if (!dressed) { dressBase(x, bz, sl + 0.03, d0, hh); dressed = true }
+        } else {
+          const z = bz + dir * (-d0 / 2 + sl * (i + 0.5))
+          B(bx, ground, z, w0, hh, sl + 0.03)
+          if (!dressed) { dressBase(bx, z, w0, sl + 0.03, hh); dressed = true }
+        }
+      }
+      return
+    }
+
+    if (form === 'cantilever') {
+      // 悬挑：底层收进去，上层整体出挑
+      // t41：以前底座只有 58~75%、底层占 28~42% 楼高 → 上面大半栋楼悬在一个巨大的空洞上。
+      // 改成：底座 ≥ 78%，单边出挑 ≤ 7m，架空层 ≤ 22m（像真实的转换层悬挑）
+      const midH = Math.min(22, h * range(rng, 0.16, 0.26))
+      const bw = Math.max(w0 * range(rng, 0.78, 0.88), w0 - 14)
+      const bd = Math.max(d0 * range(rng, 0.78, 0.88), d0 - 14)
+      const ox = Math.min(7, (w0 - bw) / 2) * range(rng, 0.4, 1) * (rng() < 0.5 ? 1 : -1)
+      const oz = Math.min(7, (d0 - bd) / 2) * range(rng, 0.4, 1) * (rng() < 0.5 ? 1 : -1)
+      B(bx + ox, ground, bz + oz, bw, midH, bd)
+      dressBase(bx + ox, bz + oz, bw, bd, midH)
+      B(bx, ground + midH, bz, w0, h - midH, d0)
+      return
+    }
+
+    // ───────── t32 新 Googie 形体（参考 googie/main.js 的轮廓，只取形，不取材质）─────────
+    // 共同约定：全部锁在 footprint 内；高度已按 AR 限过，细分支（腿/瓣/双塔）再各自按 AR 收高
+    const ARf = opts.maxAspect ?? maxAspect(kind, false)
+    const roofHex = roofOf(col, rng())
+    const R0 = Math.min(w0, d0) * 0.48
+
+    if (form === 'ellipse') {
+      // 椭圆截面：长短轴 1 : 0.62~0.78，上段收进一圈
+      const alongX = w0 >= d0
+      let rx = w0 * 0.47, rz = d0 * 0.47
+      if (Math.abs(w0 - d0) < Math.min(w0, d0) * 0.2) { if (alongX) rz *= range(rng, 0.62, 0.78); else rx *= range(rng, 0.62, 0.78) }
+      const hl = h * range(rng, 0.58, 0.72)
+      pushRound(col, bx, ground + hl / 2, bz, rx, rz, hl, 'cyl', roofHex)
+      pushRound(col, bx, ground + hl + (h - hl) / 2, bz, rx * 0.84, rz * 0.84, h - hl, 'cyl', roofHex)
+      dressRoundBase(bx, bz, rx, rz, hl)
+      return
+    }
+
+    if (form === 'hex') {
+      // 六边形棱柱：2~3 段，每段转 30° 并收 8%
+      const n = 2 + ((rng() * 2) | 0)
+      let y = ground, r = R0
+      for (let s = 0; s < n; s++) {
+        const seg = s === n - 1 ? ground + h - y : h * range(rng, 0.3, 0.42)
+        pushRound(col, bx, y + seg / 2, bz, r, r, seg, 'hex', roofHex, (s % 2) * Math.PI / 6)
+        if (s === 0) dressRoundBase(bx, bz, r, r, seg, 6)
+        y += seg
+        r *= 0.92
+      }
+      return
+    }
+
+    if (form === 'drum' || form === 'waist') {
+      // 鼓形膨胀筒（中段鼓出）/ 腰部内收双曲面（中段收细）：9 段圆柱按正弦改半径
+      const n = 9
+      const seg = h / n
+      for (let s = 0; s < n; s++) {
+        const t = (s + 0.5) / n
+        const k = form === 'drum' ? 0.74 + 0.26 * Math.sin(Math.PI * t) : 1 - 0.3 * Math.sin(Math.PI * t)
+        pushRound(col, bx, ground + seg * (s + 0.5), bz, R0 * k, R0 * k, seg + 0.02, 'cyl', s === n - 1 ? roofHex : null)
+        if (s === 0) dressRoundBase(bx, bz, R0 * k, R0 * k, seg)
+      }
+      return
+    }
+
+    if (form === 'bullet') {
+      // 子弹头：直筒身 + 抛物线收尖的顶（6 段），顶上一根细针
+      const body = h * range(rng, 0.66, 0.76)
+      pushRound(col, bx, ground + body / 2, bz, R0, R0, body, 'cyl', null)
+      dressRoundBase(bx, bz, R0, R0, body)
+      const tipH = h - body
+      const n = 6
+      for (let s = 0; s < n; s++) {
+        const t0 = s / n
+        const k = Math.sqrt(Math.max(0.04, 1 - t0 * t0 * 0.96))
+        pushRound(col, bx, ground + body + tipH * (s + 0.5) / n, bz, R0 * k, R0 * k, tipH / n + 0.02, 'cyl', s === n - 1 ? roofHex : null)
+      }
+      push(spireP, bx, ground + h + 6, bz, 0.7, 12, 0.7)
+      return
+    }
+
+    if (form === 'spiral') {
+      // 螺旋错层圆盘：中心圆筒 + 一层层错开转动的圆盘楼板
+      const core = R0 * 0.56
+      pushRound(col, bx, ground + h / 2, bz, core, core, h, 'cyl', roofHex)
+      dressRoundBase(bx, bz, core, core, h)
+      const stride = range(rng, 9, 12)
+      const e = R0 * 0.1
+      const dr = R0 * 0.88
+      const pool = shapePool(col, 'cyl', false)
+      const rp = shapePool(roofHex, 'cyl', true)
+      let i = 0
+      for (let y = ground + 7; y < ground + h - 6; y += stride, i++) {
+        const a = i * 0.95
+        const ox = Math.cos(a) * e, oz = Math.sin(a) * e
+        push(pool, bx + ox, y + 2, bz + oz, dr * 2, 4, dr * 2)
+        push(rp, bx + ox, y + 4.2, bz + oz, dr * 2.04, 0.4, dr * 2.04)
+        addSolid(bx + ox, bz + oz, dr * 2, dr * 2, y + 4.4, y)
+      }
+      return
+    }
+
+    if (form === 'ringcrown') {
+      // 顶部开洞环形塔冠：塔身 + 顶上一圈「回」字形框（中间镂空看得见天）
+      const sw = w0 * 0.84, sd = d0 * 0.84
+      const shaft = h * range(rng, 0.76, 0.84)
+      B(bx, ground, bz, sw, shaft, sd)
+      dressBase(bx, bz, sw, sd, shaft)
+      const ch = h - shaft
+      const t = Math.min(w0, d0) * 0.22
+      B(bx, ground + shaft, bz - d0 / 2 + t / 2, w0, ch, t)
+      B(bx, ground + shaft, bz + d0 / 2 - t / 2, w0, ch, t)
+      B(bx - w0 / 2 + t / 2, ground + shaft, bz, t, ch, d0 - 2 * t - 0.1)
+      B(bx + w0 / 2 - t / 2, ground + shaft, bz, t, ch, d0 - 2 * t - 0.1)
+      return
+    }
+
+    if (form === 'gate') {
+      // 门洞塔：两条腿 + 上部整体横跨（中间是一个巨大的门洞）
+      const alongX = w0 >= d0
+      const L = alongX ? w0 : d0
+      const D = alongX ? d0 : w0
+      // t41：门洞宽 ≤ 30% 面宽且 ≤ 24m、洞高 ≤ 32m，腿至少 35% 面宽（以前洞可占 40% 宽、近 60% 楼高 → 细腿托巨型上部）
+      const t = Math.max(L * 0.35, (L - Math.min(L * 0.3, 24)) / 2, Math.min(L * 0.4, D * 0.6))
+      const legH = Math.min(32, h * range(rng, 0.2, 0.32), Math.min(t, D) * ARf)
+      const top = h - legH
+      if (top > 12) {
+        for (const sg of [-1, 1]) {
+          const c = sg * (L / 2 - t / 2)
+          if (alongX) { B(bx + c, ground, bz, t, legH, D); dressBase(bx + c, bz, t, D, legH) }
+          else { B(bx, ground, bz + c, D, legH, t); dressBase(bx, bz + c, D, t, legH) }
+        }
+        B(bx, ground + legH, bz, w0, top, d0)
+        return
+      }
+    }
+
+    if (form === 'vtwin') {
+      // V 形双塔：底部挨着，往上逐段向两侧斜出
+      const alongX = w0 >= d0
+      const L = alongX ? w0 : d0
+      const D = (alongX ? d0 : w0) * 0.86
+      const tw = Math.min(L * 0.46, Math.max(L * 0.34, h / (ARf * 1.3)))
+      const hT = Math.min(h, Math.min(tw, D) * ARf * 1.3)
+      const n = 7
+      const a0 = tw / 2 + 0.6, a1 = L / 2 - tw / 2
+      for (const sg of [-1, 1]) {
+        const hh = hT * (sg < 0 ? 1 : range(rng, 0.86, 0.96))
+        for (let s = 0; s < n; s++) {
+          const c = sg * (a0 + (a1 - a0) * (s / (n - 1)))
+          const seg = hh / n
+          if (alongX) B(bx + c, ground + seg * s, bz, tw, seg + 0.02, D)
+          else B(bx, ground + seg * s, bz + c, D, seg + 0.02, tw)
+          if (s === 0) { if (alongX) dressBase(bx + c, bz, tw, D, seg); else dressBase(bx, bz + c, D, tw, seg) }
+        }
+      }
+      return
+    }
+
+    if (form === 'trefoil') {
+      // 三瓣花瓣：三支圆筒绕中心 120° 分布、高低错落
+      const r = Math.min(w0, d0) * 0.225
+      const hk = Math.min(h, r * 2 * ARf * 1.5)
+      const a0 = rng() * Math.PI * 2
+      for (let i = 0; i < 3; i++) {
+        const a = a0 + i * Math.PI * 2 / 3
+        const x = bx + Math.cos(a) * r * 1.18, z = bz + Math.sin(a) * r * 1.18
+        const hh = hk * [1, 0.88, 0.76][i]
+        pushRound(col, x, ground + hh / 2, z, r, r, hh, 'cyl', roofHex)
+        if (i === 0) dressRoundBase(x, z, r, r, hh)
+      }
+      return
+    }
+
+    if (form === 'lean') {
+      // 倾斜塔：8 段逐段向一侧平移，整体像一座斜塔
+      const alongX = rng() < 0.5
+      const dir = rng() < 0.5 ? 1 : -1
+      const k = range(rng, 0.66, 0.76)
+      const sw = alongX ? w0 * k : w0 * 0.9
+      const sd = alongX ? d0 * 0.9 : d0 * k
+      const shift = alongX ? w0 - sw : d0 - sd
+      const n = 8
+      for (let s = 0; s < n; s++) {
+        const o = dir * (-shift / 2 + shift * (s / (n - 1)))
+        const seg = h / n
+        B(bx + (alongX ? o : 0), ground + seg * s, bz + (alongX ? 0 : o), sw, seg + 0.02, sd)
+        if (s === 0) dressBase(bx + (alongX ? o : 0), bz + (alongX ? 0 : o), sw, sd, seg)
+      }
+      return
+    }
+
+    if (form === 'blocks') {
+      // 积木错位堆叠：一块横一块竖，交替错位
+      const n = 4 + ((rng() * 3) | 0)
+      let y = ground
+      for (let s = 0; s < n; s++) {
+        const seg = h / n
+        const lx = s % 2 === 0
+        const bw2 = lx ? w0 : w0 * range(rng, 0.5, 0.62)
+        const bd2 = lx ? d0 * range(rng, 0.5, 0.62) : d0
+        const ox = lx ? 0 : range(rng, -1, 1) * (w0 - bw2) / 2
+        const oz = lx ? range(rng, -1, 1) * (d0 - bd2) / 2 : 0
+        B(bx + ox, y, bz + oz, bw2, seg + 0.02, bd2)
+        if (s === 0) dressBase(bx + ox, bz + oz, bw2, bd2, seg)
+        y += seg
+      }
+      return
+    }
+
+    if (form === 'greenterr') {
+      // 绿植退台：每一级退台露台上铺草、种一排灌木/小树
+      const n = 3 + ((rng() * 2) | 0)
+      const alongXT = w0 < d0
+      const dir = rng() < 0.5 ? 1 : -1
+      let y = ground, cw = w0, cd = d0, cxT = bx, czT = bz, rem = h
+      for (let s = 0; s < n; s++) {
+        const seg = s === n - 1 ? rem : rem * range(rng, 0.24, 0.36)
+        B(cxT, y, czT, cw, seg, cd)
+        if (s === 0) dressBase(cxT, czT, cw, cd, seg)
+        y += seg
+        rem -= seg
+        if (s < n - 1) {
+          const rt = Math.max(1.6, Math.min(3.2, Math.min(cw, cd) * 0.04)) + 0.2
+          push(pickPool(roofGreenPools), cxT, y + rt + 0.2, czT, cw * 0.96, 0.4, cd * 0.96)
+          const shrink = range(rng, 0.16, 0.24)
+          if (alongXT) {
+            const nd = Math.max(10, cd * (1 - shrink)); const lz = czT + dir * (cd / 2 - (cd - nd) / 2)
+            for (let x = cxT - cw / 2 + 2; x < cxT + cw / 2 - 1; x += 3.2) push(hedge, x, y + rt + 0.9, lz + dir * (cd - nd) * 0.2, 2.2, 1.0, 1.4)
+            czT -= dir * (cd - nd) / 2; cd = nd
+          } else {
+            const nw = Math.max(10, cw * (1 - shrink)); const lx = cxT + dir * (cw / 2 - (cw - nw) / 2)
+            for (let z = czT - cd / 2 + 2; z < czT + cd / 2 - 1; z += 3.2) push(hedge, lx + dir * (cw - nw) * 0.2, y + rt + 0.9, z, 1.4, 1.0, 2.2)
+            cxT -= dir * (cw - nw) / 2; cw = nw
+          }
+        }
+      }
       return
     }
 
@@ -2505,6 +3502,100 @@ export function buildBuildings(plan, seed = 77) {
    * 沿一边排屋。
    * opts.sparse — 大缝、不铺满；opts.fill — 0~1 只铺这段比例；opts.setback — 退道路
    */
+  function placeRowMass(cx, cz, bw, bd, h, col, style, open, alongX, towardPositive) {
+    const s = towardPositive ? -1 : 1
+    const rf = rng()
+    let form = 'box'
+    if (curDistrict === 'old') form = rf < 0.4 ? 'gable' : rf < 0.7 ? 'arcade' : rf < 0.88 ? 'terrace' : 'box'
+    else if (h < 28) form = rf < 0.38 ? 'arcade' : rf < 0.62 ? 'terrace' : rf < 0.8 ? 'gable' : 'box'
+    else if (h < 80) form = rf < 0.4 ? 'terrace' : rf < 0.62 ? 'arcade' : rf < 0.8 ? 'step' : 'box'
+    else form = rf < 0.5 ? 'terrace' : rf < 0.75 ? 'step' : 'box'
+
+    if (form === 'arcade' && h > 12 && Math.min(bw, bd) > 10) {
+      const lift = range(rng, 6.2, 7.2)
+      const inset = range(rng, 2.4, 3.4)
+      let gw = bw, gd = bd, gcx = cx, gcz = cz
+      if (alongX) { gd -= inset; gcz -= s * inset / 2 }
+      else { gw -= inset; gcx -= s * inset / 2 }
+      if (gw >= 6 && gd >= 6) {
+        pushBuilding(col, style, gcx, SURFACE + lift / 2, gcz, gw, lift, gd)
+        dressNear(gcx, SURFACE, gcz, gw, Math.max(7.2, lift), gd, style, { shop: true, row: true, open })
+        const uh = h - lift
+        if (uh > 5) {
+          pushBuilding(col, style, cx, SURFACE + lift + uh / 2, cz, bw, uh, bd)
+          if (uh >= 14) dressFacade(cx, SURFACE + lift, cz, bw, uh, bd, style)
+        }
+        const sp = 5.2
+        if (alongX) {
+          const zc = cz + s * (bd / 2 - 0.38)
+          for (let x = cx - bw / 2 + 1.1; x <= cx + bw / 2 - 1.05; x += sp) {
+            push(pillar, x, SURFACE + lift / 2, zc, 0.62, lift, 0.62)
+            addSolid(x, zc, 0.62, 0.62, SURFACE + lift)
+          }
+        } else {
+          const xc = cx + s * (bw / 2 - 0.38)
+          for (let z = cz - bd / 2 + 1.1; z <= cz + bd / 2 - 1.05; z += sp) {
+            push(pillar, xc, SURFACE + lift / 2, z, 0.62, lift, 0.62)
+            addSolid(xc, z, 0.62, 0.62, SURFACE + lift)
+          }
+        }
+        return
+      }
+    }
+
+    if (form === 'terrace' && h > 16) {
+      const lowH = Math.max(10, Math.min(h * range(rng, 0.42, 0.58), h - 6))
+      pushBuilding(col, style, cx, SURFACE + lowH / 2, cz, bw, lowH, bd)
+      dressNear(cx, SURFACE, cz, bw, lowH, bd, style, { shop: true, row: true, open })
+      const k = range(rng, 0.62, 0.8)
+      let uw = bw, ud = bd, ux = cx, uz = cz
+      if (alongX) { ud = bd * k; uz = cz - s * (bd - ud) / 2 }
+      else { uw = bw * k; ux = cx - s * (bw - uw) / 2 }
+      const uh = h - lowH
+      if (uh > 5 && uw > 6 && ud > 6) {
+        pushBuilding(col, style, ux, SURFACE + lowH + uh / 2, uz, uw, uh, ud)
+        if (uh >= 14) dressFacade(ux, SURFACE + lowH, uz, uw, uh, ud, style)
+      }
+      return
+    }
+
+    if (form === 'step' && h > 24) {
+      let y = SURFACE, rem = h, cw = bw, cd = bd, ccx = cx, ccz = cz
+      for (let i = 0; i < 3; i++) {
+        const seg = i === 2 ? rem : rem * range(rng, 0.28, 0.4)
+        pushBuilding(col, style, ccx, y + seg / 2, ccz, cw, seg, cd)
+        if (i === 0) dressNear(ccx, SURFACE, ccz, cw, Math.max(7.2, seg), cd, style, { shop: true, row: true, open })
+        else if (seg >= 14) dressFacade(ccx, y, ccz, cw, seg, cd, style)
+        y += seg
+        rem -= seg
+        if (i < 2) {
+          const shrink = range(rng, 0.12, 0.2)
+          if (alongX) {
+            const nd = Math.max(8, cd * (1 - shrink))
+            ccz += (-s) * (cd - nd) / 2
+            cd = nd
+          } else {
+            const nw = Math.max(8, cw * (1 - shrink))
+            ccx += (-s) * (cw - nw) / 2
+            cw = nw
+          }
+        }
+      }
+      return
+    }
+
+    if (form === 'gable') {
+      pushBuilding(col, style, cx, SURFACE + h / 2, cz, bw, h, bd)
+      dressNear(cx, SURFACE, cz, bw, h, bd, style, { shop: true, row: true, open })
+      const gi = curDistrict === 'old' ? 0 : 3
+      push(gablePools[gi], cx, SURFACE + h + 1.7, cz, bw * 1.06, 3.4, bd * 1.06)
+      return
+    }
+
+    pushBuilding(col, style, cx, SURFACE + h / 2, cz, bw, h, bd)
+    dressNear(cx, SURFACE, cz, bw, h, bd, style, { shop: true, row: true, open })
+  }
+
   function placeRow(alongX, x0, z0, length, depth, towardPositive, kind, opts = {}) {
     curGrp++
     const sparse = !!opts.sparse
@@ -2521,13 +3612,13 @@ export function buildBuildings(plan, seed = 77) {
         : (rng() < 0.14 ? range(rng, 12, 16) : range(rng, 0.2, 0.5))
       let h =
         kind === 'shop' ? range(rng, 12, 24) :
-        kind === 'low' ? range(rng, 28, 55) :
+        kind === 'low' ? range(rng, 8, 20) :
         kind === 'waterfront' ? range(rng, 40, 90) :
-        kind === 'mid' ? range(rng, 45, 100) :
+        kind === 'mid' ? range(rng, 16, 34) :
         kind === 'high' || kind === 'core' || kind === 'wallside' ? range(rng, 70, 160) :
         range(rng, 40, 90)
       // 排屋里也掺真高楼，打断一排矮盒子
-      if (kind !== 'shop' && rng() < 0.16) h = range(rng, 140, 280)
+      if ((kind === 'high' || kind === 'core' || kind === 'wallside' || kind === 'waterfront') && rng() < 0.16) h = range(rng, 140, 280)
       // 每栋单独成组：高楼之间按采光间距退让（以前整排一组，塔楼可以贴着建）
       if (h > 58) curGrp++
       // 整排高楼不再用 podium（大玻璃=像落地窗住宅）；podium 只给 26m 以下的商业排屋
@@ -2541,13 +3632,11 @@ export function buildBuildings(plan, seed = 77) {
       if (alongX) {
         const cx = x0 + cursor + seg / 2
         const cz = towardPositive ? z0 + setback + dUse / 2 : z0 - setback - dUse / 2
-        pushBuilding(col, style, cx, SURFACE + h / 2, cz, seg * 0.98, h, dUse * 0.92)
-        dressNear(cx, SURFACE, cz, seg * 0.98, h, dUse * 0.92, style, { shop: true, row: true, open })
+        placeRowMass(cx, cz, seg * 0.98, dUse * 0.92, h, col, style, open, true, towardPositive)
       } else {
         const cz = z0 + cursor + seg / 2
         const cx = towardPositive ? x0 + setback + dUse / 2 : x0 - setback - dUse / 2
-        pushBuilding(col, style, cx, SURFACE + h / 2, cz, dUse * 0.92, h, seg * 0.98)
-        dressNear(cx, SURFACE, cz, dUse * 0.92, h, seg * 0.98, style, { shop: true, row: true, open })
+        placeRowMass(cx, cz, dUse * 0.92, seg * 0.98, h, col, style, open, false, towardPositive)
       }
       cursor += seg + gap
     }
@@ -2586,9 +3675,9 @@ export function buildBuildings(plan, seed = 77) {
     const cz = (z0 + z1) / 2
 
     let streetH =
-      kind === 'shop' ? range(rng, 16, 28) :
-      kind === 'low' ? range(rng, 22, 40) :
-      kind === 'mid' ? range(rng, 28, 55) :
+      kind === 'shop' ? range(rng, 10, 20) :
+      kind === 'low' ? range(rng, 9, 20) :
+      kind === 'mid' ? range(rng, 16, 30) :
       kind === 'core' || kind === 'high' ? range(rng, 24, 42) :
       range(rng, 22, 48)
 
@@ -2602,9 +3691,420 @@ export function buildBuildings(plan, seed = 77) {
     // 默认四面临街；fillBlock 会传入分户墙关闭标志
     const open = opts.open || { xn: true, xp: true, zn: true, zp: true }
 
-    // 街墙：偶发 U/L 院落，打断满铺方盒子
+    // t32 低层判定（不改 plan 的地块类型，免得设施/商场/内部道路跟着变）：
+    // shop/low 地皮全部、mid ~80%；CBD(|x|<1100,|z|<700) 和超高簇以外，普通 high ~55%、core ~45%、沿墙/沿河 ~45%，
+    // 跨格合并的 mega 地块保留塔楼。→ 普通街坊大半是 2~8 层
+    const inCBD = Math.abs(cx) < 1100 && Math.abs(cz) < 700
+    const bigLot = !!(block?.mega || (block?.span ?? 1) > 1)
+    const lowRise = !nearSpike(cx, cz) && (
+      kind === 'shop' || kind === 'low' ||
+      (kind === 'mid' && rng() < (opts.forceTower ? 0.5 : 0.8)) ||
+      (!inCBD && !bigLot && (
+        (kind === 'high' && rng() < (opts.forceTower ? 0.35 : 0.55)) ||
+        (kind === 'core' && rng() < (opts.forceTower ? 0.28 : 0.45)) ||
+        ((kind === 'wallside' || kind === 'waterfront') && rng() < 0.45)))
+    )
+    // 绝大多数地皮从地面直接起 Googie 轮廓；放不下就缩小足迹再试，避免退回方盒子
+    const wantForm = !lowRise && (opts.forceTower || (
+      kind === 'core' || kind === 'high' ? rng() < 0.94 :
+      kind === 'wallside' || kind === 'waterfront' ? rng() < 0.88 :
+      kind === 'mid' ? rng() < 0.86 :
+      kind === 'shop' ? rng() < 0.74 :
+      rng() < 0.82
+    ))
+    if (wantForm) {
+      const tryForm = (tw, td) => {
+        if (Math.min(tw, td) < 12 || !canPlaceRect(cx, cz, tw, td, 8)) return false
+        registerTower(cx, cz, tw, td)
+        // t32：mid 地皮按 mid 起（以前映射成 high → 满城 120m+）；低层地皮的形体也限在 8~14 层
+        const towerKind = kind === 'shop' ? 'mid' : kind
+        const baseH = heightFor(towerKind, rng, block)
+        const inSpike = nearSpike(cx, cz)
+        const lowKind = kind === 'shop' || kind === 'low' || kind === 'mid'
+        let shaftH = inSpike
+          ? baseH * range(rng, 0.95, 1.2)
+          : lowKind ? baseH * range(rng, 1.0, 1.25) : Math.min(baseH, range(rng, 120, 260)) * range(rng, 0.85, 1.05)
+        if (inSpike && kind === 'core' && rng() < 0.55) shaftH = Math.max(shaftH, range(rng, 520, 700))
+        else if (inSpike && kind === 'high' && rng() < 0.35) shaftH = Math.max(shaftH, range(rng, 420, 580))
+        // 高宽比按地皮原本的用途限（mid 地皮起的塔不按 high 放到 10:1）；超高簇内才放宽
+        const AR = maxAspect(kind, inSpike)
+        if (shaftH > Math.min(tw, td) * AR) shaftH = Math.min(tw, td) * AR * range(rng, 0.85, 1)
+        const hUse = kind === 'shop' ? Math.min(range(rng, 14, 30), Math.min(tw, td) * 2.2) : lowKind ? Math.min(shaftH, Math.min(tw, td) * AR) : Math.max(Math.min(streetH + 10, Math.min(tw, td) * AR), shaftH)
+        placeTower(towerKind, cx, cz, tw, td, block, {
+          maxAspect: AR,
+          skipPodium: true,
+          nyc: true,
+          googie: true,
+          ...(baseStyle !== 'podium' ? { style: baseStyle, col: baseCol } : {}),
+          baseY: SURFACE,
+          height: hUse,
+        })
+        return true
+      }
+      const margin = Math.min(5, Math.min(w, d) * 0.08)
+      const tw0 = Math.max(14, w - margin * 2)
+      const td0 = Math.max(14, d - margin * 2)
+      if (tryForm(tw0, td0) || tryForm(tw0 * 0.82, td0 * 0.82) || tryForm(Math.max(14, tw0 * 0.64), Math.max(14, td0 * 0.64))) return
+    }
+
+    // 街墙：分段开间、骑楼、退台、院落（没走上形体的地皮）
+    const wantTower = opts.forceTower || (
+      kind === 'core' || kind === 'high' ? rng() < 0.42 :
+      kind === 'wallside' || kind === 'waterfront' ? rng() < 0.28 :
+      kind === 'mid' ? rng() < 0.18 :
+      kind === 'shop' ? rng() < 0.08 :
+      rng() < 0.1
+    )
+    let wallTop = streetH
+    const frontAlongX = !!(open.zn || open.zp)
+    const front = frontAlongX ? w : d
     const streetRoll = rng()
-    if (streetRoll < 0.35 && Math.min(w, d) > 28 && kind !== 'shop') {
+
+    const putCol = (px, pz, lift) => {
+      push(pillar, px, SURFACE + lift / 2, pz, 0.62, lift, 0.62)
+      addSolid(px, pz, 0.62, 0.62, SURFACE + lift)
+    }
+    const arcadeCols = (bcx, bcz, bw, bd, lift, bayOpen) => {
+      const sp = 5.4
+      if (bayOpen.zn) {
+        const zc = bcz - bd / 2 + 0.38
+        for (let x = bcx - bw / 2 + 1.1; x <= bcx + bw / 2 - 1.05; x += sp) putCol(x, zc, lift)
+      }
+      if (bayOpen.zp) {
+        const zc = bcz + bd / 2 - 0.38
+        for (let x = bcx - bw / 2 + 1.1; x <= bcx + bw / 2 - 1.05; x += sp) putCol(x, zc, lift)
+      }
+      if (bayOpen.xn) {
+        const xc = bcx - bw / 2 + 0.38
+        for (let z = bcz - bd / 2 + 1.1; z <= bcz + bd / 2 - 1.05; z += sp) putCol(xc, z, lift)
+      }
+      if (bayOpen.xp) {
+        const xc = bcx + bw / 2 - 0.38
+        for (let z = bcz - bd / 2 + 1.1; z <= bcz + bd / 2 - 1.05; z += sp) putCol(xc, z, lift)
+      }
+    }
+    const putArcade = (bcx, bcz, bw, bd, bh, st, col, bayOpen) => {
+      const lift = Math.min(range(rng, 6.2, 7.2), Math.max(6.2, bh * 0.42))
+      const inset = range(rng, 2.5, 3.4)
+      let gw = bw, gd = bd, gcx = bcx, gcz = bcz
+      if (bayOpen.xn) { gw -= inset; gcx += inset / 2 }
+      if (bayOpen.xp) { gw -= inset; gcx -= inset / 2 }
+      if (bayOpen.zn) { gd -= inset; gcz += inset / 2 }
+      if (bayOpen.zp) { gd -= inset; gcz -= inset / 2 }
+      if (gw < 6) { gw = bw; gcx = bcx }
+      if (gd < 6) { gd = bd; gcz = bcz }
+      pushBuilding(col, st, gcx, SURFACE + lift / 2, gcz, gw, lift, gd, 0)
+      dressNear(gcx, SURFACE, gcz, gw, Math.max(7.2, lift), gd, st, { shop: true, open: bayOpen })
+      if (bh > lift + 5) {
+        const uh = bh - lift
+        pushBuilding(col, st, bcx, SURFACE + lift + uh / 2, bcz, bw * 0.99, uh, bd * 0.97, 0)
+        if (uh >= 14) dressFacade(bcx, SURFACE + lift, bcz, bw * 0.99, uh, bd * 0.97, st)
+      }
+      arcadeCols(bcx, bcz, bw, bd, lift, bayOpen)
+    }
+    const putTerrace = (bcx, bcz, bw, bd, bh, st, col, bayOpen) => {
+      const lowH = Math.max(10, Math.min(bh * range(rng, 0.42, 0.58), bh - 6))
+      pushBuilding(col, st, bcx, SURFACE + lowH / 2, bcz, bw * 0.99, lowH, bd * 0.97, 0)
+      dressNear(bcx, SURFACE, bcz, bw * 0.99, lowH, bd * 0.97, st, { shop: true, open: bayOpen })
+      const k = range(rng, 0.62, 0.8)
+      let uw = bw * 0.99, ud = bd * 0.97, ux = bcx, uz = bcz
+      if (bayOpen.zp && !bayOpen.zn) { const nd = ud * k; uz -= (ud - nd) / 2; ud = nd }
+      else if (bayOpen.zn && !bayOpen.zp) { const nd = ud * k; uz += (ud - nd) / 2; ud = nd }
+      else if (bayOpen.xp && !bayOpen.xn) { const nw = uw * k; ux -= (uw - nw) / 2; uw = nw }
+      else if (bayOpen.xn && !bayOpen.xp) { const nw = uw * k; ux += (uw - nw) / 2; uw = nw }
+      const uh = bh - lowH
+      if (uh > 5 && uw > 6 && ud > 6) {
+        pushBuilding(col, st, ux, SURFACE + lowH + uh / 2, uz, uw, uh, ud, 0)
+        if (uh >= 14) dressFacade(ux, SURFACE + lowH, uz, uw, uh, ud, st)
+      }
+    }
+    const putGable = (bcx, bcz, bw, bd, bh, st, col, bayOpen) => {
+      pushBuilding(col, st, bcx, SURFACE + bh / 2, bcz, bw * 0.99, bh, bd * 0.97, 0)
+      dressNear(bcx, SURFACE, bcz, bw * 0.99, bh, bd * 0.97, st, { shop: true, open: bayOpen })
+      const gi = curDistrict === 'old' ? 0 : 3
+      push(gablePools[gi], bcx, SURFACE + bh + 1.7, bcz, bw * 1.06, 3.4, bd * 1.06)
+    }
+    const putBox = (bcx, bcz, bw, bd, bh, st, col, bayOpen, yaw = 0) => {
+      pushBuilding(col, st, bcx, SURFACE + bh / 2, bcz, bw * 0.99, bh, bd * 0.97, yaw)
+      dressNear(bcx, SURFACE, bcz, bw * 0.99, bh, bd * 0.97, st, { shop: true, open: bayOpen })
+    }
+    const placeBay = (bcx, bcz, bw, bd, bh, st, col, bayOpen, form) => {
+      if (form === 'arcade') putArcade(bcx, bcz, bw, bd, bh, st, col, bayOpen)
+      else if (form === 'terrace') putTerrace(bcx, bcz, bw, bd, bh, st, col, bayOpen)
+      else if (form === 'gable') putGable(bcx, bcz, bw, bd, bh, st, col, bayOpen)
+      else putBox(bcx, bcz, bw, bd, bh, st, col, bayOpen)
+    }
+    const pickBayForm = (bh) => {
+      const rf = rng()
+      if (!wantTower && bh < 36 && rf < 0.35) return 'arcade'
+      if (!wantTower && rf < 0.62) return 'terrace'
+      if (!wantTower && (curDistrict === 'old' || kind === 'low' || kind === 'shop') && bh < 32 && rf < 0.82) return 'gable'
+      return 'box'
+    }
+
+    // ───────── t32 低层街坊（2~8 层）：联排 / 半木构坡顶宅 / 架空别墅 / 老砖公寓 / 行列式板楼 / 铁皮仓库 / 拱廊市集 / 商业步行街 / 农贸市场 ─────────
+    if (lowRise) {
+      const V = frontAlongX ? d : w
+      const fEdge = frontAlongX ? (open.zn || !open.zp ? z0 : z1) : (open.xn || !open.xp ? x0 : x1)
+      const fDir = frontAlongX ? (fEdge === z0 ? 1 : -1) : (fEdge === x0 ? 1 : -1)
+      const uBase = frontAlongX ? x0 : z0
+      // (u 沿街, v 进深) → 世界矩形 [cx, cz, w, d]
+      const RR = (u0, u1, v0, v1) => frontAlongX
+        ? [uBase + (u0 + u1) / 2, fEdge + fDir * (v0 + v1) / 2, u1 - u0, v1 - v0]
+        : [fEdge + fDir * (v0 + v1) / 2, uBase + (u0 + u1) / 2, v1 - v0, u1 - u0]
+      const oF = (first, last) => frontAlongX
+        ? { zn: fDir > 0, zp: fDir < 0, xn: !!open.xn && first, xp: !!open.xp && last }
+        : { xn: fDir > 0, xp: fDir < 0, zn: !!open.zn && first, zp: !!open.zp && last }
+      // 沿街切段：每段 [u0, u1]，段间留 gap
+      const segs = (len, lo, hi, gap) => {
+        const out = []
+        let u = 0
+        while (len - u >= lo) {
+          let L = Math.min(len - u, range(rng, lo, hi))
+          if (len - u - L < lo) L = len - u
+          out.push([u, u + L])
+          u += L + gap
+        }
+        return out
+      }
+      const FL = 3.2
+      const lawnAt = (u0, u1, v0, v1) => { if (u1 - u0 > 3 && v1 - v0 > 3) { const r = RR(u0, u1, v0, v1); pad(lawn, r[0], r[1], r[2], r[3], 0.3, 0.3) } }
+      const paveAt = (u0, u1, v0, v1) => { if (u1 - u0 > 3 && v1 - v0 > 3) { const r = RR(u0, u1, v0, v1); pad(pave, r[0], r[1], r[2], r[3], 0.24, 0.24) } }
+      const treeAt = (u, v, s = 1) => { const r = RR(u - 0.5, u + 0.5, v - 0.5, v + 0.5); villaTree(r[0], r[1], s) }
+      const LR = kind === 'shop'
+        ? [['shops', 0.36], ['arcade', 0.2], ['market', 0.1], ['row', 0.14], ['brick', 0.2]]
+        : kind === 'low'
+          ? [['row', 0.24], ['timber', 0.18], ['villa', 0.14], ['brick', 0.16], ['shed', 0.14], ['shops', 0.14]]
+          : [['brick', 0.24], ['slab', 0.24], ['row', 0.12], ['shops', 0.14], ['shed', 0.1], ['arcade', 0.09], ['market', 0.04], ['villa', 0.03]]
+      let type = LR[LR.length - 1][0]
+      {
+        const tot = LR.reduce((a, x) => a + x[1], 0)
+        let acc = 0
+        const r = rng() * tot
+        for (const [t, wt] of LR) { acc += wt; if (r < acc) { type = t; break } }
+      }
+      if ((type === 'market' || type === 'shed') && (front < 26 || V < 22)) type = 'shops'
+      if (type === 'slab' && V < 16) type = 'brick'
+      if (type === 'villa' && (front < 22 || V < 20)) type = 'row'
+      if (type === 'timber' && (front < 14 || V < 14)) type = 'row'
+
+      if (type === 'row') {
+        // 白灰联排：6.5~9.5m 一户，2~3 层坡顶，后院草地
+        const n = Math.max(1, Math.floor(front / range(rng, 6.5, 9.5)))
+        const uw = front / n
+        const dep = Math.min(V * 0.9, range(rng, 11, 15))
+        const fl = 2 + (rng() < 0.45 ? 1 : 0)
+        const base = rng() < 0.7 ? pick(rng, WHITEWASH) : pick(rng, WALL)
+        const gi = (rng() * gablePools.length) | 0
+        const rowShops = rng() < 0.35
+        for (let i = 0; i < n; i++) {
+          const col = rng() < 0.22 ? pick(rng, rng() < 0.6 ? WHITEWASH : WALL) : base
+          const h = fl * FL + 0.8 + (rng() < 0.15 ? FL : 0)
+          const [bx, bz, bw, bd] = RR(i * uw + 0.12, (i + 1) * uw - 0.12, 0.8, 0.8 + dep)
+          withGable(gi, range(rng, 0.34, 0.44), () => pushBuilding(col, 'punch', bx, SURFACE + h / 2, bz, bw, h, bd, 0))
+          dressNear(bx, SURFACE, bz, bw, h, bd, 'punch', { open: rowShops ? oF(i === 0, i === n - 1) : { xn: false, xp: false, zn: false, zp: false } })
+          lawnAt(i * uw + 0.4, (i + 1) * uw - 0.4, dep + 1.6, V - 0.6)
+        }
+        if (V - dep > 10) for (let u = 4; u < front - 2; u += range(rng, 10, 16)) treeAt(u, dep + (V - dep) * 0.6, range(rng, 0.8, 1.1))
+        return
+      }
+      if (type === 'timber') {
+        // 半木构坡顶宅：奶油墙 + 深色木构线条 + 陡坡顶，独栋 1~3 栋，院子种树
+        lawnAt(0.4, front - 0.4, 0.4, V - 0.4)
+        for (const [u0, u1] of segs(front, 10, 15, range(rng, 4, 7))) {
+          const bw = u1 - u0
+          const dep = Math.min(V * 0.7, range(rng, 9, 13))
+          const v0 = range(rng, 2, Math.max(2.2, Math.min(6, V - dep - 2)))
+          const h = (rng() < 0.6 ? 2 : 3) * FL + 0.6
+          const col = pick(rng, WHITEWASH)
+          const [bx, bz, w2, d2] = RR(u0, u1, v0, v0 + dep)
+          withGable(rng() < 0.6 ? 0 : 4, range(rng, 0.5, 0.62), () => pushBuilding(col, 'punch', bx, SURFACE + h / 2, bz, w2, h, d2, 0))
+          dressNear(bx, SURFACE, bz, w2, h, d2, 'punch', { open: { xn: false, xp: false, zn: false, zp: false } })
+          // 立面木构：竖柱 + 层间横梁 + 一对斜撑（贴在临街面外 6cm）
+          const faceV = v0 - 0.06
+          for (let k = 0; k <= Math.round(bw / 2.4); k++) {
+            const u = u0 + 0.15 + (bw - 0.3) * (k / Math.max(1, Math.round(bw / 2.4)))
+            const r = RR(u - 0.09, u + 0.09, faceV - 0.06, faceV + 0.06)
+            push(timber, r[0], SURFACE + h / 2, r[1], r[2], h, r[3])
+          }
+          for (const y of [0.25, FL, h - 0.2]) {
+            const r = RR(u0, u1, faceV - 0.07, faceV + 0.07)
+            push(timber, r[0], SURFACE + y, r[1], r[2], 0.22, r[3])
+          }
+          treeAt(u0 + bw * range(rng, 0.2, 0.8), Math.min(V - 3, v0 + dep + 5), range(rng, 0.8, 1.15))
+        }
+        return
+      }
+      if (type === 'villa') {
+        // 现代主义别墅 / 架空：白色盒子坐在细柱上，底层玻璃门厅，院里一池水
+        lawnAt(0.4, front - 0.4, 0.4, V - 0.4)
+        const bw = Math.min(front * 0.7, range(rng, 14, 22))
+        const dep = Math.min(V * 0.55, range(rng, 10, 14))
+        const u0 = (front - bw) * range(rng, 0.2, 0.8)
+        const v0 = Math.min(V - dep - 2, range(rng, 4, 8))
+        const lift = range(rng, 3.0, 3.6)
+        const h = (rng() < 0.6 ? 2 : 1) * FL + 0.6
+        const col = rng() < 0.6 ? pick(rng, ['#f6f2ea', '#f4efe4', '#eef2ee']) : pick(rng, WALL_ENAMEL)
+        const [bx, bz, w2, d2] = RR(u0, u0 + bw, v0, v0 + dep)
+        const nx = Math.max(2, Math.round(w2 / 5)), nz = Math.max(2, Math.round(d2 / 5))
+        for (let i = 0; i <= nx; i++) for (let j = 0; j <= nz; j++) {
+          if (i !== 0 && i !== nx && j !== 0 && j !== nz) continue
+          const px = bx - w2 / 2 + 0.4 + (w2 - 0.8) * (i / nx)
+          const pz = bz - d2 / 2 + 0.4 + (d2 - 0.8) * (j / nz)
+          push(pillar, px, SURFACE + lift / 2, pz, 0.32, lift, 0.32)
+          addSolid(px, pz, 0.32, 0.32, SURFACE + lift, SURFACE)
+        }
+        pushBuilding(pick(rng, WALL_GLASS), 'curtain', bx, SURFACE + lift / 2, bz, w2 * 0.36, lift, d2 * 0.4, 0)
+        pushBuilding(col, 'ribbon', bx, SURFACE + lift + h / 2, bz, w2, h, d2, 0)
+        if (V - v0 - dep > 9) {
+          const r = RR(u0 + 1, u0 + Math.min(bw - 1, 10), v0 + dep + 2.5, v0 + dep + 7)
+          push(villaWater, r[0], SURFACE + 0.33, r[1], r[2], 0.08, r[3])
+          push(pave, r[0], SURFACE + 0.28, r[1], r[2] + 2, 0.06, r[3] + 2)
+        }
+        for (let k = 0; k < 3; k++) treeAt(range(rng, 2, front - 2), range(rng, 1.5, Math.max(2, v0 - 1)), range(rng, 0.7, 1.05))
+        return
+      }
+      if (type === 'brick') {
+        // 老式砖公寓：4~6 层，番茄红/赭红漆面 + 白檐口；底层一半是小铺
+        const sl = segs(front, 14, 26, rng() < 0.6 ? 0 : range(rng, 7, 9))
+        const fl = 4 + ((rng() * 3) | 0)
+        const base = rng() < 0.75 ? pick(rng, WALL_BRICK) : pick(rng, WALL_WARM)
+        const dep = Math.min(V * 0.92, range(rng, 13, 19))
+        const shop = rng() < 0.55
+        sl.forEach(([u0, u1], i) => {
+          const h = (fl + (rng() < 0.25 ? (rng() < 0.5 ? -1 : 1) : 0)) * 3.1 + 1.2
+          const col = rng() < 0.3 ? shadeHex(base, rng() < 0.5 ? -0.07 : 0.07) : base
+          const [bx, bz, bw, bd] = RR(u0 + 0.1, u1 - 0.1, 0.6, 0.6 + dep)
+          pushBuilding(col, 'punch', bx, SURFACE + h / 2, bz, bw, h, bd, 0)
+          dressNear(bx, SURFACE, bz, bw, h, bd, 'punch', { shop, open: oF(i === 0, i === sl.length - 1) })
+        })
+        if (V - dep > 8) paveAt(0.5, front - 0.5, dep + 1.4, V - 0.5)
+        return
+      }
+      if (type === 'slab') {
+        // 行列式板楼：6~8 层长条，前后两排之间一条绿带
+        const dep = range(rng, 11, 13.5)
+        const fl = 6 + ((rng() * 3) | 0)
+        const h = fl * 3.0 + 1.0
+        const col = pick(rng, rng() < 0.55 ? WALL : WALL_ENAMEL)
+        const st = rng() < 0.5 ? 'ribbon' : 'punch'
+        const L = Math.min(front - 2, Math.max(20, front * range(rng, 0.82, 0.96)))
+        const u0 = (front - L) / 2
+        const rows = V > dep * 2 + 18 ? 2 : 1
+        const gapV = rows === 2 ? Math.max(14, Math.min(h * 0.9, V - dep * 2 - 2)) : 0
+        for (let k = 0; k < rows; k++) {
+          const v0 = 1.2 + k * (dep + gapV)
+          const [bx, bz, bw, bd] = RR(u0, u0 + L, v0, v0 + dep)
+          pushBuilding(k ? shadeHex(col, 0.06) : col, st, bx, SURFACE + h / 2, bz, bw, h, bd, 0)
+          dressNear(bx, SURFACE, bz, bw, h, bd, st, { open: k === 0 && kind !== 'low' && rng() < 0.4 ? oF(true, true) : { xn: false, xp: false, zn: false, zp: false } })
+        }
+        if (rows === 2) {
+          lawnAt(u0, u0 + L, 1.2 + dep + 1.2, 1.2 + dep + gapV - 1.2)
+          for (let u = u0 + 5; u < u0 + L - 3; u += range(rng, 9, 14)) treeAt(u, 1.2 + dep + gapV / 2 + range(rng, -2, 2), range(rng, 0.9, 1.2))
+        } else lawnAt(u0, u0 + L, dep + 2.4, V - 0.6)
+        return
+      }
+      if (type === 'shed' || type === 'market') {
+        // 铁皮仓库（低坡顶 + 卷帘门 + 前场）/ 农贸市场（大跨度坡顶棚 + 沿街雨棚柱廊）
+        const market = type === 'market'
+        const L = front * range(rng, 0.84, 0.96)
+        const u0 = (front - L) / 2
+        const apron = market ? range(rng, 3, 5) : range(rng, 6, 10)
+        const dep = Math.min(V - apron - 1, market ? range(rng, 24, 40) : range(rng, 20, 34))
+        const h = market ? range(rng, 7.5, 9.5) : range(rng, 7, 11)
+        const col = market ? pick(rng, PODIUM) : pick(rng, rng() < 0.6 ? WALL_METAL : ['#3bb8ac', '#4a9ad8', '#e09a3c', '#d85a46'])
+        const [bx, bz, bw, bd] = RR(u0, u0 + L, apron, apron + dep)
+        withGable(market ? 1 : (rng() * gablePools.length) | 0, market ? 0.16 : 0.1, () => pushBuilding(col, market ? 'podium' : 'ribbon', bx, SURFACE + h / 2, bz, bw, h, bd, 0))
+        if (market) dressNear(bx, SURFACE, bz, bw, Math.max(7.2, h), bd, 'podium', { shop: true, open: oF(true, true) })
+        if (!market) {
+          paveAt(u0, u0 + L, 0.4, apron - 0.2)
+          // 卷帘门：临街面一排 4m 宽深色门洞
+          for (let u = u0 + 4; u < u0 + L - 4; u += range(rng, 8, 12)) {
+            const r = RR(u - 2, u + 2, apron - 0.12, apron + 0.02)
+            push(door, r[0], SURFACE + 2.3, r[1], r[2], 4.6, r[3])
+          }
+        } else {
+          // 沿街雨棚 + 细柱
+          const r = RR(u0, u0 + L, 0.4, apron)
+          push(canopy, r[0], SURFACE + 4.4, r[1], r[2], 0.3, r[3])
+          for (let u = u0 + 1; u <= u0 + L - 1; u += 6) {
+            const c = RR(u - 0.15, u + 0.15, 0.7, 1.0)
+            push(pillar, c[0], SURFACE + 2.2, c[1], 0.3, 4.4, 0.3)
+            addSolid(c[0], c[1], 0.3, 0.3, SURFACE + 4.4, SURFACE)
+          }
+        }
+        return
+      }
+      if (type === 'arcade') {
+        // 拱廊市集：2~3 层，底层退进的柱廊
+        const h = (2 + (rng() < 0.5 ? 1 : 0)) * 3.6 + 1.0
+        const col = pick(rng, rng() < 0.6 ? WALL : WALL_WARM)
+        const dep = Math.min(V * 0.94, range(rng, 14, 24))
+        const [bx, bz, bw, bd] = RR(0.3, front - 0.3, 0.4, 0.4 + dep)
+        putArcade(bx, bz, bw, bd, Math.max(h, 11), 'punch', col, oF(true, true))
+        if (V - dep > 6) paveAt(0.5, front - 0.5, dep + 1, V - 0.5)
+        return
+      }
+      // 商业步行街：2~4 层小铺，一铺一色，沿街彩色雨棚
+      {
+        const sl = segs(front, 7, 13, 0)
+        const dep = Math.min(V * 0.9, range(rng, 12, 20))
+        sl.forEach(([u0, u1], i) => {
+          const h = (2 + ((rng() * 3) | 0)) * 3.4 + 0.8
+          const col = pick(rng, rng() < 0.4 ? WALL_WARM : rng() < 0.6 ? WALL_ENAMEL : WALL)
+          const st = rng() < 0.3 ? 'podium' : 'punch'
+          const [bx, bz, bw, bd] = RR(u0 + 0.08, u1 - 0.08, 0.6, 0.6 + dep)
+          if (h < 12 && rng() < 0.35) withGable((rng() * gablePools.length) | 0, 0.3, () => pushBuilding(col, st, bx, SURFACE + h / 2, bz, bw, h, bd, 0))
+          else pushBuilding(col, st, bx, SURFACE + h / 2, bz, bw, h, bd, 0)
+          dressNear(bx, SURFACE, bz, bw, Math.max(7.2, h), bd, st, { shop: true, row: true, open: oF(i === 0, i === sl.length - 1) })
+        })
+        if (V - dep > 6) paveAt(0.5, front - 0.5, dep + 1.2, V - 0.5)
+        return
+      }
+    }
+
+    if (front > 22 && streetRoll < 0.5) {
+      const nBay = front > 44 && rng() < 0.55 ? 3 : 2
+      const shares = []
+      let shareSum = 0
+      for (let i = 0; i < nBay; i++) { const s = range(rng, 0.72, 1.28); shares.push(s); shareSum += s }
+      let cursor = 0
+      let maxH = 0
+      for (let i = 0; i < nBay; i++) {
+        const bf = i === nBay - 1 ? front - cursor : Math.max(8, front * shares[i] / shareSum)
+        if (bf < 7) break
+        let bh = wantTower ? streetH * range(rng, 0.96, 1.04) : streetH * range(rng, 0.68, 1.28)
+        if (kind === 'shop') bh = Math.min(bh, 30)
+        bh = Math.max(14, bh)
+        const st = rng() < 0.42 ? pickStyle(kind, bh, false) : baseStyle
+        // 同一宗地一个主色：开间只在主色上做深浅（以前 65% 各挑一色 → 一排彩虹）
+        const col = rng() < 0.35 ? shadeHex(baseCol, rng() < 0.5 ? -0.09 : 0.08) : baseCol
+        const form = pickBayForm(bh)
+        const bayOpen = { xn: open.xn, xp: open.xp, zn: open.zn, zp: open.zp }
+        if (frontAlongX) {
+          bayOpen.xn = open.xn && i === 0
+          bayOpen.xp = open.xp && i === nBay - 1
+          const used = d * range(rng, 0.78, 0.98)
+          const bcz = (open.zp && !open.zn) ? z1 - used / 2 : (open.zn && !open.zp) ? z0 + used / 2 : cz
+          placeBay(x0 + cursor + bf / 2, bcz, bf, used, bh, st, col, bayOpen, form)
+        } else {
+          bayOpen.zn = open.zn && i === 0
+          bayOpen.zp = open.zp && i === nBay - 1
+          const used = w * range(rng, 0.78, 0.98)
+          const bcx = (open.xp && !open.xn) ? x1 - used / 2 : (open.xn && !open.xp) ? x0 + used / 2 : cx
+          placeBay(bcx, z0 + cursor + bf / 2, used, bf, bh, st, col, bayOpen, form)
+        }
+        maxH = Math.max(maxH, bh)
+        cursor += bf
+      }
+      wallTop = wantTower ? streetH : maxH
+    } else if (streetRoll < 0.7 && streetH <= 48 && Math.min(w, d) > 14) {
+      putArcade(cx, cz, w * 0.99, d * 0.97, streetH, baseStyle, baseCol, open)
+      wallTop = streetH
+    } else if (streetRoll < 0.84 && Math.min(w, d) > 24 && !wantTower) {
+      putTerrace(cx, cz, w, d, streetH, baseStyle, baseCol, open)
+      wallTop = streetH
+    } else if (streetRoll < 0.94 && Math.min(w, d) > 28 && kind !== 'shop') {
       const wing = range(rng, 0.28, 0.4)
       const court = range(rng, 0.2, 0.35)
       // 三面围合：只给真正朝外的翼做店面
@@ -2643,29 +4143,24 @@ export function buildBuildings(plan, seed = 77) {
           })
         }
       }
+      wallTop = streetH
     } else {
       const yaw = rng() < 0.08 ? range(rng, -0.12, 0.12) : 0
-      pushBuilding(baseCol, baseStyle, cx, SURFACE + streetH / 2, cz, w * 0.99, streetH, d * 0.97, yaw)
-      dressNear(cx, SURFACE, cz, w * 0.99, streetH, d * 0.97, baseStyle, { shop: true, open })
+      const useGable = !wantTower && streetH < 36 && (curDistrict === 'old' || kind === 'low' || kind === 'shop') && rng() < 0.45
+      if (useGable) putGable(cx, cz, w, d, streetH, baseStyle, baseCol, open)
+      else putBox(cx, cz, w, d, streetH, baseStyle, baseCol, open, yaw)
+      wallTop = streetH
     }
 
     // 不是每宗都上塔：隔一栋，避免塔挤成一丛
-    const wantTower = opts.forceTower || (
-      kind === 'core' || kind === 'high' ? rng() < 0.42 :
-      kind === 'wallside' || kind === 'waterfront' ? rng() < 0.28 :
-      kind === 'mid' ? rng() < 0.18 :
-      kind === 'shop' ? rng() < 0.08 :
-      rng() < 0.1
-    )
-
     if (!wantTower) {
       if (kind !== 'shop' && rng() < 0.55) {
         // 矮加建也走体量原型，不再叠一个同轴方块
         placeTower(kind === 'low' ? 'low' : 'mid', cx, cz, w * 0.85, d * 0.85, block, {
           skipPodium: true,
           ...(baseStyle !== 'podium' ? { style: baseStyle, col: baseCol } : {}),
-          baseY: SURFACE + streetH,
-          height: range(rng, 20, kind === 'low' ? 55 : 100),
+          baseY: SURFACE + wallTop,
+          height: kind === 'low' ? range(rng, 4, 10) : kind === 'mid' ? range(rng, 6, 16) : range(rng, 20, 100),
         })
       }
       return
@@ -2685,24 +4180,28 @@ export function buildBuildings(plan, seed = 77) {
     const tz = cz
     if (!canPlaceRect(tx, tz, tw, td, 14)) return
 
-    const towerKind = kind === 'shop' || kind === 'low' || kind === 'mid' ? 'high' : kind
+    // t32：低层地皮上的加建塔只到 mid（4~12 层），不再一律升成 high
+    const towerKind = kind === 'shop' || kind === 'low' || kind === 'mid' ? 'mid' : kind
     const baseH = heightFor(towerKind, rng, block)
     const inSpike = nearSpike(cx, cz)
     let shaftH = inSpike
       ? baseH * range(rng, 0.95, 1.2)
-      : Math.min(baseH, range(rng, 120, 260)) * range(rng, 0.85, 1.05)
+      : towerKind === 'mid' ? baseH : Math.min(baseH, range(rng, 120, 260)) * range(rng, 0.85, 1.05)
     if (inSpike && kind === 'core' && rng() < 0.55) shaftH = Math.max(shaftH, range(rng, 520, 700))
     else if (inSpike && kind === 'high' && rng() < 0.35) shaftH = Math.max(shaftH, range(rng, 420, 580))
-    // 超高只压高度，不再加宽越界
-    if (shaftH > Math.min(tw, td) * 10) shaftH = Math.min(tw, td) * range(rng, 8, 10)
+    // 超高只压高度，不再加宽越界；普通地皮按用途限高宽比（塔坐在街墙上，总高 = 街墙 + 塔身）
+    const AR = maxAspect(kind, inSpike)
+    const capH = Math.max(20, Math.min(tw, td) * AR - wallTop)
+    if (shaftH > capH) shaftH = capH * range(rng, 0.85, 1)
 
     registerTower(tx, tz, tw, td)
     placeTower(towerKind, tx, tz, tw, td, block, {
       skipPodium: true,
       nyc: true,
       ...(baseStyle !== 'podium' ? { style: baseStyle, col: baseCol } : {}),
-      baseY: SURFACE + streetH,
-      height: Math.max(70, shaftH),
+      baseY: SURFACE + wallTop,
+      height: towerKind === 'mid' ? Math.min(capH, shaftH) : Math.max(Math.min(70, capH), shaftH),
+      maxAspect: AR + 1,
     })
   }
 
@@ -2813,8 +4312,8 @@ export function buildBuildings(plan, seed = 77) {
       const hl = H * 0.58
       seg(hex, 'ribbon', cx - F * 0.18, y0 + hl / 2, cz, F, hl, F)
       plate(cx - F * 0.18, y0 + hl, cz, F + 1.2, F + 1.2)
-      const uw = F * 1.25
-      const ux = cx + F * 0.22
+      const uw = F * 1.08
+      const ux = cx + F * 0.04
       seg(hex2, 'curtain', ux, y0 + hl + (H - hl) / 2, cz, uw, H - hl, F * 0.78)
       // 悬挑底面一圈厚檐 + 斜撑
       push(accent, ux, y0 + hl + 0.6, cz, uw + 1.2, 1.2, F * 0.78 + 1.2)
@@ -2884,7 +4383,7 @@ export function buildBuildings(plan, seed = 77) {
     dressNear(b.cx, SURFACE, b.cz, podW, podH, podD, 'podium', { shop: true })
     registerTower(b.cx, b.cz, podW, podD)
     placeTower('core', b.cx, b.cz, foot * 0.95, foot * 0.9, { mega: true, span: 2 }, {
-      skipPodium: true, nyc: true, baseY: SURFACE + podH, height: hTarget,
+      skipPodium: true, nyc: true, baseY: SURFACE + podH, height: hTarget, maxAspect: 11,
     })
   }
   const sideFace = (nz) => (nz > 0 ? 0 : Math.PI)
@@ -2893,6 +4392,36 @@ export function buildBuildings(plan, seed = 77) {
   const pad = (pool, x, z, w, d, top, th = 0.2) => {
     if (w > 1.5 && d > 1.5) walks.push({ x, z, w, d, y: SURFACE + top })
     return push(pool, x, SURFACE + top - th / 2, z, w, th, d)
+  }
+  /**
+   * t34 街区内部道路（园区路）：以前巷道/后巷只是一块米色 pave 板，和地块分不开 →
+   * 两侧人行铺装 + 中间沥青车道 + 路缘石 + 中心虚线；交叉口 cross=true 只铺沥青方块。全部复用现有池子，不加 draw call。
+   */
+  const campusRoad = (x, z, w, d, cross = false) => {
+    pad(pave, x, z, w, d, 0.22)
+    const alongX = w >= d
+    const L = alongX ? w : d
+    const C = alongX ? d : w
+    if (C < 6.5) return
+    const cw = Math.min(7, C - 3)
+    if (cross) {
+      push(tarmac, x, SURFACE + 0.25, z, alongX ? Math.min(w, cw + (w - C)) : cw, 0.08, alongX ? cw : Math.min(d, cw + (d - C)))
+      return
+    }
+    push(tarmac, x, SURFACE + 0.25, z, alongX ? L : cw, 0.08, alongX ? cw : L)
+    for (const sd of [-1, 1]) {
+      const o = sd * (cw / 2 + 0.15)
+      if (alongX) push(stoneStep, x, SURFACE + 0.3, z + o, L, 0.16, 0.3)
+      else push(stoneStep, x + o, SURFACE + 0.3, z, 0.3, 0.16, L)
+    }
+    if (L > 14) {
+      const n = Math.floor((L - 4) / 9)
+      for (let i = 0; i < n; i++) {
+        const t = -L / 2 + 4 + 4.5 + i * 9
+        if (alongX) push(lineW, x + t, SURFACE + 0.3, z, 3, 0.02, 0.15)
+        else push(lineW, x, SURFACE + 0.3, z + t, 0.15, 0.02, 3)
+      }
+    }
   }
   const VILLA = ['#efe8dc', '#e6d8c3', '#d9c9b0', '#f3f0ea', '#cdb79c', '#e9dfd0']
   const VILLA_MOD = ['#f3f0ea', '#ebe8e2', '#dcd8d0', '#d2cdc4']
@@ -2971,6 +4500,7 @@ export function buildBuildings(plan, seed = 77) {
     let hw = Math.min(lw - garW - 6, range(rng, S[0], S[1]))
     let hd = Math.min(lotD - setback - 8, range(rng, S[2], S[3]))
     if (hw < 7 || hd < 7) return
+    plan.villaN = (plan.villaN || 0) + 1
     const floors = cls === 0 ? 2 : rng() < 0.4 ? 3 : S[4]
     const garL = rng() < 0.5
     const hx = lx + (garL ? 1 : -1) * (garW / 2 + 0.5)
@@ -3150,26 +4680,83 @@ export function buildBuildings(plan, seed = 77) {
       push(whiteP, doorX + (garL ? 1 : -1) * 6, SURFACE + 0.9, edge - nz * setback * 0.55, 0.5, 1.2, 0.5)
     }
   }
-  function fillVilla(b) {
-    // 别墅区：大小不一（120㎡ 小独栋 → 600㎡+ 跨两排的庄园），四种风格（现代 / 地中海 / 都铎 / 中式合院）
-    const rowD = (b.d - 2) / 2
-    let x = b.x0 + 1
-    while (x < b.x1 - 18) {
-      const r = rng()
-      let cls = r < 0.28 ? 0 : r < 0.62 ? 1 : r < 0.88 ? 2 : 3
-      let lw = [range(rng, 18, 22), range(rng, 26, 34), range(rng, 38, 50), range(rng, 56, 80)][cls]
-      if (b.x1 - 1 - (x + lw) < 18) lw = b.x1 - 1 - x
-      if (cls === 3 && b.d < 80) cls = 2
-      if (cls === 3) {
-        villaLot(x, lw, b.z0 + 1, -1, b.d - 2, 3)
-      } else {
-        villaLot(x, lw, b.z0 + 1, -1, rowD, cls)
-        // 另一排独立选尺寸（同列宽，户型不同）
-        const cls2 = Math.max(0, Math.min(2, cls + (rng() < 0.5 ? -1 : rng() < 0.5 ? 1 : 0)))
-        villaLot(x, lw, b.z1 - 1, 1, rowD, lw < 24 ? 0 : cls2)
+  /**
+   * 别墅社区（t33）：中央绿轴（草坪 + 步道 + 池塘 + 儿童游乐 + 树丛）把地块分成几片，每片多排独栋；
+   * 排与排之间是小区车行道（沥青 + 两侧草带 + 行道树），不再是裸地硬场。
+   */
+  function villaGreen(x0, x1, z0, z1, alongZ) {
+    const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2, w = x1 - x0, d = z1 - z0
+    pad(lawn, cx, cz, w, d, 0.3, 0.3)
+    if (alongZ) pad(pave, cx, cz, 3.2, d - 2, 0.36, 0.1)
+    else pad(pave, cx, cz, w - 2, 3.2, 0.36, 0.1)
+    const L = alongZ ? d : w
+    const n = Math.max(2, Math.floor(L / 14))
+    for (let i = 0; i < n; i++) {
+      const t = (i + 0.5) / n
+      for (const s of [-1, 1]) {
+        const tx = alongZ ? cx + s * (w * 0.32) : x0 + t * w
+        const tz = alongZ ? z0 + t * d : cz + s * (d * 0.32)
+        if (rng() < 0.8) villaTree(tx + range(rng, -2, 2), tz + range(rng, -2, 2), range(rng, 0.9, 1.25))
       }
-      x += lw
     }
+    // 池塘 + 游乐角 + 长椅
+    const pw = alongZ ? w * 0.5 : Math.min(26, w * 0.2)
+    const pd = alongZ ? Math.min(24, d * 0.16) : d * 0.5
+    const px = alongZ ? cx : x0 + w * 0.3
+    const pz = alongZ ? z0 + d * 0.3 : cz
+    pad(pave, px, pz, pw + 2.4, pd + 2.4, 0.34, 0.1)
+    push(villaWater, px, SURFACE + 0.37, pz, pw, 0.04, pd)
+    const qx = alongZ ? cx : x0 + w * 0.7
+    const qz = alongZ ? z0 + d * 0.7 : cz
+    pad(soilP, qx, qz, 12, 10, 0.34, 0.1)
+    push(pickPool(awningPools), qx - 3, SURFACE + 2.6, qz, 3, 0.15, 3)
+    push(rail, qx - 3, SURFACE + 1.4, qz, 0.12, 2.4, 0.12)
+    push(redP, qx + 2.5, SURFACE + 0.9, qz - 2, 2.6, 0.2, 1.2)
+    push(whiteP, qx + 2.5, SURFACE + 1.1, qz + 2.4, 0.2, 1.6, 3.2)
+    for (let k = 0; k < 4; k++) push(villaWood, (alongZ ? cx + 2.4 : x0 + w * (0.15 + k * 0.22)), SURFACE + 0.7, (alongZ ? z0 + d * (0.15 + k * 0.22) : cz + 2.4), alongZ ? 0.6 : 1.8, 0.45, alongZ ? 1.8 : 0.6)
+  }
+  function villaRows(b, x0, x1, z0, z1) {
+    const rowD = range(rng, 36, 46)
+    const lane = 9
+    const nRows = Math.max(1, Math.floor((z1 - z0 + lane) / (rowD + lane)))
+    const used = nRows * rowD + (nRows - 1) * lane
+    let zEdge = z0 + Math.max(0, (z1 - z0 - used) / 2)
+    for (let r = 0; r < nRows; r++) {
+      let x = x0
+      while (x < x1 - 18) {
+        const rv = rng()
+        const cls = rv < 0.16 ? 0 : rv < 0.56 ? 1 : rv < 0.95 ? 2 : 3
+        let lw = [range(rng, 20, 24), range(rng, 28, 36), range(rng, 40, 52), range(rng, 56, 66)][cls]
+        if (x1 - (x + lw) < 20) lw = x1 - x
+        villaLot(x, lw, zEdge, -1, rowD, Math.min(cls, lw > 54 && rowD > 40 ? 3 : 2))
+        x += lw
+      }
+      if (r < nRows - 1) {
+        // 小区路：5m 沥青 + 两侧草带 + 行道树（种在路南侧草带，避开对面车道口）
+        const lz = zEdge + rowD + lane / 2
+        const cx = (x0 + x1) / 2
+        pad(lawn, cx, lz, x1 - x0, lane, 0.3, 0.3)
+        pad(tarmac, cx, lz, x1 - x0, 5, 0.32, 0.1)
+        for (let tx = x0 + 6; tx < x1 - 4; tx += 15) villaTree(tx + range(rng, -1.5, 1.5), lz - 3.4, 0.85)
+      }
+      zEdge += rowD + lane
+    }
+  }
+  function fillVilla(b) {
+    const x0 = b.x0 + 1, x1 = b.x1 - 1, z0 = b.z0 + 1, z1 = b.z1 - 1
+    const gW = Math.min(64, Math.max(34, b.w * 0.13))
+    const splitZ = b.d > 300
+    const gD = splitZ ? Math.min(48, b.d * 0.12) : 0
+    const gx = b.cx + range(rng, -0.08, 0.08) * b.w
+    const gz = b.cz + range(rng, -0.06, 0.06) * b.d
+    villaGreen(gx - gW / 2, gx + gW / 2, z0, z1, true)
+    if (splitZ) {
+      villaGreen(x0, gx - gW / 2, gz - gD / 2, gz + gD / 2, false)
+      villaGreen(gx + gW / 2, x1, gz - gD / 2, gz + gD / 2, false)
+    }
+    const xs = [[x0, gx - gW / 2 - 1], [gx + gW / 2 + 1, x1]]
+    const zs = splitZ ? [[z0, gz - gD / 2 - 1], [gz + gD / 2 + 1, z1]] : [[z0, z1]]
+    for (const [a0, a1] of xs) for (const [c0, c1] of zs) if (a1 - a0 > 24 && c1 - c0 > 30) villaRows(b, a0, a1, c0, c1)
   }
   // 立面招牌登记：同一立面平面上的招牌/海报/灯带互不重叠（后放的先查 signFree）
   const signRects = []
@@ -3197,15 +4784,49 @@ export function buildBuildings(plan, seed = 77) {
   function fillHospital(b) {
     curGrp++
     const nz = -1
-    const w = Math.min(b.w - 40, 120)
-    const d = Math.min(b.d - 22, 30)
-    const h = range(rng, 34, 46)
+    const w = Math.min(b.w - 36, 280)
+    const dLot = Math.min(b.d - 28, 220)
     const cx = b.cx + 8
     const cz = b.cz + 4
     const hex = pick(rng, ['#eef0ee', '#e4ebef', '#f1eee8'])
-    pushBuilding(hex, 'ribbon', cx, SURFACE + h / 2, cz, w, h, d)
-    dressFacade(cx, SURFACE, cz, w, h, d, 'ribbon')
-    const fz = cz + nz * d / 2
+    const southD = Math.min(28, Math.max(20, dLot * 0.28))
+    const wingT = Math.min(28, Math.max(20, w * 0.22))
+    const hS = range(rng, 22, 30)
+    const hE = range(rng, 38, 52)
+    const hW = range(rng, 36, 50)
+    const h = hE
+    const frontZ = cz - dLot / 2
+    const backZ = cz + dLot / 2
+    const sz = frontZ + southD / 2
+    pushBuilding(hex, 'ribbon', cx, SURFACE + hS / 2, sz, w, hS, southD)
+    dressFacade(cx, SURFACE, sz, w, hS, southD, 'ribbon')
+    let northD = 0
+    if (dLot > 70) northD = range(rng, 18, 24)
+    const eD = dLot - southD - northD
+    if (eD > 12) {
+      const ez = frontZ + southD + eD / 2
+      pushBuilding(hex, 'ribbon', cx + w / 2 - wingT / 2, SURFACE + hE / 2, ez, wingT, hE, eD)
+      dressFacade(cx + w / 2 - wingT / 2, SURFACE, ez, wingT, hE, eD, 'ribbon')
+      pushBuilding(hex, 'ribbon', cx - w / 2 + wingT / 2, SURFACE + hW / 2, ez, wingT, hW, eD)
+      dressFacade(cx - w / 2 + wingT / 2, SURFACE, ez, wingT, hW, eD, 'ribbon')
+    }
+    if (northD) {
+      const hN = range(rng, 28, 42)
+      const nzC = backZ - northD / 2
+      const nW = Math.max(16, w - wingT * 2)
+      pushBuilding(hex, 'ribbon', cx, SURFACE + hN / 2, nzC, nW, hN, northD)
+      dressFacade(cx, SURFACE, nzC, nW, hN, northD, 'ribbon')
+    }
+    const innerW = w - wingT * 2 - 2
+    const innerD = dLot - southD - (northD || 6) - 6
+    if (innerW > 10 && innerD > 10) {
+      const icz = frontZ + southD + 3 + innerD / 2
+      pad(pave, cx, icz, innerW, innerD, 0.25)
+      treeRow(cx - innerW / 2 + 3, icz - innerD / 2 + 3, cx + innerW / 2 - 3, icz - innerD / 2 + 3, 8, 0.8)
+      treeRow(cx - innerW / 2 + 3, icz + innerD / 2 - 3, cx + innerW / 2 - 3, icz + innerD / 2 - 3, 8, 0.8)
+    }
+    const fz = frontZ
+    const d = southD
     // 主入口：雨棚 + 玻璃门 + 院名大字 + 红十字（楼顶）
     // 雨棚压低到 4.6m，院名牌整块在雨棚之上（以前牌底 4.7m 被 5.2m 的雨棚挡住一截）
     push(canopy, cx, SURFACE + 4.6, fz + nz * 4, 18, 0.4, 8)
@@ -3215,15 +4836,15 @@ export function buildBuildings(plan, seed = 77) {
       const sw = Math.min(28, w * 0.4)
       board('hospital', cx, SURFACE + 5.6 + sw / 8, fz + nz * 0.2, sw, nz)
     }
-    push(crossP, cx + w * 0.32, SURFACE + h + 5.5, fz + nz * 0.4, 8, 8, 0.4, sideFace(nz))
-    push(crossP, cx - w / 2 - 0.3, SURFACE + h - 6, cz, 7, 7, 0.4, -Math.PI / 2)
+    push(crossP, cx + w * 0.32, SURFACE + hS + 5.5, fz + nz * 0.4, 8, 8, 0.4, sideFace(nz))
+    push(crossP, cx - w / 2 - 0.3, SURFACE + hW - 6, cz, 7, 7, 0.4, -Math.PI / 2)
     // 急诊楼 + 救护车位
     const ew = Math.max(14, (b.x1 - b.x0 - w) / 2 - 6)
     const ex = b.x0 + 3 + ew / 2
     if (ew > 12) {
       curGrp++
-      pushBuilding(hex, 'punch', ex, SURFACE + 4.5, cz, ew, 9, d)
-      const efz = cz + nz * d / 2
+      pushBuilding(hex, 'punch', ex, SURFACE + 4.5, sz, ew, 9, d)
+      const efz = sz + nz * d / 2
       push(redP, ex, SURFACE + 9.2, efz + nz * 0.2, ew, 0.5, 0.3)
       board('emergency', ex, SURFACE + 7.3, efz + nz * 0.25, Math.min(10, ew * 0.6), nz)
       push(canopy, ex, SURFACE + 4.4, efz + nz * 5, ew * 0.9, 0.4, 10)
@@ -3238,6 +4859,7 @@ export function buildBuildings(plan, seed = 77) {
       }
     }
     pad(pave, cx, b.z0 + 6, w + 10, 10, 0.3)
+    fillRing(b, Math.min(cx - w / 2, b.x0 + 3), cx + w / 2, cz - dLot / 2, cz + dLot / 2, 'mid')
   }
   function lines(x, z, w, d, t = 0.12, top = 0.36) {
     pad(lineW, x, z - d / 2, w, t, top, 0.06)
@@ -3281,7 +4903,15 @@ export function buildBuildings(plan, seed = 77) {
   function fillSchool(b) {
     curGrp++
     // 校园：整圈围栏 + 校门（门楣挂校名）+ 教学楼群 + 风雨操场/体育馆 + 篮球场 + 环形跑道包足球场 + 升旗台 + 树
-    const x0 = b.x0 + 2, x1 = b.x1 - 2, z0 = b.z0 + 2, z1 = b.z1 - 2
+    let x0 = b.x0 + 2, x1 = b.x1 - 2, z0 = b.z0 + 2, z1 = b.z1 - 2
+    if (x1 - x0 > 300 || z1 - z0 > 260) {
+      const cw = Math.min(x1 - x0, 280)
+      const cd = Math.min(z1 - z0, 230)
+      x0 = b.cx - cw / 2
+      x1 = b.cx + cw / 2
+      z0 = b.cz - cd / 2
+      z1 = b.cz + cd / 2
+    }
     const gx = b.cx
     if (b.big) pad(pave, b.cx, b.cz, b.w, b.d, 0.16, 0.16)
     enclose(x0, x1, z0, z1, 'fence', gx, 12)
@@ -3332,6 +4962,7 @@ export function buildBuildings(plan, seed = 77) {
       while (x1 - x > 34) { basketball(x + 17, b.cz + 4); x += 36 }
       treeRow(x0 + 4, z0 + 6, bx + bw / 2, z0 + 6, 9)
     }
+    fillRing(b, x0 - 4, x1 + 4, z0 - 4, z1 + 4, 'mid')
   }
   function fillSports(b) {
     curGrp++
@@ -3358,21 +4989,42 @@ export function buildBuildings(plan, seed = 77) {
       push(whiteP, pcx - pw / 2 - 2, SURFACE + 1.2, b.cz, 0.8, 2.4, 0.8)
       x += pw + 12
     }
-    while (b.x1 - 2 - x > 37) {
-      if (b.d > 44) { tennis(x + 18, b.cz - b.d / 4); tennis(x + 18, b.cz + b.d / 4) } else tennis(x + 18, b.cz)
+    const czC = hz - 8
+    // t31：球场一排最多铺到馆西 ~260m（以前一直排到地块另一头），剩下 fillRing 密铺
+    const xEnd = Math.min(b.x1 - 2, b.x0 + 3 + 260)
+    while (xEnd - x > 37) {
+      if (hallD > 40) { tennis(x + 18, czC - 22); tennis(x + 18, czC + 22) } else tennis(x + 18, czC)
       x += 38
-      if (b.x1 - 2 - x > 33) {
-        basketball(x + 16, b.cz - (b.d > 44 ? b.d / 4 : 0))
-        if (b.d > 44) basketball(x + 16, b.cz + b.d / 4)
+      if (xEnd - x > 33) {
+        basketball(x + 16, czC - 20)
+        if (hallD > 40) basketball(x + 16, czC + 20)
         x += 34
       }
     }
+    fillRing(
+      b,
+      b.x0 + 3,
+      Math.max(x, hx + hallW / 2) + 6,
+      Math.min(hz - hallD / 2, czC - 36) - 6,
+      Math.max(hz + hallD / 2, czC + 36) + 6,
+      'mid',
+    )
   }
   function fillParking(b, x0, x1, z0, z1) {
     curGrp++
     const w = x1 - x0
     const d = z1 - z0
     if (w < 20 || d < 20) return
+    // 专用停车场占满大街廓会像空地：中间留一块车场，四周密铺楼
+    if (w > 160 && d > 140 && w * d > 28_000) {
+      const pw = Math.min(120, w * 0.38)
+      const pd = Math.min(100, d * 0.38)
+      const pcx = (x0 + x1) / 2
+      const pcz = (z0 + z1) / 2
+      fillParking(b, pcx - pw / 2, pcx + pw / 2, pcz - pd / 2, pcz + pd / 2)
+      fillRing(b, pcx - pw / 2, pcx + pw / 2, pcz - pd / 2, pcz + pd / 2, 'mid')
+      return
+    }
     const cx = (x0 + x1) / 2
     const cz = (z0 + z1) / 2
     pad(tarmac, cx, cz, w - 1, d - 1, 0.25, 0.2)
@@ -3394,9 +5046,10 @@ export function buildBuildings(plan, seed = 77) {
   function fillGas(b) {
     curGrp++
     const gw = Math.min(56, b.w * 0.5)
+    const gd = Math.min(80, b.d - 8)
     const gx = b.x0 + gw / 2 + 1
-    const gz = b.cz
-    pad(tarmac, gx, gz, gw, b.d - 2, 0.25, 0.2)
+    const gz = b.z0 + 8 + gd / 2
+    pad(tarmac, gx, gz, gw, gd, 0.25, 0.2)
     // 罩棚：白顶 + 红色檐带，四柱，两岛四机
     const cw = 26
     const cd = 16
@@ -3427,7 +5080,7 @@ export function buildBuildings(plan, seed = 77) {
     // 价格牌
     push(whiteP, b.x0 + 3, SURFACE + 3.5, b.z0 + 3, 0.3, 7, 0.3)
     push(boards.gas, b.x0 + 3, SURFACE + 7.4, b.z0 + 3, 4, 1, 0.3, Math.PI)
-    if (b.x1 - (b.x0 + gw + 2) > 24) fillParking(b, b.x0 + gw + 2, b.x1, b.z0, b.z1)
+    fillRing(b, b.x0 + 2, gx + gw / 2 + 6, gz - gd / 2 - 2, gz + gd / 2 + 2, 'mid')
   }
 
   // ── Round 9 设施公共件 ──
@@ -3546,8 +5199,8 @@ export function buildBuildings(plan, seed = 77) {
 
   /** 城市设施地块：体育场 / 图书馆 / 演艺中心 / 博物馆 / 影城 / 公交总站 / 公安 / 消防 / 邮局 / 酒店 / 超市 / 寺庙 / 教堂 / 立体车库 / 写字楼广场 */
   const FACILITY_KINDS = new Set(['stadium', 'library', 'arena', 'museum', 'cinema', 'busterm', 'police', 'fire', 'post', 'hotel', 'market', 'temple', 'church', 'garage', 'office', 'gov', 'farmers'])
-  function frontPlaza(b, depth) {
-    pad(pave, b.cx, b.z0 + depth / 2 + 1, b.w - 4, depth, 0.22, 0.1)
+  function frontPlaza(b, depth, w = b.w - 4) {
+    pad(pave, b.cx, b.z0 + depth / 2 + 1, w, depth, 0.22, 0.1)
   }
   function fillFacility(b) {
     curGrp++
@@ -3615,6 +5268,7 @@ export function buildBuildings(plan, seed = 77) {
       for (const s2 of [-1, 1]) push(adPools[(rng() * adPools.length) | 0], cx + s2 * ix * 0.55, SURFACE + 30, b.cz - iz - 3, 22, 10, 0.4)
       for (let i = 0; i < 4; i++) push(stoneStep, cx, SURFACE + 0.25 + i * 0.25, b.z0 + 6 + i * 1.2, 70, 0.5 + i * 0.5, 1.3)
       board('stadium', cx, SURFACE + 28, b.cz - RZ - 0.5, 40, -1)
+      fillRing(b, cx - RX - 16, cx + RX + 16, Math.max(b.z0 + 30, b.cz - RZ - 16), b.cz + RZ + 16, 'mid')
       return
     }
     if (k === 'arena') {
@@ -3646,40 +5300,9 @@ export function buildBuildings(plan, seed = 77) {
       for (let i = 0; i < 6; i++) push(accent, cx - 30 + i * 12, SURFACE + 3.8, fzA - 13.2, 0.7, 7.6, 0.7)
       for (let i = 0; i < 3; i++) push(stoneStep, cx, SURFACE + 0.2 + i * 0.2, fzA - 16 - i * 1.4, 80, 0.4 + i * 0.4, 1.5)
       board('arena', cx, SURFACE + H * 0.62 + 6.5, fzA - 0.4, 40, -1)
-      if (b.big) {
-        // 两侧：地下车库坡道口（矮墙围合的深色坡道 + 顶棚 + P 牌）+ 草坪 + 行道树
-        for (const s of [-1, 1]) {
-          const ex0 = s < 0 ? b.x0 + 4 : cx + L / 2 + R + 10
-          const ex1 = s < 0 ? cx - L / 2 - R - 10 : b.x1 - 4
-          const ew = ex1 - ex0
-          if (ew < 14) continue
-          const ex = (ex0 + ex1) / 2
-          const rw = Math.min(9, ew * 0.4)
-          const rx = ex - s * (ew / 2 - rw / 2 - 2)
-          const rz0 = b.z0 + 14
-          const rLen = Math.min(46, D0 * 0.42)
-          pad(pitDark, rx, rz0 + rLen / 2, rw, rLen, 0.2, 0.06)
-          for (const t of [-1, 1]) {
-            push(wallGrey, rx + t * (rw / 2 + 0.2), SURFACE + 0.6, rz0 + rLen / 2, 0.4, 1.2, rLen)
-            addSolid(rx + t * (rw / 2 + 0.2), rz0 + rLen / 2, 0.4, rLen, SURFACE + 1.2)
-          }
-          push(wallGrey, rx, SURFACE + 0.6, rz0 + rLen, rw + 0.8, 1.2, 0.4)
-          push(canopy, rx, SURFACE + 4.2, rz0 + rLen - 6, rw + 1.6, 0.35, 12)
-          board('parking', rx, SURFACE + 5.6, rz0 - 0.4, 6, -1)
-          // 草坪 + 两排树 + 坐凳
-          const gx = ex + s * (rw / 2 + 1)
-          const gw = ew - rw - 6
-          if (gw > 6) {
-            pad(lawn, gx, b.cz + 6, gw, D0 - 30, 0.3, 0.3)
-            treeRow(gx - gw * 0.3, b.z0 + 18, gx - gw * 0.3, b.z1 - 12, 11)
-            if (gw > 16) treeRow(gx + gw * 0.3, b.z0 + 18, gx + gw * 0.3, b.z1 - 12, 11)
-          }
-        }
-        // 前广场：两排行道树 + 后场货车
-        treeRow(b.x0 + 12, b.z0 + 6, cx - 44, b.z0 + 6, 12)
-        treeRow(cx + 44, b.z0 + 6, b.x1 - 12, b.z0 + 6, 12)
-        for (let i = 0; i < 3; i++) boxTruck(cx - 20 + i * 20, b.z1 - 9, false, accent)
-      }
+      // t31：大地块以前两侧整片草坪 + 坡道口（街廓 400m+ 时各剩 100m+ 空地）→ 一律四周密铺
+      if (b.big) for (let i = 0; i < 3; i++) boxTruck(cx - 20 + i * 20, az + R + 9, false, accent)
+      fillRing(b, cx - L / 2 - R - 20, cx + L / 2 + R + 20, az - R - 28, az + R + 16, 'mid')
       return
     }
     if (k === 'garage') {
@@ -3688,7 +5311,8 @@ export function buildBuildings(plan, seed = 77) {
       const FH = 3.2
       const w = Math.min(W0 - 22, 150)
       const d = Math.min(D0 - 8, 56)
-      const gz = b.z1 - 3 - d / 2
+      // t31：车库贴街（以前贴后边 → 门前一条几百米长的沥青车道）
+      const gz = Math.min(b.z1 - 3 - d / 2, b.z0 + 30 + d / 2)
       for (let i = 0; i <= lv; i++) {
         const y = SURFACE + i * FH
         push(pave, cx, y + 0.15, gz, w, 0.3, d)
@@ -3715,11 +5339,20 @@ export function buildBuildings(plan, seed = 77) {
         addSolid(lx, lz, 2, 2.4, SURFACE + 2.8)
       }
       board('garage', cx, SURFACE + lv * FH + 3.4, gz - d / 2 - 0.6, 22, -1)
+      fillRing(b, cx - w / 2 - 14, cx + w / 2 + 14, b.z0 + 3, gz + d / 2 + 6, 'mid')
       return
     }
     if (k === 'temple') {
       // 寺院：整圈红墙灰瓦 + 山门（可穿行）+ 钟鼓楼 + 天王殿 + 香炉 + 大雄宝殿（重檐、月台）+ 两厢配殿 + 藏经阁 + 七层塔 + 古树
-      const x0 = b.x0 + 3, x1 = b.x1 - 3, z0 = b.z0 + 3, z1 = b.z1 - 3
+      let x0 = b.x0 + 3, x1 = b.x1 - 3, z0 = b.z0 + 3, z1 = b.z1 - 3
+      if (x1 - x0 > 200 || z1 - z0 > 200) {
+        const cw = Math.min(x1 - x0, 180)
+        const cd = Math.min(z1 - z0, 190)
+        x0 = cx - cw / 2
+        x1 = cx + cw / 2
+        z0 = b.z0 + 6
+        z1 = z0 + cd
+      }
       const D = z1 - z0
       const sd = Math.min(1, D / 160)
       const zf = (f) => z0 + f * D
@@ -3776,11 +5409,20 @@ export function buildBuildings(plan, seed = 77) {
       treeRow(x0 + 6, z0 + 14, x0 + 6, z1 - 30, 12, 1.2)
       treeRow(x1 - 6, z0 + 14, x1 - 6, z1 - 8, 12, 1.2)
       for (const s of [-1, 1]) pad(lawn, cx + s * 30, zf(0.42), 22, D * 0.14, 0.3, 0.3)
+      fillRing(b, x0 - 4, x1 + 4, z0 - 4, z1 + 4, 'mid')
       return
     }
     if (k === 'church') {
       // 教堂：中殿 + 前钟楼尖塔 + 玫瑰窗；左侧回廊花园（拱廊围合草坪 + 喷泉），右侧堂区活动楼 + 花园；临街矮篱 + 门柱
-      const z0 = b.z0 + 3, z1 = b.z1 - 3
+      let x0 = b.x0 + 3, x1 = b.x1 - 3, z0 = b.z0 + 3, z1 = b.z1 - 3
+      if (x1 - x0 > 210 || z1 - z0 > 180) {
+        const cw = Math.min(x1 - x0, 200)
+        const cd = Math.min(z1 - z0, 170)
+        x0 = cx - cw / 2
+        x1 = cx + cw / 2
+        z0 = b.z0 + 5
+        z1 = z0 + cd
+      }
       const dd = z1 - z0
       const nw = 26
       const nd = Math.min(dd - 16, 60)
@@ -3793,7 +5435,7 @@ export function buildBuildings(plan, seed = 77) {
       push(villaWinLit, cx, SURFACE + 24, tz - 4.55, 4.4, 4.4, 0.1)
       push(doorGlass, cx, SURFACE + 2.2, tz - 4.6, 3.2, 4.4, 0.1)
       // 左：回廊花园
-      const cx0 = b.x0 + 6
+      const cx0 = x0 + 6
       const cx1 = cx - nw / 2 - 6
       const cw = cx1 - cx0
       if (cw > 20) {
@@ -3818,7 +5460,7 @@ export function buildBuildings(plan, seed = 77) {
       }
       // 右：堂区活动楼 + 花园
       const hx0 = cx + nw / 2 + 6
-      const hx1 = b.x1 - 6
+      const hx1 = x1 - 6
       const hw = hx1 - hx0
       if (hw > 24) {
         const pw = Math.min(56, hw - 10)
@@ -3829,17 +5471,19 @@ export function buildBuildings(plan, seed = 77) {
         if (hw - pw > 12) treeRow(hx0 + 4, z0 + 22, hx0 + 4, z1 - 4, 9)
       }
       // 临街矮篱 + 门柱 + 石碑招牌
-      for (const s of [-1, 1]) push(hedge, cx + s * (b.w / 4 + 5), SURFACE + 0.6, b.z0 + 1.5, b.w / 2 - 14, 1.2, 1.2)
-      pad(pave, cx, (b.z0 + tz - 4.5) / 2, 10, tz - 4.5 - b.z0, 0.24, 0.1)
-      push(stoneStep, cx + 16, SURFACE + 0.9, b.z0 + 4, 11, 1.8, 1.2)
-      board('church', cx + 16, SURFACE + 3.4, b.z0 + 3.4, 10, -1)
+      for (const s of [-1, 1]) push(hedge, cx + s * ((x1 - x0) / 4 + 5), SURFACE + 0.6, z0 - 1.5, (x1 - x0) / 2 - 14, 1.2, 1.2)
+      pad(pave, cx, (z0 + tz - 4.5) / 2, 10, tz - 4.5 - z0, 0.24, 0.1)
+      push(stoneStep, cx + 16, SURFACE + 0.9, z0 + 1, 11, 1.8, 1.2)
+      board('church', cx + 16, SURFACE + 3.4, z0 - 0.6, 10, -1)
+      fillRing(b, x0 - 4, x1 + 4, z0 - 4, z1 + 4, 'mid')
       return
     }
     if (k === 'library' || k === 'museum') {
       const lib = k === 'library'
       const W1 = Math.min(W0 * (lib ? 0.82 : 0.88), 152)
       const D1 = Math.min(D0 * 0.74, b.big ? 120 : D0 - 14)
-      const bz = b.z1 - 6 - D1 / 2
+      // t31：主馆贴前广场（约 44m），以前贴地块后边 → 大街廓里前面一两百米的草坪 + 水池
+      const bz = Math.min(b.z1 - 6 - D1 / 2, b.z0 + 44 + D1 / 2)
       const front = bz - D1 / 2
       if (lib) {
         // 图书馆：「错动书架」—— 四层体块左右交替悬挑 10m + 前角一座通高弧形玻璃中庭 + 屋顶阅读花园
@@ -3882,6 +5526,7 @@ export function buildBuildings(plan, seed = 77) {
           treeRow(cx + s * W1 * 0.25, b.z0 + 6, cx + s * W1 * 0.25, front - 12, 10)
         }
       }
+      fillRing(b, cx - W1 / 2 - 10, cx + W1 / 2 + 10, b.z0 + 3, bz + D1 / 2 + 8, 'mid')
       return
     }
     if (k === 'police' || k === 'fire' || k === 'post') {
@@ -3890,13 +5535,17 @@ export function buildBuildings(plan, seed = 77) {
       const [hex, st, h, bandP] = SP
       const w = Math.min(W0 * 0.6, 108)
       const d = Math.min(D0 - 18, 46)
+      // t31：整套院子收在约 200 × 110m 内、贴南侧街面；以前附属区一直拉到地块另一头（训练场沥青 400m × 400m）
+      const cxR = Math.min(b.x1 - 3, b.x0 + 3 + Math.max(w + 30, Math.min(W0, 200)))
+      const zB = Math.min(b.z1 - 3, b.z0 + 3 + Math.min(D0, 110))
+      const DD = zB - (b.z0 + 3)
       const bx = b.x0 + 3 + w / 2
-      const bz = b.z1 - 3 - d / 2
+      const bz = zB - d / 2
       const front = bz - d / 2
       facBuilding(hex, st, bx, bz, w, h, d)
       push(bandP, bx, SURFACE + h - 1.0, front - 0.18, w, 1.0, 0.2)
       const ax0 = bx + w / 2 + 5
-      const aw = b.x1 - 3 - ax0
+      const aw = cxR - ax0
       const axc = ax0 + aw / 2
       if (k === 'fire') {
         // 4 个车库门（红色卷帘）+ 门前停消防车 + 训练塔 + 操练场
@@ -3909,8 +5558,8 @@ export function buildBuildings(plan, seed = 77) {
         }
         board('fire', bx, SURFACE + h - 4.2, front - 0.5, 22, -1)
         if (aw > 16) {
-          pad(tarmac, axc, b.cz, aw, D0 - 4, 0.25, 0.2)
-          pushBuilding('#b8302a', 'punch', axc + aw * 0.25, SURFACE + 13, b.z1 - 10, 7, 26, 7)
+          pad(tarmac, axc, b.z0 + 3 + DD / 2, aw, DD - 4, 0.25, 0.2)
+          pushBuilding('#b8302a', 'punch', axc + aw * 0.25, SURFACE + 13, zB - 7, 7, 26, 7)
           for (let i = 0; i < 4; i++) push(rail, axc - aw * 0.2, SURFACE + 1.5, b.z0 + 10 + i * 4, aw * 0.4, 0.08, 0.08)
           for (let i = 0; i < 3; i++) push(redP, axc - aw * 0.2 + i * 3, SURFACE + 0.7, b.z0 + 24, 0.8, 1.4, 0.8)
         }
@@ -3922,7 +5571,7 @@ export function buildBuildings(plan, seed = 77) {
         for (let i = 0; i < 8; i++) lotCar(bx - w * 0.28 + i * (w * 0.56 / 7), SURFACE + 0.25, front - 9, Math.PI / 2, 'sedan')
         pad(tarmac, bx, front - 9, w * 0.66, 7, 0.25, 0.2)
         if (aw > 16) {
-          facBuilding('#dfe4ea', 'podium', axc, b.z1 - 16, aw - 4, 8, 26)
+          facBuilding('#dfe4ea', 'podium', axc, zB - 13, aw - 4, 8, 26)
           for (let i = 0; i < 4; i++) lotCar(ax0 + 4 + i * (aw - 8) / 3, SURFACE + 0.25, b.z0 + 12, Math.PI / 2, 'suv')
           push(whiteP, axc, SURFACE + 1.4, b.z0 + 4, 2.4, 2.8, 2.4)
           push(courtB, axc + 3.8, SURFACE + 1.1, b.z0 + 2.5, 5, 0.12, 0.12)
@@ -3934,14 +5583,15 @@ export function buildBuildings(plan, seed = 77) {
         push(pitchG, bx + 10, SURFACE + 0.7, front - 6, 0.7, 1.4, 0.6)
         if (aw > 16) {
           // 邮件分拣中心 + 装卸月台 + 邮车
-          facBuilding('#e2e8e2', 'podium', axc, b.z1 - 18, aw - 4, 9, 30)
-          const dz = b.z1 - 33
+          facBuilding('#e2e8e2', 'podium', axc, zB - 15, aw - 4, 9, 30)
+          const dz = zB - 30
           push(wallGrey, axc, SURFACE + 0.6, dz - 1.5, aw - 6, 1.2, 3)
           for (let i = 0; i < 4; i++) push(darkP, ax0 + 6 + i * (aw - 12) / 3, SURFACE + 2.2, dz + 0.1, 3.6, 3.6, 0.1)
           for (let i = 0; i < 3; i++) boxTruck(ax0 + 6 + i * (aw - 12) / 2.2, dz - 8, true, pitchG)
         }
         for (let i = 0; i < 4; i++) lotCar(bx - 20 + i * 6, SURFACE + 0.25, front - 12, Math.PI / 2, 'van')
       }
+      fillRing(b, b.x0 - 4, cxR + 4, b.z0 - 4, zB + 4, 'mid')
       return
     }
     if (k === 'gov') {
@@ -3949,7 +5599,8 @@ export function buildBuildings(plan, seed = 77) {
       const W1 = Math.min(W0 * 0.56, 96)
       const D1 = Math.min(D0 - 20, 46)
       const h = 34
-      const bz = b.z1 - 4 - D1 / 2
+      // t31：前广场约 60m（以前主楼贴后边 → 几百米深的广场 + 水池）
+      const bz = Math.min(b.z1 - 4 - D1 / 2, b.z0 + 60 + D1 / 2)
       const front = bz - D1 / 2
       facBuilding('#ece6da', 'punch', cx, bz, W1, h, D1)
       for (const s of [-1, 1]) facBuilding('#e6dfd2', 'punch', cx + s * (W1 / 2 + 15), bz + 4, 28, 18, D1 - 8)
@@ -3964,14 +5615,16 @@ export function buildBuildings(plan, seed = 77) {
       push(whiteP, cx, SURFACE + 11, pz, 0.3, 22, 0.3)
       push(redP, cx + 2.2, SURFACE + 20.5, pz, 4.2, 2.8, 0.05)
       push(villaWater, cx, SURFACE + 0.5, pz, 14, 0.4, Math.max(3, (front - 12 - b.z0) * 0.5))
-      for (const s of [-1, 1]) treeRow(cx + s * 24, b.z0 + 4, cx + s * (W0 / 2 - 6), b.z0 + 4, 9)
+      for (const s of [-1, 1]) treeRow(cx + s * 24, b.z0 + 4, cx + s * (W1 / 2 + 30), b.z0 + 4, 9)
+      fillRing(b, cx - W1 / 2 - 32, cx + W1 / 2 + 32, b.z0 + 3, bz + D1 / 2 + 8, 'mid')
       return
     }
     if (k === 'farmers') {
       // 农贸市场：钢构大棚（四面敞开）+ 天窗带 + 一排排摊位（台面 + 遮阳布 + 筐里的菜）+ 门头 + 前面装卸位
-      const W1 = W0 - 8
-      const D1 = D0 - 16
-      const bz = b.z1 - 3 - D1 / 2
+      // t31：大棚以前 = 整块地皮（500m 级），收成约 140 × 80m 贴街，其余密铺
+      const W1 = Math.min(W0 - 8, 140)
+      const D1 = Math.min(D0 - 16, 80)
+      const bz = b.z0 + 14 + D1 / 2
       const front = bz - D1 / 2
       const RH = 7.5
       for (let x = -W1 / 2; x <= W1 / 2 + 0.1; x += 8) for (const s of [-1, 1]) {
@@ -3993,17 +5646,20 @@ export function buildBuildings(plan, seed = 77) {
         }
       }
       board('farmers', cx, SURFACE + RH + 1.6, front - 1.6, 24, -1)
-      for (let i = 0; i < 8; i++) lotCar(b.x0 + 12 + i * ((W0 - 20) / 7), SURFACE + 0.25, b.z0 + 6, Math.PI / 2, i % 3 ? 'van' : null)
-      pad(tarmac, cx, b.z0 + 6, W0 - 4, 8, 0.25, 0.2)
+      for (let i = 0; i < 8; i++) lotCar(cx - W1 / 2 + 6 + i * ((W1 - 12) / 7), SURFACE + 0.25, b.z0 + 6, Math.PI / 2, i % 3 ? 'van' : null)
+      pad(tarmac, cx, b.z0 + 6, W1, 8, 0.25, 0.2)
+      fillRing(b, cx - W1 / 2 - 6, cx + W1 / 2 + 6, b.z0 + 3, bz + D1 / 2 + 6, 'mid')
       return
     }
     if (k === 'market') {
       // 惠民超市：大玻璃门脸 + 红色品牌带 + 屋顶大字 + 入口雨棚/自动门 + 购物车棚 + 侧面卸货月台和货车；旁边停车场（真车型）
+      // t31：超市 + 停车场收在约 220 × 110m 的一角（以前停车场铺满整个街廓剩余部分）
       const W1 = Math.min(W0 * 0.5, 88)
-      const D1 = D0 - 10
+      const D1 = Math.min(D0 - 10, 100)
       const h = 11
+      const mx0 = Math.max(b.x0 + 3, b.x1 - 3 - 220)
       const bx = b.x1 - 3 - W1 / 2
-      const bz = b.z1 - 3 - D1 / 2
+      const bz = b.z0 + 5 + D1 / 2
       const front = bz - D1 / 2
       facBuilding('#f4f2ee', 'podium', bx, bz, W1, h, D1)
       push(redP, bx, SURFACE + h - 1.2, front - 0.25, W1 + 0.4, 1.8, 0.3)
@@ -4026,38 +5682,56 @@ export function buildBuildings(plan, seed = 77) {
       for (let i = 0; i < 2; i++) boxTruck(dx - 8, bz + D1 * 0.1 + i * D1 * 0.22, false)
       pad(tarmac, dx - 8, bz + D1 * 0.15, 14, D1 * 0.6, 0.25, 0.2)
       // 旁边整块停车场：真车型
-      fillParking(b, b.x0 + 3, dx - 16, b.z0 + 2, b.z1 - 2)
+      fillParking(b, mx0, dx - 16, b.z0 + 2, bz + D1 / 2)
+      fillRing(b, mx0 - 4, b.x1 + 4, b.z0 - 4, bz + D1 / 2 + 6, 'mid')
       return
     }
     if (k === 'busterm') {
       // 公交总站：站房 + 长雨棚站台 + 停着的公交
-      pushBuilding('#e4e8ea', 'podium', cx - W0 / 2 + 16, SURFACE + 5, b.cz, 28, 10, Math.min(D0, 30))
-      signAt(10.5, 24)
+      // t31：站场收在约 180 × 90m（以前站台按整块街廓宽度拉 400m+，三排之间各隔一百多米空地），其余密铺
+      const TW = Math.min(W0, 180)
+      const TD = Math.min(D0, 90)
+      const tx0 = b.x0 + 3
+      const tcx = tx0 + TW / 2
+      const tcz = b.z0 + 3 + TD / 2
+      pad(tarmac, tcx + 14, tcz, TW - 30, TD - 4, 0.22, 0.2)
+      pushBuilding('#e4e8ea', 'podium', tx0 + 14, SURFACE + 5, tcz, 26, 10, Math.min(TD, 30))
+      board('busterm', tx0 + 14, SURFACE + 10.5, tcz - Math.min(TD, 30) / 2 - 0.4, 20, -1)
       for (let i = 0; i < 3; i++) {
-        const pz = b.z0 + 12 + i * Math.max(10, (D0 - 10) / 3)
-        push(pave, cx + 14, SURFACE + 0.3, pz, W0 - 40, 0.3, 3)
-        push(canopy, cx + 14, SURFACE + 4, pz, W0 - 40, 0.2, 5)
-        for (let x = cx - W0 / 2 + 36; x < cx + W0 / 2 - 6; x += 12) push(stMull, x, SURFACE + 2, pz, 0.15, 4, 0.15)
-        for (let j = 0; j < 3; j++) {
-          const bx = cx - W0 / 2 + 40 + j * 16
-          if (bx > cx + W0 / 2 - 10) break
+        const pz = b.z0 + 14 + i * ((TD - 16) / 2.6)
+        push(pave, tcx + 14, SURFACE + 0.3, pz, TW - 40, 0.3, 3)
+        push(canopy, tcx + 14, SURFACE + 4, pz, TW - 40, 0.2, 5)
+        for (let x = tx0 + 36; x < tx0 + TW - 6; x += 12) push(stMull, x, SURFACE + 2, pz, 0.15, 4, 0.15)
+        for (let j = 0; j < 6; j++) {
+          const bx = tx0 + 40 + j * 18
+          if (bx > tx0 + TW - 10) break
           lotCar(bx, SURFACE + 0.02, pz + 3.6, 0, 'bus')
         }
       }
+      void signAt
+      fillRing(b, tx0 - 4, tx0 + TW + 4, b.z0 - 4, b.z0 + 3 + TD + 4, 'mid')
       return
     }
     if (k === 'office') {
-      // 写字楼广场：两栋幕墙塔 + 中央广场喷泉
-      const tw = Math.min(W0 * 0.3, 40)
-      const td = Math.min(D0 * 0.55, 40)
+      // 写字楼：两栋主塔夹一座不大的广场，其余地皮密铺楼，不再留整块空场
+      const plazaW = Math.min(64, W0 * 0.16)
+      const plazaD = Math.min(48, D0 * 0.14)
+      const tw = 42, td = 42
       curGrp++
-      placeTower('core', cx - W0 / 2 + tw / 2 + 2, b.cz + D0 * 0.15, tw, td, b, { height: range(rng, 160, 240), style: 'curtain', col: pick(rng, WALL_GLASS) })
+      placeTower('core', cx - plazaW / 2 - tw / 2 - 4, b.cz + 8, tw, td, b, {
+        height: range(rng, 160, 240), style: 'curtain', col: pick(rng, WALL_GLASS),
+        skipPodium: true, nyc: true, googie: true, baseY: SURFACE,
+      })
       curGrp++
-      placeTower('core', cx + W0 / 2 - tw / 2 - 2, b.cz + D0 * 0.15, tw, td, b, { height: range(rng, 130, 200), style: 'curtain', col: pick(rng, WALL_GLASS) })
-      pad(pave, cx, b.cz - D0 * 0.2, W0 - tw * 2 - 8, D0 * 0.5, 0.24, 0.1)
-      push(villaWater, cx, SURFACE + 0.5, b.cz - D0 * 0.2, 12, 0.4, 8)
-      push(whiteP, cx, SURFACE + 1.4, b.cz - D0 * 0.2, 0.8, 2.2, 0.8)
-      board('office', cx, SURFACE + 3, fz + 2, 16, -1)
+      placeTower('core', cx + plazaW / 2 + tw / 2 + 4, b.cz + 8, tw, td, b, {
+        height: range(rng, 130, 200), style: 'curtain', col: pick(rng, WALL_GLASS),
+        skipPodium: true, nyc: true, googie: true, baseY: SURFACE,
+      })
+      pad(pave, cx, b.cz, plazaW, plazaD, 0.24, 0.1)
+      push(villaWater, cx, SURFACE + 0.5, b.cz, 12, 0.4, 8)
+      push(whiteP, cx, SURFACE + 1.4, b.cz, 0.8, 2.2, 0.8)
+      board('office', cx, SURFACE + 3, b.cz - plazaD / 2 - 0.4, 16, -1)
+      fillRing(b, cx - plazaW / 2 - tw - 8, cx + plazaW / 2 + tw + 8, b.cz - plazaD / 2 - 6, b.cz + td / 2 + 16, 'high')
       return
     }
     // 其余：一栋带标识的主楼 + 前广场（各自造型）
@@ -4075,9 +5749,10 @@ export function buildBuildings(plan, seed = 77) {
     if (bigLib) S.h = k === 'library' ? 30 : 26
     const w = Math.min(W0 * (bigLib ? 0.78 : S.w), bigLib ? 140 : 90)
     const d = Math.min(D0 * (bigLib ? 0.5 : S.d), bigLib ? 84 : 60)
-    const bz = bigLib ? b.z1 - 24 - d / 2 : b.z1 - 3 - d / 2
+    // t31：主楼贴前广场（约 36m），以前贴地块后边 → 前面整条几百米深的铺装空场
+    const bz = Math.min(bigLib ? b.z1 - 24 - d / 2 : b.z1 - 3 - d / 2, b.z0 + 36 + d / 2)
     if (k === 'hotel') {
-      placeTower('high', cx, bz, w, d, b, { height: S.h, style: 'hotel', col: S.col, skipPodium: true, forms: ['slab', 'chamfer', 'twin', 'stack'] })
+      placeTower('high', cx, bz, w, d, b, { height: S.h, style: 'hotel', col: S.col, skipPodium: true, nyc: true, googie: true, baseY: SURFACE })
       // 门廊雨棚（落客区）
       push(canopy, cx, SURFACE + 5, bz - d / 2 - 5, 18, 0.5, 10)
       for (const s of [-1, 1]) push(whiteP, cx + s * 8, SURFACE + 2.5, bz - d / 2 - 9.5, 0.6, 5, 0.6)
@@ -4126,12 +5801,15 @@ export function buildBuildings(plan, seed = 77) {
     if (k === 'market') {
       fillParking(b, b.x0 + 4, b.x1 - 4, b.z0 + 2, Math.max(b.z0 + 20, front - 4))
       push(redP, cx, SURFACE + S.h - 1, front - 0.12, w * 0.98, 1.2, 0.15)
-    } else frontPlaza(b, Math.max(4, front - b.z0 - 4))
+    } else frontPlaza(b, Math.max(4, front - b.z0 - 4), Math.min(b.w - 4, w + 16))
     {
       // 院名招牌：影城放在顶部居中（海报在下面两侧）；其余放在门头上方
       const bw = Math.min(w * 0.6, 24)
       const by = k === 'cinema' ? SURFACE + S.h - 1.5 - bw / 8 : SURFACE + Math.min(S.h - 2.5, 12)
       board(k, cx, by, front - 0.45, bw, -1)
+    }
+    if (k === 'hotel' || k === 'cinema') {
+      fillRing(b, cx - w / 2 - 8, cx + w / 2 + 8, b.z0 + 3, bz + d / 2 + 8, k === 'hotel' ? 'high' : 'mid')
     }
   }
   /** 任意高度停一辆车（车库各层/警局门口） */
@@ -4143,14 +5821,352 @@ export function buildBuildings(plan, seed = 77) {
     push(villaWin, x, y + 1.22, z, 1.7, 0.5, 2.4)
     for (const a of [-1, 1]) for (const c of [-1, 1]) push(tarmac, x + a * 0.8, y + 0.32, z + c * 1.45, 0.26, 0.64, 0.64)
   }
+  function sliceFrontLots(a0, a1) {
+    const lots = []
+    const alleys = []
+    let c = a0
+    while (c < a1 - 8) {
+      if (rng() < 0.18 && c > a0 + 22 && a1 - c > 46) {
+        const gap = range(rng, 8, 13)
+        alleys.push([c, c + gap])
+        c += gap
+        continue
+      }
+      let lf = range(rng, 28, 62)
+      if (a1 - c - lf < 16) lf = a1 - c
+      lf = Math.min(lf, a1 - c)
+      if (lf < 10) break
+      lots.push([c, c + lf])
+      c += lf
+    }
+    return { lots, alleys }
+  }
+
+  /** 在设施占地四周的剩余条带上密铺楼，避免医院/车库/体育场在大街廓里变成孤岛 */
+  /**
+   * 设施/商场四周的街坊带。t33：
+   *  · 先给本地块登记的公共建筑（catalog CIVIC）在最大的临街带里取位，剩下的带再密铺；
+   *  · 带子很深时不再只沿街一排（以前 placeNYCLot 只盖临街 40~60m，后面几百米全空）→ 按 36~54m 一排、8m 后巷逐排往里铺，
+   *    特别深的整片走 fillRect（内部巷道 + 院落）。
+   */
+  function fillRing(b, ix0, ix1, iz0, iz1, kind = 'mid') {
+    const raw = [
+      { alongX: true, a0: b.x0 + 3, a1: b.x1 - 3, p0: b.z0 + 3, p1: iz0 - 6, front: -1, open: { xn: false, xp: false, zn: true, zp: false } },
+      { alongX: true, a0: b.x0 + 3, a1: b.x1 - 3, p0: iz1 + 6, p1: b.z1 - 3, front: 1, open: { xn: false, xp: false, zn: false, zp: true } },
+      { alongX: false, a0: Math.max(iz0, b.z0 + 3), a1: Math.min(iz1, b.z1 - 3), p0: b.x0 + 3, p1: ix0 - 6, front: -1, open: { xn: true, xp: false, zn: false, zp: false } },
+      { alongX: false, a0: Math.max(iz0, b.z0 + 3), a1: Math.min(iz1, b.z1 - 3), p0: ix1 + 6, p1: b.x1 - 3, front: 1, open: { xn: false, xp: true, zn: false, zp: false } },
+    ]
+    let pieces = raw.filter((s) => s.p1 - s.p0 >= 16 && s.a1 - s.a0 >= 16)
+    const sp = b.specials || []
+    for (let qi = 0; qi < sp.length; qi++) {
+      const c = sp[qi]
+      if (c.done) continue
+      let best = null
+      for (const s of pieces) {
+        if (!s.front) continue
+        if (s.a1 - s.a0 < c.w + 4 || s.p1 - s.p0 < c.d) continue
+        if (!best || (s.a1 - s.a0) * (s.p1 - s.p0) > (best.a1 - best.a0) * (best.p1 - best.p0)) best = s
+      }
+      if (!best) continue
+      c.done = true
+      const slack = (best.a1 - best.a0 - c.w) / 2
+      const am = (best.a0 + best.a1) / 2 + (slack > 40 ? range(rng, -0.5, 0.5) * (slack - 30) : 0)
+      const sa0 = am - c.w / 2, sa1 = am + c.w / 2
+      const pf = best.front < 0 ? best.p0 : best.p1
+      const pc = pf - best.front * c.d / 2
+      const [cx, cz, fx, fz] = best.alongX ? [am, pc, 0, best.front] : [pc, am, best.front, 0]
+      civic.place(c.id, cx, cz, fx, fz, c.w, c.d, c.v || 0)
+      civicPlaced.push({ id: c.id, x: Math.round(cx), z: Math.round(cz), host: b.kind })
+      pieces = pieces.filter((s) => s !== best)
+      pieces.push({ ...best, a1: sa0 - 6 }, { ...best, a0: sa1 + 6 })
+      const back = best.front < 0 ? { p0: best.p0 + c.d + 8, p1: best.p1 } : { p0: best.p0, p1: best.p1 - c.d - 8 }
+      pieces.push({ ...best, a0: sa0, a1: sa1, ...back, front: 0, open: { xn: false, xp: false, zn: false, zp: false } })
+    }
+    for (const s of pieces) fillStrip(s, kind, b)
+  }
+  function stripRow(s, q0, q1, kind, b) {
+    if (q1 - q0 < 16 || s.a1 - s.a0 < 16) return
+    const { lots, alleys } = sliceFrontLots(s.a0, s.a1)
+    for (const [u0, u1] of alleys) {
+      if (s.alongX) campusRoad((u0 + u1) / 2, (q0 + q1) / 2, u1 - u0, q1 - q0 + 2)
+      else campusRoad((q0 + q1) / 2, (u0 + u1) / 2, q1 - q0 + 2, u1 - u0)
+    }
+    for (let i = 0; i < lots.length; i++) {
+      const [u0, u1] = lots[i]
+      const open = { ...s.open }
+      if (s.alongX) {
+        open.xn = s.open.xn || i === 0
+        open.xp = s.open.xp || i === lots.length - 1
+        placeNYCLot(u0, u1, q0, q1, kind, b, { open })
+      } else {
+        open.zn = s.open.zn || i === 0
+        open.zp = s.open.zp || i === lots.length - 1
+        placeNYCLot(q0, q1, u0, u1, kind, b, { open })
+      }
+    }
+  }
+  function fillStrip(s, kind, b) {
+    const depth = s.p1 - s.p0
+    const len = s.a1 - s.a0
+    if (depth < 16 || len < 16) return
+    if (depth <= 66) return stripRow(s, s.p0, s.p1, kind, b)
+    const lane = (q0, q1) => {
+      if (s.alongX) campusRoad((s.a0 + s.a1) / 2, (q0 + q1) / 2, len, q1 - q0)
+      else campusRoad((q0 + q1) / 2, (s.a0 + s.a1) / 2, q1 - q0, len)
+    }
+    const fromMax = s.front > 0
+    if (depth > 150 && len > 120) {
+      const D = range(rng, 38, 52)
+      const f0 = fromMax ? s.p1 - D : s.p0
+      stripRow(s, f0, f0 + D, kind, b)
+      const r0 = fromMax ? s.p0 : s.p0 + D + 8
+      const r1 = fromMax ? s.p1 - D - 8 : s.p1
+      lane(fromMax ? r1 : f0 + D, fromMax ? f0 : r0)
+      if (s.alongX) fillRect(kind, s.a0, s.a1, r0, r1, b)
+      else fillRect(kind, r0, r1, s.a0, s.a1, b)
+      return
+    }
+    let rem = depth
+    let c = fromMax ? s.p1 : s.p0
+    while (rem >= 16) {
+      const D = rem <= 66 ? rem : Math.min(range(rng, 36, 54), rem - 24)
+      const q0 = fromMax ? c - D : c
+      stripRow(s, q0, q0 + D, kind, b)
+      rem -= D
+      c = fromMax ? c - D : c + D
+      if (rem < 24) break
+      lane(fromMax ? c - 8 : c, fromMax ? c : c + 8)
+      c = fromMax ? c - 8 : c + 8
+      rem -= 8
+    }
+  }
+
+  function fillRect(kind, x0, x1, z0, z1, block) {
+    const w = x1 - x0, d = z1 - z0
+    if (w < 18 || d < 18) return
+    const vb = {
+      ...block,
+      kind,
+      x0, x1, z0, z1,
+      cx: (x0 + x1) / 2,
+      cz: (z0 + z1) / 2,
+      w, d,
+      mega: false,
+      spike: false,
+    }
+    if (Math.min(w, d) > 90) fillSuperblock(vb, 1.2)
+    else {
+      const alongX = w >= d
+      const { lots, alleys } = sliceFrontLots(alongX ? x0 : z0, alongX ? x1 : z1)
+      // t34：切出来的巷子以前不铺任何东西（露出底板）→ 铺成园区路
+      for (const [u0, u1] of alleys) {
+        if (alongX) campusRoad((u0 + u1) / 2, (z0 + z1) / 2, u1 - u0, d)
+        else campusRoad((x0 + x1) / 2, (u0 + u1) / 2, w, u1 - u0)
+      }
+      for (const [u0, u1] of lots) {
+        if (alongX) placeNYCLot(u0, u1, z0, z1, kind, vb, { open: { xn: u0 === lots[0][0], xp: u1 === lots[lots.length - 1][1], zn: true, zp: true } })
+        else placeNYCLot(x0, x1, u0, u1, kind, vb, { open: { xn: true, xp: true, zn: u0 === lots[0][0], zp: u1 === lots[lots.length - 1][1] } })
+      }
+    }
+  }
+
+  /**
+   * 滨河（t32）：两岸整片做滨水公园，不再在河岸地块上铺沿河楼 / fillSuperblock 街坊。
+   * 园内设施（滨水步道、栈桥、咖啡亭、凉亭、公厕、儿童游乐、树丛、花境）全部在 amenities.buildParkFacilities 里按公园尺度稀疏布置；
+   * 这里不放任何楼体。
+   */
+  function fillRiverbank(b) {
+    void b
+  }
+
+  function fillSuperblock(b, inset, mode = 'dense') {
+    const x0 = b.x0 + inset, x1 = b.x1 - inset
+    const z0 = b.z0 + inset, z1 = b.z1 - inset
+    const depthS = range(rng, 36, 58)
+    const depthN = range(rng, 36, 58)
+    const depthW = range(rng, 36, 58)
+    const depthE = range(rng, 36, 58)
+
+    const sliceFront = (alongX, a0, a1, p0, p1, openBase) => {
+      const { lots, alleys } = sliceFrontLots(a0, a1)
+      for (const [u0, u1] of alleys) {
+        if (alongX) campusRoad((u0 + u1) / 2, (p0 + p1) / 2, u1 - u0, Math.abs(p1 - p0) + 3)
+        else campusRoad((p0 + p1) / 2, (u0 + u1) / 2, Math.abs(p1 - p0) + 3, u1 - u0)
+      }
+      for (let i = 0; i < lots.length; i++) {
+        const [u0, u1] = lots[i]
+        const open = { xn: openBase.xn, xp: openBase.xp, zn: openBase.zn, zp: openBase.zp }
+        if (alongX) {
+          open.xn = openBase.xn || i === 0
+          open.xp = openBase.xp || i === lots.length - 1
+          placeNYCLot(u0, u1, p0, p1, b.kind === 'park' ? 'mid' : b.kind, b, { open })
+        } else {
+          open.zn = openBase.zn || i === 0
+          open.zp = openBase.zp || i === lots.length - 1
+          placeNYCLot(p0, p1, u0, u1, b.kind === 'park' ? 'mid' : b.kind, b, { open })
+        }
+      }
+    }
+
+    sliceFront(true, x0, x1, z0, z0 + depthS, { xn: false, xp: false, zn: true, zp: false })
+    sliceFront(true, x0, x1, z1 - depthN, z1, { xn: false, xp: false, zn: false, zp: true })
+    const midZ0 = z0 + depthS, midZ1 = z1 - depthN
+    if (midZ1 - midZ0 > 16) {
+      sliceFront(false, midZ0, midZ1, x0, x0 + depthW, { xn: true, xp: false, zn: false, zp: false })
+      sliceFront(false, midZ0, midZ1, x1 - depthE, x1, { xn: false, xp: true, zn: false, zp: false })
+    }
+
+    // t34 内环路：临街一圈楼和内部地皮之间留 9m 园区环路（以前只留 2m，整片内部像一块大平板）
+    const RR = 9
+    const ix0 = x0 + depthW + RR, ix1 = x1 - depthE - RR
+    const iz0 = z0 + depthS + RR, iz1 = z1 - depthN - RR
+    if (ix1 - ix0 < 22 || iz1 - iz0 < 22) {
+      // 内部太小：整块铺成内院，不留空板
+      const qx0 = x0 + depthW + 2, qx1 = x1 - depthE - 2, qz0 = z0 + depthS + 2, qz1 = z1 - depthN - 2
+      if (qx1 - qx0 > 8 && qz1 - qz0 > 8) pad(pave, (qx0 + qx1) / 2, (qz0 + qz1) / 2, qx1 - qx0, qz1 - qz0, 0.22)
+      return
+    }
+    {
+      const rw = RR - 1
+      const cxm = (ix0 + ix1) / 2, czm = (iz0 + iz1) / 2
+      campusRoad(cxm, iz0 - RR / 2, ix1 - ix0, rw)
+      campusRoad(cxm, iz1 + RR / 2, ix1 - ix0, rw)
+      campusRoad(ix0 - RR / 2, czm, rw, iz1 - iz0)
+      campusRoad(ix1 + RR / 2, czm, rw, iz1 - iz0)
+      for (const [qx, qz] of [[ix0 - RR / 2, iz0 - RR / 2], [ix1 + RR / 2, iz0 - RR / 2], [ix0 - RR / 2, iz1 + RR / 2], [ix1 + RR / 2, iz1 + RR / 2]]) campusRoad(qx, qz, rw, rw, true)
+    }
+
+    // 公园只在中心留 100 米左右的绿地，四周仍密铺楼
+    const parkW = mode === 'parkFrame' ? Math.min(130, (ix1 - ix0) * 0.42) : 0
+    const parkD = mode === 'parkFrame' ? Math.min(120, (iz1 - iz0) * 0.42) : 0
+    const pcx = (ix0 + ix1) / 2, pcz = (iz0 + iz1) / 2
+    const inPark = (mx, mz) => parkW > 0 && Math.abs(mx - pcx) < parkW / 2 - 2 && Math.abs(mz - pcz) < parkD / 2 - 2
+
+    // 内部切成 40–80m 地皮，巷子连通；少数大地皮做成四面围合的小院，不再留几百米空院子
+    const cut = (a0, a1) => {
+      const spans = []
+      let c = a0
+      let sinceAlley = 0
+      while (c < a1 - 10) {
+        // t34：至少每 ~95m 一条内部路（以前 16% 随机，常常几百米连成一片无路地块）
+        if ((rng() < 0.16 || sinceAlley > 95) && c > a0 + 28 && a1 - c > 58) {
+          sinceAlley = 0
+          const g = range(rng, 8, 13)
+          spans.push({ t: 'alley', a: c, b: c + g })
+          c += g
+          continue
+        }
+        let lf = range(rng, 38, 78)
+        if (a1 - c - lf < 22) lf = a1 - c
+        lf = Math.min(lf, a1 - c)
+        if (lf < 14) break
+        spans.push({ t: 'lot', a: c, b: c + lf })
+        c += lf
+        sinceAlley += lf
+      }
+      if (spans.length && a1 - spans[spans.length - 1].b > 14) {
+        const last = spans[spans.length - 1]
+        if (last.t === 'lot') last.b = a1
+        else spans.push({ t: 'lot', a: last.b, b: a1 })
+      }
+      return spans
+    }
+
+    const cols = cut(ix0, ix1)
+    const rows = cut(iz0, iz1)
+    const innerKind = b.kind === 'shop' ? (rng() < 0.5 ? 'mid' : 'shop') : b.kind === 'park' ? 'mid' : b.kind
+    const openAll = { xn: true, xp: true, zn: true, zp: true }
+
+    for (const col of cols) {
+      for (const row of rows) {
+        const cx0 = col.a, cx1 = col.b, cz0 = row.a, cz1 = row.b
+        const cw = cx1 - cx0, cd = cz1 - cz0
+        if (cw < 6 || cd < 6) continue
+        const mx = (cx0 + cx1) / 2, mz = (cz0 + cz1) / 2
+        if (inPark(mx, mz)) continue
+        if (col.t === 'alley' || row.t === 'alley') {
+          if (col.t === 'alley' && row.t === 'lot') campusRoad(mx, mz, cw, cd + 2)
+          else if (row.t === 'alley' && col.t === 'lot') campusRoad(mx, mz, cw + 2, cd)
+          else campusRoad(mx, mz, cw, cd, true)
+          continue
+        }
+        if (cw > 52 && cd > 52 && rng() < 0.28 && mode !== 'parkFrame') {
+          const thick = range(rng, 16, 24)
+          placeNYCLot(cx0, cx1, cz0, cz0 + thick, innerKind, b, { open: { xn: true, xp: true, zn: true, zp: false } })
+          placeNYCLot(cx0, cx1, cz1 - thick, cz1, innerKind, b, { open: { xn: true, xp: true, zn: false, zp: true } })
+          if (cz1 - thick - (cz0 + thick) > 14) {
+            placeNYCLot(cx0, cx0 + thick, cz0 + thick, cz1 - thick, innerKind, b, { open: { xn: true, xp: false, zn: false, zp: false } })
+            placeNYCLot(cx1 - thick, cx1, cz0 + thick, cz1 - thick, innerKind, b, { open: { xn: false, xp: true, zn: false, zp: false } })
+          }
+          const iw = cw - thick * 2 - 4, id = cd - thick * 2 - 4
+          if (iw > 8 && id > 8) {
+            pad(pave, mx, mz, iw, id, 0.22)
+            if (iw > 16 && id > 16) {
+              treeRow(mx - iw / 2 + 3, mz - id / 2 + 3, mx + iw / 2 - 3, mz - id / 2 + 3, 8, 0.85)
+              treeRow(mx - iw / 2 + 3, mz + id / 2 - 3, mx + iw / 2 - 3, mz + id / 2 - 3, 8, 0.85)
+            }
+          }
+        } else {
+          placeNYCLot(cx0, cx1, cz0, cz1, innerKind, b, { open: openAll, forceTower: rng() < 0.4 })
+        }
+      }
+    }
+  }
+
   function fillBlock(b) {
     curDistrict = b.district || null
     curBlockB = b
     if (FACILITY_KINDS.has(b.kind)) return fillFacility(b)
-    if (b.kind === 'plaza' && b.w > 90 && b.d > 80) return placePlaza(b)
-    if (b.kind === 'park' || b.kind === 'riverbank' || b.kind === 'plaza') return
-    if (b.spike) return placeSpike(b)
+    if (b.kind === 'themepark') {
+      // t37 城边整块主题乐园：入口朝城内那条干道
+      const fx = b.cx > 0 ? -1 : 1
+      civic.place('themepark', b.cx, b.cz, fx, 0, b.d - 6, b.w - 6)
+      civicPlaced.push({ id: 'themepark', x: Math.round(b.cx), z: Math.round(b.cz), host: 'edge' })
+      return
+    }
+    if (b.kind === 'parkresort') {
+      // t40 乐园度假区：正面（步行桥）朝向乐园那条干道
+      const pk = plan.blocks.find((q) => q.kind === 'themepark')
+      const fx = pk ? Math.sign(pk.cx - b.cx) || 1 : 1
+      civic.place('parkresort', b.cx, b.cz, fx, 0, b.d - 6, b.w - 6)
+      civicPlaced.push({ id: 'parkresort', x: Math.round(b.cx), z: Math.round(b.cz), host: 'edge' })
+      return
+    }
+    if (b.kind === 'plaza' && b.w > 90 && b.d > 80) {
+      if (Math.min(b.w, b.d) > 200) {
+        const pw = Math.min(160, b.w * 0.42)
+        const pd = Math.min(140, b.d * 0.4)
+        const pb = { ...b, x0: b.cx - pw / 2, x1: b.cx + pw / 2, z0: b.cz - pd / 2, z1: b.cz + pd / 2, w: pw, d: pd, cx: b.cx, cz: b.cz }
+        placePlaza(pb)
+        fillRing(b, pb.x0 - 4, pb.x1 + 4, pb.z0 - 4, pb.z1 + 4, 'mid')
+        return
+      }
+      return placePlaza(b)
+    }
+    if (b.kind === 'park' && Math.min(b.w, b.d) > 180) {
+      fillSuperblock(b, 1.2, 'parkFrame')
+      return
+    }
+    if (b.kind === 'riverbank') {
+      fillRiverbank(b)
+      return
+    }
+    if (b.kind === 'park' || b.kind === 'plaza') return
+    if (b.spike) {
+      placeSpike(b)
+      if (Math.min(b.w, b.d) > 150) {
+        fillRing(b, b.cx - 72, b.cx + 72, b.cz - 88, b.cz + 72, b.kind === 'high' ? 'high' : 'core')
+      }
+      return
+    }
     if (b.kind === 'villa') return fillVilla(b)
+    if (b.kind === 'airport') {
+      // 城边机场：整块，临街面朝城内
+      const fx = b.cx > 0 ? -1 : 1
+      civic.place('airport', b.cx, b.cz, fx, 0, b.d - 6, b.w - 6)
+      civicPlaced.push({ id: 'airport', x: Math.round(b.cx), z: Math.round(b.cz), host: 'edge' })
+      return
+    }
     if (b.kind === 'hospital') return fillHospital(b)
     if (b.kind === 'school') return fillSchool(b)
     if (b.kind === 'sports' || b.kind === 'gym') return fillSports(b)
@@ -4166,14 +6182,19 @@ export function buildBuildings(plan, seed = 77) {
     const usableD = b.d - pad * 2
     if (usableW < 16 || usableD < 16) return
 
-    // 异形地标塔：核心/高层街块偶发
-    if ((b.kind === 'core' || b.kind === 'high') && Math.min(usableW, usableD) > 62 && rng() < 0.2) {
+    // 异形地标只独占中等街块；超大街廓走围合内院，地标放在院子里
+    const shortSide = Math.min(usableW, usableD)
+    if ((b.kind === 'core' || b.kind === 'high') && shortSide > 62 && shortSide < 140 && rng() < 0.3) {
       if (placeIconic(b) !== false) return
     }
 
-    // 核心大地块偶发「一整块一栋超高」，底座够宽才压得住高度
-    if ((b.kind === 'core' || b.kind === 'high') && Math.min(usableW, usableD) > 70 && rng() < 0.22) {
+    if ((b.kind === 'core' || b.kind === 'high') && shortSide > 70 && shortSide < 140 && rng() < 0.18) {
       placeNYCLot(b.x0 + pad, b.x1 - pad, b.z0 + pad, b.z1 - pad, 'core', b)
+      return
+    }
+
+    if (shortSide > 90) {
+      fillSuperblock(b, pad)
       return
     }
 
@@ -4314,30 +6335,19 @@ export function buildBuildings(plan, seed = 77) {
   }
 
   function placeMall(b) {
-    const depth = 12
-    const frontN = b.mega ? 2 : 1 + ((rng() * 2) | 0)
-    const sides = [
-      { alongX: true, x0: b.x0 + 1, z0: b.z0, len: b.w - 2, toward: true },
-      { alongX: true, x0: b.x0 + 1, z0: b.z1, len: b.w - 2, toward: false },
-      { alongX: false, x0: b.x0, z0: b.z0 + 8, len: b.d - 16, toward: true },
-      { alongX: false, x0: b.x1, z0: b.z0 + 8, len: b.d - 16, toward: false },
-    ].sort(() => rng() - 0.5)
-    for (let i = 0; i < frontN; i++) {
-      const s = sides[i]
-      placeRow(s.alongX, s.x0, s.z0, s.len, depth, s.toward, 'shop', {
-        fill: range(rng, 0.45, 0.8),
-        sparse: rng() < 0.4,
-      })
-    }
-
-    const pad = b.mega ? range(rng, 28, 48) : range(rng, 22, 36)
-    const w = b.w - pad * 2
-    const d = b.d - pad * 2
-    if (w < 36 || d < 36) return
+    // t31：商场以前 = 整块地皮减 22~48m 退线（街廓 400~600m → 300~500m 的一整块深色屋顶 + 巨大白色中庭），
+    // 外加沿地块边 0.45~0.8 长的 placeRow 店铺条。现在按真实城市商场收成一栋：
+    // 主体约 170~220 × 140~180m，贴南侧（-z）街面、前面一块 22~32m 的门前广场，其余地皮 fillRing 密铺街坊。
     curGrp++
+    const plazaD = range(rng, 22, 32)
+    const w = Math.min(b.w - 16, b.mega ? range(rng, 190, 220) : range(rng, 170, 205))
+    const d = Math.min(b.d - plazaD - 12, b.mega ? range(rng, 150, 180) : range(rng, 140, 168))
+    if (w < 36 || d < 36) return
+    const slack = Math.max(0, (b.w - 16 - w) / 2)
+    const cx = b.cx + range(rng, -0.35, 0.35) * slack
+    const cz = b.z0 + plazaD + d / 2
+    const pad = plazaD
     const h = heightFor('mall', rng, b)
-    const cx = b.cx + range(rng, -8, 8)
-    const cz = b.cz + range(rng, -8, 8)
     // 多层商场：两级退台裙楼 + 屋顶玻璃中庭天窗 + 双层高玻璃主入口（门廊 + 招牌）+ 门前广场
     const h1 = Math.max(16, h * 0.42)
     const h2 = Math.max(10, h * 0.3)
@@ -4348,8 +6358,8 @@ export function buildBuildings(plan, seed = 77) {
     }
     const topY = SURFACE + h1 + h2
     // 中庭天窗：玻璃采光顶 + 钢肋
-    const aw = w * 0.34
-    const ad = d * 0.3
+    const aw = Math.min(56, w * 0.28)
+    const ad = Math.min(40, d * 0.26)
     push(glassPortal, cx - w * 0.12, topY + 3.6, cz - d * 0.04, aw, 1.6, ad)
     for (let i = -2; i <= 2; i++) push(accent, cx - w * 0.12 + i * aw / 5, topY + 4.5, cz - d * 0.04, 0.4, 0.4, ad + 0.6)
     // 主入口：外凸玻璃门厅（两层高）+ 门廊雨棚 + 招牌
@@ -4372,8 +6382,28 @@ export function buildBuildings(plan, seed = 77) {
       }
     }
     dressNear(cx, SURFACE, cz, w, Math.min(h1, 40), d, 'podium', { shop: true })
+    // 商场两侧和背后：街坊密铺（与 fillSchool / fillHospital 同一套），不再留整片空场
+    fillRing(b, cx - w / 2 - 6, cx + w / 2 + 6, b.z0 + 3, cz + d / 2 + 6, rng() < 0.5 ? 'shop' : 'mid')
   }
 
+  // ── t33 公共建筑：按 catalog CIVIC 登记到宿主地块（只登记，不改宿主 kind → 不触发设施重排）──
+  const civicPlaced = []
+  const civic = makeCivic({
+    LP, push, pushBuilding, addSolid, pad, villaTree, boards, billFrame, rng, range, S0: SURFACE, Mat, lotCar, cylGeo,
+    nextGrp: () => { curGrp++ },
+    pools: { glassPortal, stoneStep, lawn, pave, tarmac, redWall, tileGrey, goldP, lineW, beacon, treadP, hedge, fence, gablePools, awningPools, flowerPools },
+  })
+  for (const c of CATALOG.civic || []) {
+    if (!c.host || !civic.has(c.id)) continue
+    let best = null
+    let bd = 160
+    for (const b of plan.blocks) {
+      if (b.kind !== c.host.kind) continue
+      const dd = Math.hypot(b.cx - c.host.x, b.cz - c.host.z)
+      if (dd < bd) { bd = dd; best = b }
+    }
+    if (best) (best.specials || (best.specials = [])).push({ id: c.id, w: c.size[0], d: c.size[1], v: c.v || 0 })
+  }
   /** 超高只集中在两三个簇 */
   const SPIKE_ZONES = [
     { x: 0.14 * W.cityWidth, z: 0.02 * W.segmentLength, r: 420 },
@@ -4527,7 +6557,8 @@ export function buildBuildings(plan, seed = 77) {
       if (plan.isClosed?.(ax, sz, -40)) continue
       if ((inC && hh < 0.5) || (commerce.has(sz) && hh < 0.3)) ops.push({ x: ax, z: sz + s * (sw / 2 + 9), s })
       // 地铁口：约每 600~800m 一个（路口一角）
-      if (hh > 0.55 && hh < (inC ? 0.95 : 0.8)) {
+      // t33：地铁口加密（以前约 1/4 路口，现在约 2/3）
+      if (hh > 0.28 && hh < (inC ? 0.98 : 0.92)) {
         const sx = hh * 13 % 1 < 0.5 ? -1 : 1
         metros.push({ x: ax + sx * (aw / 2 + 3.6), z: sz - s * (sw / 2 + 13), s: -s })
       }
@@ -5179,5 +7210,7 @@ export function buildBuildings(plan, seed = 77) {
   g.userData.shops = shopSpots
   g.userData.walks = walks
   g.userData.cylinders = cylList
+  g.userData.civic = civicPlaced
+  g.userData.floatFix = floatFix
   return g
 }

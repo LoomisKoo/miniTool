@@ -66,11 +66,14 @@ function buildParkFacilities(plan, rng) {
     inst.setMatrixAt(inst.userData.n++, dummy.matrix)
   }
 
-  const path = pool(Mat.concrete('#cfc3ad'), 4_000)
+  // t34 园路 / 广场：克隆后加铺砖分格 + 斑驳（不再是纯色板）
+  const craftM = (hex, kind) => { const m = Mat.concrete(hex).clone(); Mat.registerMaterial(m); return Mat.groundCraft(m, kind) }
+  const plazaM = craftM('#c4b8a4', 'pave')
+  const path = pool(craftM('#d8c8a6', 'pave'), 5_000)
   const court = pool(Mat.concrete('#3a6a4a'), 400)
   const sand = pool(Mat.sand(), 400)
-  const wood = pool(Mat.concrete('#8a6a48'), 3_000)
-  const metal = pool(Mat.metal('#6a727c'), 2_000)
+  const wood = pool(Mat.concrete('#8a6a48'), 6_000)
+  const metal = pool(Mat.metal('#6a727c'), 4_000)
   const water = pool(Mat.water(false), 80)
   const cylPool = (mat, cap) => {
     const inst = new THREE.InstancedMesh(cylGeo, mat, cap)
@@ -115,11 +118,11 @@ function buildParkFacilities(plan, rng) {
   const trunkMat = Mat.concrete('#5a4030')
   const canopyMat = Mat.grass('#3f6a3a')
   // 公园树：阔叶（多团冠）/ 伞形大树 / 针叶塔形 / 柱形，冠色逐棵微调；开阔处种大树（16~26m）
-  const trunks = new THREE.InstancedMesh(cylGeo, trunkMat, 4_000)
-  const canopies = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), canopyMat, 9_000)
-  trunks.userData = { n: 0, cap: 4_000 }
+  const trunks = new THREE.InstancedMesh(cylGeo, trunkMat, 8_000)
+  const canopies = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), canopyMat, 18_000)
+  trunks.userData = { n: 0, cap: 8_000 }
   trunks.name = canopies.name = 'parkTrees'
-  canopies.userData = { n: 0, cap: 9_000 }
+  canopies.userData = { n: 0, cap: 18_000 }
   const tcol = new THREE.Color()
   const TINT = ['#ffffff', '#e8f4dc', '#d6e8c8', '#f4f0d0', '#c8dcc0', '#e0ead0']
   const putI = (inst, x, y, z, sx, sy, sz, col) => {
@@ -160,23 +163,81 @@ function buildParkFacilities(plan, rng) {
     }
   }
 
-  for (const b of plan.blocks) {
-    if (b.kind !== 'park' && b.kind !== 'riverbank' && b.kind !== 'plaza') continue
-    if (b.kind === 'riverbank') {
-      // 以前整块草地盖过河面，河只在路口露出来 → 看起来是一截截的。现在只铺两岸陆地
-      const rb = W.riverWidth / 2 + 30
-      for (const s of [-1, 1]) {
-        const xa = s < 0 ? b.x0 : rb
-        const xb = s < 0 ? -rb : b.x1
-        if (xb - xa < 8) continue
-        const pad = new THREE.Mesh(new THREE.BoxGeometry(xb - xa, 0.4, Math.max(8, b.d - 2)), Mat.grass('#5a7a52'))
-        pad.position.set((xa + xb) / 2, SURFACE - 0.14, b.cz)
-        g.add(pad)
-        const n = Math.floor(((xb - xa) * b.d) / 900)
-        for (let i = 0; i < n; i++) tree(range(rng, xa + 4, xb - 4), range(rng, b.z0 + 6, b.z1 - 6), range(rng, 7, 14))
-      }
-      continue
+  // t32 滨水公园专用：咖啡亭 / 栈桥 / 遮阳伞
+  const cafeP = pool(Mat.concrete('#3bb8ac'), 60)
+  const cafeRoof = pool(Mat.concrete('#f4ecd8'), 60)
+  const cafeGlass = pool(Mat.glass(), 60)
+  const umbP = [pool(Mat.concrete('#e46a52'), 200), pool(Mat.concrete('#f2c14e'), 200), pool(Mat.concrete('#f4f1ea'), 200)]
+  const deckP = pool(Mat.concrete('#a07a52'), 400)
+  const RIVER_Y = SURFACE - 6
+  /** 滨水公园附加：沿河林荫步道 + 横向园路 + 栈桥 + 咖啡亭（s = 该岸在河的哪一侧，-1 西岸 / +1 东岸） */
+  function riverExtras(bk, s) {
+    const RW2 = W.riverWidth / 2
+    const inward = s // 离河方向
+    const px = s * (RW2 + 30 + 9)
+    // 1) 林荫滨水步道：5m 宽，两侧行道树，单侧庭院灯 + 长椅
+    push(path, px, SURFACE + 0.49, bk.cz, 5, 0.12, bk.d - 12)
+    for (let z = bk.z0 + 10; z < bk.z1 - 10; z += range(rng, 13, 17)) {
+      tree(px + inward * 5.5, z, range(rng, 9, 14))
+      if (rng() < 0.7) tree(px - inward * 5.5, z + 6, range(rng, 8, 12))
     }
+    for (let z = bk.z0 + 14; z < bk.z1 - 14; z += 24) {
+      const lx = px - inward * 3.1
+      push(lampP, lx, SURFACE + 2.2, z, 0.14, 4.0, 0.14)
+      push(lampH, lx, SURFACE + 4.55, z, 0.5, 0.5, 0.5)
+      lampsOut.push(lx, SURFACE + 4.2, z)
+      push(wood, lx, SURFACE + 0.92, z + 8, 0.5, 0.07, 1.8)
+      push(metal, lx, SURFACE + 0.7, z + 8, 0.4, 0.42, 1.6)
+    }
+    // 2) 横向园路：每 ~120m 一条，从滨水步道通到内侧城市道路
+    const xIn = s > 0 ? bk.x1 - 6 : bk.x0 + 6
+    const nC = Math.max(1, Math.round(bk.d / 120))
+    for (let i = 0; i < nC; i++) {
+      const z = bk.z0 + bk.d * (i + 0.5) / nC
+      push(path, (px + xIn) / 2, SURFACE + 0.485, z, Math.abs(xIn - px), 0.12, 3.5)
+    }
+    // 3) 栈桥：从驳岸压顶伸出 20m 到水面上，木栈道 + 栏杆 + 桩 + 桥头两盏灯
+    const pz = bk.cz + range(rng, -bk.d * 0.18, bk.d * 0.18)
+    const L = 20
+    const pcx = s * RW2 - s * L / 2
+    push(deckP, pcx, SURFACE + 0.87, pz, L, 0.3, 4.6)
+    // 驳岸石台到栈桥的一小段
+    push(deckP, s * (RW2 + 2), SURFACE + 0.87, pz, 4, 0.3, 4.6)
+    for (const sz of [-1, 1]) {
+      push(metal, pcx, SURFACE + 1.95, pz + sz * 2.2, L, 0.08, 0.08)
+      for (let k = 0; k <= 5; k++) {
+        const x = s * RW2 - s * (L * k / 5)
+        push(metal, x, SURFACE + 1.45, pz + sz * 2.2, 0.08, 1.0, 0.08)
+        // 桩：从栈道底一直插到河床
+        const top = SURFACE + 0.3, bot = RIVER_Y - 2
+        push(deckP, x, (top + bot) / 2 + 0.4, pz + sz * 1.9, 0.42, top - bot, 0.42)
+      }
+    }
+    for (const sz of [-1, 1]) {
+      const lx = s * RW2 - s * (L - 0.6)
+      push(lampP, lx, SURFACE + 2.6, pz + sz * 2.0, 0.12, 3.6, 0.12)
+      push(lampH, lx, SURFACE + 4.6, pz + sz * 2.0, 0.45, 0.45, 0.45)
+      lampsOut.push(lx, SURFACE + 4.3, pz + sz * 2.0)
+    }
+    // 4) 滨水咖啡亭：青绿搪瓷小亭 + 奶油色回旋镖斜顶 + 外摆遮阳伞
+    const cz = Math.min(bk.z1 - 30, Math.max(bk.z0 + 30, pz + (rng() < 0.5 ? -1 : 1) * range(rng, 36, 60)))
+    const cx = s * (RW2 + 30 + 26)
+    push(bright, cx, SURFACE + 0.5, cz, 24, 0.14, 22)
+    push(cafeP, cx + inward * 4, SURFACE + 2.2, cz, 8, 3.6, 13)
+    push(cafeGlass, cx + inward * 4 - inward * 4.02, SURFACE + 2.0, cz, 0.08, 2.6, 11)
+    push(cafeRoof, cx + inward * 3, SURFACE + 4.35, cz, 12, 0.32, 16, inward * 0.1)
+    push(boardK, cx + inward * 4, SURFACE + 3.6, cz - 6.56, 3.2, 0.8, 0.1)
+    for (let i = 0; i < 4; i++) {
+      const ux = cx - inward * 4.5 + (i % 2) * inward * -4
+      const uz = cz - 5 + Math.floor(i / 2) * 9 + (i % 2) * 2
+      push(metal, ux, SURFACE + 1.65, uz, 0.08, 2.5, 0.08)
+      push(umbP[i % 3], ux, SURFACE + 3.0, uz, 3.0, 0.18, 3.0)
+      push(wood, ux, SURFACE + 1.15, uz, 1.2, 0.08, 1.2)
+      for (const o of [-1.2, 1.2]) push(wood, ux + o, SURFACE + 0.85, uz, 0.45, 0.06, 0.45)
+    }
+  }
+
+  function parkBody(b) {
     const isPlaza = b.kind === 'plaza'
     const mega = !!(b.mega || (b.span ?? 1) > 1)
 
@@ -184,9 +245,9 @@ function buildParkFacilities(plan, rng) {
     const pad = new THREE.Mesh(
       new THREE.BoxGeometry(Math.max(8, b.w - 2), 0.4, Math.max(8, b.d - 2)),
       isPlaza
-        ? Mat.concrete('#c4b8a4')
-        : b.kind === 'riverbank'
-          ? Mat.grass('#5a7a52')
+        ? plazaM
+        : b.kind === 'riverpark'
+          ? Mat.grass('#5f8a54')
           : Mat.grass('#4f7348'),
     )
     pad.position.set(b.cx, SURFACE - 0.14, b.cz)
@@ -197,7 +258,7 @@ function buildParkFacilities(plan, rng) {
       push(edgeP, b.cx + s * (Math.max(8, b.w - 2) / 2), SURFACE + 0.48, b.cz, 0.3, 0.16, Math.max(8, b.d - 2))
     }
     // 大广场由 buildings.placePlaza 做成「抬高平台 + 下沉庭院」，这里只铺底
-    if (isPlaza && b.w > 90 && b.d > 80) continue
+    if (isPlaza && b.w > 90 && b.d > 80) return
 
     const pathW = Math.min(mega ? 10 : 6, b.w * 0.08)
     push(path, b.cx, SURFACE + 0.48, b.cz, Math.max(8, b.w - 16), 0.12, pathW)
@@ -378,19 +439,35 @@ function buildParkFacilities(plan, rng) {
     }
   }
 
+  for (const b of plan.blocks) {
+    if (b.kind === 'park' || b.kind === 'plaza') { parkBody(b); continue }
+    if (b.kind !== 'riverbank') continue
+    // t32 河岸 = 两岸滨水公园：草坪 + 环路 + 中心喷泉广场 + 凉亭/公厕/小卖部/健身/儿童游乐 + 树丛花境（公园尺度，稀疏），
+    // 再加沿河林荫步道、横向园路、栈桥、咖啡亭。驳岸石台（city.js，河边 28m）是滨水广场
+    const rb = W.riverWidth / 2 + 30
+    for (const s of [-1, 1]) {
+      const xa = s < 0 ? b.x0 : rb
+      const xb = s < 0 ? -rb : b.x1
+      if (xb - xa < 8) continue
+      const bank = { kind: 'riverpark', x0: xa, x1: xb, z0: b.z0, z1: b.z1, w: xb - xa, d: b.d, cx: (xa + xb) / 2, cz: b.cz, mega: true, span: 1 }
+      parkBody(bank)
+      if (bank.w > 40 && bank.d > 80) riverExtras(bank, s)
+    }
+  }
+
   // 跨格大塔/商场场地铺一层场地底板，盖住被吞掉的路
   for (const b of plan.blocks) {
     if (!b.mega) continue
     if (b.kind !== 'core' && b.kind !== 'high' && b.kind !== 'mall') continue
     const deck = new THREE.Mesh(
       new THREE.BoxGeometry(b.w - 4, 0.55, b.d - 4),
-      Mat.concrete('#9a9590'),
+      Mat.concrete('#d8c8a8'), // t32 暖色石材铺地（以前 #9a9590 灰板像脏场院）
     )
     deck.position.set(b.cx, SURFACE + 0.28, b.cz)
     g.add(deck)
   }
 
-  for (const inst of [path, court, sand, wood, metal, water, bright, lampP, lampH, binP, soil, edgeP, ...flowers, redPil, roofP, goldP, wcP, kioskP, fitP, fitY, fitR, fitB, boardWC, boardK, boardPark, rim, waterC, jet]) {
+  for (const inst of [cafeP, cafeRoof, cafeGlass, ...umbP, deckP, path, court, sand, wood, metal, water, bright, lampP, lampH, binP, soil, edgeP, ...flowers, redPil, roofP, goldP, wcP, kioskP, fitP, fitY, fitR, fitB, boardWC, boardK, boardPark, rim, waterC, jet]) {
     inst.count = inst.userData.n
     g.add(inst)
   }

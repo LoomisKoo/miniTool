@@ -6,7 +6,14 @@ import { buildBuildings } from './buildings.js'
 import { buildAmenities } from './amenities.js'
 import { buildStreetLife } from './street.js'
 import { buildBoats } from './boats.js'
+
 import { chunkify } from './perf.js'
+
+// t34 城市底板 / 滨水广场：克隆后加世界坐标分格 + 斑驳（不污染共享的 concrete 缓存）
+let _gm = null, _pm = null
+const reg = (m) => (Mat.registerMaterial(m), m)
+const GROUND_MAT = () => _gm || (_gm = Mat.groundCraft(reg(Mat.concrete('#cdbb9c').clone()), 'ground'))
+const PLAZA_MAT = () => _pm || (_pm = Mat.groundCraft(reg(Mat.concrete('#d6c4a2').clone()), 'slab'))
 
 /**
  * 街道 / 河 / 公园设施 / 沿街密建 / 桥
@@ -19,7 +26,7 @@ export function buildCity(plan, seed = 77) {
   // 地面分两半，中间留出河道（河面低于路面 6m）
   for (const s of [-1, 1]) {
     const gw = (W.cityWidth - 2) / 2 - W.riverWidth / 2 - 2.2
-    const ground = new THREE.Mesh(new THREE.BoxGeometry(gw, 3, W.segmentLength - 2), Mat.concrete('#8f8b85'))
+    const ground = new THREE.Mesh(new THREE.BoxGeometry(gw, 3, W.segmentLength - 2), GROUND_MAT()) // t32 暖砂岩铺地（以前 #8f8b85 灰板）
     ground.position.set(s * (W.riverWidth / 2 + 2.2 + gw / 2), SURFACE - 1.5, 0)
     ground.receiveShadow = true
     root.add(ground)
@@ -172,7 +179,8 @@ function cutSpan(a, b, holes) {
 
 function buildRoads(plan) {
   const g = new THREE.Group()
-  const closed = plan.closed || []
+  // 大设施地块里的干道整段取消；园区内部道路段由下面单独画（窄一号）
+  const closed = [...(plan.closed || []), ...(plan.inner || [])]
   for (const x of plan.avenues) {
     // 大设施地块内部的道路整段取消
     const holes = closed.filter((r) => x > r.x0 && x < r.x1).map((r) => [r.z0, r.z1])
@@ -197,6 +205,19 @@ function buildRoads(plan) {
         g.add(road)
       }
     }
+  }
+  // 园区内部道路：沿原干道中线，车行道收窄（大道 14m / 横街 8m），路面高度与原干道一致（车不用抬升）
+  for (const r of plan.inner || []) {
+    const len = r.hi - r.lo
+    const mid = (r.lo + r.hi) / 2
+    const road = r.axis === 'z'
+      ? new THREE.Mesh(new THREE.BoxGeometry(r.cw, 0.12, len), Mat.asphalt())
+      : new THREE.Mesh(new THREE.BoxGeometry(len, 0.12, r.cw), Mat.asphalt())
+    if (r.axis === 'z') road.position.set(r.at, SURFACE + 0.06, mid)
+    else road.position.set(mid, SURFACE + 0.035, r.at)
+    road.receiveShadow = true
+    road.name = 'innerRoad'
+    g.add(road)
   }
   return g
 }
@@ -234,7 +255,7 @@ function buildRiver() {
 
     const bank = new THREE.Mesh(
       new THREE.BoxGeometry(28, 1.3, W.segmentLength * 0.96),
-      Mat.concrete('#8a8478'),
+      PLAZA_MAT(), // t32 滨水广场石台：暖米色（以前 #8a8478 灰板）
     )
     bank.position.set(s * (RW / 2 + 14), SURFACE - 0.225, 0) // 顶面比驳岸压顶低 2.5cm，不共面
     g.add(bank)

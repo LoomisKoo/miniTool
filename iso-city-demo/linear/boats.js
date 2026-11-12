@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { W, SURFACE } from './spec.js'
 import * as Mat from './mat.js'
+import { buildShips } from './ships.js'
 
 /**
  * 河上的船：渡轮 / 观光船 / 游艇 / 小摩托艇 / 划艇。
@@ -128,6 +129,7 @@ export function buildBoats(plan) {
   const std = (c, opts = {}) => {
     const m = new THREE.MeshStandardMaterial({ color: c, roughness: 0.5, metalness: 0.1, ...opts })
     Mat.registerMaterial(m)
+    Mat.tactile(m, 0.7) // t35
     return m
   }
   const HULL = { ferry: std('#f4f4f2'), tour: std('#1f3a5a'), yacht: std('#fafafa', { roughness: 0.25 }), motor: std('#d83a2a'), row: std('#8a5a34'), sampan: std('#5a3e28'), barge: std('#3a4650') }
@@ -172,7 +174,12 @@ export function buildBoats(plan) {
     root.add(b)
     boats.push(b)
   })
+  // t33/t34：Googie 大船（邮轮 / 集装箱船 / 汽车渡轮 / 运砂驳船）停在航道之间的空档 + 拖轮 / 帆船 / 快艇 / 渔船空档内漂航
+  let sd = 9137
+  const srng = () => ((sd = (sd * 16807) % 2147483647) - 1) / 2147483646
+  const shipTick = buildShips(root, srng)
   root.userData.tick = (dt, t, cam) => {
+    shipTick(dt, t, cam)
     for (const b of boats) {
       const u = b.userData
       u.z += u.dir * u.speed * dt

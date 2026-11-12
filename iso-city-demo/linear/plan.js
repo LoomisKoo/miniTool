@@ -1,8 +1,10 @@
 import { W } from './spec.js'
 import { mulberry } from './rng.js'
+import { CATALOG } from './catalog.js'
 
 /**
- * 城市平面：密路网底图 + 跨格合并（大塔 / 商场 / 公园 / 广场可占多格）
+ * 城市平面：分级路网（干道疏、间距不规则）+ 跨格合并（大塔 / 商场 / 公园 / 广场可占多格）。
+ * 大街廓内部由建筑层做围合内院，避免「出门就是马路」。
  */
 
 function makeBlock(kind, x0, x1, z0, z1, extra = {}) {
@@ -100,6 +102,7 @@ function mergeSpans(blocks, rng, { kinds, outKind, maxCells, attempts, preferLar
     const merged = makeBlock(outKind, box.x0, box.x1, box.z0, box.z1, {
       span: cluster.length,
       mega: true,
+      cells: cluster.map((c) => ({ x0: c.x0, x1: c.x1, z0: c.z0, z1: c.z1 })),
     })
     blocks.push(merged)
     made++
@@ -118,20 +121,29 @@ export function buildPlan(seed = 20261110) {
   const z0 = -W.segmentLength / 2
   const z1 = W.segmentLength / 2
 
-  // 偏曼哈顿尺度：南北向长块、东西向较密的街
-  const avenues = []
-  for (let x = -half + 200; x <= half - 200; x += 220) {
-    if (Math.abs(x) < W.riverWidth / 2 + 70) continue
-    avenues.push(x)
+  // 分级干道：不规则间距，南北约 460–720m，东西约 340–560m，偶发更大空档
+  const irregular = (lo, hi, minG, maxG, skip) => {
+    const out = []
+    let x = lo + minG * (0.35 + rng() * 0.5)
+    while (x <= hi) {
+      if (!skip || !skip(x)) out.push(Math.round(x * 10) / 10)
+      let step = minG + rng() * (maxG - minG)
+      if (rng() < 0.22) step += minG * (0.28 + rng() * 0.45)
+      x += step
+    }
+    return out
   }
+  const avenues = irregular(
+    -half + 160,
+    half - 160,
+    460,
+    720,
+    (x) => Math.abs(x) < W.riverWidth / 2 + 90,
+  )
+  const streets = irregular(z0 + 70, z1 - 70, 340, 560, null)
 
-  const streets = []
-  for (let z = z0 + 90; z <= z1 - 90; z += 100) {
-    streets.push(z)
-  }
-
-  const commerceStreets = streets.filter((_, i) => i % 4 === 2)
-  const commerceAvenues = avenues.filter((_, i) => i % 3 === 1)
+  const commerceStreets = streets.filter((_, i) => i % 2 === 1)
+  const commerceAvenues = avenues.filter((_, i) => i % 2 === 0)
 
   const blocks = []
   const xs = [-half + 30, ...avenues, half - 30].sort((a, b) => a - b)
@@ -188,15 +200,15 @@ export function buildPlan(seed = 20261110) {
   mergeSpans(blocks, rng, {
     kinds: ['park'],
     outKind: 'park',
-    maxCells: 6,
-    attempts: 8,
+    maxCells: 2,
+    attempts: 6,
     preferLarge: true,
   })
   mergeSpans(blocks, rng, {
     kinds: ['plaza'],
     outKind: 'plaza',
-    maxCells: 3,
-    attempts: 4,
+    maxCells: 2,
+    attempts: 3,
     preferLarge: false,
   })
   // 纽约以「地皮」为单元，少做跨好多格的超大地块
@@ -204,14 +216,14 @@ export function buildPlan(seed = 20261110) {
     kinds: ['core', 'high'],
     outKind: 'core',
     maxCells: 2,
-    attempts: 8,
+    attempts: 4,
     preferLarge: true,
   })
   mergeSpans(blocks, rng, {
     kinds: ['shop', 'mid'],
     outKind: 'mall',
     maxCells: 2,
-    attempts: 6,
+    attempts: 4,
     preferLarge: true,
   })
 
@@ -256,7 +268,8 @@ export function buildPlan(seed = 20261110) {
       !(b.cz > 1350 && b.cx > 550 && b.cx < 2050)
     const anchors = blocks.filter(okCell).sort((a, b) => hsh(a.cx * 1.3, a.cz) - hsh(b.cx * 1.3, b.cz))
     // 学校 / 寺院也跨两格（整圈围合 + 内部设施，单格放不下）
-    const MEGA = [['stadium', 2, 3], ['arena', 2, 2], ['library', 1, 2], ['museum', 1, 2], ['school', 1, 2], ['temple', 1, 2]]
+    // 街廓已经够大，设施占一格即可，不再跨两三格把道路封掉一大片
+    const MEGA = [['stadium', 1, 1], ['arena', 1, 1], ['library', 1, 1], ['museum', 1, 1], ['school', 1, 1], ['temple', 1, 1]]
     for (const [kind, nx, nz] of MEGA) {
       for (const a of anchors) {
         if (a._eaten) continue
@@ -311,6 +324,86 @@ export function buildPlan(seed = 20261110) {
       }
     }
   }
+  // —— 园区内部道路：跨格合并的地块中间原本是一条干道（大道/横街）。以前整块铺成场地/广场、路面整段不画，
+  // 但车流仍按干道车道穿过去 → 车在一片灰地上开。现在把那一截降级成园区内部道路（更窄的沥青路 + 路缘 + 人行道），
+  // 地块沿内部道路切回两半分别建楼（仍保留 mega 高度/体量），车流在这一段收窄车道、减速通过。
+  const inner = []
+  const INNER = {
+    avenue: { cw: 14, walk: 3.4, lane: (o) => (o < 8 ? 1.9 : 5.3), vmax: 9 },
+    street: { cw: 8, walk: 3.0, lane: () => 2.1, vmax: 8 },
+  }
+  for (let i = blocks.length - 1; i >= 0; i--) {
+    const b = blocks[i]
+    if (!b.cells || b.cells.length !== 2) continue
+    const [p, q] = b.cells
+    let axis = null
+    let at = 0
+    let type = null
+    if (p.x1 <= q.x0 + 1 || q.x1 <= p.x0 + 1) {
+      const g0 = Math.min(p.x1, q.x1)
+      const g1 = Math.max(p.x0, q.x0)
+      const c = (g0 + g1) / 2
+      const ave = avenues.find((x) => Math.abs(x - c) < 3)
+      if (ave != null && g1 - g0 < 60) { axis = 'z'; at = ave; type = 'avenue' }
+    } else if (p.z1 <= q.z0 + 1 || q.z1 <= p.z0 + 1) {
+      const g0 = Math.min(p.z1, q.z1)
+      const g1 = Math.max(p.z0, q.z0)
+      const c = (g0 + g1) / 2
+      const st = streets.find((z) => Math.abs(z - c) < 3)
+      if (st != null && g1 - g0 < 60) { axis = 'x'; at = st; type = 'street' }
+    }
+    if (!axis) continue
+    const S = INNER[type]
+    const hw = S.cw / 2 + 0.3 + S.walk + 0.6 // 车行道半宽 + 路缘 + 人行道 + 退线
+    const r = {
+      axis, at, type, cw: S.cw, walk: S.walk, vmax: S.vmax, laneAt: S.lane,
+      lo: axis === 'z' ? b.z0 : b.x0, hi: axis === 'z' ? b.z1 : b.x1,
+      x0: b.x0, x1: b.x1, z0: b.z0, z1: b.z1,
+    }
+    inner.push(r)
+    const extra = { span: b.span, mega: true, district: b.district, innerSide: true }
+    const parts = axis === 'z'
+      ? [makeBlock(b.kind, b.x0, at - hw, b.z0, b.z1, extra), makeBlock(b.kind, at + hw, b.x1, b.z0, b.z1, extra)]
+      : [makeBlock(b.kind, b.x0, b.x1, b.z0, at - hw, extra), makeBlock(b.kind, b.x0, b.x1, at + hw, b.z1, extra)]
+    blocks.splice(i, 1, ...parts.filter((k) => k.w > 20 && k.d > 20))
+  }
+
+  // —— t33：别墅区分散到城边 / 大公园旁几片；城边一块做机场。都放在设施分配之后，只改这几块的 kind，不触发设施重排 ——
+  {
+    const near = (x, z, ok) => {
+      let best = null, bd = 1e9
+      for (const b of blocks) {
+        if (!ok(b)) continue
+        const dd = Math.hypot(b.cx - x, b.cz - z)
+        if (dd < bd) { bd = dd; best = b }
+      }
+      return bd < 160 ? best : null
+    }
+    const fabric = (b) => ['core', 'high', 'mid', 'low', 'shop', 'villa'].includes(b.kind) && !b.district
+    for (const v of CATALOG.villas || []) {
+      const b = near(v.x, v.z, (k) => fabric(k) && !(Math.abs(k.cx) < 1100 && Math.abs(k.cz) < 700) && Math.abs(k.cx) > W.riverWidth / 2 + 240)
+      if (b) b.kind = 'villa'
+    }
+    for (const c of CATALOG.civic || []) {
+      if (!c.block) continue
+      const b = near(c.block.x, c.block.z, (k) => (c.kinds || ['high', 'wallside', 'core']).includes(k.kind))
+      if (!b) continue
+      b.kind = c.id
+      // t40 整片扩张（主题乐园）：把同一对干道之间、z 落在 grow 范围内的地块一起并进来；
+      // 中间被吞掉的支路整段登记为 closed（路面 / 人行道 / 路灯 / 车流都不进），两侧干道不动
+      if (c.grow) {
+        const eat = blocks.filter((k) => k !== b && Math.abs(k.x0 - b.x0) < 30 && Math.abs(k.x1 - b.x1) < 30 &&
+          k.z0 >= c.grow.z0 - 5 && k.z1 <= c.grow.z1 + 5 && !['riverbank', 'airport', 'park'].includes(k.kind))
+        if (eat.length) {
+          const all = [b, ...eat]
+          const box = unionBox(all)
+          Object.assign(b, makeBlock(c.id, box.x0, box.x1, box.z0, box.z1, { span: all.length, mega: true, big: true }))
+          for (const k of eat) blocks.splice(blocks.indexOf(k), 1)
+          closed.push({ x0: box.x0, x1: box.x1, z0: box.z0, z1: box.z1 })
+        }
+      }
+    }
+  }
   const parks = blocks.filter((b) => b.kind === 'park').sort((a, b) => b.w * b.d - a.w * a.d)
   let ferris = null
   if (parks.length) {
@@ -339,9 +432,12 @@ export function buildPlan(seed = 20261110) {
     ferris,
     districts,
     closed,
-    /** 点是否落在被合并的大设施地块里（pad>0 向内收，pad<0 向外扩） */
+    /** 园区内部道路（跨格合并地块里被降级的那一截干道） */
+    inner,
+    /** 点是否落在被合并的大设施地块 / 园区内部道路段里（pad>0 向内收，pad<0 向外扩）：干道的人行道/路灯/标线/行人都不进 */
     isClosed(x, z, pad = 0.5) {
       for (const r of closed) if (x > r.x0 + pad && x < r.x1 - pad && z > r.z0 + pad && z < r.z1 - pad) return true
+      for (const r of inner) if (x > r.x0 + pad && x < r.x1 - pad && z > r.z0 + pad && z < r.z1 - pad) return true
       return false
     },
   }
@@ -367,21 +463,22 @@ export function heightFor(kind, rng, block) {
       h = 55 + rng() * 90
       break
     case 'mid':
-      h = 45 + rng() * 70
+      // t32：mid = 4~12 层（以前 45~115m 已经是高层）
+      h = 14 + rng() * 26
       break
     case 'shop':
-      h = 14 + rng() * 20
+      h = 7 + rng() * 11
       break
     case 'mall':
       h = mega ? 32 + rng() * 28 : 24 + rng() * 18
       break
     case 'low':
-      h = 22 + rng() * 36
+      h = 7 + rng() * 16
       break
     default:
       h = 40 + rng() * 80
   }
-  return h * (kind === 'shop' ? 1 : boost)
+  return h * (kind === 'shop' || kind === 'low' || kind === 'mid' ? 1 : boost)
 }
 
 export function styleFor(kind, rng) {
