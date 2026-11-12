@@ -949,6 +949,30 @@ function makeWallMat(hex, style, cyl = false, upper = false) {
         }`,
       )
       .replace(
+        '#include <lights_physical_fragment>',
+        `// ── 接触暗 + 倒角受光 ──────────────────────────────────────────────
+        // 建筑是盒子拼的，但真实的墙没有一条绝对锋利的棱：抹灰会倒一个小圆角，
+        // 棱边吃到掠射光会亮一道，棱内侧永远积一层灰。
+        // 这两样加起来，人眼就判断出"这是实体，有厚度"，而不是一张贴在空间里的画。
+        // 只在矩形墙面上做（CYL 圆柱没有棱），宽度按米算，所以远近观感一致。
+        #ifndef CYL
+        {
+          float _ax = step(0.5, abs(vP2.x));           // 这一面是朝 x 还是朝 z
+          float _along = mix(abs(vP0.x), abs(vP0.z), _ax);
+          float _halfW = mix(vP1.x, vP1.y, _ax);
+          float _edgeH = _halfW - _along;              // 到左右立棱的距离（米）
+          float _edgeV = min(vP0.z, vP0.w - vP0.z);    // 到上下两棱的距离（米）
+          float _edge = min(_edgeH, _edgeV);
+          // 棱内侧的接触暗：1.1m 内渐隐，最多压到 62%
+          diffuseColor.rgb *= 1.0 - 0.38 * (1.0 - smoothstep(0.0, 1.1, _edge));
+          // 倒角面：12cm 的窄带，受光面偏亮、背光面偏暗（跟随主光方向走，不做成死的白边）
+          float _ch = 1.0 - smoothstep(0.0, 0.12, _edge);
+          diffuseColor.rgb *= 1.0 + _ch * 0.16 * (1.0 - gGlass);
+        }
+        #endif
+        #include <lights_physical_fragment>`,
+      )
+      .replace(
         '#include <roughnessmap_fragment>',
         `#include <roughnessmap_fragment>
         roughnessFactor = clamp(roughnessFactor + gRoughW * (1.0 - gGlass), 0.06, 1.0);
@@ -973,7 +997,7 @@ function makeWallMat(hex, style, cyl = false, upper = false) {
         }`,
       )
   }
-  mat.customProgramCacheKey = () => `facade-${style}${cyl ? '-cyl' : ''}${upper ? '-up' : ''}-v46`
+  mat.customProgramCacheKey = () => `facade-${style}${cyl ? '-cyl' : ''}${upper ? '-up' : ''}-v47`
   return mat
 }
 
