@@ -178,6 +178,148 @@
   var deckWords = [];
   var activeIdx = 0;
 
+  /* ── 排行榜（小红书内测 · 无尽最高分 · board=1）─────
+     一次 submitScore 会同时写入总/月/周/日；未授权或低版本隐藏入口。 */
+  var RANK_BOARD = 1;
+  var RANK_MIN_CLIENT = 9510;
+  var RANK_CACHE_MS = 45000;
+  var RANK_SCORE_MAX = 1000000;
+  // 本地 / ?demo：无平台 API 时用假数据预览；线上包不走这条
+  function rankDevPreview() {
+    if (DEV_MODE) return true;
+    try {
+      var h = location.hostname || '';
+      return h === 'localhost' || h === '127.0.0.1' || h === '';
+    } catch (e) { return false; }
+  }
+  var RANK_PERIODS = [
+    { k: 'day', nm: '日榜' },
+    { k: 'week', nm: '周榜' },
+    { k: 'month', nm: '月榜' },
+    { k: 'all', nm: '总榜' },
+  ];
+  var rankPeriod = 'week';
+  var rankDenied = false;
+  var rankEnabled = false;
+  var rankCache = {};
+  var rankReqId = 0;
+
+  function miniTool() {
+    return (window.xhs && window.xhs.miniTool) || null;
+  }
+  function readBuildVersion(lo) {
+    var env = lo && lo.miniToolEnv;
+    return Number(env && env.buildVersion) || 0;
+  }
+  function getClientVersion(bv) {
+    return Math.floor((Number(bv) || 0) / 1000);
+  }
+  function rankApiPresent() {
+    var m = miniTool();
+    return !!(m && typeof m.submitScore === 'function' &&
+      typeof m.getRankList === 'function' && typeof m.getMyRank === 'function');
+  }
+  function rankErrCode(err) {
+    return err && (err.errCode != null ? Number(err.errCode) : NaN);
+  }
+  function clampRankScore(n) {
+    n = Number(n);
+    if (!isFinite(n)) return 0;
+    if (n > RANK_SCORE_MAX) return RANK_SCORE_MAX;
+    if (n < -RANK_SCORE_MAX) return -RANK_SCORE_MAX;
+    return n;
+  }
+  function denyRank() {
+    rankDenied = true;
+    rankEnabled = false;
+  }
+  function probeRankSupport() {
+    if (rankDenied) {
+      rankEnabled = false;
+      return Promise.resolve(false);
+    }
+    if (!rankApiPresent()) {
+      rankEnabled = false;
+      return Promise.resolve(false);
+    }
+    var sync = readBuildVersion(window.xhs && window.xhs.launchOptions);
+    function apply(bv) {
+      var ok = !bv || getClientVersion(bv) >= RANK_MIN_CLIENT;
+      rankEnabled = ok && !rankDenied;
+      return rankEnabled;
+    }
+    if (sync) return Promise.resolve(apply(sync));
+    var m = miniTool();
+    if (!m || typeof m.getLaunchOptions !== 'function') return Promise.resolve(apply(0));
+    return Promise.resolve(m.getLaunchOptions()).then(function (lo) {
+      return apply(readBuildVersion(lo));
+    }).catch(function () { return apply(0); });
+  }
+  function submitEndlessScore(score) {
+    if (rankDenied || !rankEnabled || !rankApiPresent()) return;
+    score = clampRankScore(score);
+    if (!(score > 0)) return;
+    var m = miniTool();
+    try {
+      Promise.resolve(m.submitScore({ board: RANK_BOARD, score: score })).then(function () {
+        rankCache = {};
+      }).catch(function (err) {
+        var c = rankErrCode(err);
+        if (c === 1005 || c === 1006) denyRank();
+      });
+    } catch (e) {}
+  }
+  function rankSleep(ms) {
+    return new Promise(function (res) { setTimeout(res, ms); });
+  }
+  function fetchRankList(period, attempt) {
+    attempt = attempt || 0;
+    var m = miniTool();
+    return Promise.resolve(m.getRankList({ board: RANK_BOARD, period: period })).then(function (res) {
+      return (res && res.data) || [];
+    }).catch(function (err) {
+      if (rankErrCode(err) === 2002 && attempt < 4) {
+        return rankSleep([500, 1000, 2000, 4000][attempt]).then(function () {
+          return fetchRankList(period, attempt + 1);
+        });
+      }
+      throw err;
+    });
+  }
+  function fetchMyRank(period) {
+    var m = miniTool();
+    return Promise.resolve(m.getMyRank({ board: RANK_BOARD, period: period })).then(function (res) {
+      return res || { status: 'NOT_PARTICIPATING' };
+    });
+  }
+  function loadRankData(period, force) {
+    var hit = rankCache[period];
+    if (!force && hit && Date.now() - hit.at < RANK_CACHE_MS) {
+      return Promise.resolve(hit);
+    }
+    return Promise.all([fetchRankList(period), fetchMyRank(period)]).then(function (pair) {
+      var pack = { at: Date.now(), list: pair[0] || [], mine: pair[1] || {} };
+      rankCache[period] = pack;
+      return pack;
+    }).catch(function (err) {
+      var c = rankErrCode(err);
+      if (c === 1005 || c === 1006) denyRank();
+      throw err;
+    });
+  }
+  function formatMyRank(mine) {
+    if (!mine) return { lab: '未上榜', score: null };
+    var st = mine.status;
+    if (st === 'EXACT') return { lab: '第 ' + mine.rank + ' 名', score: mine.score };
+    if (st === 'OVER_LIMIT') return { lab: '500+', score: null };
+    if (st === 'NO_SCORE') return { lab: '本期暂无成绩', score: null };
+    return { lab: '尚未上榜', score: null };
+  }
+  function escRankText(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
   /* ── 存储 ─────────────────────────────────────── */
   // 地址带 ?reset 时从零开始（开发调试用）
   // 小红书原生存储是异步的：getStorage({key}) → Promise<{data}>；本地 localStorage 同步兜底，两边都写
@@ -1572,11 +1714,20 @@
   }
 
   /* ── 主界面 Tab ───────────────────────────────── */
-  var SCREENS = { draw: 'screenDraw', expedition: 'screenExpedition', mine: 'screenMine' };
+  var SCREENS = { draw: 'screenDraw', expedition: 'screenExpedition', rank: 'screenRank', mine: 'screenMine' };
   var curTab = 'draw';
 
   function switchTab(name) {
     if (!SCREENS[name]) return;
+    // 防御：切主 Tab 时清掉可能残留的遮罩/弹层，避免挡住底栏点击
+    if (name !== curTab) {
+      var sh = $('mineSheet');
+      if (sh && sh.classList.contains('open')) closeMineSheet();
+      else {
+        var m0 = $('mask');
+        if (m0) m0.classList.remove('on');
+      }
+    }
     if (curTab !== name) sfx('tab');
     curTab = name;
     for (var k in SCREENS) {
@@ -1590,6 +1741,7 @@
     if (name === 'expedition') renderExpedition();
     else pauseHangarPreview();
     if (name === 'mine') renderMine();
+    if (name === 'rank') renderRankPage();
     if (name === 'draw') { refreshCounts(); renderQuota(); updateDailyBrief(); showEmptyPile(); }
   }
 
@@ -2232,6 +2384,8 @@
     }
     save();
     checkAchievementUnlocks();
+    // 每次有分都交：服务端拆总/月/周/日，只保留各周期最好成绩
+    if (info && (info.score || 0) > 0) submitEndlessScore(info.score);
     renderBattleQuota();
     refreshCounts();
     if (curTab === 'mine') renderMine();
@@ -2371,8 +2525,8 @@
   }
   function renderMineActs() {
     var rs = $('mineRecSub'), as = $('mineAchSub');
+    var best = (state.stats && state.stats.endlessBest) || 0;
     if (rs) {
-      var best = (state.stats && state.stats.endlessBest) || 0;
       var list = state.records || [];
       if (best) rs.textContent = '∞ ' + best;
       else if (list.length) {
@@ -2423,6 +2577,11 @@
     var sh = $('mineSheet');
     if (!sh) return;
     var body = $('mineSheetBody');
+    if (mode === 'rank') {
+      closeMineSheet();
+      switchTab('rank');
+      return;
+    }
     $('mineSheetTitle').textContent =
       mode === 'record' ? '战绩' :
       mode === 'ach' ? '成就' :
@@ -2456,6 +2615,8 @@
           '<p>每次出战消耗 1 点精力，约每 <b>' + energyRegenMin() + '</b> 分钟恢复 1 点；也可用 <b>' + ENERGY_BUY_COST + '</b> 成长点补给（每日有限次）。</p></section>' +
         '<section><h4>无尽</h4>' +
           '<p>通关后的<strong>极限试炼</strong>：唯一以最高分为目标。混合已解锁地区的怪物、波次与首领轮番加压；越往后的地区分值倍率越高。刷新纪录、冲击无尽成就——闯关推进地图，无尽证明你的战机有多强。</p></section>' +
+        '<section><h4>排行榜</h4>' +
+          '<p>底部「排行」Tab：无尽最高分公开榜（日 / 周 / 月 / 总）。需小红书客户端与头像昵称授权。</p></section>' +
       '</div>';
   }
   function renderExpHelpSheet(body) {
@@ -2467,7 +2628,7 @@
         '<section><h4>闯关</h4>' +
           '<p>推进地图、解锁地区与后续内容。选定关卡出战，通关拿星、拿成长点与图鉴；是主线进度所在。</p></section>' +
         '<section><h4>无尽 · 无可替代</h4>' +
-          '<p>通关本地区 <b>第 1 关</b> 后解锁。<b>唯一刷最高分</b>的模式：混合怪池、无限加压、周期性首领，倒下才结算。<b>当前地区倍率 ×' + mul + '</b>——越往后的地区分更高。刷新纪录可额外掉落抽卡机会；无尽成就只在这里推进。闯关开地图，无尽验战力。</p></section>' +
+          '<p>通关本地区 <b>第 1 关</b> 后解锁。<b>唯一刷最高分</b>的模式：混合怪池、无限加压、周期性首领，倒下才结算。<b>当前地区倍率 ×' + mul + '</b>——越往后的地区分更高。刷新纪录可额外掉落抽卡机会；无尽成就只在这里推进。闯关开地图，无尽验战力。分数会计入公开排行（日 / 周 / 月 / 总）。</p></section>' +
         '<section><h4>出战卡</h4>' +
           '<p>点左侧卡槽更换出战词卡。中间预览为满火力形态；字母等级与主副武器决定弹幕强度。</p></section>' +
       '</div>';
@@ -2547,6 +2708,7 @@
               ? ((endWave ? '最高波次 ' + endWave + ' · ' : '') + (endRuns ? endRuns + ' 次挑战' : '历史最佳'))
               : '通关地区第 1 关后解锁') +
           '</span>' +
+          (!rankDenied ? '<button class="rv-rank-link" id="recGoRank" type="button">查看排行 ›</button>' : '') +
         '</div>' +
         '<div class="rv-strip">' +
           '<div><b>' + stageN + '</b><span>闯关</span></div>' +
@@ -2563,6 +2725,8 @@
         '<button class="btn primary" id="recGoExp">去漫游</button></div>';
       var go = $('recGoExp');
       if (go) go.onclick = function () { closeMineSheet(); switchTab('expedition'); };
+      var goRank0 = $('recGoRank');
+      if (goRank0) goRank0.onclick = function () { closeMineSheet(); switchTab('rank'); };
       return;
     }
 
@@ -2599,6 +2763,147 @@
     });
     box.innerHTML = html + '<div class="rv-list">' + rows + '</div>' +
       '<p class="rv-total">最近 ' + list.length + ' 场 · 共获 ' + ink + ' 成长点</p>';
+    var goRank = $('recGoRank');
+    if (goRank) goRank.onclick = function () { closeMineSheet(); switchTab('rank'); };
+  }
+
+  function mockRankPack(localBest) {
+    var base = Math.max(localBest || 0, 12800);
+    var names = ['词海行者', '字母剑士', '无尽旅人', '默写达人', '卡牌收割机', '波次猎手', '典籍守门', '港口词匠', '街角书吏', '初读旅人'];
+    var list = names.map(function (nm, i) {
+      return { rank: i + 1, nickname: nm, score: Math.round(base * (1.35 - i * 0.08) / 10) * 10 };
+    });
+    var myScore = localBest || Math.round(base * 0.72);
+    var myRank = 8;
+    for (var i = 0; i < list.length; i++) {
+      if (myScore >= list[i].score) { myRank = i + 1; break; }
+      if (i === list.length - 1) myRank = list.length + 1;
+    }
+    if (myRank <= 10) {
+      list.splice(Math.min(myRank - 1, list.length), 0, { rank: myRank, nickname: '我（本地预览）', score: myScore });
+      list = list.slice(0, 10).map(function (r, idx) { return { rank: idx + 1, nickname: r.nickname, score: r.score }; });
+    }
+    return {
+      at: Date.now(),
+      list: list,
+      mine: myRank <= 10
+        ? { status: 'EXACT', rank: myRank, score: myScore }
+        : { status: 'OVER_LIMIT', rank: null, score: myScore },
+      demo: true,
+    };
+  }
+  function renderRankPage() {
+    var box = $('rankPage');
+    if (!box) return;
+    var localBest = (state.stats && state.stats.endlessBest) || 0;
+    var tabs = RANK_PERIODS.map(function (p) {
+      return '<button class="rk-tab' + (rankPeriod === p.k ? ' on' : '') + '" type="button" data-rk="' + p.k + '">' + p.nm + '</button>';
+    }).join('');
+    var useDemo = rankDevPreview() && (!rankApiPresent() || !rankEnabled);
+    var demoTag = useDemo ? '<em class="rk-demo-tag">开发预览</em>' : '';
+    box.innerHTML =
+      '<div class="rk-board">' +
+        '<div class="rk-tabs">' + tabs + '</div>' +
+        '<div class="rk-mine" id="rkMine">' +
+          '<span class="rk-mine-lab">我的成绩 ' + demoTag + '</span>' +
+          '<b class="rk-mine-score">' + (localBest || '—') + '</b>' +
+          '<span class="rk-mine-sub" id="rkMineSub">加载排名中…</span>' +
+        '</div>' +
+        '<div class="rk-body" id="rkBody"><div class="rk-loading">加载榜单…</div></div>' +
+      '</div>';
+    var tabBox = box.querySelector('.rk-tabs');
+    if (tabBox) {
+      tabBox.onclick = function (e) {
+        var t = e.target && e.target.closest && e.target.closest('[data-rk]');
+        if (!t) return;
+        var k = t.getAttribute('data-rk');
+        if (!k || k === rankPeriod) return;
+        rankPeriod = k;
+        renderRankPage();
+      };
+    }
+    if (rankDenied) {
+      var sub0 = $('rkMineSub');
+      if (sub0) sub0.textContent = '未授权 · 本地 ' + (localBest || 0);
+      var bd0 = $('rkBody');
+      if (bd0) {
+        bd0.innerHTML = '<div class="rk-empty"><p>未授权排行榜</p><span>上传时需勾选头像昵称授权</span>' +
+          '<button class="btn primary" id="rkGoExp" type="button">去漫游刷分</button></div>';
+        var g0 = $('rkGoExp');
+        if (g0) g0.onclick = function () { switchTab('expedition'); };
+      }
+      return;
+    }
+    if (!rankApiPresent() || !rankEnabled) {
+      if (useDemo) {
+        paintRankData(mockRankPack(localBest), localBest);
+        return;
+      }
+      var sub1 = $('rkMineSub');
+      if (sub1) sub1.textContent = '需升级客户端 · 本地 ' + (localBest || 0);
+      var bd = $('rkBody');
+      if (bd) {
+        bd.innerHTML = '<div class="rk-empty"><p>请升级小红书</p><span>排行榜需 App 9.51 及以上；可先去无尽刷分，升级后自动上榜</span>' +
+          '<button class="btn primary" id="rkGoExp" type="button">去漫游</button></div>';
+        var g1 = $('rkGoExp');
+        if (g1) g1.onclick = function () { switchTab('expedition'); };
+      }
+      return;
+    }
+    var req = ++rankReqId;
+    loadRankData(rankPeriod, false).then(function (pack) {
+      if (req !== rankReqId || !$('rkBody')) return;
+      paintRankData(pack, localBest);
+    }).catch(function (err) {
+      if (req !== rankReqId) return;
+      if (rankDevPreview()) {
+        paintRankData(mockRankPack(localBest), localBest);
+        return;
+      }
+      var bd2 = $('rkBody'), sub = $('rkMineSub');
+      if (sub) sub.textContent = '本地最高 ' + (localBest || 0);
+      if (bd2) {
+        bd2.innerHTML = '<div class="rk-empty"><p>榜单加载失败</p><span>稍后再试</span>' +
+          '<button class="btn primary" id="rkRetry" type="button">重试</button></div>';
+        var rt = $('rkRetry');
+        if (rt) rt.onclick = function () {
+          rankCache[rankPeriod] = null;
+          renderRankPage();
+        };
+      }
+    });
+  }
+  function paintRankData(pack, localBest) {
+    var mine = formatMyRank(pack && pack.mine);
+    var sub = $('rkMineSub');
+    if (sub) {
+      var cloud = mine.score != null ? ('云端 ' + mine.score + ' · ') : '';
+      var demo = pack && pack.demo ? ' · 示例数据' : '';
+      sub.textContent = cloud + mine.lab + (localBest ? ' · 本地 ' + localBest : '') + demo;
+    }
+    var bd = $('rkBody');
+    if (!bd) return;
+    var list = (pack && pack.list) || [];
+    if (!list.length) {
+      bd.innerHTML = '<div class="rk-empty"><p>还没有人上榜</p><span>去无尽刷一局，成为第一名</span>' +
+        '<button class="btn primary" id="rkGoExp" type="button">去漫游</button></div>';
+      var go = $('rkGoExp');
+      if (go) go.onclick = function () { switchTab('expedition'); };
+      return;
+    }
+    var rows = list.map(function (row, i) {
+      var rank = row.rank != null ? row.rank : (i + 1);
+      var nick = row.nickname != null && row.nickname !== '' ? escRankText(row.nickname) : '词旅人';
+      var top = rank <= 3 ? ' top' + rank : '';
+      var me = nick.indexOf('我（') === 0 ? ' me' : '';
+      return '<div class="rk-row' + top + me + '">' +
+        '<span class="rk-pos">' + rank + '</span>' +
+        '<span class="rk-nick">' + nick + '</span>' +
+        '<b class="rk-score">' + (row.score != null ? row.score : '—') + '</b>' +
+      '</div>';
+    }).join('');
+    bd.innerHTML = '<div class="rk-list">' + rows + '</div>' +
+      '<p class="rk-foot">' + (pack && pack.demo ? '开发预览 · 非真实榜单' : ('展示前 ' + list.length + ' 名 · 约 45 秒缓存')) + '</p>';
   }
 
   function openBook() {
@@ -4731,6 +5036,11 @@
     updateDailyBrief();
     renderDrawThemes();
     showEmptyPile();
+    probeRankSupport().then(function (ok) {
+      if (!ok) return;
+      var best = (state.stats && state.stats.endlessBest) || 0;
+      if (best > 0) submitEndlessScore(best);
+    });
   }
   sgetNative().then(function (raw) {
     if (booted) return;

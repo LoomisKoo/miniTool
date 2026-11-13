@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>词卡物语</title>
-<link rel="stylesheet" href="style.css?v=m4911">
+<link rel="stylesheet" href="style.css?v=ivjzu">
 </head>
 <body>
 <div id="app">
@@ -35,8 +35,6 @@
       <div class="draw-themes" id="drawThemes" aria-label="主题卡池"></div>
       <div class="draw-theme-desc" id="drawThemeDesc" aria-live="polite"></div>
       <div class="stage" id="stage"></div>
-
-      <div class="quota-bar" id="quotaBar"></div>
 
       <div class="draw-foot">
         <div class="hint" id="hint">每组 3 张单词卡</div>
@@ -75,17 +73,10 @@
             <div class="exp-actions">
               <button class="exp-go" id="expStart" disabled title="挑战当前关卡">
                 <i class="exp-btn-fx" aria-hidden="true"></i>
-                <svg class="exp-btn-ico" viewBox="0 0 24 24" aria-hidden="true">
-                  <path fill="currentColor" d="M12 2.1 13.6 13.5H10.4L12 2.1Z"/>
-                  <path fill="currentColor" d="M7.6 13.3h8.8v1.7H7.6zm3 1.7h2.8v6.3a1.4 1.4 0 0 1-2.8 0v-6.3Z"/>
-                </svg>
                 <b>闯关</b>
               </button>
               <button class="exp-endless locked" id="expEndless" type="button" aria-disabled="true" title="通关本地区第 1 关后解锁无尽">
                 <i class="exp-btn-fx" aria-hidden="true"></i>
-                <svg class="exp-btn-ico" viewBox="0 0 26 24" overflow="visible" aria-hidden="true">
-                  <path fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" d="M18.178 8c5.096 0 5.096 8 0 8-5.095 0-7.133-8-12.739-8-4.585 0-4.585 8 0 8 5.606 0 7.644-8 12.74-8z"/>
-                </svg>
                 <span class="exp-endless-lab"><b>无尽</b></span>
               </button>
             </div>
@@ -147,6 +138,17 @@
       </div>
     </section>
 
+    <!-- ══ 无尽排行 ══ -->
+    <section class="screen" id="screenRank">
+      <header class="hdr">
+        <div class="hdr-l">
+          <p class="hdr-sub">无尽最高分 · 公开榜</p>
+          <h1 class="hdr-title">排行榜</h1>
+        </div>
+      </header>
+      <div class="rank-page" id="rankPage"></div>
+    </section>
+
   </main>
 
   <!-- 我的：筛选 / 战绩 / 成就 共用一个底部弹层 -->
@@ -176,6 +178,14 @@
         <path d="M13.6 4.6l5.8 5.8M6.2 12.4l5.4 5.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
       </svg>
       <span>漫游</span>
+    </button>
+    <button class="tab" data-tab="rank">
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M7.5 16.5V11M12 16.5V7.5M16.5 16.5v-3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        <path d="M4.5 19.5h15" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+        <path d="M5.5 4.5h13v3.2c0 1.2-.7 2.2-1.8 2.6L12 12.2 7.3 10.3C6.2 9.9 5.5 8.9 5.5 7.7V4.5Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+      </svg>
+      <span>排行</span>
     </button>
     <button class="tab" data-tab="mine">
       <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -330,20 +340,20 @@
   </div>
 </div>
 
-<script src="glyphs.js?v=m4911"></script>
-<script src="words.js?v=m4911"></script>
-<script src="words-bulk.js?v=m4911"></script>
-<script src="gloss.js?v=m4911"></script>
-<script src="gloss-bulk.js?v=m4911"></script>
-<script src="senses.js?v=m4911"></script>
-<script src="frames.js?v=m4911"></script>
-<script src="card.js?v=m4911"></script>
-<script src="fx.js?v=m4911"></script>
-<script src="tts.js?v=m4911"></script>
-<script src="sfx.js?v=m4911"></script>
-<script src="stages.js?v=m4911"></script>
-<script src="battle.js?v=m4911"></script>
-<script src="capture.js?v=m4911"></script>
-<script src="app.js?v=m4911"></script>
+<script src="glyphs.js?v=ivjzu"></script>
+<script src="words.js?v=ivjzu"></script>
+<script src="words-bulk.js?v=ivjzu"></script>
+<script src="gloss.js?v=ivjzu"></script>
+<script src="gloss-bulk.js?v=ivjzu"></script>
+<script src="senses.js?v=ivjzu"></script>
+<script src="frames.js?v=ivjzu"></script>
+<script src="card.js?v=ivjzu"></script>
+<script src="fx.js?v=ivjzu"></script>
+<script src="tts.js?v=ivjzu"></script>
+<script src="sfx.js?v=ivjzu"></script>
+<script src="stages.js?v=ivjzu"></script>
+<script src="battle.js?v=ivjzu"></script>
+<script src="capture.js?v=ivjzu"></script>
+<script src="app.js?v=ivjzu"></script>
 </body>
 </html>

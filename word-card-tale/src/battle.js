@@ -1924,6 +1924,18 @@
     }
   }
 
+  // 道具生成坐标夹进可视区：侧翼怪常在屏外被击杀，原样用 e.x 会掉到画布外捡不到
+  function spawnItem(it) {
+    var x0 = clamp(it.x, 22, W - 22);
+    var y0 = clamp(it.y, hudTop + 16, H - hudBot - 28);
+    // 贴左边就别再往外甩；贴右边同理
+    var vx = it.vx || 0;
+    if (x0 <= 28 && vx < 0) vx = Math.abs(vx);
+    if (x0 >= W - 28 && vx > 0) vx = -Math.abs(vx);
+    it.x = x0; it.y = y0; it.vx = vx; it.t = it.t || 0;
+    state.items.push(it);
+    return it;
+  }
   function dropItems(e) {
     var r = Math.random, list = [], c0 = state.card, sK = (c0.kind === 'shield' || c0.sub === 'shield') ? 1 : 1.5;
     // 场上同类道具有上限：字母最多 3 颗、火力最多 1 颗、总数最多 6 个，满了就不再掉
@@ -1958,9 +1970,9 @@
       if (!maxP) list.push('P');
     }
     list.forEach(function (t, i) {
-      state.items.push({
+      spawnItem({
         type: t, x: e.x + (i - (list.length - 1) / 2) * 14, y: e.y,
-        vx: rnd(-50, 50), vy: rnd(-150, -80), t: 0,
+        vx: rnd(-50, 50), vy: rnd(-120, -60),
       });
     });
     dropCodex(e);
@@ -1970,7 +1982,7 @@
     var owned = (api.codexHas && api.codexHas(e.sprite)) || state.codexGot.indexOf(e.sprite) >= 0;
     var ch = (CODEX_RATE[e.type] || 0) * (state.endless ? 0.4 : 1);
     if (!owned && e.sprite && Math.random() < ch) {
-      state.items.push({ type: 'C', sprite: e.sprite, x: e.x, y: e.y, vx: rnd(-30, 30), vy: rnd(-170, -120), t: 0 });
+      spawnItem({ type: 'C', sprite: e.sprite, x: e.x, y: e.y, vx: rnd(-30, 30), vy: rnd(-140, -90) });
     }
   }
   // 刻意压得很低：普通怪要刷很久，精英 / 首领才值得反复挑战
@@ -2331,7 +2343,7 @@
       // 被击中掉 1 级火力，并把 P 抛出去，可以再捡回来
       if (state.power > 1) {
         state.power--;
-        state.items.push({ type: 'P', x: p.x, y: p.y - 10, vx: rnd(-60, 60), vy: -220, t: 0 });
+        spawnItem({ type: 'P', x: p.x, y: p.y - 10, vx: rnd(-60, 60), vy: -180 });
       }
     }
     state.invuln = 1.15 * (1 + auxBonus('guard') / 100);
@@ -2972,7 +2984,9 @@
     state.items.forEach(function (it) {
       it.t += dt;
       var d = dist(it, p);
-      if (state.phase === 'clear' || (d < 78 && it.t > 0.35)) {
+      // 贴边加大吸附，避免侧翼掉落贴墙后沉底消失
+      var pull = (it.x < 28 || it.x > W - 28) ? 110 : 78;
+      if (state.phase === 'clear' || (d < pull && it.t > 0.35)) {
         var a = Math.atan2(p.y - it.y, p.x - it.x);
         it.x += Math.cos(a) * 520 * dt;
         it.y += Math.sin(a) * 520 * dt;
@@ -2981,7 +2995,13 @@
         it.vx *= 0.97;
         it.x += it.vx * dt;
         it.y += it.vy * dt;
-        if (it.x < 14 || it.x > W - 14) it.vx *= -1;
+        if (it.x < 14 || it.x > W - 14) {
+          it.vx *= -1;
+          it.x = clamp(it.x, 14, W - 14);
+        }
+        // 不要飞出顶栏 / 底栏外太久：顶上压回、底下靠玩家吸附区
+        if (it.y < hudTop + 8) { it.y = hudTop + 8; it.vy = Math.max(it.vy, 40); }
+        if (it.y > H - hudBot - 12) { it.y = H - hudBot - 12; it.vy = Math.min(it.vy, -20); }
       }
       if (d < 22 && it.t > 0.25) { it.got = true; collect(it); }
     });

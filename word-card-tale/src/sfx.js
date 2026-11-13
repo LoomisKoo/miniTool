@@ -315,48 +315,48 @@
 
   var lib = {
     /* —— 命中（只在打中时响，按弹种分材质）—— */
-    /* 打击感 = 极短的高频瞬态（"啪"）+ 中高频材质，不用任何低频正弦扫频（那就是"低音鼓"的来源） */
-    hit: function () { var r = rv(); snap(0.07, 3000); noise(0.03, 0.04, 2200 * r, 0, 0, { type: 'bandpass', q: 1.4 }); },
+    /* 打击感 = 极短的高频瞬态（"啪"）+ 中高频材质；音量压低，避免盖过对局 BGM */
+    hit: function () { var r = rv(); snap(0.045, 3000); noise(0.03, 0.028, 2200 * r, 0, 0, { type: 'bandpass', q: 1.4 }); },
     hit_blast: function () {   // 霰弹：干脆的"噗啪"碎响
-      var r = rv(); snap(0.08, 2600);
-      noise(0.04, 0.05, 1700 * r, 0.004, 900, { type: 'bandpass', q: 1.2 });
+      var r = rv(); snap(0.05, 2600);
+      noise(0.04, 0.032, 1700 * r, 0.004, 900, { type: 'bandpass', q: 1.2 });
     },
     hit_frost: function () {   // 冰锥：冰晶碎裂的清脆"叮"
-      var r = rv(); snap(0.05, 6000);
-      tone(2637 * r, 0, 0.07, 'sine', 0.024, 0, { wet: 0.4 }); tone(3951 * r, 0, 0.05, 'sine', 0.012, 0.006);
+      var r = rv(); snap(0.035, 6000);
+      tone(2637 * r, 0, 0.07, 'sine', 0.016, 0, { wet: 0.4 }); tone(3951 * r, 0, 0.05, 'sine', 0.008, 0.006);
     },
     hit_swift: function () {   // 追踪弹：小型爆点"砰"（中高频）
-      var r = rv(); snap(0.07, 3200);
-      tone(1300 * r, 700 * r, 0.045, 'triangle', 0.03);
-      noise(0.05, 0.035, 2400 * r, 0.005, 1200, { type: 'bandpass', q: 1 });
+      var r = rv(); snap(0.045, 3200);
+      tone(1300 * r, 700 * r, 0.045, 'triangle', 0.02);
+      noise(0.05, 0.024, 2400 * r, 0.005, 1200, { type: 'bandpass', q: 1 });
     },
     hit_thunder: function () { // 雷电：三连电火花噼啪
       var r = rv();
-      for (var i = 0; i < 3; i++) noise(0.018, 0.06 - i * 0.012, (3600 + i * 900) * r, i * 0.014, 0, { type: 'bandpass', q: 2 });
+      for (var i = 0; i < 3; i++) noise(0.018, 0.04 - i * 0.008, (3600 + i * 900) * r, i * 0.014, 0, { type: 'bandpass', q: 2 });
     },
     hit_pierce: function () {  // 激光：灼烧的"嘶"
-      var r = rv(); noise(0.05, 0.035, 6500 * r, 0, 4000, { type: 'highpass' }); tone(2200 * r, 1800, 0.035, 'sine', 0.01);
+      var r = rv(); noise(0.05, 0.024, 6500 * r, 0, 4000, { type: 'highpass' }); tone(2200 * r, 1800, 0.035, 'sine', 0.007);
     },
     hit_tide: function () {    // 潮汐：水花"啪嚓"
-      var r = rv(); snap(0.05, 2400);
-      noise(0.07, 0.05, 1200 * r, 0, 3200, { type: 'bandpass', q: 1.4 });
+      var r = rv(); snap(0.035, 2400);
+      noise(0.07, 0.032, 1200 * r, 0, 3200, { type: 'bandpass', q: 1.4 });
     },
     hit_blade: function () {   // 飞刃：金属"锵"
-      var r = rv(); snap(0.07, 4500);
-      tone(1760 * r, 0, 0.12, 'triangle', 0.018, 0.004, { wet: 0.4 }); tone(2637 * r, 0, 0.09, 'sine', 0.012, 0.006);
+      var r = rv(); snap(0.045, 4500);
+      tone(1760 * r, 0, 0.12, 'triangle', 0.012, 0.004, { wet: 0.4 }); tone(2637 * r, 0, 0.09, 'sine', 0.008, 0.006);
     },
-    hit_shield: function () { var r = rv(); snap(0.05, 3800); tone(1318 * r, 0, 0.05, 'sine', 0.022); },
+    hit_shield: function () { var r = rv(); snap(0.035, 3800); tone(1318 * r, 0, 0.05, 'sine', 0.015); },
     crit: function () {
-      var r = rv(); snap(0.11, 3500);
-      noise(0.05, 0.06, 2800 * r, 0.004, 1400, { type: 'bandpass', q: 1.2 });
-      tone(1568 * r, 0, 0.1, 'triangle', 0.032, 0.01, { wet: 0.4 });
-      tone(2349 * r, 0, 0.08, 'sine', 0.02, 0.025);
+      var r = rv(); snap(0.07, 3500);
+      noise(0.05, 0.04, 2800 * r, 0.004, 1400, { type: 'bandpass', q: 1.2 });
+      tone(1568 * r, 0, 0.1, 'triangle', 0.022, 0.01, { wet: 0.4 });
+      tone(2349 * r, 0, 0.08, 'sine', 0.014, 0.025);
     },
     // 小怪击破：碎裂爆响（中频为主），只有精英 / 首领才用低频 bigboom
     boom: function () {
-      var r = rv(); snap(0.1, 2800);
-      noise(0.14, 0.09, 2400 * r, 0.004, 500, { type: 'bandpass', q: 0.9 });
-      tone(760 * r, 260, 0.08, 'triangle', 0.03, 0.004);
+      var r = rv(); snap(0.07, 2800);
+      noise(0.14, 0.06, 2400 * r, 0.004, 500, { type: 'bandpass', q: 0.9 });
+      tone(760 * r, 260, 0.08, 'triangle', 0.022, 0.004);
     },
     bigboom: function () { tone(100, 30, 0.8, 'sine', 0.26); noise(0.9, 0.2, 2400, 0, 80, { wet: 0.3 }); tone(55, 30, 1, 'sine', 0.12, 0.05); },
 
@@ -611,8 +611,9 @@
   /* —— 对局 BGM：实时合成的循环音序（16 分音符步进，提前 0.15 秒排程）——
      stage：A 小调 Am-F-C-G，轻快琶音；boss：D 小调 Dm-Bb-Gm-A，更快、更密、加贝斯切分 */
   var MUSIC = {
-    stage: { bpm: 124, vol: 0.32, chords: [[57, 60, 64], [53, 57, 60], [48, 52, 55], [55, 59, 62]], arp: [0, 1, 2, 1, 0, 2, 1, 2], hat: 0.5, busy: 0 },
-    boss: { bpm: 142, vol: 0.36, chords: [[50, 53, 57], [46, 50, 53], [43, 46, 50], [45, 49, 52]], arp: [0, 2, 1, 2, 0, 2, 1, 0], hat: 1, busy: 1 },
+    // 对局 BGM 要比命中音效更抢耳：总线音量抬高，打击感再单独压一点
+    stage: { bpm: 124, vol: 0.58, chords: [[57, 60, 64], [53, 57, 60], [48, 52, 55], [55, 59, 62]], arp: [0, 1, 2, 1, 0, 2, 1, 2], hat: 0.5, busy: 0 },
+    boss: { bpm: 142, vol: 0.64, chords: [[50, 53, 57], [46, 50, 53], [43, 46, 50], [45, 49, 52]], arp: [0, 2, 1, 2, 0, 2, 1, 0], hat: 1, busy: 1 },
   };
   var mus = { mode: null, step: 0, next: 0, timer: 0, g: null, duckT: 0 };
   function mtof(m) { return 440 * Math.pow(2, (m - 69) / 12); }
@@ -624,18 +625,18 @@
     var dest = mus.g, d = t - a.currentTime, o = { dest: dest };
     var beat = s % 16, bar = ((s / 16) | 0) % 4, ch = cfg.chords[bar], sp = 60 / cfg.bpm / 4;
     // 柔和底鼓（低音量、短）+ 反拍军鼓 + 16 分镲
-    if (beat % 4 === 0) tone(110, 48, 0.16, 'sine', 0.1, d, o);
-    if (beat === 4 || beat === 12) noise(0.12, 0.05, 1900, d, 900, { dest: dest, type: 'bandpass', q: 0.8 });
-    if (cfg.hat >= 1 || beat % 2 === 0) noise(0.03, beat % 4 === 2 ? 0.03 : 0.016, 7500, d, 7500, { dest: dest, type: 'highpass' });
+    if (beat % 4 === 0) tone(110, 48, 0.16, 'sine', 0.14, d, o);
+    if (beat === 4 || beat === 12) noise(0.12, 0.07, 1900, d, 900, { dest: dest, type: 'bandpass', q: 0.8 });
+    if (cfg.hat >= 1 || beat % 2 === 0) noise(0.03, beat % 4 === 2 ? 0.04 : 0.022, 7500, d, 7500, { dest: dest, type: 'highpass' });
     // 贝斯：八分音符根音，boss 段加切分
     if (beat % 2 === 0 || (cfg.busy && (beat === 7 || beat === 15))) {
-      tone(mtof(ch[0] - 24), 0, sp * 1.7, 'sawtooth', 0.06, d, { dest: dest, lp: 420 });
+      tone(mtof(ch[0] - 24), 0, sp * 1.7, 'sawtooth', 0.09, d, { dest: dest, lp: 420 });
     }
     // 琶音：三和弦按图案上下跳，每两小节升一个八度做起伏
     var ni = cfg.arp[beat % cfg.arp.length], oct = (bar % 2 && beat >= 8) ? 12 : 0;
-    tone(mtof(ch[ni] + 12 + oct), 0, sp * 1.4, 'triangle', 0.028, d, { dest: dest, wet: 0.35 });
+    tone(mtof(ch[ni] + 12 + oct), 0, sp * 1.4, 'triangle', 0.042, d, { dest: dest, wet: 0.35 });
     // 每小节一次铺底和弦
-    if (beat === 0) ch.forEach(function (n) { tone(mtof(n), 0, sp * 15, 'triangle', 0.012, d, { dest: dest, lp: 1400, atk: 0.12, wet: 0.3 }); });
+    if (beat === 0) ch.forEach(function (n) { tone(mtof(n), 0, sp * 15, 'triangle', 0.02, d, { dest: dest, lp: 1400, atk: 0.12, wet: 0.3 }); });
   }
   function musicTick() {
     var a = ac;
