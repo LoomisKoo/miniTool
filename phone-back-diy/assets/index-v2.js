@@ -1628,11 +1628,26 @@ function nvOnLens(it,modelId){
   if(nvIsRing(it))return!0;
   return nvInCamArea(modelId,it.x,it.y,.02)
 }
+function nvImgHalf(a){
+  const w=a.scale||.3,h=w/(a.aspect||1),c=Math.abs(Math.cos(a.rotation||0)),s=Math.abs(Math.sin(a.rotation||0));
+  return{hw:(w*c+h*s)/2,hh:(w*s+h*c)/2}
+}
+function nvClampIntoPlateau(it,modelId){
+  const z=nvZone(modelId),pad=.02;
+  const{hh,hw}=nvImgHalf(it);
+  const x0=z.x0+pad+hw,x1=z.x1-pad-hw,y0=z.y0+pad+hh,y1=z.y1-pad-hh;
+  it.x=x0<=x1?Math.min(Math.max(it.x,x0),x1):(z.x0+z.x1)/2;
+  it.y=y0<=y1?Math.min(Math.max(it.y,y0),y1):(z.y0+z.y1)/2
+}
 function nvSyncCam(item,modelId){
   if(!item||item.kind==="stroke")return;
   if(nvIsRing(item)){item.aboveCamera=!0;return}
-  // 上传的图片：拖到相机模组上就变成"镜头层"，只在该模组范围内显示
-  if(nvIsImgItem(item)){item.aboveCamera=nvInCamArea(modelId,item.x,item.y,.02);return}
+  // 上传的图片：落在相机模组上就自动进"镜头层"，并锁在模组范围内
+  if(nvIsImgItem(item)){
+    const on=nvInCamArea(modelId,item.x,item.y,.02);
+    item.aboveCamera=on,on&&nvClampIntoPlateau(item,modelId);
+    return
+  }
   const sc=item.kind==="text"?item.fontScale:item.scale;
   item.aboveCamera=nvHitsCam(modelId,item.x,item.y,sc)
 }
@@ -2013,10 +2028,31 @@ function ml(e,t,l){
 }function nvIsRing(a){
   return a&&a.kind==="decal"&&a.source&&a.source.type==="builtin"&&!!NV_RING[a.source.id]
 }
+const NV_RING_SCALE=2.8;
+function nvMaskPath(e,t,modelId,usePlateau){
+  const K=Ke[modelId]||Ke.m17pro,o=c=>t.x+c/K.w*t.w,a=c=>t.y+c/K.h*t.h,r=c=>c/K.w*t.w;
+  const P=nvPlateauMm(modelId),L=nvLensMm(modelId);
+  if(usePlateau){
+    const x=o(P.x0),y=a(P.y0),w=r(P.w),h=a(P.y1)-a(P.y0),rad=r(P.corner);
+    T(e,x,y,w,h,rad)
+  }else T(e,t.x,t.y,t.w,t.h,t.r);
+  for(let i=0;i<L.length;i++){
+    const cx=o(L[i].x),cy=a(L[i].y),R=r(L[i].r)*1.02;
+    e.moveTo(cx+R,cy),e.arc(cx,cy,R,0,Math.PI*2)
+  }
+  for(let i=0;i<P.feat.length;i++){
+    const cx=o(P.feat[i][1]),cy=a(P.feat[i][2]),R=r(P.feat[i][3])*1.35;
+    e.moveTo(cx+R,cy),e.arc(cx,cy,R,0,Math.PI*2)
+  }
+  e.clip("evenodd")
+}
 function nvClipLens(e,t,modelId,it){
-  if(!nvOnLens(it,modelId))return!1;
-  const r=nvPlateauRect(t,modelId);
-  return e.save(),T(e,r.x,r.y,r.w,r.h,r.r),e.clip(),!0
+  if(!it||it.kind!=="decal")return!1;
+  const ring=nvIsRing(it),on=nvOnLens(it,modelId);
+  if(!ring&&!on)return!1;
+  // 环状贴纸绕在镜头外圈：只裁机身 + 挖镜头孔，允许溢出模组边缘
+  // 其他落在模组上的贴纸/图片：裁进模组范围，并且挖掉镜头与传感器
+  return e.save(),nvMaskPath(e,t,modelId,!ring),!0
 }
 function Vt(e,t,l,n,i,modelId){
   for(let o=0;
@@ -2052,7 +2088,7 @@ function nvNormalize(e){
     const it=e.items[i];
     if(!nvIsRing(it))continue;
     const c=L[k%L.length];
-    k++,it.x=c.x,it.y=c.y,it.scale=2.05*c.r,it.rotation=0,it.aboveCamera=!0
+    k++,it.x=c.x,it.y=c.y,it.scale=NV_RING_SCALE*c.r,it.rotation=0,it.aboveCamera=!0
   }
 }
 function nvBackdropImg(bd){
@@ -2496,7 +2532,7 @@ function Tn(e,t){
   if(!a)return;
   const n=nvCam(e.modelId).lens,u=nvZone(e.modelId),c=(u.x0+u.x1)/2,m=(u.y0+u.y1)/2;
   if(a==="lens"){
-    for(let f=0;f<n.length;f++)Ge(e,t,n[f].x,n[f].y,2.08*n[f].r,0,!0);
+    for(let f=0;f<n.length;f++)Ge(e,t,n[f].x,n[f].y,NV_RING_SCALE*n[f].r,0,!0);
     return
   }
   if(a==="badge"){
@@ -2673,12 +2709,17 @@ function an(e){
     },x:.5+(Math.random()-.5)*.2,y:.68+(Math.random()-.5)*.1,scale:.24,rotation:(Math.random()-.5)*.3,aboveCamera:!1,aspect:1
   };
   nvSyncCam(it,e.modelId),e.items.push(it),e.selectedId=it.id
-}function Ol(e,t,l){
-  const z=nvZone(e.modelId);
+}function Ol(e,t,l,inLens){
+  const z=nvZone(e.modelId),asp=l||1;
+  const pw=z.x1-z.x0,ph=z.y1-z.y0;
+  const fitW=Math.min(pw*.92,ph*.92*asp);
   const it={
     id:Z(),kind:"decal",source:{
       type:"image",imageId:t
-    },x:.5,y:Math.min(.93,z.y1+.3),scale:.4,rotation:0,aboveCamera:!1,aspect:l||1
+    },
+    x:.5,y:inLens?(z.y0+z.y1)/2:Math.min(.93,z.y1+.3),
+    scale:inLens?Math.max(.12,fitW):.4,
+    rotation:0,aboveCamera:!!inLens,aspect:asp
   };
   nvSyncCam(it,e.modelId),e.items.push(it),e.selectedId=it.id
 }const Le=[{
@@ -3142,7 +3183,7 @@ function Ws(e){
               type:"image",imageId:Ue
             },density:s.tile?s.tile.density:.62,size:s.tile?s.tile.size:.5
           }
-        }):M(()=>Ol(s,Ue,ee.aspect))
+        }):M(()=>Ol(s,Ue,ee.aspect,Ye==="lens"))
       },R.onerror=()=>re("这张图打不开"),R.src=v
     },y.readAsDataURL(g)
   }),h("resultBack").addEventListener("click",()=>{
