@@ -1150,7 +1150,7 @@ function Hn(e){
   if(t.kind==="decal"){
     const l=e,n=Sn(l.source);
     return!n||n.type==="image"&&!ce[n.imageId]?null:{
-      id:t.id,kind:"decal",source:n,x:W(l.x,.5),y:W(l.y,.6),scale:W(l.scale,.24),rotation:W(l.rotation,0),aboveCamera:l.aboveCamera===!0,aspect:W(l.aspect,1)||1
+      id:t.id,kind:"decal",layer:l.layer==="lens"||(l.layer===void 0&&l.aboveCamera===!0)?"lens":"body",source:n,x:W(l.x,.5),y:W(l.y,.6),scale:W(l.scale,.24),rotation:W(l.rotation,0),aboveCamera:l.aboveCamera===!0,aspect:W(l.aspect,1)||1
     }
   }if(t.kind==="text"){
     const l=e,n=["system","smiley","display","hand"],i=["solid","stroke","gradient","neon","metal","glitter"],o=String(l.font),a=String(l.effect),r=n.indexOf(o)>=0?o:"smiley",d=i.indexOf(a)>=0?a:"solid";
@@ -1623,29 +1623,35 @@ function nvPlateauRect(t,modelId){
     r:P.corner/K.w*t.w
   }
 }
-function nvOnLens(it,modelId){
+function nvOnLens(it){
   if(!it||it.kind!=="decal")return!1;
   if(nvIsRing(it))return!0;
-  return nvInCamArea(modelId,it.x,it.y,.02)
+  return nvIsImgItem(it)&&it.layer==="lens"
 }
 function nvImgHalf(a){
   const w=a.scale||.3,h=w/(a.aspect||1),c=Math.abs(Math.cos(a.rotation||0)),s=Math.abs(Math.sin(a.rotation||0));
   return{hw:(w*c+h*s)/2,hh:(w*s+h*c)/2}
 }
-function nvClampIntoPlateau(it,modelId){
-  const z=nvZone(modelId),pad=.02;
-  const{hh,hw}=nvImgHalf(it);
-  const x0=z.x0+pad+hw,x1=z.x1-pad-hw,y0=z.y0+pad+hh,y1=z.y1-pad-hh;
-  it.x=x0<=x1?Math.min(Math.max(it.x,x0),x1):(z.x0+z.x1)/2;
-  it.y=y0<=y1?Math.min(Math.max(it.y,y0),y1):(z.y0+z.y1)/2
+// 镜头层图片的最大尺寸（比模组本身宽松，超出部分由遮罩裁掉）
+function nvLensMaxScale(modelId){
+  const z=nvZone(modelId),base=Math.max(z.x1-z.x0,z.y1-z.y0);
+  return Math.min(.92,Math.max(.26,base*2.6))
+}
+function nvClampLensImg(it,modelId){
+  const z=nvZone(modelId);
+  it.scale=Math.min(Math.max(it.scale,.1),nvLensMaxScale(modelId));
+  // 中心只在模组内活动：图片可以比模组大，多出来的部分被模组遮罩裁掉
+  const ix=(z.x1-z.x0)*.06,iy=(z.y1-z.y0)*.06;
+  it.x=Math.min(Math.max(it.x,z.x0+ix),z.x1-ix);
+  it.y=Math.min(Math.max(it.y,z.y0+iy),z.y1-iy)
 }
 function nvSyncCam(item,modelId){
   if(!item||item.kind==="stroke")return;
   if(nvIsRing(item)){item.aboveCamera=!0;return}
-  // 上传的图片：落在相机模组上就自动进"镜头层"，并锁在模组范围内
   if(nvIsImgItem(item)){
-    const on=nvInCamArea(modelId,item.x,item.y,.02);
-    item.aboveCamera=on,on&&nvClampIntoPlateau(item,modelId);
+    // 层级由上传入口决定：镜头页上传 -> 镜头层；其他入口 -> 背膜层
+    const lens=item.layer==="lens";
+    item.aboveCamera=lens,lens&&nvClampLensImg(item,modelId);
     return
   }
   const sc=item.kind==="text"?item.fontScale:item.scale;
@@ -2048,7 +2054,7 @@ function nvMaskPath(e,t,modelId,usePlateau){
 }
 function nvClipLens(e,t,modelId,it){
   if(!it||it.kind!=="decal")return!1;
-  const ring=nvIsRing(it),on=nvOnLens(it,modelId);
+  const ring=nvIsRing(it),on=nvOnLens(it);
   if(!ring&&!on)return!1;
   // 环状贴纸绕在镜头外圈：只裁机身 + 挖镜头孔，允许溢出模组边缘
   // 其他落在模组上的贴纸/图片：裁进模组范围，并且挖掉镜头与传感器
@@ -2712,13 +2718,14 @@ function an(e){
 }function Ol(e,t,l,inLens){
   const z=nvZone(e.modelId),asp=l||1;
   const pw=z.x1-z.x0,ph=z.y1-z.y0;
-  const fitW=Math.min(pw*.92,ph*.92*asp);
+  const cover=Math.max(pw,ph*asp)*(inLens?1.12:.9);
   const it={
-    id:Z(),kind:"decal",source:{
+    id:Z(),kind:"decal",layer:inLens?"lens":"body",source:{
       type:"image",imageId:t
     },
-    x:.5,y:inLens?(z.y0+z.y1)/2:Math.min(.93,z.y1+.3),
-    scale:inLens?Math.max(.12,fitW):.4,
+    x:inLens?(z.x0+z.x1)/2:.5,
+    y:inLens?(z.y0+z.y1)/2:Math.min(.9,z.y1+.28),
+    scale:inLens?Math.max(.18,Math.min(nvLensMaxScale(e.modelId),cover)):.46,
     rotation:0,aboveCamera:!!inLens,aspect:asp
   };
   nvSyncCam(it,e.modelId),e.items.push(it),e.selectedId=it.id
@@ -2845,7 +2852,7 @@ function h(e){
     sh.classList.contains("is-open")||sh.classList.contains("is-closing")||Ws(!0)
   }
   const a=h("scaleWrap"),r=h("rotWrap"),d=h("selScale"),f=h("selRot");
-  i&&i.kind!=="stroke"?(a.hidden=!1,r.hidden=!1,document.activeElement!==d&&(i.kind==="text"?(d.min="0.04",d.max="0.2",d.step="0.002",d.value=String(i.fontScale),h("scaleLabel").textContent="字号"):(d.min="0.08",d.max="0.85",d.step="0.01",d.value=String(i.scale),h("scaleLabel").textContent="大小")),document.activeElement!==f&&(f.value=String(Gl(i.rotation)))):(a.hidden=!0,r.hidden=!0);
+  i&&i.kind!=="stroke"?(a.hidden=!1,r.hidden=!1,document.activeElement!==d&&(i.kind==="text"?(d.min="0.04",d.max="0.2",d.step="0.002",d.value=String(i.fontScale),h("scaleLabel").textContent="字号"):(d.min="0.08",d.max=String(nvIsImgItem(i)&&i.layer==="lens"?nvLensMaxScale(s.modelId):.98),d.step="0.01",d.value=String(i.scale),h("scaleLabel").textContent="大小")),document.activeElement!==f&&(f.value=String(Gl(i.rotation)))):(a.hidden=!0,r.hidden=!0);
   const p=h("penPill");
   p.hidden=S.tab!=="draw",p.textContent=S.pen?"画笔开着 · 点此挪贴纸":"画笔关着 · 点此继续画",h("tileControls").hidden=!s.tile,h("tileHint").hidden=!(S.tileMode&&!s.tile);
   const c=h("tileDensity"),b=h("tileSize");
