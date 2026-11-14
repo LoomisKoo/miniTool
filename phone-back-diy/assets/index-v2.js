@@ -1654,6 +1654,14 @@ function nvMaxScale(it,modelId){
   if(nvIsRing(it))return NV_BODY_MAX;
   return it.kind==="text"?.2:NV_BODY_MAX
 }
+function nvClampBgImg(it,modelId){
+  it.scale=Math.min(Math.max(it.scale||1,nvBgMinScale(it,modelId)),nvMaxScale(it,modelId));
+  const{hh,hw}=nvImgHalf(it);
+  // 图宽/高必须完全盖住机身；用旋转后的外接框判断，任何角度都不会露底
+  const xLo=1-hw,xHi=hw,yLo=1-hh,yHi=hh;
+  it.x=xLo<=xHi?Math.min(Math.max(it.x,xLo),xHi):.5;
+  it.y=yLo<=yHi?Math.min(Math.max(it.y,yLo),yHi):.5
+}
 function nvMinScale(it,modelId){
   if(!it)return .08;
   if(it.kind==="text")return .04;
@@ -1673,11 +1681,7 @@ function nvSyncCam(item,modelId){
   if(nvIsRing(item)){item.aboveCamera=!0;return}
   if(nvIsImgItem(item)){
     // 层级由上传入口决定：镜头页 -> 镜头层；背景页 -> 最底层背景；其他 -> 背膜层
-    if(item.layer==="bg"){
-      item.aboveCamera=!1,
-      item.scale=Math.min(Math.max(item.scale||1,nvBgMinScale(item,modelId)),nvMaxScale(item,modelId));
-      return
-    }
+    if(item.layer==="bg"){item.aboveCamera=!1,nvClampBgImg(item,modelId);return}
     const lens=item.layer==="lens";
     item.aboveCamera=lens,lens&&nvClampLensImg(item,modelId);
     return
@@ -2324,12 +2328,9 @@ function Fl(e){
   }
 }function nn(e,t,l,n){
   const i=pe(t.width,t.height,s.modelId);
-  if(e&&e.layer==="bg"){
-    e.x=z((l-i.x)/i.w,-.6,1.6),e.y=z((n-i.y)/i.h,-.6,1.6)
-  }else{
-    e.x=z((l-i.x)/i.w,-.08,1.08),e.y=z((n-i.y)/i.h,-.04,1.04)
-  }
-  nvSyncCam(e,s.modelId)
+  e.x=z((l-i.x)/i.w,-.08,1.08),e.y=z((n-i.y)/i.h,-.04,1.04);
+  // 背景图层：拖动时也要保证整张图仍然盖满机身
+  e&&e.layer==="bg"&&nvClampBgImg(e,s.modelId),nvSyncCam(e,s.modelId)
 }function ye(){
   const e=[],t=Object.keys(X);
   for(let l=0;
@@ -2422,7 +2423,7 @@ function Fl(e){
         r.kind==="text"?r.fontScale=z(se*(f/de),.04,.2):r.scale=z(se*(f/de),nvMinScale(r,s.modelId),nvMaxScale(r,s.modelId)),nvSyncCam(r,s.modelId),I()
       }else if(A==="rotate"){
         const d=te(r,e),f=Math.atan2(o.y-d.y,o.x-d.x);
-        r.rotation=Ne+(f-We),I()
+        r.rotation=Ne+(f-We),r.layer==="bg"&&nvClampBgImg(r,s.modelId),I()
       }
     }
   },n=i=>{
