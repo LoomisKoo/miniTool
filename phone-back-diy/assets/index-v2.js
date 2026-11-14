@@ -934,16 +934,23 @@ const AI_PACK=[
   {id:"ai-wp-winter",name:"冬日",group:"bg",file:"wp-winter.webp"},
   {id:"ai-wp-beach",name:"海边日落",group:"bg",file:"wp-beach.webp"},
   {id:"ai-wp-autumn",name:"秋日",group:"bg",file:"wp-autumn.webp"},
-  {id:"ai-wp-milk",name:"奶油",group:"bg",file:"wp-milk.webp"},
-  {id:"ai-wp-strawberry",name:"草莓牛奶",group:"bg",file:"wp-strawberry.webp"},
-  {id:"ai-wp-cloudy",name:"云朵蓝",group:"bg",file:"wp-cloudy.webp"},
-  {id:"ai-wp-peach",name:"蜜桃",group:"bg",file:"wp-peach.webp"},
-  {id:"ai-wp-matcha",name:"抹茶格纹",group:"bg",file:"wp-matcha.webp"},
+  {id:"ai-wp-milk",name:"奶油云海",group:"bg",file:"wp-milk.webp"},
+  {id:"ai-wp-strawberry",name:"草莓糖霜",group:"bg",file:"wp-strawberry.webp"},
+  {id:"ai-wp-cloudy",name:"云画蓝天",group:"bg",file:"wp-cloudy.webp"},
+  {id:"ai-wp-peach",name:"蜜桃黄昏",group:"bg",file:"wp-peach.webp"},
+  {id:"ai-wp-matcha",name:"抹茶野餐",group:"bg",file:"wp-matcha.webp"},
   {id:"ai-wp-lemon",name:"柠檬汽水",group:"bg",file:"wp-lemon.webp"},
-  {id:"ai-wp-lilac",name:"薰衣草",group:"bg",file:"wp-lilac.webp"},
+  {id:"ai-wp-lilac",name:"薰衣草夜",group:"bg",file:"wp-lilac.webp"},
   {id:"ai-wp-butterheart",name:"奶油心心",group:"bg",file:"wp-butterheart.webp"},
-  {id:"ai-wp-mint",name:"薄荷波纹",group:"bg",file:"wp-mint.webp"},
-  {id:"ai-wp-caramel",name:"焦糖布丁",group:"bg",file:"wp-caramel.webp"}
+  {id:"ai-wp-mint",name:"薄荷海浪",group:"bg",file:"wp-mint.webp"},
+  {id:"ai-wp-caramel",name:"焦糖拿铁",group:"bg",file:"wp-caramel.webp"},
+  {id:"ai-wp-aurora",name:"极光夜空",group:"bg",file:"wp-aurora.webp"},
+  {id:"ai-wp-daisy",name:"雏菊花田",group:"bg",file:"wp-daisy.webp"},
+  {id:"ai-wp-cow",name:"奶牛纹",group:"bg",file:"wp-cow.webp"},
+  {id:"ai-wp-snow",name:"雪夜小屋",group:"bg",file:"wp-snow.webp"},
+  {id:"ai-wp-starfield",name:"星座图谱",group:"bg",file:"wp-starfield.webp"},
+  {id:"ai-wp-rainbow",name:"彩虹棉花糖",group:"bg",file:"wp-rainbow.webp"},
+  {id:"ai-wp-cherry",name:"夜樱",group:"bg",file:"wp-cherry.webp"}
 ];
 const AI_IMG={};
 function aiDraw(id){
@@ -2502,7 +2509,14 @@ function Tn(e,t){
   {id:"lilac",bg:"ai-wp-lilac",color:{m17pro:"deepblue",m17:"lavender",m15:"pink"},glitter:"holo",border:"sparkle",pool:["ai-star","ai-crescent","ai-sparkle","ai-butterfly","ai-pearls","ai-moon"],line:["做甜甜的梦","紫色心情","安静地发光"],fs:"#9C7BD6"},
   {id:"mintwave",bg:"ai-wp-mint",color:{m17pro:"silver",m17:"sage",m15:"blue"},glitter:"frost",border:"pearl",pool:["ai-seahorse","ai-shell","ai-bubbles","ai-fish","ai-duck","ai-starfish"],line:["薄荷味的清醒","海浪替我上班","清凉一下也很好"],fs:"#4FA894"},
   {id:"peach",bg:"ai-wp-peach",color:{m17pro:"silver",m17:"pink",m15:"pink"},glitter:"rose",border:"flower",pool:["ai-peach","ai-petals","ai-heart","ai-rose","ai-icecream","ai-bow"],line:["蜜桃味的我","温柔是种超能力","今天很桃气"],fs:"#E27D62"},
-  {id:"caramel",bg:"ai-wp-caramel",color:{m17pro:"cosmic",m17:"white",m15:"yellow"},glitter:"gold",border:"dash",pool:["ai-cupcake","ai-waffle","ai-donut","ai-latte","ai-cookie","ai-croissant"],line:["焦糖布丁营业中","甜品治愈一切","慢慢吃比较甜"],fs:"#B8814C"}
+  {id:"caramel",bg:"ai-wp-caramel",color:{m17pro:"cosmic",m17:"white",m15:"yellow"},glitter:"gold",border:"dash",pool:["ai-cupcake","ai-waffle","ai-donut","ai-latte","ai-cookie","ai-croissant"],line:["焦糖布丁营业中","甜品治愈一切","慢慢吃比较甜"],fs:"#B8814C"},
+  {id:"aurora",bg:"ai-wp-aurora",color:{m17pro:"deepblue",m17:"lavender",m15:"black"},glitter:"holo",border:"sparkle",pool:["ai-star","ai-sparkle","ai-crescent","ai-moon","ai-pearls","ai-snow"],line:["极光替我发光","今晚的天空在营业","许个愿吧"],fs:"#8FE3C8"},
+  {id:"daisy",bg:"ai-wp-daisy",color:{m17pro:"silver",m17:"sage",m15:"yellow"},glitter:"gold",border:"flower",pool:["ai-daisy","ai-tulip","ai-butterfly","ai-clover2","ai-leaf","ai-heart","ai-chick"],line:["花田里的小可爱","今天也努力开花","晒太阳是正经事"],fs:"#5E9A57"},
+  {id:"cow",bg:"ai-wp-cow",color:{m17pro:"silver",m17:"white",m15:"yellow"},glitter:"frost",border:"dash",pool:["ai-sheep","ai-bunny","ai-cloud","ai-cookie","ai-latte","ai-heart"],line:["哞哞营业中","今天也很牛","牛奶味的一天"],fs:"#6A5343"},
+  {id:"snow",bg:"ai-wp-snow",color:{m17pro:"silver",m17:"mist",m15:"blue"},glitter:"frost",border:"pearl",pool:["ai-snow","ai-bear","ai-latte","ai-cloud","ai-cookie","ai-crescent"],line:["雪夜小屋已开灯","冷到只想抱抱","把冬天装进口袋"],fs:"#8FB3CC"},
+  {id:"starfield",bg:"ai-wp-starfield",color:{m17pro:"deepblue",m17:"black",m15:"blue"},glitter:"star",border:"stars",pool:["ai-planet","ai-star","ai-crescent","ai-sparkle","ai-gem","ai-moon"],line:["星星排队下班","今晚的星座是我","宇宙级可爱"],fs:"#C9B6FF"},
+  {id:"rainbow",bg:"ai-wp-rainbow",color:{m17pro:"silver",m17:"lavender",m15:"pink"},glitter:"candy",border:"dash",pool:["ai-rainbow","ai-cloud","ai-star","ai-sparkle","ai-icecream","ai-heart"],line:["吃掉这道彩虹","今天有亿点点甜","云上小卖部"],fs:"#E58BB4"},
+  {id:"cherry",bg:"ai-wp-cherry",color:{m17pro:"deepblue",m17:"lavender",m15:"pink"},glitter:"rose",border:"hearts",pool:["ai-petals","ai-heart","ai-star","ai-bow","ai-crescent","ai-cherry"],line:["夜樱限定浪漫","月亮也来赏花","悄悄开在夜里"],fs:"#F3C3D3"}
 ];
 
 function nvSendBack(e){
@@ -2574,7 +2588,7 @@ function st(e,t,l){
   if(theme&&qe(theme.bg)){
     e.backdrop={type:"builtin",id:theme.bg}
   }else if(l&&Math.random()<.55){
-    const envs=["ai-wp-ocean","ai-wp-night","ai-wp-sakura","ai-wp-garden","ai-wp-coquette","ai-wp-cafe","ai-wp-galaxy","ai-wp-winter","ai-wp-beach","ai-wp-autumn","ai-wp-milk","ai-wp-strawberry","ai-wp-cloudy","ai-wp-peach","ai-wp-matcha","ai-wp-lemon","ai-wp-lilac","ai-wp-butterheart","ai-wp-mint","ai-wp-caramel"].filter(id=>qe(id));
+    const envs=["ai-wp-ocean","ai-wp-night","ai-wp-sakura","ai-wp-garden","ai-wp-coquette","ai-wp-cafe","ai-wp-galaxy","ai-wp-winter","ai-wp-beach","ai-wp-autumn","ai-wp-milk","ai-wp-strawberry","ai-wp-cloudy","ai-wp-peach","ai-wp-matcha","ai-wp-lemon","ai-wp-lilac","ai-wp-butterheart","ai-wp-mint","ai-wp-caramel","ai-wp-aurora","ai-wp-daisy","ai-wp-cow","ai-wp-snow","ai-wp-starfield","ai-wp-rainbow","ai-wp-cherry"].filter(id=>qe(id));
     envs.length&&(e.backdrop={type:"builtin",id:envs[Math.floor(Math.random()*envs.length)]})
   }
   const basePool=t==="cream"?["ai-bunny","ai-cat","ai-bear","ai-sheep","ai-heart","ai-bow","ai-cherry","ai-peach","ai-berry","ai-daisy","ai-rose","ai-cloud","ai-moon","ai-donut","ai-boba","ai-icecream","ai-cupcake","ai-chick","ai-tulip","ai-macaron","ai-lollipop","ai-cookie","ai-latte","ai-envelope","ai-minibow","ai-ribbon2","ai-paw","ai-bouquet","ai-frog","ai-duck","ai-clover2","ai-washi","ai-washi2","ai-candy","ai-polaroid"]:["ai-star","ai-sparkle","ai-butterfly","ai-cd","ai-lipstick","ai-kiss","ai-rainbow","ai-gem","ai-badge","ai-crown","ai-gamepad","ai-sunglasses","ai-bolt","ai-planet","ai-crescent","ai-dice","ai-film","ai-cam2","ai-lock","ai-key","ai-notes","ai-glitters","ai-wing","ai-stamp","ai-ghost","ai-fish","ai-snow"];
