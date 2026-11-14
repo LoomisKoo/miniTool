@@ -1611,32 +1611,11 @@ function nvHitsCam(modelId,x,y,scale){
 function nvIsImgItem(a){
   return !!(a&&a.kind==="decal"&&a.source&&a.source.type==="image")
 }
-function nvImgHalf(a){
-  const w=a.scale||.3,h=w/(a.aspect||1),c=Math.abs(Math.cos(a.rotation||0)),s=Math.abs(Math.sin(a.rotation||0));
-  return{hw:(w*c+h*s)/2,hh:(w*s+h*c)/2}
-}
-function nvImgSafeBox(modelId){
-  const z=nvZone(modelId);
-  const top=Math.min(.93,z.y1+.04),bot=.975;
-  return{top:top,bot:bot,h:Math.max(.12,bot-top),w:.9}
-}
-function nvFitImg(it,modelId){
-  if(!it)return;
-  const box=nvImgSafeBox(modelId),asp=it.aspect||1;
-  const maxW=Math.max(.14,Math.min(box.w,box.h*asp));
-  if(!(it.scale>0))it.scale=.36;
-  it.scale=Math.min(Math.max(it.scale,.1),maxW);
-  it.aboveCamera=!1;
-  const{hh,hw}=nvImgHalf(it);
-  const xLo=hw+.012,xHi=1-hw-.012;
-  it.x=xLo<=xHi?Math.min(Math.max(it.x,xLo),xHi):.5;
-  const yLo=box.top+hh,yHi=box.bot-hh;
-  it.y=yLo<=yHi?Math.min(Math.max(it.y,yLo),yHi):(box.top+box.bot)/2
-}
 function nvSyncCam(item,modelId){
   if(!item||item.kind==="stroke")return;
   if(nvIsRing(item)){item.aboveCamera=!0;return}
-  if(nvIsImgItem(item)){nvFitImg(item,modelId);return}
+  // 上传的图片：可以自由移动、可以压在相机区域下方，但永远处于相机模组的下层
+  if(nvIsImgItem(item)){item.aboveCamera=!1;return}
   const sc=item.kind==="text"?item.fontScale:item.scale;
   item.aboveCamera=nvHitsCam(modelId,item.x,item.y,sc)
 }
@@ -1806,7 +1785,9 @@ function cl(e,t,l,n){
   const P=nvPlateauMm(l),base=n.kind==="glass"?"#D7E6F0":n.base;
   const x=o(P.x0),y=a(P.y0),w=r(P.w),h=a(P.y1)-a(P.y0),rad=r(P.corner);
   e.save(),T(e,t.x,t.y,t.w,t.h,t.r),e.clip();
-  e.save(),T(e,x,y,w,h,rad),e.shadowColor="rgba(0,0,0,0.30)",e.shadowBlur=t.w*.026,e.shadowOffsetY=t.w*.009,e.fillStyle=$(base,-.18),e.fill(),e.restore();
+  // 一层大范围柔和投影 + 一层贴边锐利投影：模组"浮"在背膜之上，跨层也分得清
+  e.save(),T(e,x,y,w,h,rad),e.shadowColor="rgba(38,22,12,0.20)",e.shadowBlur=t.w*.085,e.shadowOffsetY=t.w*.026,e.fillStyle=$(base,-.14),e.fill(),e.restore();
+  e.save(),T(e,x,y,w,h,rad),e.shadowColor="rgba(0,0,0,0.34)",e.shadowBlur=t.w*.026,e.shadowOffsetY=t.w*.010,e.fillStyle=$(base,-.18),e.fill(),e.restore();
   nvPlateFill(e,x,y,w,h,rad,base);
   nvPlateGlass(e,x,y,w,h,rad,base,t.w);
   nvCamBody(e,t,l,base);
@@ -2667,14 +2648,13 @@ function an(e){
   };
   nvSyncCam(it,e.modelId),e.items.push(it),e.selectedId=it.id
 }function Ol(e,t,l){
-  const asp=l||1,box=nvImgSafeBox(e.modelId);
-  const fitW=Math.min(box.w,box.h*asp);
+  const z=nvZone(e.modelId);
   const it={
     id:Z(),kind:"decal",source:{
       type:"image",imageId:t
-    },x:.5,y:(box.top+box.bot)/2,scale:Math.max(.16,fitW*.92),rotation:0,aboveCamera:!1,aspect:asp
+    },x:.5,y:Math.min(.93,z.y1+.3),scale:.4,rotation:0,aboveCamera:!1,aspect:l||1
   };
-  nvFitImg(it,e.modelId),e.items.push(it),e.selectedId=it.id
+  nvSyncCam(it,e.modelId),e.items.push(it),e.selectedId=it.id
 }const Le=[{
   id:"bg",name:"背景"
 },{
