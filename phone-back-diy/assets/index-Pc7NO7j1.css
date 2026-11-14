@@ -485,4 +485,14 @@ input,textarea,.result img{-webkit-user-select:auto;user-select:auto}
 .fx-frost{background:linear-gradient(145deg,#fff,#D6E8FF)!important}
 .theme-row{display:flex;gap:8px;flex-wrap:wrap}
 .theme-row .btn{flex:1;min-width:120px}
-@media(min-width:380px){.fx-grid{grid-template-columns:repeat(4,1fr)}}
+/* 边框图案只有文字，不占预览位置：收成小一号的胶囊按钮 */
+#borderModes{grid-template-columns:repeat(3,1fr);gap:6px}
+#borderModes .fx-chip{
+  min-height:0;padding:8px 4px;flex-direction:row;gap:0;
+  font-size:12px;border-radius:11px;background:linear-gradient(160deg,#fff,#FFF4F8)
+}
+#borderModes .fx-chip span{line-height:1.2}
+@media(min-width:380px){
+  .fx-grid{grid-template-columns:repeat(4,1fr)}
+  #borderModes{grid-template-columns:repeat(3,1fr)}
+}
