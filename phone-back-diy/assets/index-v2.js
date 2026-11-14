@@ -2051,7 +2051,7 @@ function Mn(e,t,l,n,i){
   if(e.save(),T(e,t.x,t.y,t.w,t.h,t.r),e.clip(),l.backdrop&&nvDrawBackdrop(e,t,l.backdrop),l.tile){
     const r=JSON.stringify(l.tile)+"|"+Math.round(t.w);
     (r!==Kt||!we)&&(ml(t.w,t.h,l.tile),Kt=r),we&&e.drawImage(we,t.x,t.y,t.w,t.h)
-  }if(Cl(e,t,l,n),e.restore(),Vt(e,t,l.items,!1,n.ry),a||cl(e,t,l.modelId,o),Vt(e,t,l.items,!0,n.ry),a||nvLensTop(e,t,l.modelId,o.base),VtRing(e,t,l.items),i.selection&&l.selectedId)for(let r=0;r<l.items.length;r++)l.items[r].id===l.selectedId&&wl(e,t,l.items[r])
+  }if(Cl(e,t,l,n),e.restore(),Vt(e,t,l.items,!1,n.ry),a||cl(e,t,l.modelId,o),a||nvLensTop(e,t,l.modelId,o.base),Vt(e,t,l.items,!0,n.ry),VtRing(e,t,l.items),i.selection&&l.selectedId)for(let r=0;r<l.items.length;r++)l.items[r].id===l.selectedId&&wl(e,t,l.items[r])
 }function dt(e,t){
   if(t.kind==="stroke")return null;
   const l=e.x+t.x*e.w,n=e.y+t.y*e.h;
