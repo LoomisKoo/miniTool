@@ -1,0 +1,21 @@
+@font-face {
+  font-family: "Smiley Sans";
+  src: url("./smiley-subset.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Lilita One";
+  src: url("./lilita-one.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: Pangolin;
+  src: url("./pangolin.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}

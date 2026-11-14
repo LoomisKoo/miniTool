@@ -1,0 +1,8 @@
+{
+  "id": "xiaohongshu",
+  "name": "小红书小工具",
+  "portraitOnly": true,
+  "storagePrefix": "kaihe_phone_back_xhs_",
+  "title": "手机背面 DIY",
+  "storageKey": "kaihe-phone-back-v1"
+}
