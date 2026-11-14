@@ -984,7 +984,7 @@ function loadAiStickers(){
       img.onload=img.onerror=function(){
         if(--left<=0)resolve()
       };
-      img.src="./assets/stickers/"+s.file+"?v=75"
+      img.src="./assets/stickers/"+s.file+"?v=76"
     }
   })
 }
@@ -2482,27 +2482,27 @@ function Tn(e,t){
   };
   nvSyncCam(it,e.modelId),e.items.push(it)
 }const THEME_PACKS=[
-  {id:"ocean",bg:"ai-wp-ocean",color:{m17pro:"deepblue",m17:"mist",m15:"blue"},glitter:"frost",border:"pearl",pool:["ai-jellyfish","ai-shell","ai-starfish","ai-coral","ai-seaweed","ai-bubbles","ai-seahorse","ai-fishschool","ai-fish","ai-chest"],line:["海底世界","今日份浪花","蓝色心情"],fs:"#8EB7D6"},
-  {id:"midsummer",bg:"ai-wp-night",color:{m17pro:"deepblue",m17:"lavender",m15:"black"},glitter:"star",border:"sparkle",pool:["ai-fireflies","ai-mushroom","ai-moon","ai-crescent","ai-sparkle","ai-butterfly","ai-star"],line:["仲夏夜","梦里有光","萤火虫"],fs:"#CDB6E8"},
-  {id:"sakura",bg:"ai-wp-sakura",color:{m17pro:"silver",m17:"white",m15:"pink"},glitter:"rose",border:"hearts",pool:["ai-petals","ai-bunny","ai-daisy","ai-heart","ai-bow","ai-cherry","ai-cloud"],line:["樱花季","春日漫步","粉色心事"],fs:"#E25B45"},
-  {id:"cafe",bg:"ai-wp-cafe",color:{m17pro:"cosmic",m17:"white",m15:"yellow"},glitter:"gold",border:"flower",pool:["ai-macaron","ai-latte","ai-cookie","ai-croissant","ai-cupcake","ai-donut"],line:["下午茶时间","甜甜的","今日份治愈"],fs:"#E2A63B"},
-  {id:"galaxy",bg:"ai-wp-galaxy",color:{m17pro:"deepblue",m17:"black",m15:"blue"},glitter:"holo",border:"stars",pool:["ai-planet","ai-star","ai-crescent","ai-sparkle","ai-bolt"],line:["银河旅人","闪闪发光","今晚看星星"],fs:"#C9B6FF"},
-  {id:"autumn",bg:"ai-wp-autumn",color:{m17pro:"cosmic",m17:"white",m15:"yellow"},glitter:"gold",border:"dash",pool:["ai-leaf","ai-bouquet","ai-cookie","ai-latte","ai-bear"],line:["秋日私语","落叶拾光","暖暖的"],fs:"#F08A3E"},
-  {id:"cloud",bg:"ai-wp-cloudy",color:{m17pro:"silver",m17:"mist",m15:"blue"},glitter:"frost",border:"pearl",pool:["ai-cloud","ai-sheep","ai-moon","ai-star","ai-bunny"],line:["云朵软软","做梦吧","轻轻的"],fs:"#8EB7D6"},
-  {id:"coquette",bg:"ai-wp-coquette",color:{m17pro:"silver",m17:"lavender",m15:"pink"},glitter:"rose",border:"ribbon",pool:["ai-minibow","ai-ribbon2","ai-pearls","ai-heart","ai-kiss","ai-lipstick","ai-envelope"],line:["甜心女孩","今日份可爱","蝴蝶结"],fs:"#E23B8A"},
-  {id:"winter",bg:"ai-wp-winter",color:{m17pro:"silver",m17:"mist",m15:"blue"},glitter:"frost",border:"pearl",pool:["ai-snow","ai-bear","ai-latte","ai-cloud","ai-cookie"],line:["冬日限定","下雪啦","热可可"],fs:"#8EB7D6"},
-  {id:"beach",bg:"ai-wp-beach",color:{m17pro:"cosmic",m17:"mist",m15:"yellow"},glitter:"gold",border:"dash",pool:["ai-fish","ai-sunglasses","ai-icecream","ai-star","ai-cam"],line:["日落海边","假期模式","晒晒太阳"],fs:"#F08A3E"},
-  {id:"garden",bg:"ai-wp-garden",color:{m17pro:"silver",m17:"sage",m15:"green"},glitter:"rose",border:"flower",pool:["ai-butterfly","ai-tulip","ai-daisy","ai-clover2","ai-leaf","ai-frog","ai-mushroom","ai-petals"],line:["秘密花园","蝶舞","绿意"],fs:"#6FAE98"},
-  {id:"music",bg:"ai-wp-galaxy",color:{m17pro:"deepblue",m17:"lavender",m15:"black"},glitter:"candy",border:"sparkle",pool:["ai-cd","ai-notes","ai-headphone","ai-star","ai-bolt","ai-gamepad"],line:["音乐夜","耳机女孩","节奏感"],fs:"#C45B8A"},
-  {id:"milk",bg:"ai-wp-milk",color:{m17pro:"silver",m17:"white",m15:"yellow"},glitter:"gold",border:"pearl",pool:["ai-bunny","ai-sheep","ai-cloud","ai-moon","ai-latte","ai-cookie","ai-boba","ai-bow"],line:["奶油色的下午","软乎乎的","抱抱自己"],fs:"#C79B6A"},
-  {id:"strawberry",bg:"ai-wp-strawberry",color:{m17pro:"silver",m17:"pink",m15:"pink"},glitter:"rose",border:"hearts",pool:["ai-berry","ai-cherry","ai-heart","ai-bow","ai-macaron","ai-lollipop","ai-bunny","ai-kiss"],line:["草莓牛奶","甜甜想你","今日份可爱"],fs:"#E2557E"},
-  {id:"matcha",bg:"ai-wp-matcha",color:{m17pro:"silver",m17:"sage",m15:"green"},glitter:"frost",border:"flower",pool:["ai-frog","ai-clover2","ai-tulip","ai-daisy","ai-leaf","ai-latte","ai-mushroom"],line:["抹茶拿铁","慢慢来","清清爽爽"],fs:"#7CA46A"},
-  {id:"lemonade",bg:"ai-wp-lemon",color:{m17pro:"cosmic",m17:"mist",m15:"yellow"},glitter:"gold",border:"dash",pool:["ai-sparkle","ai-icecream","ai-duck","ai-chick","ai-sunglasses","ai-donut"],line:["柠檬汽水","冒泡的快乐","晴天出门"],fs:"#D9A21B"},
-  {id:"butterheart",bg:"ai-wp-butterheart",color:{m17pro:"silver",m17:"white",m15:"yellow"},glitter:"gold",border:"hearts",pool:["ai-heart","ai-bear","ai-chick","ai-cookie","ai-bouquet","ai-minibow"],line:["黄油小星星","心动的","暖暖的"],fs:"#D89A4E"},
-  {id:"lilac",bg:"ai-wp-lilac",color:{m17pro:"deepblue",m17:"lavender",m15:"pink"},glitter:"holo",border:"sparkle",pool:["ai-star","ai-crescent","ai-sparkle","ai-butterfly","ai-pearls","ai-moon"],line:["薰衣草色","做甜甜的梦","闪闪的"],fs:"#9C7BD6"},
-  {id:"mintwave",bg:"ai-wp-mint",color:{m17pro:"silver",m17:"sage",m15:"blue"},glitter:"frost",border:"pearl",pool:["ai-seahorse","ai-shell","ai-bubbles","ai-fish","ai-duck","ai-starfish"],line:["薄荷海浪","清凉一下","海风味"],fs:"#4FA894"},
-  {id:"peach",bg:"ai-wp-peach",color:{m17pro:"silver",m17:"pink",m15:"pink"},glitter:"rose",border:"flower",pool:["ai-peach","ai-petals","ai-heart","ai-rose","ai-icecream","ai-bow"],line:["蜜桃日落","温柔一点点","橘子味黄昏"],fs:"#E27D62"},
-  {id:"caramel",bg:"ai-wp-caramel",color:{m17pro:"cosmic",m17:"white",m15:"yellow"},glitter:"gold",border:"dash",pool:["ai-cupcake","ai-waffle","ai-donut","ai-latte","ai-cookie","ai-croissant"],line:["焦糖布丁","甜甜的治愈","慢慢吃"],fs:"#B8814C"}
+  {id:"ocean",bg:"ai-wp-ocean",color:{m17pro:"deepblue",m17:"mist",m15:"blue"},glitter:"frost",border:"pearl",pool:["ai-jellyfish","ai-shell","ai-starfish","ai-coral","ai-seaweed","ai-bubbles","ai-seahorse","ai-fishschool","ai-fish","ai-chest"],line:["海底捞不到我","我是条咸鱼","今天也想躺平","海底小纵队报到"],fs:"#8EB7D6"},
+  {id:"midsummer",bg:"ai-wp-night",color:{m17pro:"deepblue",m17:"lavender",m15:"black"},glitter:"star",border:"sparkle",pool:["ai-fireflies","ai-mushroom","ai-moon","ai-crescent","ai-sparkle","ai-butterfly","ai-star"],line:["萤火虫正在打工","梦里什么都有","夏夜不要睡觉","有事梦里说"],fs:"#CDB6E8"},
+  {id:"sakura",bg:"ai-wp-sakura",color:{m17pro:"silver",m17:"white",m15:"pink"},glitter:"rose",border:"hearts",pool:["ai-petals","ai-bunny","ai-daisy","ai-heart","ai-bow","ai-cherry","ai-cloud"],line:["樱花限定可爱","春天欠我一个抱抱","粉色使人快乐"],fs:"#E25B45"},
+  {id:"cafe",bg:"ai-wp-cafe",color:{m17pro:"cosmic",m17:"white",m15:"yellow"},glitter:"gold",border:"flower",pool:["ai-macaron","ai-latte","ai-cookie","ai-croissant","ai-cupcake","ai-donut"],line:["咖啡续命中","不上班只上糖","今天也要快乐","拿铁比爱情靠谱"],fs:"#E2A63B"},
+  {id:"galaxy",bg:"ai-wp-galaxy",color:{m17pro:"deepblue",m17:"black",m15:"blue"},glitter:"holo",border:"stars",pool:["ai-planet","ai-star","ai-crescent","ai-sparkle","ai-bolt"],line:["宇宙第一可爱","在银河系发呆","星星替我加班","美到外太空"],fs:"#C9B6FF"},
+  {id:"autumn",bg:"ai-wp-autumn",color:{m17pro:"cosmic",m17:"white",m15:"yellow"},glitter:"gold",border:"dash",pool:["ai-leaf","ai-bouquet","ai-cookie","ai-latte","ai-bear"],line:["秋天适合想念","捡到一片小秋天","天凉记得想我"],fs:"#F08A3E"},
+  {id:"cloud",bg:"ai-wp-cloudy",color:{m17pro:"silver",m17:"mist",m15:"blue"},glitter:"frost",border:"pearl",pool:["ai-cloud","ai-sheep","ai-moon","ai-star","ai-bunny"],line:["云朵替我上班","软倒起不来","轻轻飘走","做一朵正经的云"],fs:"#8EB7D6"},
+  {id:"coquette",bg:"ai-wp-coquette",color:{m17pro:"silver",m17:"lavender",m15:"pink"},glitter:"rose",border:"ribbon",pool:["ai-minibow","ai-ribbon2","ai-pearls","ai-heart","ai-kiss","ai-lipstick","ai-envelope"],line:["禁止心动，违者亲我","本人很贵，请勿赊账","可爱到犯规","甜心营业中"],fs:"#E23B8A"},
+  {id:"winter",bg:"ai-wp-winter",color:{m17pro:"silver",m17:"mist",m15:"blue"},glitter:"frost",border:"pearl",pool:["ai-snow","ai-bear","ai-latte","ai-cloud","ai-cookie"],line:["冷到不想说话","冬日限定的我","暖宝宝分你一半"],fs:"#8EB7D6"},
+  {id:"beach",bg:"ai-wp-beach",color:{m17pro:"cosmic",m17:"mist",m15:"yellow"},glitter:"gold",border:"dash",pool:["ai-fish","ai-sunglasses","ai-icecream","ai-star","ai-cam"],line:["海风帮我请假","晒黑也是一种努力","假期模式已开"],fs:"#F08A3E"},
+  {id:"garden",bg:"ai-wp-garden",color:{m17pro:"silver",m17:"sage",m15:"green"},glitter:"rose",border:"flower",pool:["ai-butterfly","ai-tulip","ai-daisy","ai-clover2","ai-leaf","ai-frog","ai-mushroom","ai-petals"],line:["花园里长了个我","蚂蚁都比我勤奋","蝴蝶请假了"],fs:"#6FAE98"},
+  {id:"music",bg:"ai-wp-galaxy",color:{m17pro:"deepblue",m17:"lavender",m15:"black"},glitter:"candy",border:"sparkle",pool:["ai-cd","ai-notes","ai-headphone","ai-star","ai-bolt","ai-gamepad"],line:["耳机一戴，谁都不爱","循环单曲中","音乐比人靠谱"],fs:"#C45B8A"},
+  {id:"milk",bg:"ai-wp-milk",color:{m17pro:"silver",m17:"white",m15:"yellow"},glitter:"gold",border:"pearl",pool:["ai-bunny","ai-sheep","ai-cloud","ai-moon","ai-latte","ai-cookie","ai-boba","ai-bow"],line:["奶油味的我","软软的好欺负","请投喂，谢谢","甜得不讲道理"],fs:"#C79B6A"},
+  {id:"strawberry",bg:"ai-wp-strawberry",color:{m17pro:"silver",m17:"pink",m15:"pink"},glitter:"rose",border:"hearts",pool:["ai-berry","ai-cherry","ai-heart","ai-bow","ai-macaron","ai-lollipop","ai-bunny","ai-kiss"],line:["草莓味的可爱","今天也要甜一点","心动草莓季"],fs:"#E2557E"},
+  {id:"matcha",bg:"ai-wp-matcha",color:{m17pro:"silver",m17:"sage",m15:"green"},glitter:"frost",border:"flower",pool:["ai-frog","ai-clover2","ai-tulip","ai-daisy","ai-leaf","ai-latte","ai-mushroom"],line:["抹茶味的躺平","慢慢来也是本事","不着急，会甜的"],fs:"#7CA46A"},
+  {id:"lemonade",bg:"ai-wp-lemon",color:{m17pro:"cosmic",m17:"mist",m15:"yellow"},glitter:"gold",border:"dash",pool:["ai-sparkle","ai-icecream","ai-duck","ai-chick","ai-sunglasses","ai-donut"],line:["柠檬精本人","我酸了但很甜","冒泡的快乐","开心就摇一摇"],fs:"#D9A21B"},
+  {id:"butterheart",bg:"ai-wp-butterheart",color:{m17pro:"silver",m17:"white",m15:"yellow"},glitter:"gold",border:"hearts",pool:["ai-heart","ai-bear","ai-chick","ai-cookie","ai-bouquet","ai-minibow"],line:["心软，请手下留情","心动不如动手","一点点心动"],fs:"#D89A4E"},
+  {id:"lilac",bg:"ai-wp-lilac",color:{m17pro:"deepblue",m17:"lavender",m15:"pink"},glitter:"holo",border:"sparkle",pool:["ai-star","ai-crescent","ai-sparkle","ai-butterfly","ai-pearls","ai-moon"],line:["做甜甜的梦","紫色心情","安静地发光"],fs:"#9C7BD6"},
+  {id:"mintwave",bg:"ai-wp-mint",color:{m17pro:"silver",m17:"sage",m15:"blue"},glitter:"frost",border:"pearl",pool:["ai-seahorse","ai-shell","ai-bubbles","ai-fish","ai-duck","ai-starfish"],line:["薄荷味的清醒","海浪替我上班","清凉一下也很好"],fs:"#4FA894"},
+  {id:"peach",bg:"ai-wp-peach",color:{m17pro:"silver",m17:"pink",m15:"pink"},glitter:"rose",border:"flower",pool:["ai-peach","ai-petals","ai-heart","ai-rose","ai-icecream","ai-bow"],line:["蜜桃味的我","温柔是种超能力","今天很桃气"],fs:"#E27D62"},
+  {id:"caramel",bg:"ai-wp-caramel",color:{m17pro:"cosmic",m17:"white",m15:"yellow"},glitter:"gold",border:"dash",pool:["ai-cupcake","ai-waffle","ai-donut","ai-latte","ai-cookie","ai-croissant"],line:["焦糖布丁营业中","甜品治愈一切","慢慢吃比较甜"],fs:"#B8814C"}
 ];
 
 function nvSendBack(e){
@@ -2560,7 +2560,7 @@ function st(e,t,l){
   Tn(e,rings[Math.floor(Math.random()*rings.length)]);
   Tn(e,tops[Math.floor(Math.random()*tops.length)]);
   const withText=Math.random()<.55;
-  const lineSet=theme?theme.line:t==="cream"?["今天也要好好的","元气满满","小确幸","可爱暴击"]:["主打一个可爱","今日份闪闪","Y2K女孩","闪闪发光"];
+  const lineSet=theme?theme.line:t==="cream"?["有事请烧纸，没事勿扰","本人已下班，别找","请投喂，谢谢","可爱到犯规","今天也要好好的","不回就是在吃鸡"]:["Y2K女孩上线","闪闪发光不解释","别问我，我也不知道","手机比我先睡","无语但很可爱","美颜开着，勿扰"];
   const line=lineSet[Math.floor(Math.random()*lineSet.length)];
   const fScale=.05+.02*Math.random();
   const textBox=withText?nvBox(.5,textY,Math.min(.46,line.length*fScale*.5+.05),fScale*.75,0):null;
