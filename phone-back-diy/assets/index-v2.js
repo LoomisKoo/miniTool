@@ -1628,9 +1628,12 @@ function nvOnLens(it){
   if(nvIsRing(it))return!0;
   return nvIsImgItem(it)&&it.layer==="lens"
 }
-function nvImgHalf(a){
-  const w=a.scale||.3,h=w/(a.aspect||1),c=Math.abs(Math.cos(a.rotation||0)),s=Math.abs(Math.sin(a.rotation||0));
-  return{hw:(w*c+h*s)/2,hh:(w*s+h*c)/2}
+// 图片旋转后的外接框：hw 为机身宽度占比，hh 为机身高度占比
+function nvImgHalf(a,modelId){
+  const K=Ke[modelId]||Ke.m17pro;
+  const pw=(a.scale||.3)*K.w,ph=pw/((a.aspect)||1);   // 毫米
+  const c=Math.abs(Math.cos(a.rotation||0)),s=Math.abs(Math.sin(a.rotation||0));
+  return{hw:(pw*c+ph*s)/2/K.w,hh:(pw*s+ph*c)/2/K.h}
 }
 // 镜头层图片的最大尺寸（比模组本身宽松，超出部分由遮罩裁掉）
 function nvLensMaxScale(modelId){
@@ -1648,7 +1651,7 @@ function nvMaxScale(it,modelId){
   if(!it)return NV_BODY_MAX;
   if(nvIsImgItem(it)){
     if(it.layer==="lens")return nvLensMaxScale(modelId);
-    if(it.layer==="bg")return Math.max(4,nvBgMinScale(it,modelId));
+    if(it.layer==="bg")return Math.max(4,nvBgMinScale(it,modelId)*1.2);
     return NV_BODY_MAX
   }
   if(nvIsRing(it))return NV_BODY_MAX;
@@ -1656,11 +1659,20 @@ function nvMaxScale(it,modelId){
 }
 function nvClampBgImg(it,modelId){
   it.scale=Math.min(Math.max(it.scale||1,nvBgMinScale(it,modelId)),nvMaxScale(it,modelId));
-  const{hh,hw}=nvImgHalf(it);
-  // 图宽/高必须完全盖住机身；用旋转后的外接框判断，任何角度都不会露底
+  const{hh,hw}=nvImgHalf(it,modelId);
+  // 四条边都要盖住机身：左<=0、右>=1、上<=0、下>=1
   const xLo=1-hw,xHi=hw,yLo=1-hh,yHi=hh;
   it.x=xLo<=xHi?Math.min(Math.max(it.x,xLo),xHi):.5;
-  it.y=yLo<=yHi?Math.min(Math.max(it.y,yLo),yHi):.5
+  it.y=yLo<=yHi?Math.min(Math.max(it.y,yLo),yHi):.5;
+  // 外接框仍未盖满（旋转/极端比例），按比例补足尺寸后再夹一次
+  if(hw<.5||hh<.5){
+    const need=Math.max(.5/Math.max(hw,1e-3),.5/Math.max(hh,1e-3));
+    it.scale=Math.min(nvMaxScale(it,modelId),it.scale*need*1.02);
+    const h2=nvImgHalf(it,modelId);
+    const xl=1-h2.hw,xh=h2.hw,yl=1-h2.hh,yh=h2.hh;
+    it.x=xl<=xh?Math.min(Math.max(it.x,xl),xh):.5;
+    it.y=yl<=yh?Math.min(Math.max(it.y,yl),yh):.5
+  }
 }
 function nvMinScale(it,modelId){
   if(!it)return .08;
