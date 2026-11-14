@@ -984,7 +984,7 @@ function loadAiStickers(){
       img.onload=img.onerror=function(){
         if(--left<=0)resolve()
       };
-      img.src="./assets/stickers/"+s.file+"?v=74"
+      img.src="./assets/stickers/"+s.file+"?v=75"
     }
   })
 }
@@ -2510,20 +2510,37 @@ function nvSendBack(e){
   const it=e.items.pop();
   it.aboveCamera=!1,e.items.unshift(it)
 }
-function nvBusy(placed,x,y,sc){
-  for(let i=0;i<placed.length;i++){
-    const p=placed[i],minD=(p.sc+sc)*.48;
-    if(Math.hypot(p.x-x,p.y-y)<minD)return!0
+const NV_YW=2.1;
+function nvBox(x,y,hx,hy,rot){
+  return{x:x,y:y*NV_YW,hx:hx,hy:hy,rot:rot||0}
+}
+function nvHalfProj(o,ax){
+  const c=Math.cos(o.rot),s=Math.sin(o.rot);
+  return o.hx*Math.abs(c*ax[0]+s*ax[1])+o.hy*Math.abs(-s*ax[0]+c*ax[1])
+}
+function nvOverlap(a,b,pad){
+  const dx=b.x-a.x,dy=b.y-a.y,ac=Math.cos(a.rot),as=Math.sin(a.rot),bc=Math.cos(b.rot),bs=Math.sin(b.rot);
+  const axes=[[ac,as],[-as,ac],[bc,bs],[-bs,bc]];
+  for(let i=0;i<4;i++){
+    const ax=axes[i],d=Math.abs(dx*ax[0]+dy*ax[1]);
+    if(d>nvHalfProj(a,ax)+nvHalfProj(b,ax)+pad)return!1
   }
+  return!0
+}
+function nvBusy(placed,box,pad){
+  for(let i=0;i<placed.length;i++)if(nvOverlap(box,placed[i],pad))return!0;
   return!1
 }
-function nvPickSpot(placed,z,sc,textY){
-  for(let t=0;t<28;t++){
-    const x=.12+Math.random()*.76,y=Math.max(z.y1+.06,.42)+Math.random()*.48;
-    if(y>textY-sc*.55)continue;
-    if(y+sc*.45>textY-sc*.1)continue;
-    if(nvBusy(placed,x,y,sc))continue;
-    return{x,y}
+function nvPickSpot(placed,z,sc,textBox,rot){
+  const yMin=Math.max(z.y1+.06,.4),yMax=.95;
+  for(let t=0;t<90;t++){
+    const y=yMin+Math.random()*(yMax-yMin),x=.1+Math.random()*.8;
+    const box=nvBox(x,y,sc*.5,sc*.5,rot);
+    if(box.y-box.hy<z.y1*NV_YW+.01)continue;
+    if(box.y+box.hy>NV_YW*.955)continue;
+    if(textBox&&nvOverlap(box,textBox,.02))continue;
+    if(nvBusy(placed,box,.02))continue;
+    return{x:x,y:y,box:box}
   }
   return null
 }
@@ -2542,7 +2559,17 @@ function st(e,t,l){
   const rings=["ai-ring-hollow","ai-ring-star2","ai-ring-bead","ai-pearlring"],tops=["ai-ears","ai-catears","ai-halo","ai-wreath"];
   Tn(e,rings[Math.floor(Math.random()*rings.length)]);
   Tn(e,tops[Math.floor(Math.random()*tops.length)]);
+  const withText=Math.random()<.55;
+  const lineSet=theme?theme.line:t==="cream"?["今天也要好好的","元气满满","小确幸","可爱暴击"]:["主打一个可爱","今日份闪闪","Y2K女孩","闪闪发光"];
+  const line=lineSet[Math.floor(Math.random()*lineSet.length)];
+  const fScale=.05+.02*Math.random();
+  const textBox=withText?nvBox(.5,textY,Math.min(.46,line.length*fScale*.5+.05),fScale*.75,0):null;
   const placed=[];
+  for(let i=0;i<e.items.length;i++){
+    const it=e.items[i];
+    if(it.kind!=="decal")continue;
+    placed.push(nvBox(it.x,it.y,it.scale*.52,it.scale*.52,it.rotation))
+  }
   e.backdrop=null;
   if(theme&&qe(theme.bg)){
     e.backdrop={type:"builtin",id:theme.bg}
@@ -2557,15 +2584,18 @@ function st(e,t,l){
     let id=pool[Math.floor(Math.random()*pool.length)],guard=0;
     while(used[id]&&guard++<14)id=pool[Math.floor(Math.random()*pool.length)];
     used[id]=1;
-    const sc=.13+Math.random()*.15+(Math.random()<.18?.1:0);
-    const spot=nvPickSpot(placed,z,sc,textY);
+    let sc=.13+Math.random()*.15+(Math.random()<.18?0.1:0);
+    const rot=(Math.random()-.5)*(l?26:12)*Math.PI/180;
+    let spot=nvPickSpot(placed,z,sc,textBox,rot);
+    for(let r=0;r<3&&!spot;r++){
+      sc*=.82,spot=nvPickSpot(placed,z,sc,textBox,rot)
+    }
     if(!spot)continue;
-    Ge(e,id,spot.x,spot.y,sc,(Math.random()-.5)*(l?26:12),!1),placed.push({x:spot.x,y:spot.y,sc})
+    Ge(e,id,spot.x,spot.y,sc,rot*180/Math.PI,!1),placed.push(spot.box)
   }
-  if(Math.random()<.55){
-    const lines=theme?theme.line:t==="cream"?["今天也要好好的","元气满满","小确幸","可爱暴击"]:["主打一个可爱","今日份闪闪","Y2K女孩","闪闪发光"];
-    const line=lines[Math.floor(Math.random()*lines.length)],col=theme?theme.fs:t==="cream"?"#E25B45":"#F2D48A";
-    on(e,line,"hand","solid",col,.05+.02*Math.random(),.22,textY)
+  if(withText){
+    const col=theme?theme.fs:t==="cream"?"#E25B45":"#F2D48A";
+    on(e,line,"hand","solid",col,fScale,.22,textY)
   }
 }
 function an(e){
