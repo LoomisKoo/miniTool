@@ -870,6 +870,12 @@ const AI_PACK=[
   {id:"ai-ring-hollow",name:"奶油圈",group:"lens",file:"st-ring-hollow.webp",anchor:"lens"},
   {id:"ai-ring-star2",name:"星光圈",group:"lens",file:"st-ring-star2.webp",anchor:"lens"},
   {id:"ai-ring-bead",name:"串珠圈",group:"lens",file:"st-ring-bead.webp",anchor:"lens"},
+  {id:"ai-ring-flower",name:"小花圈",group:"lens",file:"st-ring-flower.webp",anchor:"lens"},
+  {id:"ai-ring-heart",name:"爱心圈",group:"lens",file:"st-ring-heart.webp",anchor:"lens"},
+  {id:"ai-ring-cloud",name:"云朵圈",group:"lens",file:"st-ring-cloud.webp",anchor:"lens"},
+  {id:"ai-ring-bow",name:"蝴蝶结圈",group:"lens",file:"st-ring-bow.webp",anchor:"lens"},
+  {id:"ai-ring-candy",name:"糖果圈",group:"lens",file:"st-ring-candy.webp",anchor:"lens"},
+  {id:"ai-ring-moon",name:"月亮圈",group:"lens",file:"st-ring-moon.webp",anchor:"lens"},
   {id:"ai-hearts",name:"爱心雨",group:"deco",file:"st-hearts.webp"},
   {id:"ai-word-cute",name:"可爱字",group:"deco",file:"st-word-cute.webp"},
   {id:"ai-washi",name:"胶带",group:"deco",file:"st-washi.webp"},
@@ -960,21 +966,15 @@ function aiDraw(id){
     const ar=img.naturalWidth/Math.max(1,img.naturalHeight);
     let w=t,h=t;
     ar>=1?(w=t,h=t/ar):(h=t,w=t*ar);
-    if(NV_RING[id]){
-      const sz=Math.ceil(Math.max(w,h)*1.2),c=aiDraw._c||(aiDraw._c=document.createElement("canvas"));
-      (c.width!==sz||c.height!==sz)&&(c.width=sz,c.height=sz);
-      const g=c.getContext("2d");
-      g.setTransform(1,0,0,1,0,0),g.clearRect(0,0,sz,sz),g.save(),g.translate(sz/2,sz/2),g.drawImage(img,-w/2,-h/2,w,h);
-      g.globalCompositeOperation="destination-out",g.beginPath(),g.arc(0,0,Math.min(w,h)*.32,0,Math.PI*2),g.fill(),g.restore();
-      e.drawImage(c,-sz/2,-sz/2)
-    }else e.drawImage(img,-w/2,-h/2,w,h)
+    e.drawImage(img,-w/2,-h/2,w,h)
   }
 }
 function installAiStickers(){
   _.length=0;
   for(let i=0;i<AI_PACK.length;i++){
     const s=AI_PACK[i];
-    m({id:s.id,name:s.name,group:s.group,anchor:s.anchor||null,draw:aiDraw(s.id)})
+    m({id:s.id,name:s.name,group:s.group,anchor:s.anchor||null,draw:aiDraw(s.id)});
+    s.anchor&&(NV_ANCHOR[s.id]=s.anchor),NV_RING[s.id]=s.anchor==="lens"?1:0
   }
   for(const k of Object.keys(Ct))delete Ct[k];
   for(let i=0;i<_.length;i++)Ct[_[i].id]=_[i];
@@ -991,7 +991,7 @@ function loadAiStickers(){
       img.onload=img.onerror=function(){
         if(--left<=0)resolve()
       };
-      img.src="./assets/stickers/"+s.file+"?v=76"
+      img.src="./assets/stickers/"+s.file+"?v=81"
     }
   })
 }
@@ -1611,11 +1611,28 @@ function nvHitsCam(modelId,x,y,scale){
 function nvIsImgItem(a){
   return !!(a&&a.kind==="decal"&&a.source&&a.source.type==="image")
 }
+function nvInCamArea(modelId,x,y,pad){
+  const z=nvZone(modelId),m=pad||0;
+  return x>z.x0-m&&x<z.x1+m&&y>z.y0-m&&y<z.y1+m
+}
+function nvPlateauRect(t,modelId){
+  const K=Ke[modelId]||Ke.m17pro,P=nvPlateauMm(modelId);
+  return{
+    x:t.x+P.x0/K.w*t.w,y:t.y+P.y0/K.h*t.h,
+    w:P.w/K.w*t.w,h:(P.y1-P.y0)/K.h*t.h,
+    r:P.corner/K.w*t.w
+  }
+}
+function nvOnLens(it,modelId){
+  if(!it||it.kind!=="decal")return!1;
+  if(nvIsRing(it))return!0;
+  return nvInCamArea(modelId,it.x,it.y,.02)
+}
 function nvSyncCam(item,modelId){
   if(!item||item.kind==="stroke")return;
   if(nvIsRing(item)){item.aboveCamera=!0;return}
-  // 上传的图片：可以自由移动、可以压在相机区域下方，但永远处于相机模组的下层
-  if(nvIsImgItem(item)){item.aboveCamera=!1;return}
+  // 上传的图片：拖到相机模组上就变成"镜头层"，只在该模组范围内显示
+  if(nvIsImgItem(item)){item.aboveCamera=nvInCamArea(modelId,item.x,item.y,.02);return}
   const sc=item.kind==="text"?item.fontScale:item.scale;
   item.aboveCamera=nvHitsCam(modelId,item.x,item.y,sc)
 }
@@ -1996,7 +2013,12 @@ function ml(e,t,l){
 }function nvIsRing(a){
   return a&&a.kind==="decal"&&a.source&&a.source.type==="builtin"&&!!NV_RING[a.source.id]
 }
-function Vt(e,t,l,n,i){
+function nvClipLens(e,t,modelId,it){
+  if(!nvOnLens(it,modelId))return!1;
+  const r=nvPlateauRect(t,modelId);
+  return e.save(),T(e,r.x,r.y,r.w,r.h,r.r),e.clip(),!0
+}
+function Vt(e,t,l,n,i,modelId){
   for(let o=0;
   o<l.length;
   o++){
@@ -2008,15 +2030,19 @@ function Vt(e,t,l,n,i){
       !!a.aboveCamera===n&&Sl(e,t,a,i);
       continue
     }if(nvIsRing(a))continue;
-    !!a.aboveCamera===n&&yl(e,t,a)
+    if(!!a.aboveCamera!==n)continue;
+    const clipped=nvClipLens(e,t,modelId,a);
+    yl(e,t,a),clipped&&e.restore()
   }
 }
-function VtRing(e,t,l){
+function VtRing(e,t,l,modelId){
   for(let o=0;
   o<l.length;
   o++){
     const a=l[o];
-    nvIsRing(a)&&a.aboveCamera&&yl(e,t,a)
+    if(!(nvIsRing(a)&&a.aboveCamera))continue;
+    const clipped=nvClipLens(e,t,modelId,a);
+    yl(e,t,a),clipped&&e.restore()
   }
 }const NV_RING={ "ring-platinum":1,"ring-gold":1,"ring-star":1 };
 function nvNormalize(e){
@@ -2051,7 +2077,7 @@ function Mn(e,t,l,n,i){
   if(e.save(),T(e,t.x,t.y,t.w,t.h,t.r),e.clip(),l.backdrop&&nvDrawBackdrop(e,t,l.backdrop),l.tile){
     const r=JSON.stringify(l.tile)+"|"+Math.round(t.w);
     (r!==Kt||!we)&&(ml(t.w,t.h,l.tile),Kt=r),we&&e.drawImage(we,t.x,t.y,t.w,t.h)
-  }if(Cl(e,t,l,n),e.restore(),Vt(e,t,l.items,!1,n.ry),a||cl(e,t,l.modelId,o),a||nvLensTop(e,t,l.modelId,o.base),Vt(e,t,l.items,!0,n.ry),VtRing(e,t,l.items),i.selection&&l.selectedId)for(let r=0;r<l.items.length;r++)l.items[r].id===l.selectedId&&wl(e,t,l.items[r])
+  }if(Cl(e,t,l,n),e.restore(),Vt(e,t,l.items,!1,n.ry,l.modelId),a||cl(e,t,l.modelId,o),a||nvLensTop(e,t,l.modelId,o.base),Vt(e,t,l.items,!0,n.ry,l.modelId),VtRing(e,t,l.items,l.modelId),i.selection&&l.selectedId)for(let r=0;r<l.items.length;r++)l.items[r].id===l.selectedId&&wl(e,t,l.items[r])
 }function dt(e,t){
   if(t.kind==="stroke")return null;
   const l=e.x+t.x*e.w,n=e.y+t.y*e.h;
