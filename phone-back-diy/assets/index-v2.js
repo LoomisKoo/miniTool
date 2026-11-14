@@ -2339,10 +2339,11 @@ function Fl(e){
     x:l.x+e.x*l.w,y:l.y+e.y*l.h
   }
 }function nn(e,t,l,n){
-  const i=pe(t.width,t.height,s.modelId);
-  e.x=z((l-i.x)/i.w,-.08,1.08),e.y=z((n-i.y)/i.h,-.04,1.04);
-  // 背景图层：拖动时也要保证整张图仍然盖满机身
-  e&&e.layer==="bg"&&nvClampBgImg(e,s.modelId),nvSyncCam(e,s.modelId)
+  const i=pe(t.width,t.height,s.modelId),bg=e&&e.layer==="bg";
+  const x=(l-i.x)/i.w,y=(n-i.y)/i.h;
+  // 背景图层可以拖到很远：范围交给覆盖约束 nvClampBgImg 决定，这里不能再夹一次
+  bg?(e.x=x,e.y=y,nvClampBgImg(e,s.modelId)):(e.x=z(x,-.08,1.08),e.y=z(y,-.04,1.04));
+  nvSyncCam(e,s.modelId)
 }function ye(){
   const e=[],t=Object.keys(X);
   for(let l=0;
