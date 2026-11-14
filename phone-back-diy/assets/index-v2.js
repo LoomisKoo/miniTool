@@ -1150,7 +1150,7 @@ function Hn(e){
   if(t.kind==="decal"){
     const l=e,n=Sn(l.source);
     return!n||n.type==="image"&&!ce[n.imageId]?null:{
-      id:t.id,kind:"decal",layer:l.layer==="lens"||(l.layer===void 0&&l.aboveCamera===!0)?"lens":"body",source:n,x:W(l.x,.5),y:W(l.y,.6),scale:W(l.scale,.24),rotation:W(l.rotation,0),aboveCamera:l.aboveCamera===!0,aspect:W(l.aspect,1)||1
+      id:t.id,kind:"decal",layer:l.layer==="bg"?"bg":(l.layer==="lens"||(l.layer===void 0&&l.aboveCamera===!0)?"lens":"body"),source:n,x:W(l.x,.5),y:W(l.y,.6),scale:W(l.scale,.24),rotation:W(l.rotation,0),aboveCamera:l.aboveCamera===!0,aspect:W(l.aspect,1)||1
     }
   }if(t.kind==="text"){
     const l=e,n=["system","smiley","display","hand"],i=["solid","stroke","gradient","neon","metal","glitter"],o=String(l.font),a=String(l.effect),r=n.indexOf(o)>=0?o:"smiley",d=i.indexOf(a)>=0?a:"solid";
@@ -1640,7 +1640,7 @@ function nvLensMaxScale(modelId){
 const NV_BODY_MAX=2.4;
 function nvMaxScale(it,modelId){
   if(!it)return NV_BODY_MAX;
-  if(nvIsImgItem(it))return it.layer==="lens"?nvLensMaxScale(modelId):NV_BODY_MAX;
+  if(nvIsImgItem(it))return it.layer==="lens"?nvLensMaxScale(modelId):(it.layer==="bg"?4:NV_BODY_MAX);
   if(nvIsRing(it))return NV_BODY_MAX;
   return it.kind==="text"?.2:NV_BODY_MAX
 }
@@ -1656,7 +1656,8 @@ function nvSyncCam(item,modelId){
   if(!item||item.kind==="stroke")return;
   if(nvIsRing(item)){item.aboveCamera=!0;return}
   if(nvIsImgItem(item)){
-    // 层级由上传入口决定：镜头页上传 -> 镜头层；其他入口 -> 背膜层
+    // 层级由上传入口决定：镜头页 -> 镜头层；背景页 -> 最底层背景；其他 -> 背膜层
+    if(item.layer==="bg"){item.aboveCamera=!1;return}
     const lens=item.layer==="lens";
     item.aboveCamera=lens,lens&&nvClampLensImg(item,modelId);
     return
@@ -2067,6 +2068,12 @@ function nvClipLens(e,t,modelId,it){
   // 其他落在模组上的贴纸/图片：裁进模组范围，并且挖掉镜头与传感器
   return e.save(),nvMaskPath(e,t,modelId,!ring),!0
 }
+function VtBg(e,t,l){
+  for(let o=0;o<l.length;o++){
+    const a=l[o];
+    a.kind==="decal"&&a.layer==="bg"&&yl(e,t,a)
+  }
+}
 function Vt(e,t,l,n,i,modelId){
   for(let o=0;
   o<l.length;
@@ -2079,6 +2086,7 @@ function Vt(e,t,l,n,i,modelId){
       !!a.aboveCamera===n&&Sl(e,t,a,i);
       continue
     }if(nvIsRing(a))continue;
+    if(a.layer==="bg")continue;
     if(!!a.aboveCamera!==n)continue;
     const clipped=nvClipLens(e,t,modelId,a);
     yl(e,t,a),clipped&&e.restore()
@@ -2126,7 +2134,9 @@ function Mn(e,t,l,n,i){
   if(e.save(),T(e,t.x,t.y,t.w,t.h,t.r),e.clip(),l.backdrop&&nvDrawBackdrop(e,t,l.backdrop),l.tile){
     const r=JSON.stringify(l.tile)+"|"+Math.round(t.w);
     (r!==Kt||!we)&&(ml(t.w,t.h,l.tile),Kt=r),we&&e.drawImage(we,t.x,t.y,t.w,t.h)
-  }if(Cl(e,t,l,n),e.restore(),Vt(e,t,l.items,!1,n.ry,l.modelId),a||cl(e,t,l.modelId,o),a||nvLensTop(e,t,l.modelId,o.base),Vt(e,t,l.items,!0,n.ry,l.modelId),VtRing(e,t,l.items,l.modelId),i.selection&&l.selectedId)for(let r=0;r<l.items.length;r++)l.items[r].id===l.selectedId&&wl(e,t,l.items[r])
+  }
+  VtBg(e,t,l.items);
+  if(Cl(e,t,l,n),e.restore(),Vt(e,t,l.items,!1,n.ry,l.modelId),a||cl(e,t,l.modelId,o),a||nvLensTop(e,t,l.modelId,o.base),Vt(e,t,l.items,!0,n.ry,l.modelId),VtRing(e,t,l.items,l.modelId),i.selection&&l.selectedId)for(let r=0;r<l.items.length;r++)l.items[r].id===l.selectedId&&wl(e,t,l.items[r])
 }function dt(e,t){
   if(t.kind==="stroke")return null;
   const l=e.x+t.x*e.w,n=e.y+t.y*e.h;
@@ -2294,7 +2304,12 @@ function Fl(e){
   }
 }function nn(e,t,l,n){
   const i=pe(t.width,t.height,s.modelId);
-  e.x=z((l-i.x)/i.w,-.08,1.08),e.y=z((n-i.y)/i.h,-.04,1.04),nvSyncCam(e,s.modelId)
+  if(e&&e.layer==="bg"){
+    e.x=z((l-i.x)/i.w,-.6,1.6),e.y=z((n-i.y)/i.h,-.6,1.6)
+  }else{
+    e.x=z((l-i.x)/i.w,-.08,1.08),e.y=z((n-i.y)/i.h,-.04,1.04)
+  }
+  nvSyncCam(e,s.modelId)
 }function ye(){
   const e=[],t=Object.keys(X);
   for(let l=0;
@@ -2722,8 +2737,19 @@ function an(e){
     },x:.5+(Math.random()-.5)*.2,y:.68+(Math.random()-.5)*.1,scale:.24,rotation:(Math.random()-.5)*.3,aboveCamera:!1,aspect:1
   };
   nvSyncCam(it,e.modelId),e.items.push(it),e.selectedId=it.id
-}function Ol(e,t,l,inLens){
+}function Ol(e,t,l,mode){
   const z=nvZone(e.modelId),asp=l||1;
+  const inLens=mode==="lens",inBg=mode==="bg";
+  if(inBg){
+    // 背景图：铺满机身，作为最底层图层，可自由移动/缩放
+    const it={
+      id:Z(),kind:"decal",layer:"bg",source:{
+        type:"image",imageId:t
+      },x:.5,y:.5,scale:Math.max(1.02,asp),rotation:0,aboveCamera:!1,aspect:asp
+    };
+    e.items.unshift(it),e.selectedId=it.id;
+    return
+  }
   const pw=z.x1-z.x0,ph=z.y1-z.y0;
   const cover=Math.max(pw,ph*asp)*(inLens?1.12:.9);
   const it={
@@ -2942,7 +2968,7 @@ function h(e){
       r.className="emoji",r.textContent=i,a.appendChild(r),o.appendChild(a),o.addEventListener("click",()=>Jl(i)),e.appendChild(o)
     }return
   }const uh=h("uploadHint");
-  uh&&(uh.textContent=Ye==="bg"?"这里上传会铺成最底层的背景图，不会盖住贴纸。":"上传的图不会抠图。透明 PNG 贴上去更好看。");
+  uh&&(uh.textContent=Ye==="bg"?"这里上传会铺成最底层背景，选中后可以拖动和缩放。":"上传的图不会抠图。透明 PNG 贴上去更好看。");
   const l=On(Ye);
   for(let n=0;
   n<l.length;
@@ -3199,11 +3225,7 @@ function Ws(e){
               type:"image",imageId:Ue
             },density:s.tile?s.tile.density:.62,size:s.tile?s.tile.size:.5
           }
-        }):Ye==="bg"?M(()=>{
-          s.backdrop={
-            type:"image",imageId:Ue
-          },s.selectedId=null
-        }):M(()=>Ol(s,Ue,ee.aspect,Ye==="lens"))
+        }):M(()=>Ol(s,Ue,ee.aspect,Ye==="bg"?"bg":Ye==="lens"?"lens":"body"))
       },R.onerror=()=>re("这张图打不开"),R.src=v
     },y.readAsDataURL(g)
   }),h("resultBack").addEventListener("click",()=>{
