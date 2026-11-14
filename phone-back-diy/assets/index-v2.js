@@ -1638,11 +1638,27 @@ function nvLensMaxScale(modelId){
   return Math.min(1.35,Math.max(.3,base*3.2))
 }
 const NV_BODY_MAX=2.4;
+// 背景图最小缩放：必须完整盖住机身（宽 >= 机身宽，高 >= 机身高）
+function nvBgMinScale(it,modelId){
+  const K=Ke[modelId]||Ke.m17pro,asp=(it&&it.aspect)||1;
+  // 留 1% 余量，避免四舍五入在边缘露出底色
+  return Math.max(1.01,asp*(K.h/K.w)*1.01)
+}
 function nvMaxScale(it,modelId){
   if(!it)return NV_BODY_MAX;
-  if(nvIsImgItem(it))return it.layer==="lens"?nvLensMaxScale(modelId):(it.layer==="bg"?4:NV_BODY_MAX);
+  if(nvIsImgItem(it)){
+    if(it.layer==="lens")return nvLensMaxScale(modelId);
+    if(it.layer==="bg")return Math.max(4,nvBgMinScale(it,modelId));
+    return NV_BODY_MAX
+  }
   if(nvIsRing(it))return NV_BODY_MAX;
   return it.kind==="text"?.2:NV_BODY_MAX
+}
+function nvMinScale(it,modelId){
+  if(!it)return .08;
+  if(it.kind==="text")return .04;
+  if(nvIsImgItem(it)&&it.layer==="bg")return nvBgMinScale(it,modelId);
+  return .08
 }
 function nvClampLensImg(it,modelId){
   const z=nvZone(modelId);
@@ -1657,7 +1673,11 @@ function nvSyncCam(item,modelId){
   if(nvIsRing(item)){item.aboveCamera=!0;return}
   if(nvIsImgItem(item)){
     // 层级由上传入口决定：镜头页 -> 镜头层；背景页 -> 最底层背景；其他 -> 背膜层
-    if(item.layer==="bg"){item.aboveCamera=!1;return}
+    if(item.layer==="bg"){
+      item.aboveCamera=!1,
+      item.scale=Math.min(Math.max(item.scale||1,nvBgMinScale(item,modelId)),nvMaxScale(item,modelId));
+      return
+    }
     const lens=item.layer==="lens";
     item.aboveCamera=lens,lens&&nvClampLensImg(item,modelId);
     return
@@ -2392,14 +2412,14 @@ function Fl(e){
       const f=d[0],p=d[1],c=s.items.filter(C=>C.id===G)[0];
       if(!c||c.kind==="stroke")return;
       const b=Math.max(8,Math.hypot(p.x-f.x,p.y-f.y)),u=Math.atan2(p.y-f.y,p.x-f.x),w=(f.x+p.x)/2,P=(f.y+p.y)/2;
-      c.kind==="text"?c.fontScale=z(se*(b/de),.04,.2):c.scale=z(se*(b/de),.08,nvMaxScale(c,s.modelId)),c.rotation=Ne+(u-We),nn(c,e,En+(w-Fn),In+(P-An)),I();
+      c.kind==="text"?c.fontScale=z(se*(b/de),.04,.2):c.scale=z(se*(b/de),nvMinScale(c,s.modelId),nvMaxScale(c,s.modelId)),c.rotation=Ne+(u-We),nn(c,e,En+(w-Fn),In+(P-An)),I();
       return
     }const r=s.items.filter(d=>d.id===G)[0];
     if(!(!r||r.kind==="stroke")){
       if(A==="move")nn(r,e,o.x+xe,o.y+et),I();
       else if(A==="scale"){
         const d=te(r,e),f=Math.max(8,Math.hypot(o.x-d.x,o.y-d.y));
-        r.kind==="text"?r.fontScale=z(se*(f/de),.04,.2):r.scale=z(se*(f/de),.08,nvMaxScale(r,s.modelId)),nvSyncCam(r,s.modelId),I()
+        r.kind==="text"?r.fontScale=z(se*(f/de),.04,.2):r.scale=z(se*(f/de),nvMinScale(r,s.modelId),nvMaxScale(r,s.modelId)),nvSyncCam(r,s.modelId),I()
       }else if(A==="rotate"){
         const d=te(r,e),f=Math.atan2(o.y-d.y,o.x-d.x);
         r.rotation=Ne+(f-We),I()
@@ -2745,7 +2765,7 @@ function an(e){
     const it={
       id:Z(),kind:"decal",layer:"bg",source:{
         type:"image",imageId:t
-      },x:.5,y:.5,scale:Math.max(1.02,asp),rotation:0,aboveCamera:!1,aspect:asp
+      },x:.5,y:.5,scale:nvBgMinScale({aspect:asp},e.modelId),rotation:0,aboveCamera:!1,aspect:asp
     };
     e.items.unshift(it),e.selectedId=it.id;
     return
@@ -2885,7 +2905,7 @@ function h(e){
     sh.classList.contains("is-open")||sh.classList.contains("is-closing")||Ws(!0)
   }
   const a=h("scaleWrap"),r=h("rotWrap"),d=h("selScale"),f=h("selRot");
-  i&&i.kind!=="stroke"?(a.hidden=!1,r.hidden=!1,document.activeElement!==d&&(i.kind==="text"?(d.min="0.04",d.max="0.2",d.step="0.002",d.value=String(i.fontScale),h("scaleLabel").textContent="字号"):(d.min="0.08",d.max=String(nvMaxScale(i,s.modelId)),d.step="0.01",d.value=String(i.scale),h("scaleLabel").textContent="大小")),document.activeElement!==f&&(f.value=String(Gl(i.rotation)))):(a.hidden=!0,r.hidden=!0);
+  i&&i.kind!=="stroke"?(a.hidden=!1,r.hidden=!1,document.activeElement!==d&&(i.kind==="text"?(d.min="0.04",d.max="0.2",d.step="0.002",d.value=String(i.fontScale),h("scaleLabel").textContent="字号"):(d.min=String(nvMinScale(i,s.modelId)),d.max=String(nvMaxScale(i,s.modelId)),d.step="0.01",d.value=String(i.scale),h("scaleLabel").textContent="大小")),document.activeElement!==f&&(f.value=String(Gl(i.rotation)))):(a.hidden=!0,r.hidden=!0);
   const p=h("penPill");
   p.hidden=S.tab!=="draw",p.textContent=S.pen?"画笔开着 · 点此挪贴纸":"画笔关着 · 点此继续画",h("tileControls").hidden=!s.tile,h("tileHint").hidden=!(S.tileMode&&!s.tile);
   const c=h("tileDensity"),b=h("tileSize");
