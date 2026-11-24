@@ -45,6 +45,16 @@
     });
   }
 
+  // Esc inside cross-origin iframe → tell the studio parent to close the shell.
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    try {
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage({ type: 'loomis-work-esc' }, '*');
+      }
+    } catch (err) {}
+  }, true);
+
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', scrub);
   else scrub();
   setTimeout(scrub, 600);
