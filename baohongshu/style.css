@@ -1,0 +1,466 @@
+
+/* 顶部两段：--safe-t 手机安全区 + --nav-h 小红书容器导航栏(44px)；--xhs-nav = 二者之和 */
+:root{--red:#ff2442;--ink:#222;--muted:#999;--line:#eee;--bg:#f7f7f7;--bar:64px;--nav-h:44px;--safe-t:var(--safe-area-inset-top,env(safe-area-inset-top,0px));--safe-b:var(--safe-area-inset-bottom,env(safe-area-inset-bottom,0px));--xhs-top:var(--safe-t);--xhs-nav:calc(var(--safe-t) + var(--nav-h))}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;min-height:100%;background:#eee;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;color:var(--ink)}
+button,input,textarea,select{font:inherit}button{border:0;background:none;color:inherit;cursor:pointer}
+/* 图标容器统一：<i> 默认斜体会让 emoji 头像发歪，一律拉正 */
+i,em{font-style:normal}
+.avatar,.big-avatar,.cat-icon,.eye-icon,.badge{line-height:1;text-align:center;font-style:normal}
+.app{max-width:430px;min-height:calc(100vh - var(--xhs-nav));margin:var(--xhs-nav) auto 0;background:#fff;position:relative;overflow:hidden}
+.scroll{min-height:calc(100vh - var(--xhs-nav));padding-bottom:calc(var(--bar) + env(safe-area-inset-bottom) + 14px);overflow-y:auto;-webkit-overflow-scrolling:touch}
+.top{height:58px;display:flex;align-items:center;padding:0 16px;gap:15px;border-bottom:1px solid #f4f4f4;position:sticky;top:0;background:rgba(255,255,255,.94);backdrop-filter:blur(14px);z-index:4}
+.logo{font-size:18px;font-weight:800;letter-spacing:-1px}.logo i{font-style:normal;color:var(--red)}
+.search{height:34px;flex:1;border-radius:18px;background:#f5f5f5;color:#aaa;display:flex;align-items:center;padding:0 13px;gap:7px;font-size:13px}
+.search span{font-size:17px;color:#777}.top-icon{font-size:21px;position:relative}.badge{position:absolute;right:-7px;top:-7px;background:var(--red);color:#fff;border:0;font-size:9px;line-height:14px;height:18px;min-width:18px;padding:0 4px;border-radius:10px;text-align:center;font-weight:700;white-space:nowrap;display:inline-flex;align-items:center;justify-content:center}
+.tabs{height:45px;display:flex;align-items:center;justify-content:center;gap:28px;border-bottom:1px solid #f4f4f4;position:sticky;top:58px;background:#fff;z-index:3}
+.tabs button{height:45px;color:#888;font-size:15px;position:relative}.tabs button.active{color:#222;font-weight:700}.tabs button.active:after{content:"";position:absolute;bottom:0;left:50%;width:23px;height:3px;border-radius:3px;background:#222;transform:translateX(-50%)}
+.feed{display:block;width:100%;-webkit-column-count:2;column-count:2;-webkit-column-gap:8px;column-gap:8px;padding:10px 7px}.feed .card{-webkit-column-break-inside:avoid;break-inside:avoid;page-break-inside:avoid;display:inline-block;width:100%;margin:0 0 8px}.card{overflow:hidden}.cover{height:222px;border-radius:8px;position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden;color:#fff;font-size:58px;background-size:cover;background-position:center;box-shadow:inset 0 -48px 40px rgba(0,0,0,.07)}.cover.ratio-tall{height:auto;aspect-ratio:3/4}.cover.ratio-short{height:auto;aspect-ratio:4/3}.cover.ratio-square{height:auto;aspect-ratio:1/1}.cover.ratio-34{height:auto;aspect-ratio:3/4}.cover.ratio-11{height:auto;aspect-ratio:1/1}.cover.ratio-43{height:auto;aspect-ratio:4/3}.cover.ratio-photo{height:auto;aspect-ratio:var(--cover-ar,3/4)}.cover.has-image{background-size:cover;background-position:center center;background-repeat:no-repeat;background-color:#1a191f}
+.my-posts .cover{height:auto!important}.cover:after{content:"";position:absolute;top:0;right:0;bottom:0;left:0;background:linear-gradient(145deg,rgba(255,255,255,.25),transparent 45%,rgba(0,0,0,.1));pointer-events:none}.cover span{filter:drop-shadow(0 4px 7px rgba(0,0,0,.12))}.cover-stats{position:absolute;left:9px;bottom:8px;z-index:1;color:#fff;font-size:11px;text-shadow:0 1px 4px rgba(0,0,0,.4);font-weight:600}.cover.small{height:170px}.c1{background:linear-gradient(145deg,#fbc2eb,#a6c1ee)}.c2{background:linear-gradient(145deg,#f6d365,#fda085)}.c3{background:linear-gradient(145deg,#84fab0,#8fd3f4)}.c4{background:linear-gradient(145deg,#d4fc79,#96e6a1)}.c5{background:linear-gradient(145deg,#fccb90,#d57eeb)}.c6{background:linear-gradient(145deg,#e0c3fc,#8ec5fc)}.c7{background:linear-gradient(145deg,#ffecd2,#fcb69f)}.cover .new{position:absolute;top:8px;left:8px;padding:3px 7px;border-radius:10px;background:var(--red);font-size:10px;color:#fff;z-index:1}
+.title{font-size:14px;line-height:1.4;margin:7px 2px 5px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.author{display:flex;align-items:center;gap:5px;color:#888;font-size:11px;padding:0 2px}.avatar{width:20px;height:20px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#ffc3a0,#ffafbd);font-size:11px;flex:none}.likes{margin-left:auto}.liked{color:var(--red)!important}.empty{padding:70px 25px;text-align:center;color:#aaa;font-size:14px}.empty b{font-size:40px;display:block;margin-bottom:10px}
+.section{padding:15px}.section-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}.section-head h2{font-size:18px;margin:0}.section-head small{color:#999}
+.hot-list{display:flex;gap:10px;overflow:auto;padding-bottom:3px}.hot{min-width:150px;height:92px;border-radius:10px;padding:11px;color:#333;background:linear-gradient(135deg,#fff1eb,#ffe3ed)}.hot:nth-child(2){background:linear-gradient(135deg,#edf7ff,#dceeff)}.hot:nth-child(3){background:linear-gradient(135deg,#f4edff,#e9d8ff)}.hot b{display:block;font-size:14px;margin-bottom:7px}.hot span{font-size:12px;color:#999}
+.inbox-head{padding:16px 15px 10px;background:#fff}.inbox-title{font-size:23px;font-weight:800}.inbox-cats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;padding:26px 15px 10px}.inbox-cat{text-align:center;font-size:13px;color:#555}.cat-icon{width:58px;height:58px;border-radius:18px;margin:0 auto 8px;display:flex;align-items:center;justify-content:center;font-size:29px;position:relative;box-shadow:0 5px 14px rgba(0,0,0,.08)}.cat-icon.like{background:linear-gradient(145deg,#ffe0df,#ffb8bd);color:#ff5268}.cat-icon.follow{background:linear-gradient(145deg,#dceaff,#a8caff);color:#4789e9}.cat-icon.comment{background:linear-gradient(145deg,#d4f7e4,#9fe5c2);color:#19a76a}.cat-icon svg{width:30px;height:30px;display:block;fill:currentColor}.cat-count{position:absolute;right:-10px;top:-8px;min-width:31px;height:22px;padding:0 7px;border-radius:13px;background:var(--red);border:2px solid #fff;color:#fff;font-size:11px;line-height:18px;font-weight:700}.message-group{padding:0 15px}.message{display:flex;gap:12px;padding:15px 0;border-bottom:1px solid #f3f3f3;align-items:center;cursor:pointer}.message .avatar{width:46px;height:46px;font-size:20px}.message-body{flex:1;min-width:0;font-size:14px;line-height:1.45}.message-body b{font-weight:650;display:block;font-size:15px;margin-bottom:4px}.message-body small{display:block;color:#aaa;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.message.unread .message-body b:before{content:"";display:inline-block;background:var(--red);width:6px;height:6px;border-radius:50%;margin-right:6px;vertical-align:2px}.message-meta{align-self:stretch;display:flex;flex-direction:column;align-items:flex-end;justify-content:space-between;color:#aaa;font-size:11px;min-width:37px}.chat-badge{min-width:20px;height:20px;border-radius:12px;background:var(--red);color:#fff;display:flex;align-items:center;justify-content:center;padding:0 5px;font-size:11px;font-weight:700}
+.profile-head{padding:24px 18px 20px;background:linear-gradient(180deg,#fff6f7,#fff)}.profile-row{display:flex;align-items:center;gap:14px}.big-avatar{width:68px;height:68px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:30px;background:linear-gradient(135deg,#ffd3b6,#ff8cae);border:3px solid #fff;box-shadow:0 2px 12px #f5c7cf}.profile-name{font-weight:700;font-size:20px}.profile-id{font-size:12px;color:#999;margin-top:4px}.stats{display:flex;gap:28px;margin-top:22px}.stats b{display:block;font-size:19px;line-height:26px;font-variant-numeric:tabular-nums}.stats span{display:block;color:#999;font-size:12px;line-height:16px;margin-top:3px}.profile-tabs{display:flex;height:45px;border-bottom:1px solid #eee}.profile-tabs button{flex:1;color:#999}.profile-tabs button.active{color:#222;font-weight:700;border-bottom:2px solid #222}.my-posts{display:block;-webkit-column-count:2;column-count:2;-webkit-column-gap:3px;column-gap:3px;padding:3px}.my-posts .card{-webkit-column-break-inside:avoid;break-inside:avoid;page-break-inside:avoid;display:inline-block;width:100%;margin:0 0 3px;vertical-align:top}.my-posts .cover{border-radius:3px}.my-posts .title{padding:0 5px;margin-top:7px}
+.bottom{height:calc(var(--bar) + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));position:fixed;bottom:0;left:50%;transform:translateX(-50%);max-width:430px;width:100%;background:rgba(255,255,255,.94);border-top:1px solid #eee;display:flex;align-items:center;justify-content:space-around;z-index:8;padding:0 0 var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))}.bottom button{flex:1;height:var(--bar);display:flex;align-items:center;justify-content:center;color:#999;font-size:14px;padding:0;position:relative}.bottom button.active{color:#222;font-weight:700}.bottom button>.badge{right:calc(50% - 28px);top:12px}.bottom .badge{right:-17px;top:-6px}.bottom .publish{display:flex;align-items:center;justify-content:center;font-size:25px;color:#fff;background:var(--red);width:48px;height:34px;margin:0 auto;border-radius:8px;line-height:1;font-weight:400;padding:0 0 2px}
+.modal-back{position:fixed;top:var(--xhs-nav);right:0;bottom:0;left:0;background:rgba(0,0,0,.38);z-index:20;opacity:0;pointer-events:none;transition:.2s}.modal-back.open{opacity:1;pointer-events:auto}.modal{position:absolute;bottom:0;left:50%;transform:translateX(-50%) translateY(100%);width:100%;max-width:430px;background:#fff;border-radius:18px 18px 0 0;padding:10px 18px calc(18px + env(safe-area-inset-bottom));transition:.28s;max-height:100%;overflow:auto}.modal-back.open .modal{transform:translateX(-50%) translateY(0)}.handle{width:36px;height:4px;border-radius:3px;background:#ddd;margin:0 auto 15px}.modal h2{font-size:18px;margin:0 0 18px}.upload{height:190px;border-radius:10px;background:#f7f7f7;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#aaa;position:relative;overflow:hidden}.upload strong{font-size:34px;font-weight:300;color:#bbb}.upload img{width:100%;height:100%;object-fit:cover;display:none}.upload.has img{display:block}.upload.has>*:not(img){display:none}.fields{display:grid;gap:12px;margin-top:15px}.field{display:flex;flex-direction:column;gap:6px}.field label{font-size:12px;color:#888}.field input,.field textarea,.field select{border:0;background:#f7f7f7;border-radius:8px;padding:12px;outline:none;color:#222}.field textarea{resize:none;height:65px}.category{display:flex;gap:7px;flex-wrap:wrap}.category button{padding:7px 13px;border-radius:20px;background:#f5f5f5;color:#888;font-size:12px}.category button.on{background:#fff0f2;color:var(--red);font-weight:600}.publish-btn{width:100%;height:46px;border-radius:23px;background:var(--red);color:#fff;margin-top:18px;font-weight:700;font-size:16px}.close{position:absolute;right:17px;top:15px;color:#999;font-size:22px}
+.detail-back{position:fixed;top:var(--xhs-nav);right:0;bottom:0;left:0;background:#f7f7f7;z-index:12;display:none;overflow:auto}.detail-back.open{display:block}.detail{max-width:430px;margin:auto;background:#fff;min-height:calc(100vh - var(--xhs-nav))}.detail-top{height:52px;display:flex;align-items:center;padding:0 15px;border-bottom:1px solid #eee;background:#fff;position:sticky;top:0;z-index:2}.detail-top button{font-size:25px;width:35px}.detail-top h3{margin:auto;font-size:16px}.detail-cover{height:350px;margin:12px 15px 0;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:90px;background-size:cover;background-position:center;box-shadow:0 5px 18px rgba(0,0,0,.08)}.detail-cover.has-image{height:auto!important;aspect-ratio:var(--cover-ar,3/4);max-height:min(72vh,640px);background-size:cover;background-position:center center;background-repeat:no-repeat;background-color:#1a191f}.detail-content{padding:18px 18px 30px}.detail-author{display:flex;align-items:center;gap:8px;color:#555;font-size:13px;margin-bottom:18px}.detail-author .avatar{width:30px;height:30px}.detail-content h1{font-size:21px;line-height:1.35;margin:0 0 10px}.detail-content p{color:#555;line-height:1.7;margin:0 0 12px}.detail-actions{display:flex;gap:24px;padding:15px 0;border-bottom:1px solid #eee;color:#666;font-size:14px}.detail-actions b{color:#222;margin-left:4px}.tag{color:#456bb3;margin-right:8px;font-size:13px}.comment-head{font-weight:700;margin:20px 0 4px}.comment{padding:12px 0;border-bottom:1px solid #f1f1f1;font-size:13px;line-height:1.7}.comment .avatar{margin-right:7px}.toast{position:fixed;bottom:82px;left:50%;transform:translateX(-50%) translateY(10px);background:rgba(30,30,30,.9);color:#fff;padding:10px 16px;border-radius:22px;font-size:13px;opacity:0;pointer-events:none;z-index:30;transition:.2s}.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.detail-back{position:fixed;top:var(--xhs-nav);right:0;bottom:0;left:0;background:#f7f7f7;z-index:12;display:none;overflow:auto}.detail-back.open{display:block}.detail{max-width:430px;margin:auto;background:#fff;min-height:calc(100vh - var(--xhs-nav))}.detail-top{height:52px;display:flex;align-items:center;padding:0 15px;border-bottom:1px solid #eee;background:#fff;position:sticky;top:0;z-index:2}.detail-top button{font-size:25px;width:35px}.detail-top h3{margin:auto;font-size:16px}.detail-cover{height:350px;margin:12px 15px 0;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:90px;background-size:cover;background-position:center;box-shadow:0 5px 18px rgba(0,0,0,.08)}.detail-cover.has-image{height:auto!important;aspect-ratio:var(--cover-ar,3/4);max-height:min(72vh,640px);background-size:cover;background-position:center center;background-repeat:no-repeat;background-color:#1a191f}.detail-content{padding:18px 18px 30px}.detail-author{display:flex;align-items:center;gap:8px;color:#555;font-size:13px;margin-bottom:18px}.detail-author .avatar{width:30px;height:30px}.detail-content h1{font-size:21px;line-height:1.35;margin:0 0 10px}.detail-content p{color:#555;line-height:1.7;margin:0 0 12px}.detail-actions{display:flex;gap:24px;padding:15px 0;border-bottom:1px solid #eee;color:#666;font-size:14px}.detail-actions b{color:#222;margin-left:4px}.tag{color:#456bb3;margin-right:8px;font-size:13px}.comment-head{font-weight:700;margin:20px 0 4px}.comment{padding:12px 0;border-bottom:1px solid #f1f1f1;font-size:13px;line-height:1.7}.comment .avatar{margin-right:7px}.chat-back{position:fixed;top:var(--xhs-nav);right:0;bottom:0;left:0;background:#f7f7f7;z-index:15;display:none;overflow:auto}.chat-back.open{display:block}.chat-page{max-width:430px;min-height:calc(100vh - var(--xhs-nav));margin:auto;background:#f7f7f7;padding-bottom:0;display:flex;flex-direction:column}.chat-head{height:54px;background:#fff;border-bottom:1px solid #eee;display:flex;align-items:center;padding:0 15px;position:sticky;top:0;z-index:2}.chat-head button{font-size:25px;width:35px}.chat-head h3{margin:auto;font-size:16px}.chat-body{padding:18px 14px;display:flex;flex-direction:column;gap:13px}.chat-row{display:flex;gap:8px;align-items:flex-end}.chat-row.me{justify-content:flex-end}.chat-row .avatar{width:34px;height:34px}.bubble{max-width:76%;padding:10px 12px;border-radius:14px;background:#fff;color:#333;font-size:14px;line-height:1.55;box-shadow:0 1px 2px rgba(0,0,0,.04)}.chat-row.me .bubble{background:#ff2442;color:#fff}.chat-compose{position:fixed;bottom:0;left:50%;transform:translateX(-50%);max-width:430px;width:100%;padding:10px 12px calc(10px + env(safe-area-inset-bottom));background:#fff;border-top:1px solid #eee;display:flex;gap:8px}.chat-compose input{flex:1;border:0;background:#f5f5f5;border-radius:20px;padding:10px 14px;outline:none}.chat-compose button{border-radius:19px;background:var(--red);color:#fff;padding:0 16px;font-size:13px}.toast{position:fixed;bottom:82px;left:50%;transform:translateX(-50%) translateY(10px);background:rgba(30,30,30,.9);color:#fff;padding:10px 16px;border-radius:22px;font-size:13px;opacity:0;pointer-events:none;z-index:30;transition:.2s}.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.detail-back{position:fixed;top:var(--xhs-nav);right:0;bottom:0;left:0;background:#f7f7f7;z-index:12;display:none;overflow:auto}.detail-back.open{display:block}.detail{max-width:430px;margin:auto;background:#fff;min-height:calc(100vh - var(--xhs-nav))}.detail-top{height:52px;display:flex;align-items:center;padding:0 15px;border-bottom:1px solid #eee;background:#fff;position:sticky;top:0;z-index:2}.detail-top button{font-size:25px;width:35px}.detail-top h3{margin:auto;font-size:16px}.detail-cover{height:350px;margin:12px 15px 0;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:90px;background-size:cover;background-position:center;box-shadow:0 5px 18px rgba(0,0,0,.08)}.detail-cover.has-image{height:auto!important;aspect-ratio:var(--cover-ar,3/4);max-height:min(72vh,640px);background-size:cover;background-position:center center;background-repeat:no-repeat;background-color:#1a191f}.detail-content{padding:18px 18px 30px}.detail-author{display:flex;align-items:center;gap:8px;color:#555;font-size:13px;margin-bottom:18px}.detail-author .avatar{width:30px;height:30px}.detail-content h1{font-size:21px;line-height:1.35;margin:0 0 10px}.detail-content p{color:#555;line-height:1.7;margin:0 0 12px}.detail-actions{display:flex;gap:24px;padding:15px 0;border-bottom:1px solid #eee;color:#666;font-size:14px}.detail-actions b{color:#222;margin-left:4px}.tag{color:#456bb3;margin-right:8px;font-size:13px}.comment-head{font-weight:700;margin:20px 0 4px}.comment{padding:12px 0;border-bottom:1px solid #f1f1f1;font-size:13px;line-height:1.7}.comment .avatar{margin-right:7px}.activity-back{position:fixed;top:var(--xhs-nav);right:0;bottom:0;left:0;background:#fff;z-index:14;display:none;overflow:auto}.activity-back.open{display:block}.activity-page{max-width:430px;min-height:calc(100vh - var(--xhs-nav));margin:auto;background:#fff;padding-bottom:20px}.chat-back{position:fixed;top:var(--xhs-nav);right:0;bottom:0;left:0;background:#f7f7f7;z-index:15;display:none;overflow:auto}.chat-back.open{display:block}.chat-page{max-width:430px;min-height:calc(100vh - var(--xhs-nav));margin:auto;background:#f7f7f7;padding-bottom:0;display:flex;flex-direction:column}.chat-head{height:54px;background:#fff;border-bottom:1px solid #eee;display:flex;align-items:center;padding:0 15px;position:sticky;top:0;z-index:2}.chat-head button{font-size:25px;width:35px}.chat-head h3{margin:auto;font-size:16px}.chat-body{padding:18px 14px;display:flex;flex-direction:column;gap:13px}.chat-row{display:flex;gap:8px;align-items:flex-end}.chat-row.me{justify-content:flex-end}.chat-row .avatar{width:34px;height:34px}.bubble{max-width:76%;padding:10px 12px;border-radius:14px;background:#fff;color:#333;font-size:14px;line-height:1.55;box-shadow:0 1px 2px rgba(0,0,0,.04)}.chat-row.me .bubble{background:#ff2442;color:#fff}.chat-compose{position:fixed;bottom:0;left:50%;transform:translateX(-50%);max-width:430px;width:100%;padding:10px 12px calc(10px + env(safe-area-inset-bottom));background:#fff;border-top:1px solid #eee;display:flex;gap:8px}.chat-compose input{flex:1;border:0;background:#f5f5f5;border-radius:20px;padding:10px 14px;outline:none}.chat-compose button{border-radius:19px;background:var(--red);color:#fff;padding:0 16px;font-size:13px}.toast{position:fixed;bottom:82px;left:50%;transform:translateX(-50%) translateY(10px);background:rgba(30,30,30,.9);color:#fff;padding:10px 16px;border-radius:22px;font-size:13px;opacity:0;pointer-events:none;z-index:30;transition:.2s}.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+/* 顶部不留白、不圆角：所有页面容器一律贴顶铺满 */
+@media(min-width:431px){body{padding:0!important}.app{border-radius:0!important;box-shadow:none!important;min-height:calc(100vh - var(--xhs-nav))}}
+ .detail-actions{gap:10px}.detail-action{border:0;background:#f7f7f7;border-radius:18px;padding:7px 10px;color:#555}.detail-action.on{color:var(--red);background:#fff0f2}.comment-form{display:flex;gap:8px;margin:10px 0 4px}.comment-form input{flex:1;border:0;background:#f5f5f5;border-radius:18px;padding:9px 12px;outline:none}.comment-form button{border-radius:18px;background:var(--red);color:#fff;padding:0 14px}.detail{background:#1A191F!important;color:#F5F4F7}.detail-top{height:58px;background:#1A191F!important;border:0!important;color:#F5F4F7}.detail-top button{color:#F5F4F7}.detail-cover{height:min(68vh,560px);margin:0;border-radius:0;box-shadow:none}.detail-cover .media-count{display:none}.detail-content{padding:18px 18px 24px}.detail-content h1{font-size:20px;color:#F5F4F7}.detail-content p{color:#C8C5D0}.detail-bottom{position:fixed;left:50%;bottom:0;transform:translateX(-50%);z-index:4;width:100%;max-width:430px;display:flex;align-items:center;gap:10px;padding:10px 14px calc(10px + env(safe-area-inset-bottom));background:#1A191F;border-top:1px solid #302F37}.detail-bottom .comment-form{flex:1;margin:0}.detail-bottom .comment-form input{height:38px;background:#25242B;color:#F5F4F7}.detail-bottom .comment-form button{display:none}.detail-bottom .detail-action{background:transparent;color:#F5F4F7;padding:4px;font-size:14px;white-space:nowrap}.detail-bottom .detail-action.on{color:var(--red)}.detail-bottom .detail-action:first-child{font-size:22px}
+ .eye-icon{display:inline-block;width:13px;height:8px;border:1.5px solid currentColor;border-radius:12px/8px;margin-right:3px;vertical-align:-1px;position:relative}.eye-icon:after{content:"";position:absolute;width:3px;height:3px;border-radius:50%;background:currentColor;left:3.5px;top:1px}.stats{justify-content:space-around;gap:0}.stats>div{text-align:center;min-width:72px}.my-posts .empty{grid-column:1/-1;width:100%;min-height:300px;display:flex;flex-direction:column;align-items:center;justify-content:center}.follow-btn{margin-left:auto;color:#fff!important;background:var(--red);border-radius:18px;padding:7px 15px}.follow-btn.followed{color:#888!important;background:#fff;border:1px solid #ccc}.detail-menu{position:absolute;right:12px;top:46px;z-index:5;background:#fff;border-radius:12px;box-shadow:0 5px 20px rgba(0,0,0,.16);padding:6px;display:none}.detail-menu.open{display:block}.detail-menu button{display:block;width:120px;text-align:left;padding:9px 10px;font-size:13px}.activity-back,.detail-back,.chat-back{transform:translateX(100%);transition:transform .28s cubic-bezier(.22,.61,.36,1);display:block;visibility:hidden;pointer-events:none}.activity-back.open,.detail-back.open,.chat-back.open{transform:translateX(0);visibility:visible;pointer-events:auto}.activity-back.closing,.detail-back.closing,.chat-back.closing{transform:translateX(-100%)}
+.detail-top .detail-author{margin:0;flex:1;min-width:0;align-items:center}.detail-top .detail-author b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}/* 顶栏的返回/菜单键是 25px 图标字号，关注按钮必须显式收小，否则会被一起撑大 */
+.detail-top .follow-btn{width:auto!important;white-space:nowrap;flex:none;margin:0 8px;padding:6px 14px;font-size:13px!important;line-height:1;font-weight:500;border-radius:15px}.detail-top>button{flex:none;white-space:nowrap}.detail-content .comment{display:flex;gap:10px;padding:14px 0;border-bottom:1px solid #f1f1f1;font-size:13px;position:static;min-height:0}
+.detail-content .comment .avatar{position:static;width:30px;height:30px;font-size:14px;flex:none}
+.c-main{flex:1;min-width:0}
+.c-top{display:flex;align-items:center;gap:7px;margin-bottom:3px;line-height:1.3}
+.c-top b{color:#8a8794;font-size:12.5px;font-weight:500}
+.c-meta{color:#b3b0bb;font-size:11px}
+.c-text{margin:0!important;padding:0;color:#333;line-height:1.45;word-break:break-word}
+.c-acts{display:flex;gap:16px;margin:0;padding:0;line-height:1}
+.c-act{color:#9a97a2;font-size:12px;padding:0;margin:0;background:none;line-height:1;height:auto;min-height:0}
+.c-act.on{color:var(--red)}.detail-bottom .detail-action,.detail-bottom .detail-action.on{background:transparent!important}
+.profile-head{position:relative}.theme-toggle{position:absolute;right:16px;top:18px;border:1px solid #ddd;background:#fff;border-radius:18px;padding:6px 10px;color:#777}
+.chat-row{align-items:flex-start!important}.activity-back.closing,.detail-back.closing,.chat-back.closing{transform:translateX(100%)}
+body.dark{background:#111;color:#f5f5f5}body.dark .app,body.dark .scroll,body.dark .detail,body.dark .activity-page,body.dark .chat-page{background:#17171c;color:#f5f5f5}body.dark .top,body.dark .tabs,body.dark .bottom,body.dark .inbox-head,body.dark .chat-head,body.dark .chat-compose{background:rgba(23,23,28,.96);border-color:#303039}body.dark .search,body.dark .field input,body.dark .field textarea,body.dark .chat-compose input,body.dark .comment-form input{background:#292930;color:#f5f5f5}body.dark .tabs button,body.dark .bottom button,body.dark .message-body small,body.dark .profile-id,body.dark .section-head small{color:#a9a9b3}body.dark .profile-head{background:linear-gradient(180deg,#29202a,#17171c)}body.dark .profile-tabs,body.dark .message,body.dark .comment{border-color:#303039}body.dark .profile-tabs button{color:#999}body.dark .message-body,body.dark .detail-content p{color:#ddd}body.dark .bubble,body.dark .detail-action,body.dark .detail-menu{background:#292930;color:#eee}body.dark .theme-toggle{background:#292930;border-color:#444;color:#eee}body.dark .inbox-cats{border-color:#25252b}body.dark .empty{color:#aaa}
+
+
+body{background:#1A191F}
+body.dark{background:#1A191F;color:#F5F4F7}
+body.dark .app,body.dark .scroll{background:#1A191F;color:#F5F4F7}
+body.dark .top,body.dark .tabs,body.dark .bottom,body.dark .inbox-head,body.dark .chat-head,body.dark .chat-compose{background:#1A191F;border-color:#302F37}
+body.dark .logo,body.dark .tabs button.active,body.dark .bottom button.active,body.dark .inbox-title,body.dark .profile-name,body.dark .detail-content h1{color:#F5F4F7}
+body.dark .tabs button,body.dark .bottom button,body.dark .profile-id,body.dark .author,body.dark .section-head small{color:#92909B}
+body.dark .search,body.dark .field input,body.dark .field textarea,body.dark .chat-compose input,body.dark .comment-form input{background:#25242B;color:#F5F4F7}
+body.dark .search{color:#92909B}
+body.dark .profile-head{background:#1A191F}
+body.dark .profile-tabs,body.dark .message,body.dark .comment{border-color:#302F37}
+body.dark .profile-tabs button{color:#92909B}
+body.dark .profile-tabs button.active{color:#F5F4F7}
+body.dark .section,body.dark .hot,body.dark .modal,body.dark .detail,body.dark .activity-page,body.dark .chat-page{background:#1A191F;color:#F5F4F7}
+body.dark .hot{background:#25242B}
+body.dark .message-body,body.dark .detail-content p,body.dark .comment{color:#D0CED6}
+body.dark .message-body small{color:#92909B}
+body.dark .bubble,body.dark .detail-action,body.dark .detail-menu,body.dark .upload{background:#25242B;color:#F5F4F7}
+body.dark .detail-menu button{color:#F5F4F7}
+body.dark .detail-cover{box-shadow:0 5px 18px rgba(0,0,0,.3)}
+body.dark .theme-toggle{display:none}
+body.dark .empty{color:#92909B}body.dark .detail-top{background:#1A191F;border-color:#302F37;color:#F5F4F7}body.dark .detail-top button{color:#F5F4F7}
+.cat-count{border:0!important}
+.cat-count{width:22px;min-width:22px;padding:0;border-radius:50%}.cat-count.wide{width:auto;min-width:31px;padding:0 7px;border-radius:13px}
+.cat-count{display:flex;align-items:center;justify-content:center;line-height:1!important;text-align:center}
+/* 新评论提示条：不打断阅读，用户点击才把新评论插入列表顶部 */
+.new-comments{position:fixed;left:50%;bottom:calc(74px + env(safe-area-inset-bottom));z-index:80;display:none;align-items:center;gap:7px;padding:9px 15px;border-radius:20px;background:rgba(255,255,255,.97);color:var(--red);font-size:13px;font-weight:650;box-shadow:0 6px 22px rgba(0,0,0,.2);border:1px solid rgba(0,0,0,.06);cursor:pointer}
+.new-comments.show{display:flex;animation:ncIn .24s cubic-bezier(.22,1,.36,1) both}
+.new-comments b{font-weight:700}
+@keyframes ncIn{from{opacity:0;transform:translate(-50%,10px) scale(.96)}to{opacity:1;transform:translate(-50%,0) scale(1)}}
+body.dark .new-comments{background:rgba(41,41,48,.97);border-color:#3a3a44;color:#FF6B7E}
+.comment-flash{animation:cFlash 1.1s ease}
+@keyframes cFlash{0%{background:rgba(255,36,66,.09)}100%{background:transparent}}
+.profile-page{padding:0!important;background:#1A191F!important}.profile-hero{position:relative;min-height:auto;padding:12px 16px 14px;color:#fff;overflow:hidden;background:radial-gradient(circle at 65% 15%,rgba(74,111,168,.9),transparent 24%),radial-gradient(circle at 25% 20%,rgba(85,54,130,.8),transparent 32%),linear-gradient(145deg,#080b18,#192d4d 52%,#12131d)}.profile-hero:before{content:"✦　·　✧　　·　✦　　·　✧　·";position:absolute;top:20px;left:0;right:0;color:rgba(255,255,255,.55);font-size:18px;letter-spacing:9px;white-space:nowrap;transform:rotate(-12deg)}.profile-top{display:none}.profile-row.profile-user{position:relative;z-index:1;margin-top:0;gap:12px;align-items:flex-start}.profile-row.profile-user>div{flex:1;min-width:0;padding-top:2px}.profile-row.profile-user .profile-edit-btn{margin-left:auto;flex:none;margin-top:0}.profile-page .big-avatar{width:76px;height:76px;background:linear-gradient(135deg,#5d7da8,#e6a7bd);font-size:35px;box-shadow:0 0 0 2px rgba(255,255,255,.8),0 5px 18px rgba(0,0,0,.35)}.profile-page .profile-name{font-size:21px;color:#fff;display:flex;align-items:center}.profile-page .profile-id{color:rgba(255,255,255,.65)}.profile-bio{position:relative;z-index:1;margin:14px 0 8px;font-size:13px;line-height:1.7;color:rgba(255,255,255,.88)}.profile-tags{display:flex;gap:7px;position:relative;z-index:1}.profile-tags span{padding:4px 10px;border-radius:13px;background:rgba(255,255,255,.14);font-size:11px;color:#e8edf6}.profile-page .stats{position:relative;z-index:1;justify-content:flex-start;gap:27px;margin-top:14px}.profile-page .stats>div{text-align:left;min-width:auto}.profile-page .stats b{color:#fff}.profile-page .stats span{color:rgba(255,255,255,.7)}.profile-actions{display:none!important}.profile-page .profile-tabs{height:48px;background:#1A191F;border-color:#302F37}.profile-page .my-posts{background:#1A191F}
+/* ===== 我的页面：编辑资料入口 + 标签选择器 ===== */
+.profile-tags{flex-wrap:wrap;align-items:center}
+.profile-edit-btn{position:relative;z-index:1;display:inline-flex;align-items:center;height:24px;padding:0 11px;border:1px solid rgba(255,255,255,.3);border-radius:12px;background:rgba(255,255,255,.12);color:rgba(255,255,255,.92);font-size:11.5px;line-height:1;font-weight:500}
+.profile-edit-btn.dashed{border-style:dashed;border-color:rgba(255,255,255,.45);background:rgba(255,255,255,.08)}
+.profile-edit-btn:active{transform:scale(.95)}
+.profile-name.is-empty{color:rgba(255,255,255,.6);font-weight:500}
+.profile-bio.is-empty{color:rgba(255,255,255,.5);cursor:pointer}
+.field label .hint{color:#aaa;font-weight:400;margin-left:2px}
+.tag-picker{display:flex;flex-wrap:wrap;gap:8px}
+.tag-chip{padding:8px 13px;border-radius:16px;background:#f4f4f7;color:#555;font-size:12.5px;border:1px solid transparent;transition:.15s}
+.tag-chip.on{background:#ffe8ee;color:#E5365F;border-color:#ffbccd;font-weight:600}
+.tag-add{display:flex;gap:8px}
+.tag-add input{flex:1;height:40px;border-radius:10px;background:#f7f7f7;padding:0 12px;font-size:13.5px;border:1px solid transparent}
+.tag-add input:focus{background:#fff;border-color:#ffbccd}
+.tag-add button{padding:0 16px;border-radius:10px;background:#222;color:#fff;font-size:13px;font-weight:600;flex:none}
+.tag-selected{display:flex;flex-wrap:wrap;gap:8px}
+.tag-selected:empty{display:none}
+.tag-custom{display:inline-flex;align-items:center;gap:3px;padding:7px 10px 7px 12px;border-radius:16px;background:#ffe8ee;color:#E5365F;font-size:12.5px;font-weight:600}
+.tag-custom i{font-style:normal;font-size:15px;line-height:1;opacity:.55;padding:0 2px}
+body.dark .tag-chip{background:#25242B;color:#C8C6D0}
+body.dark .tag-chip.on{background:#3A2530;color:#FF9DB8;border-color:#6E3A4C}
+body.dark .tag-add input{background:#25242B;color:#F5F4F7}
+body.dark .tag-add button{background:#F0F0F3;color:#111}
+body.dark .tag-custom{background:#3A2530;color:#FF9DB8}
+/* ===== 自适应屏幕宽度：撑满横向空间 ===== */
+html,body{height:100%;width:100%;max-width:100%;overflow:hidden;overscroll-behavior:none}
+.app{max-width:100%!important;height:100%;min-height:100%;display:flex;flex-direction:column;overflow:hidden}
+.scroll{flex:1;min-width:0;min-height:0!important;overflow-y:auto;overflow-x:hidden}
+@media(min-width:431px){.app{height:100%}}
+.bottom{left:0!important;transform:none!important;max-width:100%!important}
+.modal{left:0!important;max-width:100%!important;transform:translateY(100%)!important}
+.modal-back.open .modal{transform:translateY(0)!important}
+.detail{max-width:100%!important}
+.detail-bottom{left:0!important;transform:none!important;max-width:100%!important}
+.activity-page{max-width:100%!important}
+.chat-page{max-width:100%!important}
+.chat-compose{left:0!important;transform:none!important;max-width:100%!important}
+.feed{width:100%;-webkit-column-count:2;column-count:2;column-width:auto}
+.my-posts{-webkit-column-count:2;column-count:2}
+.inbox-cats{grid-template-columns:repeat(auto-fit,minmax(110px,1fr))}
+/* 消息页顶部导航：固定吸顶、无圆角、无上边距、标题水平居中 */
+#page .inbox-head{position:sticky;top:0;z-index:6;height:52px;padding:0 15px;display:flex;align-items:center;justify-content:center;border-radius:0;border:0;border-bottom:1px solid var(--ih-line);background:var(--ih-bg);color:var(--ih-fg);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}
+#page .inbox-title{font-size:17px;font-weight:600;line-height:1;margin:0;color:inherit}
+/* 消息列表页顶部的「消息」标题由小红书容器导航栏显示，页面里不再重复显示；
+   保留 52px 的 .inbox-head 作为等高留白（否则列表会顶到容器导航栏下面） */
+#page>.inbox-head .inbox-title{display:none}
+:root{--ih-bg:rgba(255,255,255,.96);--ih-fg:#222;--ih-line:#f0f0f2}
+body.dark{--ih-bg:rgba(26,25,31,.96);--ih-fg:#F5F4F7;--ih-line:#2A2A32}
+body.tab-messages .app{border-radius:0!important;box-shadow:none!important;height:calc(100vh - var(--xhs-nav))!important;min-height:calc(100vh - var(--xhs-nav))!important}
+body.tab-messages{padding:0!important}
+body.tab-messages .app>.scroll{padding-top:0}
+/* 消息列表紧贴屏幕顶部：把 app 钉死在视口顶部，清掉任何上边距/圆角/留白 */
+body.tab-messages{margin:0!important;padding:0!important;border:0!important}
+/* 消息列表页顶部只有标题、左右无控件，标题由小红书容器导航栏显示，
+   所以这一页不预留容器高度：内容直接从屏幕顶部开始（隐藏在我们的 52px 标题栏之下） */
+body.tab-messages .app{position:fixed!important;top:0!important;right:0!important;bottom:0!important;left:0!important;margin:0!important;max-width:100%!important;height:auto!important;min-height:0!important;border-radius:0!important;box-shadow:none!important}
+body.tab-messages .scroll,body.tab-messages .app>.scroll,body.tab-messages #page{padding-top:0!important;margin-top:0!important;scroll-padding-top:0}
+/* 首页：顶栏只有 title「爆红书」（标题由小红书容器导航栏显示，页面内的 logo 只是同高度占位），
+   所以同样不预留容器高度，文字区从屏幕顶部开始；标题水平居中 */
+body.tab-home .app,body.tab-explore .app{margin-top:0!important;padding-top:var(--xhs-nav);height:100%!important;min-height:100%!important}
+body.tab-home .app>.scroll,body.tab-explore .app>.scroll{min-height:0}
+body.tab-home .top,body.tab-explore .top{justify-content:center}
+/* 我的页：内容需要避开容器导航栏，但顶部背景（星夜/粉色渐变）不跟着下移，直接铺到屏幕最顶 */
+body.tab-me .app{margin-top:0!important;height:100%!important;min-height:100%!important}
+body.tab-me .app>.scroll{min-height:0}
+body.tab-me #page .profile-hero{padding-top:calc(var(--xhs-nav) + 18px)}
+body.tab-me .theme-toggle{top:calc(var(--xhs-nav) + 22px)}
+body.tab-messages #page>.inbox-head{margin-top:0!important;padding-top:0!important;top:0!important;border-top:0!important;border-radius:0!important}
+body.tab-messages #page>.inbox-head .inbox-title{line-height:52px}
+/* 笔记详情页整页撑满横向空间：顶栏 / 封面 / 正文不再限宽居中 */
+.detail-top,.detail-cover,.detail-content{max-width:100%!important;width:100%;margin-left:0!important;margin-right:0!important}
+/* 聊天页消息区撑满横向：.chat-page 是列方向 flex 容器，
+   flex 子项上的 margin:auto 会让它收缩成内容宽度（而不是拉伸满宽），所以这里必须显式 width:100% */
+.chat-body{max-width:100%!important;width:100%!important;margin-left:0!important;margin-right:0!important}
+/* 手机端上线：所有内容区一律撑满横向，左右留白由各自的 padding 负责（不再居中限宽） */
+.chat-compose>*{max-width:100%!important}
+.message-group,.inbox-head{max-width:100%!important;width:100%;margin-left:0!important;margin-right:0!important}
+/* 关闭键（圆形按钮）和添加图片方块要按自己的尺寸走，不能被这条「一律撑满」的规则拉宽 */
+.modal>*:not(.close):not(.upload){max-width:100%!important;width:100%;margin-left:0!important;margin-right:0!important}
+.dm-toast{max-width:100%!important}
+body.dark .c-text{color:#D0CED6}
+body.dark .c-top b{color:#92909B}
+body.dark .c-meta{color:#7f7d88}
+body.dark .c-act{color:#8f8c98}
+body.dark .c-act.on{color:var(--red)}
+@media(min-width:768px){.feed{-webkit-column-count:3;column-count:3}.my-posts{-webkit-column-count:3;column-count:3}}
+@media(min-width:1440px){.feed{-webkit-column-count:4;column-count:4}}
+/* ===== 全局私信通知（顶部下拉，同屏最多 1 条，新消息把旧消息顶掉） ===== */
+.dm-layer{position:fixed;top:var(--xhs-nav);left:0;right:0;height:0;z-index:40;pointer-events:none}
+.dm-toast{pointer-events:auto;position:absolute;top:8px;left:10px;right:10px;margin:0 auto;max-width:900px;display:flex;align-items:center;gap:11px;padding:11px 14px;border-radius:14px;background:rgba(255,255,255,.97);box-shadow:0 8px 26px rgba(0,0,0,.16);border:1px solid rgba(0,0,0,.05);text-align:left;will-change:transform,opacity;opacity:0;transform:translateY(-160%) scale(.97);touch-action:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
+.dm-toast.in{animation:dmDrop .34s cubic-bezier(.22,1,.36,1) both}
+.dm-toast.out{animation:dmUp .2s ease forwards}
+.dm-toast .avatar{width:34px;height:34px;font-size:17px;flex:none}
+.dm-body{flex:1;min-width:0}
+.dm-body b{display:block;font-size:14px;font-weight:650;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dm-body small{display:block;color:#999;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dm-time{color:#bbb;font-size:11px;flex:none;align-self:flex-start;margin-top:2px}
+@keyframes dmDrop{from{transform:translateY(-160%) scale(.97);opacity:0}to{transform:translateY(0) scale(1);opacity:1}}
+@keyframes dmUp{from{transform:translateY(0) scale(1);opacity:1}to{transform:translateY(-160%) scale(.97);opacity:0}}
+body.dark .dm-toast{background:rgba(41,41,48,.97);border-color:#3a3a44}
+body.dark .dm-body b{color:#F5F4F7}
+body.dark .dm-body small{color:#92909B}
+/* 私信会话中的真实时间戳 */
+.chat-time{text-align:center;color:#b3b0bb;font-size:11px;margin:3px 0 1px;line-height:1.4}
+body.dark .chat-time{color:#7f7d88}
+/* ===== 所有页面顶部统一：无圆角、无上留白 ===== */
+html,body{margin:0;padding:0}
+.app,.detail,.activity-page,.chat-page,.detail-back,.activity-back,.chat-back{border-radius:0!important}
+.app>.top,.tabs,.inbox-head,.detail-top,.chat-head,.profile-hero,.activity-page>.inbox-head{margin-top:0!important;border-radius:0!important}
+.scroll,#page{padding-top:0!important;margin-top:0!important}
+.top,.detail-top,.chat-head,.inbox-head{top:0!important}
+/* 浮层仍从容器导航栏下方开始（偏移量保持），但用同色把导航栏那一截填实，避免透过看到上一页 */
+.detail-back,.activity-back,.chat-back{background:#1A191F;box-shadow:0 calc(-1 * var(--xhs-nav)) 0 0 #1A191F}
+.modal-back{box-shadow:0 calc(-1 * var(--xhs-nav)) 0 0 rgba(0,0,0,.38)}
+/* 详情页 / 私信页 底部栏：改为 sticky 钉在滚动容器底部。
+   fixed 会被父级 .detail-back/.chat-back 的 transform（滑入动画）变成「相对滚动容器」，
+   于是底栏会跟着列表一起滚走；sticky 不受 transform 影响。 */
+.detail-bottom,.chat-compose{position:sticky!important;left:0!important;right:0!important;top:auto!important;bottom:0!important;transform:none!important;width:100%!important;max-width:100%!important;margin:0!important;flex:none!important;z-index:5!important}
+/* 内容不足一屏时也把底栏顶到最底部 */
+.detail{display:flex!important;flex-direction:column}
+.detail-content,.chat-body{flex:1 0 auto}
+.detail-bottom,.chat-compose{margin-top:auto!important}
+.detail-bottom .comment-form{flex:1 1 0!important;min-width:0!important;max-width:52%!important}
+.detail-bottom .comment-form input{flex:1 1 auto!important;min-width:0!important}
+/* 聊天页改为「上中下三段」弹性布局：头部固定、消息区自己滚动、输入栏永远贴底。
+   完全不依赖 sticky/fixed，因此在任何浏览器、任何滚动位置都不会跑位。 */
+.chat-back{display:flex!important;flex-direction:column;overflow:hidden!important}
+.chat-page{flex:1 1 auto!important;width:100%!important;min-height:0!important;height:auto!important;margin:0!important;display:flex!important;flex-direction:column;overflow:hidden}
+.chat-head{flex:0 0 auto!important;position:relative!important;top:auto!important}
+.chat-body{flex:1 1 auto!important;min-height:0!important;overflow-y:auto!important;-webkit-overflow-scrolling:touch}
+.chat-compose{position:static!important;left:auto!important;right:auto!important;top:auto!important;bottom:auto!important;transform:none!important;flex:0 0 auto!important;width:100%!important;max-width:100%!important;margin:0!important;z-index:6!important}
+/* ===== 首次进入：昵称 + 性别 引导页（盖住全屏，必须填完才能进） ===== */
+.onboard{position:fixed;top:0;right:0;bottom:0;left:0;width:100%;height:100%;z-index:200;display:none;align-items:center;justify-content:center;padding:24px 18px 24px;padding-bottom:calc(24px + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));background:radial-gradient(circle at 72% 10%,rgba(255,36,66,.3),transparent 46%),linear-gradient(160deg,#141018,#221b27 58%,#110e15);box-sizing:border-box}
+.onboard.open{display:flex}
+body.onboarding .bottom,body.onboarding .new-comments,body.onboarding .dm-layer{display:none!important}
+.onboard-card{width:100%;max-width:360px;max-height:100%;overflow:auto;background:#fff;border-radius:22px;padding:26px 22px 22px;box-shadow:0 20px 60px rgba(0,0,0,.5);animation:obIn .3s cubic-bezier(.22,1,.36,1) both}
+@keyframes obIn{from{opacity:0;transform:translateY(14px) scale(.97)}to{opacity:1;transform:none}}
+.onboard-logo{text-align:center;font-size:26px;font-weight:800;letter-spacing:-1px;color:#222}
+.onboard-logo i{font-style:normal;color:var(--red)}
+.onboard-sub{text-align:center;color:#999;font-size:13px;line-height:1.6;margin:8px 0 22px}
+.onboard-field{margin-bottom:16px}
+.onboard-field>label{display:block;font-size:12px;color:#888;margin-bottom:8px}
+.onboard-field input{width:100%;height:46px;border:0;border-radius:12px;background:#f6f6f8;padding:0 14px;font-size:15px;outline:none;color:#222}
+.onboard-field input:focus{background:#fff;box-shadow:0 0 0 2px rgba(255,36,66,.32)}
+.gender-picker{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}
+.gender-picker button{height:44px;border-radius:12px;background:#f6f6f8;color:#777;font-size:14px;transition:.15s}
+.gender-picker button.on{background:#fff0f2;color:var(--red);font-weight:700;box-shadow:inset 0 0 0 1.5px var(--red)}
+.onboard-err{margin:0;min-height:17px;color:var(--red);font-size:12px;line-height:17px}
+.onboard-btn{width:100%;height:48px;border-radius:24px;background:var(--red);color:#fff;font-weight:700;font-size:16px;margin-top:8px}
+.onboard-btn:active{transform:scale(.985)}
+.profile-name .profile-gender{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;padding:0;margin-left:8px;border-radius:50%;background:rgba(255,255,255,.14);font-size:13px;font-weight:500;color:rgba(255,255,255,.72);line-height:22px;text-align:center;flex:none;align-self:center;overflow:hidden}
+.profile-name .profile-gender .g-sym{font-size:13px;width:100%;height:100%;display:inline-flex;align-items:center;justify-content:center;line-height:1;font-weight:700}
+/* 性别符号：女 ♀ 红、男 ♂ 蓝、未填 人形图标 */
+.g-sym{display:inline-flex;align-items:center;justify-content:center;line-height:1;font-weight:700;font-size:1.05em}
+.g-sym.female{color:#ff2442}
+.g-sym.male{color:#2f74e0}
+.g-sym.other{color:#9a9aa4}
+.g-sym svg{width:.86em;height:.86em;display:block;margin:0 auto}
+.avatar.has-photo,.big-avatar.has-photo,.avatar-edit.has-photo{background-size:cover!important;background-position:center!important;background-repeat:no-repeat!important;color:transparent;font-size:0!important}
+.big-avatar{position:relative;overflow:hidden;cursor:pointer;border-width:1px!important}
+.profile-page .big-avatar{box-shadow:0 0 0 1px rgba(255,255,255,.55),0 5px 18px rgba(0,0,0,.35)!important}
+.avatar-edit{position:relative;width:76px;height:76px;border-radius:50%;overflow:hidden;display:inline-flex;align-items:center;justify-content:center;font-size:32px;background:linear-gradient(135deg,#5d7da8,#e6a7bd);color:#fff;border:1px solid rgba(255,255,255,.55)}
+body.dark .avatar-edit{border-color:#4a4952}
+body.dark .onboard-card{background:#1F1E25}
+body.dark .onboard-logo{color:#F5F4F7}
+body.dark .onboard-field input,body.dark .gender-picker button{background:#2A2931;color:#E8E6EE}
+body.dark .gender-picker button.on{background:#3A2530;color:#FF9DB8;box-shadow:inset 0 0 0 1.5px #FF6B7E}
+/* ===== 弹窗改版（发布图文 / 编辑资料 共用）=====
+   ①去掉顶部那条灰色指示条（两边都由右上角的圆形关闭键来表达「可关闭」）
+   ②关闭键：右上角、圆形浅灰底，白底弹窗上更醒目，点按区域也更大
+   ③添加图片：从整行大色块收成「圆角正方形」缩略块，符合发布页的图片位直觉 */
+.modal{padding-top:18px}
+#profile-modal .modal{display:flex;flex-direction:column;max-height:calc(100% - var(--xhs-nav))!important}
+#profile-modal.activity-back{padding-top:calc(var(--xhs-top) + 29px)!important}
+.profile-edit-page{display:flex;flex-direction:column;overflow:hidden}
+.profile-edit-page>.inbox-head{flex:none}
+.profile-edit-page .nav-save{margin-left:auto;flex:none;height:30px;padding:0 14px;border-radius:15px;background:var(--red);color:#fff;font-size:13px;font-weight:600}
+.edit-scroll{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:18px}
+.edit-scroll .fields{max-width:100%}
+.modal .handle,.modal>.handle{display:none!important}
+.modal>.close{position:absolute!important;right:14px!important;top:14px!important;width:32px!important;height:32px!important;min-width:32px!important;max-width:32px!important;padding:0!important;margin:0!important;border-radius:50%!important;background:#f1f1f3;color:#6b6b73;font-size:19px!important;line-height:1!important;display:flex!important;align-items:center!important;justify-content:center!important;z-index:3;transition:.15s}
+.modal>.close:active{background:#e3e3e7;transform:scale(.94)}
+.modal h2{padding-right:44px}
+.upload{width:104px!important;height:104px!important;min-height:0!important;max-width:104px!important;border-radius:16px!important;align-self:flex-start;margin:0!important;gap:3px}
+.upload strong{font-size:25px;line-height:1}
+.upload span{font-size:11px;line-height:1.3;padding:0 6px}
+.upload img{border-radius:16px}
+.upload:active{background:#f0f0f2}
+/* 图片是必填项：标红星；点「发布笔记」漏图时给方块描红 + 轻微抖动，不用只靠 toast */
+.upload .req{color:var(--red);font-style:normal;margin-left:1px;font-weight:700}
+.field label .req{color:var(--red);font-style:normal;margin-left:2px;font-weight:700}
+.upload.missing{background:#fff3f5!important;box-shadow:inset 0 0 0 1.5px var(--red)!important;animation:shakeX .42s}
+.upload.missing span,.upload.missing strong{color:var(--red)!important}
+@keyframes shakeX{0%,100%{transform:translateX(0)}20%{transform:translateX(-4px)}40%{transform:translateX(4px)}60%{transform:translateX(-3px)}80%{transform:translateX(3px)}}
+body.dark .upload.missing{background:#3A2530!important}
+body.dark .modal>.close{background:#2A2931;color:#C8C6D0}
+body.dark .modal>.close:active{background:#34333C}
+body.dark .upload:active{background:#2E2D36}
+/* ===== 发现页：话题热搜卡（可点）=====
+   .hot 从装饰性 div 改成 button，所以要自己声明文字对齐、flex 布局和按压反馈 */
+.hot{display:flex;flex-direction:column;align-items:flex-start;gap:5px;flex:0 0 auto;text-align:left;font:inherit;cursor:pointer;transition:.15s}
+.hot .hot-rank{font-size:11px;font-weight:800;letter-spacing:1px;color:var(--red)}
+.hot .hot-meta{font-size:11.5px;color:#999}
+.hot:active{transform:scale(.97)}
+.shuffle{padding:5px 11px;border-radius:14px;background:#f5f5f5;color:#666;font-size:12px;transition:.15s}
+.shuffle:active{background:#ececec;transform:scale(.96)}
+body.dark .shuffle{background:#292930;color:#C8C6D0}
+/* ===== 话题聚合页 ===== */
+.topic-page .inbox-head{position:sticky;top:0;z-index:6;height:52px;padding:0 15px;display:flex;align-items:center;border-radius:0;border:0;border-bottom:1px solid var(--ih-line);background:var(--ih-bg);color:var(--ih-fg);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}
+.topic-page .inbox-title{font-size:17px;font-weight:600;line-height:52px;margin:0;color:inherit}
+.topic-hero{padding:20px 18px 18px;background:radial-gradient(circle at 82% 0%,rgba(255,36,66,.16),transparent 58%),linear-gradient(180deg,#fff6f7,#fff)}
+.topic-emoji{font-size:34px;line-height:1}
+.topic-hero h1{font-size:22px;margin:10px 0 6px}
+.topic-hero p{margin:0 0 12px;color:#999;font-size:12.5px}
+.topic-meta{display:flex;align-items:center;gap:5px;flex-wrap:wrap;color:#999;font-size:12px}
+.topic-meta b{color:#222;font-size:13px;font-variant-numeric:tabular-nums}
+.topic-join{margin-top:15px;height:36px;padding:0 18px;border-radius:18px;background:var(--red);color:#fff;font-size:13px;font-weight:600;transition:.15s}
+.topic-join:active{transform:scale(.97);opacity:.9}
+.topic-notes{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:3px;padding:3px}
+.topic-notes .card{display:block;width:100%;margin:0}
+.topic-notes .cover{height:180px;border-radius:3px}
+.topic-more{padding:16px 15px 6px;font-size:15px;font-weight:700}
+body.dark .topic-hero{background:radial-gradient(circle at 82% 0%,rgba(255,36,66,.2),transparent 58%),linear-gradient(180deg,#221b22,#1A191F)}
+body.dark .topic-meta b{color:#F5F4F7}
+/* 顶栏：安全区 + 容器导航（规范）；浮层用 padding 让出，内部自己滚，避免 sticky 顶到容器按钮上 */
+html,body{width:100%;max-width:100%;overflow:hidden;overscroll-behavior:none;-webkit-text-size-adjust:100%}
+.chat-back,.detail-back,.activity-back,.modal-back{
+  top:0!important;right:0!important;bottom:0!important;left:0!important;
+  width:auto!important;max-width:none!important;
+  padding-top:var(--xhs-nav)!important;
+  box-sizing:border-box;
+  box-shadow:none!important;
+  overflow-x:hidden!important;
+  overscroll-behavior:none;
+}
+.chat-back,.detail-back,.activity-back{
+  display:none!important;
+  transform:none!important;
+}
+.chat-back.open,.detail-back.open,.activity-back.open{
+  display:flex!important;
+  flex-direction:column;
+  overflow:hidden!important;
+  visibility:visible!important;
+  pointer-events:auto!important;
+}
+.detail,.chat-page,.activity-page{
+  flex:1 1 auto!important;
+  width:100%!important;
+  max-width:100%!important;
+  min-width:0!important;
+  min-height:0!important;
+  margin:0!important;
+  overflow-x:hidden!important;
+  overflow-y:auto;
+  -webkit-overflow-scrolling:touch;
+}
+.detail{
+  display:flex!important;
+  flex-direction:column;
+  overflow:hidden!important;
+}
+.detail-scroll{
+  flex:1 1 auto;
+  min-height:0;
+  overflow-x:hidden;
+  overflow-y:auto;
+  -webkit-overflow-scrolling:touch;
+}
+.chat-page{display:flex!important;flex-direction:column;overflow:hidden!important}
+.detail-top{
+  flex:0 0 auto!important;
+  position:relative!important;
+  top:auto!important;
+  z-index:6!important;
+  background:#1A191F!important;
+}
+.chat-head,.activity-page>.inbox-head,.topic-page .inbox-head{
+  flex:0 0 auto!important;
+  position:relative!important;
+  top:auto!important;
+}
+body.tab-messages .app{
+  padding-top:var(--xhs-nav)!important;
+  box-sizing:border-box;
+  overflow-x:hidden;
+}
+body.tab-home .app,body.tab-explore .app{
+  padding-top:var(--xhs-top)!important;
+  box-sizing:border-box;
+  overflow-x:hidden;
+}
+body.tab-me .app{padding-top:0!important}
+body.tab-messages #page>.inbox-head{height:0!important;min-height:0!important;padding:0!important;margin:0!important;border:0!important;overflow:hidden}
+body.tab-me #page .profile-hero{padding-top:calc(var(--xhs-nav) + 28px)}
+.profile-page .profile-row.profile-user{margin-top:0;align-items:flex-start}
+body.tab-home .top,body.tab-explore .top{height:var(--nav-h)}
+.inbox-cats{padding-top:12px}
+.detail-content .c-text,.detail-content p.c-text{margin:0!important;padding:0}
+.dm-layer{top:var(--xhs-nav)!important}
+.dm-toast{top:8px!important}
+.detail-cover{
+  flex:none!important;
+  height:280px!important;
+  min-height:220px!important;
+  max-height:70vh;
+  margin:0!important;
+  border-radius:0!important;
+}
+.detail-cover.has-image{
+  height:320px!important;
+  min-height:240px!important;
+}
+.detail-content{padding:16px 20px 28px!important}
+.detail-content h1,.detail-content p,.detail-content .tag,.comment-head,.detail-content .comment{padding-left:0;padding-right:0}
+.nav-back,#close-detail,#close-chat,[data-inbox-back],[data-topic-back],[data-user-back]{
+  position:relative;z-index:2;flex:none;
+  width:48px!important;min-width:48px;height:48px!important;
+  font-size:40px!important;line-height:46px!important;font-weight:200;
+  padding:0!important;display:flex!important;align-items:center;justify-content:center;
+  margin-left:-12px!important
+}
+.nav-head,.detail-top,.chat-head,.activity-page>.inbox-head,.topic-page .inbox-head{
+  position:relative!important;display:flex!important;align-items:center!important;
+}
+.nav-title,.chat-head h3{
+  position:absolute;left:52px;right:52px;margin:0!important;
+  text-align:center;font-size:16px;font-weight:600;line-height:48px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none;
+}
+.nav-spacer{width:48px;min-width:48px;height:1px;margin-left:auto;flex:none}
+.top{justify-content:center!important}
+.top .logo{width:100%;text-align:center}
+.detail-top .detail-author{position:absolute!important;left:48px;right:80px;top:0;bottom:0;margin:0!important;display:flex;align-items:center;justify-content:center;pointer-events:auto}
+.detail-top .follow-btn{position:relative;z-index:2;margin-left:auto!important;flex:none;width:auto!important;height:auto!important;font-size:13px!important}
+.user-page .follow-btn{width:auto!important;height:28px!important;font-size:13px!important;line-height:1;padding:0 12px}
+.chat-back,.detail-back,.activity-back{
+  display:flex!important;flex-direction:column;
+  visibility:hidden;pointer-events:none;
+  transform:translate3d(100%,0,0)!important;
+  transition:transform .28s cubic-bezier(.22,.61,.36,1);
+}
+.chat-back.open,.detail-back.open,.activity-back.open{
+  visibility:visible!important;pointer-events:auto!important;
+  transform:translate3d(0,0,0)!important;
+}
+.chat-back.closing,.detail-back.closing,.activity-back.closing{
+  visibility:visible!important;pointer-events:none!important;
+  transform:translate3d(100%,0,0)!important;
+}
+body.tab-me #page .profile-hero{padding-top:calc(var(--xhs-nav) + 28px)!important}
+.user-page .profile-hero{padding-top:16px}
+#user.activity-back{padding-top:calc(var(--xhs-top) + 15px)!important}
+#detail.detail-back{padding-top:calc(var(--xhs-top) + 29px)!important}
+.user-page{display:flex!important;flex-direction:column;overflow:hidden!important}
+.user-page>.inbox-head{flex:none}
+.user-scroll{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.user-page .profile-edit-btn.followed{opacity:.75}
+.profile-stats-row{display:flex;align-items:flex-end;gap:20px;margin-top:14px;position:relative;z-index:1}
+.profile-stats-row .stats{margin-top:0}
+.profile-stats-row .profile-edit-btn{margin-left:auto;flex:none;align-self:flex-end}
+.author-hit{display:inline-flex;align-items:center;gap:5px;min-width:0;cursor:pointer}
+.biz-card{width:100%;max-width:270px;background:#fff;border:1px solid #ececf0;border-radius:14px;padding:12px 13px;box-shadow:0 2px 8px rgba(0,0,0,.05);color:#222}
+body.dark .biz-card{background:#25242b;border-color:#383742;color:#f5f4f7}
+.biz-card-tag{display:inline-block;font-size:10px;font-weight:700;color:var(--red);background:rgba(255,36,66,.12);padding:2px 7px;border-radius:999px;margin-bottom:6px}
+.biz-card-title{font-size:14px;font-weight:700;line-height:1.4;margin:0 0 4px}
+.biz-card-desc{font-size:12px;color:#888;line-height:1.5;margin:0 0 10px}
+body.dark .biz-card-desc{color:#a9a9b3}
+.biz-card-btn{width:100%;height:34px;border-radius:17px;background:var(--red);color:#fff;font-size:12px;font-weight:700;cursor:pointer}
+.biz-card-btn.done{background:#f0f0f3;color:#888;cursor:default}
+body.dark .biz-card-btn.done{background:#32313b;color:#999}
+.first-post-banner{display:flex;align-items:center;justify-content:space-between;gap:10px;width:calc(100% - 16px);margin:8px auto 2px;padding:11px 14px;border-radius:12px;background:linear-gradient(135deg,rgba(255,36,66,.12),rgba(255,112,132,.08));border:1px solid rgba(255,36,66,.26);color:#222;font-size:12.5px;line-height:1.45;text-align:left;cursor:pointer}
+body.dark .first-post-banner{color:#f5f4f7;background:linear-gradient(135deg,rgba(255,36,66,.18),rgba(255,36,66,.07));border-color:rgba(255,36,66,.32)}
+.first-post-banner i{flex:none;font-style:normal;font-weight:700;color:var(--red);white-space:nowrap}
+.my-posts .empty{column-span:all;-webkit-column-span:all;padding:56px 24px}
+.empty-cta{margin-top:16px;padding:10px 22px;border-radius:20px;background:var(--red);color:#fff;font-size:14px;font-weight:700;cursor:pointer}
+.publish-guide{display:none;position:absolute;left:50%;bottom:calc(100% + 12px);transform:translateX(-50%);padding:9px 15px;border-radius:999px;background:linear-gradient(135deg,#ff2442,#ff556d);color:#fff;font-size:12.5px;font-weight:700;line-height:1.2;white-space:nowrap;box-shadow:0 8px 22px rgba(255,36,66,.42);cursor:pointer;z-index:12;animation:guideBob 1.5s ease-in-out infinite;pointer-events:auto}
+.publish-guide::after{content:"";position:absolute;left:50%;top:100%;transform:translateX(-50%);border:7px solid transparent;border-top-color:#ff3d58}
+body.need-first-post .publish-guide{display:inline-flex;align-items:center;gap:5px}
+body.need-first-post .bottom .publish{box-shadow:0 0 0 4px rgba(255,36,66,.22);animation:publishPulse 1.6s ease-in-out infinite}
+body.onboarding .publish-guide{display:none!important}
+@keyframes guideBob{0%,100%{transform:translateX(-50%) translateY(0)}50%{transform:translateX(-50%) translateY(-5px)}}
+@keyframes publishPulse{0%,100%{box-shadow:0 0 0 3px rgba(255,36,66,.22)}50%{box-shadow:0 0 0 7px rgba(255,36,66,.36)}}
+#xhsRewardEntry,.xhs-rw{display:none!important}

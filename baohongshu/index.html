@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#fff">
+<title>爆红书</title>
+<link rel="stylesheet" href="./style.css">
+</head>
+<body class="onboarding">
+
+<div class="app">
+<main class="scroll" id="page"></main>
+<nav class="bottom">
+  <div class="publish-guide" id="publish-guide" role="button" tabindex="0" data-open-publish>🔥 发第一篇笔记，马上涨粉爆红！</div>
+  <button data-tab="home" class="active">首页</button>
+  <button data-tab="explore">发现</button>
+  <button id="open-publish" aria-label="发布"><span class="publish">＋</span></button>
+  <button data-tab="messages">消息<i class="badge" id="nav-badge" style="display:none">0</i></button>
+  <button data-tab="me">我</button>
+</nav>
+</div>
+<div class="modal-back" id="publish-modal">
+  <section class="modal">
+    <button class="close" id="close-publish">×</button>
+    <h2>发布图文</h2>
+    <label class="upload" id="upload"><strong>＋</strong><span>添加图片<i class="req">*</i></span><img id="upload-img" alt="作品预览"></label>
+    <input id="file-input" type="file" accept="image/*" hidden>
+    <div class="fields">
+      <div class="field"><label>选择内容分类<i class="req">*</i></label><div class="category" id="categories"></div></div>
+      <div class="field"><label>标题<i class="req">*</i></label><input id="post-title" maxlength="35" placeholder="记录一下今天的生活"></div>
+      <div class="field"><label>正文 <span class="hint">选填，最多 100 字</span></label><textarea id="post-desc" maxlength="100" placeholder="分享你的生活和发现…"></textarea></div>
+    </div>
+    <button class="publish-btn" id="publish-post">发布笔记</button>
+  </section>
+</div>
+<div class="activity-back" id="profile-modal">
+  <section class="activity-page profile-edit-page">
+    <section class="inbox-head nav-head">
+      <button class="nav-back" data-edit-back>‹</button>
+      <span class="nav-title">编辑资料</span>
+      <button type="button" class="nav-save" id="save-profile">保存</button>
+    </section>
+    <div class="edit-scroll">
+      <div class="fields">
+        <div class="field"><label>头像</label><button type="button" class="avatar-edit" id="edit-avatar" data-pick-avatar></button></div>
+        <div class="field"><label>昵称</label><input id="edit-name" maxlength="12" placeholder="给自己起个名字"></div>
+        <div class="field"><label>性别</label><div class="gender-picker" id="edit-gender"><button type="button" data-egender="女">女</button><button type="button" data-egender="男">男</button><button type="button" data-egender="保密">保密</button></div></div>
+        <div class="field"><label>简介 <span class="hint">选填，最多 80 字</span></label><textarea id="edit-bio" maxlength="80" placeholder="介绍一下自己，让别人更了解你…"></textarea></div>
+        <div class="field">
+          <label>标签 <span class="hint" id="tag-count">最多 6 个</span></label>
+          <div class="tag-picker" id="tag-picker"></div>
+          <div class="tag-add"><input id="tag-input" maxlength="10" placeholder="自定义标签，例如「露营」"><button id="tag-add-btn">添加</button></div>
+          <div class="tag-selected" id="tag-selected"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+<input id="avatar-input" type="file" accept="image/*" hidden>
+<div class="detail-back" id="detail"></div>
+<div class="activity-back" id="activity"></div>
+<div class="activity-back" id="topic"></div>
+<div class="chat-back" id="chat"></div>
+<div class="activity-back" id="user"></div>
+<div class="dm-layer" id="dm-layer"></div>
+<div class="new-comments" id="new-comments" role="button" aria-label="查看新评论"><b id="new-comments-n">0</b> 条新评论<span>›</span></div>
+<div class="toast" id="toast"></div>
+<div class="onboard open" id="onboard">
+  <section class="onboard-card">
+    <div class="onboard-logo">爆红书<i>·</i></div>
+    <p class="onboard-sub">第一次见，先留个名字吧<br>刷新后会重新开始</p>
+    <div class="onboard-field">
+      <label>昵称</label>
+      <input id="ob-name" maxlength="12" placeholder="输入你的昵称（最多 12 字）" autocomplete="off">
+    </div>
+    <div class="onboard-field">
+      <label>性别</label>
+      <div class="gender-picker" id="ob-gender">
+        <button type="button" data-gender="女">女</button>
+        <button type="button" data-gender="男">男</button>
+        <button type="button" data-gender="保密">保密</button>
+      </div>
+    </div>
+    <p class="onboard-err" id="ob-err"></p>
+    <button class="onboard-btn" id="ob-start">进 入 爆 红 书</button>
+  </section>
+</div>
+
+<script src="./app.js"></script>
+<script src="../web-bridge.js"></script>
+</body>
+</html>
